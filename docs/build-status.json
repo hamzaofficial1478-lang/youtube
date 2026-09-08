@@ -1,7 +1,7 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "updated": "2026-09-08",
-  "nextAction": "Complete foundation verification, then implement protected account/provider configuration and test a read-only YouTube connection.",
+  "nextAction": "Enter a restricted YouTube Data API key in Connections and verify one real public channel lookup; then implement per-channel OAuth identity, refresh and revocation before owner access.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -57,14 +57,14 @@
         {
           "id": "F05",
           "title": "Local request protection and browser usability",
-          "status": "testing",
-          "remaining": "Automated request protection and desktop flow passed; mobile editing remains unverified."
+          "status": "done",
+          "evidence": "Request boundary tests passed; desktop and 390 x 844 browser draft editing/revision checks passed on 2026-09-08."
         },
         {
           "id": "F06",
           "title": "Process ledger, launcher and release checks",
-          "status": "testing",
-          "remaining": "Ledger and runnable checks recorded; startup passed. Verify stopping a running managed instance and a full launcher restart cycle."
+          "status": "done",
+          "evidence": "29 automated checks passed; Windows start/stop/restart passed under the same user. Ledger, setup guide and GitHub workflow updated."
         }
       ]
     },
@@ -75,14 +75,14 @@
         {
           "id": "R01",
           "title": "Protected provider and channel credentials",
-          "status": "planned",
-          "remaining": "Choose secret storage; implement per-channel OAuth state/PKCE and token refresh/revocation; never reuse one account slot."
+          "status": "testing",
+          "remaining": "Implemented/tested Windows-protected public research key storage. Remaining: per-channel OAuth state/PKCE, verified identity, refresh/revocation and provider secrets."
         },
         {
           "id": "R02",
           "title": "YouTube read-only connector",
-          "status": "planned",
-          "remaining": "Verify returned channel identity, public metadata access, quota buckets, errors and source retention with actual accounts."
+          "status": "testing",
+          "remaining": "Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention."
         },
         {
           "id": "R03",

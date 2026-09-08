@@ -4,11 +4,13 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {randomBytes,timingSafeEqual}=require('node:crypto');
 const {Store,InputError}=require('./store');
+const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {checkFFmpeg}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
-function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true}={}) {
+function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null}={}) {
   const store=new Store(dataFile), token=randomBytes(32).toString('hex');
+  research ||= new YouTubeResearch(new WindowsVault(path.dirname(dataFile)));
   let timer, ffmpegAvailable=null;
   checkFFmpeg().then(available=>{ffmpegAvailable=available;}).catch(()=>{ffmpegAvailable=false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
@@ -29,10 +31,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.headers['sec-fetch-site']==='cross-site')throw new InputError('Cross-site requests are not allowed.',403);
       const url=new URL(req.url,`http://${host}`), pathname=url.pathname;
       if(req.method==='GET'){
-        if(files[pathname]){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
+        if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
-        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.1.0',mode:'local-planning'});
-        if(pathname==='/api/state')return json(res,200,{...store.state(),token,build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.2.0',mode:'local-planning'});
+        if(pathname==='/api/state')return json(res,200,{...store.state(),token,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
           capabilities:{research:'not_connected',text:'not_connected',translation:'not_implemented',voice:'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
@@ -44,7 +46,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       const supplied=Buffer.from(String(req.headers['x-local-token']||''));const expected=Buffer.from(token);
       if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected))throw new InputError('Reload the app before saving.',403);
       const body=await readBody(req);let result;
-      if(pathname==='/api/families' && req.method==='POST')result=store.saveFamily(body);
+      if(pathname==='/api/youtube/key' && req.method==='POST'){research.save(body.key);result=research.status();}
+      else if(pathname==='/api/youtube/forget' && req.method==='POST'){research.forget();result=research.status();}
+      else if(pathname==='/api/youtube/channel' && req.method==='POST')result=await research.lookup(body.channel);
+      else if(pathname==='/api/families' && req.method==='POST')result=store.saveFamily(body);
       else if(pathname==='/api/content' && req.method==='POST')result=store.saveContent(body);
       else {
         const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|review|storyboard))?$/);
@@ -70,7 +75,7 @@ if(require.main===module){
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('PORT must be a whole number between 1024 and 65535.');
   const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
-  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.1.0\nOpen http://127.0.0.1:${port}\nLocal planning mode. No paid generation or publishing is enabled.`));
+  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.2.0\nOpen http://127.0.0.1:${port}\nLocal planning with optional public YouTube lookup. No paid generation or publishing is enabled.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
 }
 module.exports={createApp};

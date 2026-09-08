@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-08. Current application: 0.1.0, local planning foundation. Full production automation remains in development.
+Last updated: 2026-09-08. Current application: 0.2.0, local planning and protected public-research setup. Full production automation remains in development.
 
 ## Resume here
 
 Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable English loop, then three languages, then controlled portfolio growth. Do not interpret this first release as a finished automated channel business.
 
-The next dependent stage is protected provider/channel configuration, followed by a real read-only YouTube identity test. Before implementation, choose an appropriate secret store and channel-specific authorization design. The running version intentionally has no credential entry fields or live publication endpoint.
+The next action is to supply a restricted YouTube Data API key through Connections and verify a real public lookup. Protected Windows key storage and the public lookup code are implemented and tested with fixtures; no live key was supplied. Per-channel OAuth authorization and identity isolation remain the next account milestone. There is no publication endpoint. See YOUTUBE-SETUP.md for setup and security details.
 
 ## What the user requested
 
@@ -17,7 +17,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Foundation: create a family, save a sourced English draft, review the exact version, prepare a saved planning scaffold, export it, restart the program and retain the work. Preserve original data during editing and tests. Explicitly distinguish planned language slots from connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 4 / 23 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 6 / 23 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -27,15 +27,15 @@ A dependable local workspace that preserves every draft and distinguishes planni
 - [x] **F02 Channel families and local persistence** (done) - Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md.
 - [x] **F03 Content studio and review gates** (done) - Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md.
 - [x] **F04 Saved storyboard planning jobs and export** (done) - Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md.
-- [ ] **F05 Local request protection and browser usability** (testing) - Automated request protection and desktop flow passed; mobile editing remains unverified.
-- [ ] **F06 Process ledger, launcher and release checks** (testing) - Ledger and runnable checks recorded; startup passed. Verify stopping a running managed instance and a full launcher restart cycle.
+- [x] **F05 Local request protection and browser usability** (done) - Request boundary tests passed; desktop and 390 x 844 browser draft editing/revision checks passed on 2026-09-08.
+- [x] **F06 Process ledger, launcher and release checks** (done) - 29 automated checks passed; Windows start/stop/restart passed under the same user. Ledger, setup guide and GitHub workflow updated.
 
 ### 02 · Accounts and research
 
 Approved data access and evidence-led research without invented metrics.
 
-- [ ] **R01 Protected provider and channel credentials** (planned) - Choose secret storage; implement per-channel OAuth state/PKCE and token refresh/revocation; never reuse one account slot.
-- [ ] **R02 YouTube read-only connector** (planned) - Verify returned channel identity, public metadata access, quota buckets, errors and source retention with actual accounts.
+- [ ] **R01 Protected provider and channel credentials** (testing) - Implemented/tested Windows-protected public research key storage. Remaining: per-channel OAuth state/PKCE, verified identity, refresh/revocation and provider secrets.
+- [ ] **R02 YouTube read-only connector** (testing) - Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention.
 - [ ] **R03 Permitted web, Reddit and Agent-Reach tools** (planned) - Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching.
 - [ ] **R04 Daily niche and topic evidence briefs** (planned) - Collect dated evidence, explicit audience profiles, differentiation, confidence and topic deduplication. Gate API-derived scores on required permission.
 
@@ -97,11 +97,33 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Validation record
 
+### Current release 0.2.0 - 2026-09-08
+
+- `npm run check`: passed. `npm test`: 29 passed, zero failures or skips under the normal Windows account. Restricted sandbox run passed 28 but could not access Windows DPAPI; the complete real-encryption test passed outside that sandbox with synthetic keys. No real provider credentials or Google calls were used.
+- Added checks for channel-link validation, fixed Google origin, header-only credential transmission, no secret in status/results, missing/hidden metrics, large counts, provider denial, network failure, response-size limits, wrong channel identity, concurrent operations, replacement/forget, ciphertext at rest and corruption handling.
+- Phone viewport 390 x 844: edited and saved the existing isolated QA draft; confirmed revision increment and removal of its previous approval/storyboard. New research fixture UI passed key save, successful lookup, literal HTML-like result title, unavailable subscribers, provider-denial recovery and forget/disable flow. Desktop layout was also inspected; no browser warning/error logs were recorded.
+- Windows launchers passed start -> stop -> start -> stop under one Windows account. Fixed the vague null-reference error when Windows cannot expose process details; this now fails with an actionable message without stopping an unverifiable process.
+- Initial new HTTP test cleanup ran before the server closed; corrected cleanup order and reran successfully. Initial helper execution was blocked by default PowerShell script policy; added the same process-scoped invocation option used by the existing launcher. No global policy was changed.
+- Live Google key validity, project restrictions/quota and actual public data remain unverified. OAuth, per-channel bindings, private analytics and publishing are not implemented. R01/R02 are deliberately not marked done.
+
+### Earlier foundation checks
+
 - `npm run check`: passed on Node 24.18.1, 2026-09-08.
 - `npm test`: 20 passed, zero failed, skipped or cancelled. Covers validation, three-language families, exact budgets, archive/restore, optimistic conflicts, review gates, approval invalidation, job deduplication/cancellation/recovery, export, SQLite persistence and HTTP request protection. Tests use isolated databases.
 - Desktop browser: created a disposable family, saved an original fictional draft with a reviewed source, submitted and approved it, queued a storyboard, and inspected six completed scenes and truthful language states. Verified HTML-like family text renders literally. Browser test records were isolated from the real workspace.
 - Windows launcher: startup and health check passed during foundation work; an initial runtime-version quoting issue was corrected. The later stop command correctly reported an already-stopped instance. Stopping a running launcher-managed instance and a full start/stop/restart cycle remain to be verified.
 - Mobile editing flow remains unverified. Foundation F05/F06 remain in testing; passing automated checks is not a claim of complete browser or production validation.
+
+The mobile and launcher gaps in this earlier record were resolved by the 0.2.0 checks above.
+
+### 2026-09-08 - protected research setup
+
+- Completed the foundation's remaining targeted checks; started R01/R02 with the smallest usable public-research slice.
+- Added `youtube.js`, a fixed Windows DPAPI helper and Connections forms. Saving a key performs no external call. The key stays outside SQLite and is not returned to the browser. Encrypted replacement is atomic, and forget clears the local copy.
+- Added a bounded, manual `channels.list` adapter for public IDs/handles. Only one request runs at a time; key replacement/removal is blocked while that request is active. Failures do not trigger automatic retries or reveal raw upstream messages.
+- Kept large totals exact and missing values unavailable. Show source identity/time without claiming owner authorization or inferred ranking/tier/retention metrics. Results are not persisted.
+- Added repeatable synthetic browser fixtures isolated from normal startup and real data. Preserved all three upstream revision/license records; no additional upstream module was imported.
+- Updated README, setup guide, structured checklist and GitHub continuation instructions. No paid services were called. Next required input is a YouTube Data API key entered only into the actual application's Connections page.
 
 ### 2026-09-08 - GitHub handover
 
@@ -115,7 +137,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - This is a single-user local app. There is no public hosting, multi-user authentication, multi-machine worker coordination or tested unattended Windows service setup.
 - Node 24 is required. Node SQLite availability was checked on the actual local runtime; deployment to other runtimes needs verification.
 - There are no paid text, speech, translation or video providers connected. No content is uploaded to YouTube.
-- Research sources are manually entered. Permission/accuracy status is a creator attestation, not automated verification. Submitted URLs are stored but never fetched by this release.
+- Draft evidence URLs remain manually entered and are not fetched. Optional public channel lookup contacts only the fixed Google API endpoint. Permission/accuracy status for draft evidence remains a creator attestation.
 - The storyboard is a rough six-part scaffold, not finished direction. It may split a sentence and cannot guarantee timing. It must be refined before TTS or rendering.
 - Spanish/Italian scripts, voices, thumbnails and subtitles are not produced. Language slots and pending states are real records, not translations.
 - Media rendering is not implemented. FFmpeg detection must not be mistaken for a rendering test.

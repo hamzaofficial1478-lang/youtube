@@ -9,6 +9,9 @@ try {
     $appProcess = Get-Process -Id $record.pid -ErrorAction SilentlyContinue
     if (-not $appProcess) { Write-Host 'Control Room is already stopped.'; exit 0 }
     $processInfo = Get-CimInstance Win32_Process -Filter ('ProcessId = ' + [int]$record.pid)
+    if (-not $processInfo -or [string]::IsNullOrWhiteSpace($processInfo.CommandLine)) {
+        throw 'Windows could not verify this process. Stop it from the Windows account or terminal that started it. Nothing was stopped.'
+    }
     if ($appProcess.ProcessName -ne 'node' -or $appProcess.StartTime.ToUniversalTime().ToString('o') -ne $record.startedAt -or -not $processInfo.CommandLine.Contains('"' + $serverFile + '"')) {
         throw 'Process identity did not match the launcher record. Nothing was stopped.'
     }

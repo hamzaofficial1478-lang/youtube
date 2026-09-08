@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.1.0 - the first working stage of the multilingual YouTube program.
+Version 0.2.0 - planning foundation plus protected YouTube research setup.
 
 The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
 
@@ -8,7 +8,7 @@ The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/ha
 
 Clone this repository (or download and extract its ZIP), then on Windows double-click **Start Control Room.cmd**. It starts a hidden local server and opens the browser. Keep that checkout in place while running. To stop it, use **Stop Control Room.cmd**.
 
-The app opens at http://127.0.0.1:3456. It is local to your computer. No account setup, package installation or API key is needed for this first version. Node.js 24 must be installed and available on PATH; this computer had Node 24.18.1 during development.
+The app opens at http://127.0.0.1:3456. It is local to your computer. Planning requires no account setup, package installation or API key. Optional public YouTube lookup requires your own API key. Node.js 24 must be installed and available on PATH; this computer had Node 24.18.1 during development.
 
 Alternatively, open a terminal in this directory and run:
 
@@ -27,14 +27,15 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 5. Prepare a saved, approximate six-scene planning scaffold and export the content as JSON.
 6. Edit and revise safely: changes invalidate old approvals and storyboards; conflicting edits are rejected instead of silently overwriting.
 7. Archive/restore families without deleting work, reopen saved data and inspect the build tracker.
+8. Save a YouTube Data API key with Windows account protection, then look up a public channel by handle, ID or URL. See [YouTube setup](docs/YOUTUBE-SETUP.md). The connector has fixture coverage; verification with your live project remains pending.
 
-The storyboard is **planning only**. It uses the supplied words and estimated timing; it is not generated media or an AI-directed script. No live research, AI writing, voiceover, translation, rendering or publishing has been connected yet. Connection cards accurately show these states.
+The storyboard is **planning only**. It uses the supplied words and estimated timing; it is not generated media or an AI-directed script. Competitor research automation, AI writing, voiceover, translation, rendering, channel sign-in and publishing remain upcoming. Connection cards distinguish a saved key, a tested public lookup and channel ownership authorization.
 
 ## Where your work is saved
 
 `data/control-room.sqlite` contains your families, drafts, reviews, jobs and activity. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
 
-The exported planning JSON contains the selected draft and its source references. Store it according to your own privacy needs. No secrets are collected by this release.
+The exported planning JSON contains the selected draft and its source references; it never includes the API key. The optional key is encrypted separately in `data/youtube-key.dpapi`, protected for the Windows account that saved it. Other machines/accounts may require key re-entry. **Forget local key** removes the saved copy; revocation in Google Cloud is separate.
 
 ## How to continue development
 
@@ -42,6 +43,7 @@ The exported planning JSON contains the selected draft and its source references
 - **docs/build-status.json**: structured checklist used by the UI.
 - **docs/REPOSITORIES.md**: the three supplied repos, pinned revisions, licenses and actual reuse.
 - **AGENTS.md**: instructions for future coding sessions.
+- **docs/YOUTUBE-SETUP.md**: key setup, security boundaries, live verification and the next research steps.
 - [Detailed PDF blueprint](docs/YouTube_Automation_Program_Blueprint.pdf).
 - `scripts/build_blueprint.py`: optional PDF source; requires Python, ReportLab and Windows Calibri/Consolas fonts. It is separate from the dependency-free Node application.
 
