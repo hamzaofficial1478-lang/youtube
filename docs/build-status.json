@@ -1,0 +1,204 @@
+{
+  "version": "0.1.0",
+  "updated": "2026-09-08",
+  "nextAction": "Complete foundation verification, then implement protected account/provider configuration and test a read-only YouTube connection.",
+  "repositories": [
+    {
+      "name": "YouTube Automation Agent",
+      "url": "https://github.com/darkzOGx/youtube-automation-agent",
+      "revision": "260d7a94ab2d5bb2a98ce6620bfda7efd56ebd6b",
+      "status": "Selected modules reused",
+      "usage": "Metadata validation is used for draft titles. The FFmpeg helper checks executable availability. Full upstream application and scheduler are not launched."
+    },
+    {
+      "name": "Stickman Video Director",
+      "url": "https://github.com/kaomei/stickman-video-director",
+      "revision": "6d7f8c83a16c594c23bb73da832c8864ccd2aeb5",
+      "status": "Directing reference retained",
+      "usage": "Its storyboard contract informs the six-scene planning scaffold and is accessible from the studio. It does not render a video or call a model."
+    },
+    {
+      "name": "Agent-Reach",
+      "url": "https://github.com/Panniantong/Agent-Reach",
+      "revision": "da5044d26fc6adddb6554d5679c94ac22e76e428",
+      "status": "Reference only",
+      "usage": "Selected channel and MCP source files are retained with the MIT license. No installation, browser-session access or external reading is enabled."
+    }
+  ],
+  "phases": [
+    {
+      "title": "01 · Local foundation",
+      "goal": "A dependable local workspace that preserves every draft and distinguishes planning from live automation.",
+      "tasks": [
+        {
+          "id": "F01",
+          "title": "Blueprint review and repository register",
+          "status": "done",
+          "evidence": "Reviewed blueprint and pinned source; preserved licenses and recorded reuse decisions in REPOSITORIES.md."
+        },
+        {
+          "id": "F02",
+          "title": "Channel families and local persistence",
+          "status": "done",
+          "evidence": "Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md."
+        },
+        {
+          "id": "F03",
+          "title": "Content studio and review gates",
+          "status": "done",
+          "evidence": "Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md."
+        },
+        {
+          "id": "F04",
+          "title": "Saved storyboard planning jobs and export",
+          "status": "done",
+          "evidence": "Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md."
+        },
+        {
+          "id": "F05",
+          "title": "Local request protection and browser usability",
+          "status": "testing",
+          "remaining": "Automated request protection and desktop flow passed; mobile editing remains unverified."
+        },
+        {
+          "id": "F06",
+          "title": "Process ledger, launcher and release checks",
+          "status": "testing",
+          "remaining": "Ledger and runnable checks recorded; startup passed. Verify stopping a running managed instance and a full launcher restart cycle."
+        }
+      ]
+    },
+    {
+      "title": "02 · Accounts and research",
+      "goal": "Approved data access and evidence-led research without invented metrics.",
+      "tasks": [
+        {
+          "id": "R01",
+          "title": "Protected provider and channel credentials",
+          "status": "planned",
+          "remaining": "Choose secret storage; implement per-channel OAuth state/PKCE and token refresh/revocation; never reuse one account slot."
+        },
+        {
+          "id": "R02",
+          "title": "YouTube read-only connector",
+          "status": "planned",
+          "remaining": "Verify returned channel identity, public metadata access, quota buckets, errors and source retention with actual accounts."
+        },
+        {
+          "id": "R03",
+          "title": "Permitted web, Reddit and Agent-Reach tools",
+          "status": "planned",
+          "remaining": "Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching."
+        },
+        {
+          "id": "R04",
+          "title": "Daily niche and topic evidence briefs",
+          "status": "planned",
+          "remaining": "Collect dated evidence, explicit audience profiles, differentiation, confidence and topic deduplication. Gate API-derived scores on required permission."
+        }
+      ]
+    },
+    {
+      "title": "03 · Original scripts and production",
+      "goal": "A sourced English master becomes a real, reviewable video.",
+      "tasks": [
+        {
+          "id": "P01",
+          "title": "LLM writing with claim and budget controls",
+          "status": "planned",
+          "remaining": "Connect one approved provider; validate structured outlines, hooks, original scripts and claim references; meter cost and retries."
+        },
+        {
+          "id": "P02",
+          "title": "Directed, expressive English narration",
+          "status": "planned",
+          "remaining": "Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior."
+        },
+        {
+          "id": "P03",
+          "title": "Real scene editing and visual assets",
+          "status": "planned",
+          "remaining": "Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review."
+        },
+        {
+          "id": "P04",
+          "title": "FFmpeg render, preview and media QC",
+          "status": "planned",
+          "remaining": "Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes."
+        }
+      ]
+    },
+    {
+      "title": "04 · Spanish and Italian editions",
+      "goal": "Reuse the visual master while preserving meaning, natural voice and scene timing.",
+      "tasks": [
+        {
+          "id": "L01",
+          "title": "Scene translation and local packaging",
+          "status": "planned",
+          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails for the selected Spanish locale and Italian."
+        },
+        {
+          "id": "L02",
+          "title": "Language narration and synchronization",
+          "status": "planned",
+          "remaining": "Generate actual voices, adjust natural wording/timing and verify with proficient language reviewers."
+        },
+        {
+          "id": "L03",
+          "title": "Independent edition approvals",
+          "status": "planned",
+          "remaining": "Track EN/ES/IT outputs and language-specific revisions; propagate source corrections and permit independent release decisions."
+        }
+      ]
+    },
+    {
+      "title": "05 · Controlled publishing",
+      "goal": "Publish the right approved version to the right channel without duplicates.",
+      "tasks": [
+        {
+          "id": "Y01",
+          "title": "Private resumable upload and reconciliation",
+          "status": "planned",
+          "remaining": "Implement and test per-channel destination binding, upload session recovery and unknown-outcome reconciliation on a real test channel."
+        },
+        {
+          "id": "Y02",
+          "title": "Thumbnails, captions and scheduling",
+          "status": "planned",
+          "remaining": "Confirm attachments, future time zones, audience/disclosure settings, project audit status and each quota bucket."
+        },
+        {
+          "id": "Y03",
+          "title": "Rules-based unattended operation",
+          "status": "planned",
+          "remaining": "Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts."
+        }
+      ]
+    },
+    {
+      "title": "06 · Learning and portfolio scale",
+      "goal": "Use actual owner evidence and measured capacity to reach 10-15 families.",
+      "tasks": [
+        {
+          "id": "A01",
+          "title": "Authorized analytics and experiments",
+          "status": "planned",
+          "remaining": "Verify supported owner reports, measurement windows and approved derived-data use; show unavailable values honestly."
+        },
+        {
+          "id": "A02",
+          "title": "Backup/restore and production reliability",
+          "status": "planned",
+          "remaining": "Add supported backup UI/automation; test restore, external job leases, retry ceilings, disk pressure and provider failures."
+        },
+        {
+          "id": "A03",
+          "title": "Sustained scale and growth validation",
+          "status": "planned",
+          "remaining": "Measure 14-day reliability, quota, render capacity, cost and language review load; validate each channel over its own 90-100 day period."
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
+    <p class="nav-label">WORKSPACE</p>
+    <nav aria-label="Main navigation">
+      <a href="#overview" data-view="overview"><span>◫</span> Overview</a>
+      <a href="#families" data-view="families"><span>▦</span> Channel families</a>
+      <a href="#studio" data-view="studio"><span>✎</span> Content studio</a>
+      <a href="#connections" data-view="connections"><span>⌘</span> Connections</a>
+      <a href="#progress" data-view="progress"><span>☷</span> Build progress</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="status-dot"></span> Local workspace<p>Version 0.1 · Foundation<br>English / Spanish / Italian</p></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="breadcrumb">Overview</span></div><span class="mode"><span class="status-dot"></span> Planning mode</span></header>
+    <main id="main" tabindex="-1"><div class="loading">Opening your workspace…</div></main>
+    <footer>Built one verified step at a time. <a href="#progress">See what works and what comes next ↗</a></footer>
+  </div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog id="family-dialog" aria-labelledby="family-heading">
+    <form id="family-form">
+      <div class="dialog-heading"><div><p class="eyebrow">ONE BRAND, THREE LANGUAGES</p><h2 id="family-heading">Create a channel family</h2></div><button class="icon-button" type="button" data-close="family-dialog" aria-label="Close family dialog">×</button></div>
+      <input type="hidden" name="id"><input type="hidden" name="revision">
+      <div class="form-grid">
+        <label class="full">Family name<input name="name" required minlength="2" maxlength="80" placeholder="e.g. Everyday Explained"></label>
+        <label>Audience tier<select name="tier"><option value="A">Tier A</option><option value="B">Tier B</option><option value="Custom">Custom</option></select></label>
+        <label>Format<select name="format"><option value="long-form">Long-form</option><option value="shorts">Shorts</option></select></label>
+        <label class="full">Target countries <span class="hint">Separate with commas. These define your own market profile.</span><input name="countries" required placeholder="e.g. United States, United Kingdom"></label>
+        <label class="full">Who is this for?<textarea name="audience" required minlength="10" maxlength="2000" rows="2" placeholder="Describe their interests, questions and viewing preferences."></textarea></label>
+        <label class="full">Niche hypothesis <span class="hint">Optional; you can refine it after research.</span><textarea name="niche" maxlength="1000" rows="2" placeholder="The distinct value this channel could offer."></textarea></label>
+        <label>English voice locale<select name="englishLocale"><option value="en-US">US English</option><option value="en-GB">UK English</option></select></label>
+        <label>Spanish locale<select name="spanishLocale"><option value="es-419">Latin American Spanish</option><option value="es-ES">Spain</option><option value="es-MX">Mexico</option></select></label>
+        <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning only; no paid services are active.</span></label>
+        <label>Original videos per week<input name="cadence" type="number" required min="1" max="14" step="1" value="2"></label>
+        <label class="full">Planning time zone<input name="timezone" required value="Asia/Karachi" placeholder="Asia/Karachi"></label>
+      </div>
+      <p class="note">English, Spanish and Italian slots are created together. YouTube account connections will be added in a later stage.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="family-dialog">Cancel</button><button type="submit" class="button primary">Save family</button></div>
+    </form>
+  </dialog>
+  <dialog id="content-dialog" aria-labelledby="content-heading">
+    <form id="content-form">
+      <div class="dialog-heading"><div><p class="eyebrow">AN ORIGINAL STORY STARTS HERE</p><h2 id="content-heading">New content draft</h2></div><button class="icon-button" type="button" data-close="content-dialog" aria-label="Close content dialog">×</button></div>
+      <input type="hidden" name="id"><input type="hidden" name="revision">
+      <div class="form-grid">
+        <label>Channel family<select name="familyId" required></select></label>
+        <label>Content type<select name="kind"><option value="factual">Factual / educational</option><option value="fiction">Clearly labeled original fiction</option></select></label>
+        <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
+        <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
+        <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
+        <label class="full">English script <span class="hint">Write or paste your original script. AI writing is not connected yet.</span><textarea name="script" maxlength="50000" rows="9" placeholder="Your narration, from opening to payoff."></textarea></label>
+      </div>
+      <div class="section-heading"><h3>Evidence & source rights</h3><button class="button text-button" type="button" id="add-source">+ Add source</button></div>
+      <div id="source-fields"></div>
+      <label class="checkbox-label"><input name="rightsConfirmed" type="checkbox"><span>I reviewed the factual claims, original contribution and rights to use this story and its planned media. This is my review, not an automated rights check.</span></label>
+      <p class="note" id="revision-warning">You can save incomplete drafts. Required checks must pass before review.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="content-dialog">Cancel</button><button type="submit" class="button primary">Save draft</button></div>
+    </form>
+  </dialog>
+</body></html>
