@@ -1,7 +1,7 @@
 {
-  "version": "0.2.0",
-  "updated": "2026-09-08",
-  "nextAction": "Enter a restricted YouTube Data API key in Connections and verify one real public channel lookup; then implement per-channel OAuth identity, refresh and revocation before owner access.",
+  "version": "0.3.0",
+  "updated": "2026-09-09",
+  "nextAction": "Connector slots are implemented and fixture-tested. Verify real provider credentials, then implement per-channel OAuth identity/refresh/revocation and recent-video evidence collection.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -76,7 +76,7 @@
           "id": "R01",
           "title": "Protected provider and channel credentials",
           "status": "testing",
-          "remaining": "Implemented/tested Windows-protected public research key storage. Remaining: per-channel OAuth state/PKCE, verified identity, refresh/revocation and provider secrets."
+          "remaining": "Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters."
         },
         {
           "id": "R02",

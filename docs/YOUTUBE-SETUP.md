@@ -1,4 +1,6 @@
-# YouTube research setup - version 0.2
+# YouTube research setup
+
+Version 0.3 update: create a named **YouTube public research** slot using **Connections > Add connector**, save its key there, and select that slot in **Research connector**. Slots support edit, test and delete; see [CONNECTORS.md](CONNECTORS.md). The older key form described below appears only if a v0.2 key already exists. That key is preserved and remains usable.
 
 This release adds a public channel lookup. It does not connect a channel owner account, read private analytics or upload content. The lookup code and error handling are tested with synthetic responses; a live Google project/key has not yet been supplied or tested.
 

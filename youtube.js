@@ -131,4 +131,4 @@ class YouTubeResearch {
     finally { this.busy = false; }
   }
 }
-module.exports = {WindowsVault, YouTubeResearch, channelFilter};
+module.exports = {WindowsVault, YouTubeResearch, channelFilter, responseJson};

@@ -14,6 +14,6 @@ const research = new YouTubeResearch(vault, async url => {
   if (url.searchParams.get('forHandle') === '@denied') return Response.json({}, {status: 403});
   return Response.json({items: [{id: 'UC'+'a'.repeat(22), snippet: {title: 'TEST FIXTURE <b>literal text</b>', description: 'Synthetic browser test result. No data was fetched from YouTube.'}, statistics: {hiddenSubscriberCount: true, viewCount: '12345', videoCount: '12'}}]});
 });
-const {server} = createApp({dataFile: ':memory:', research});
+const {server} = createApp({dataFile: ':memory:', research,protector:{transform:(operation,input)=>Buffer.from([...input].reverse())},providerFetch:async()=>Response.json({data:[],voices:[],items:[{id:'UC'+'a'.repeat(22),snippet:{title:'SYNTHETIC CONNECTOR TEST'}}]})});
 server.listen(3457, '127.0.0.1', () => console.log('TEST FIXTURE ONLY http://127.0.0.1:3457 — no external calls; key stored only in test memory.'));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close());

@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.2.0 - planning foundation plus protected YouTube research setup.
+Version 0.3.0 - planning foundation, connector slots and protected research setup.
 
 The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
 
@@ -28,6 +28,7 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 6. Edit and revise safely: changes invalidate old approvals and storyboards; conflicting edits are rejected instead of silently overwriting.
 7. Archive/restore families without deleting work, reopen saved data and inspect the build tracker.
 8. Save a YouTube Data API key with Windows account protection, then look up a public channel by handle, ID or URL. See [YouTube setup](docs/YOUTUBE-SETUP.md). The connector has fixture coverage; verification with your live project remains pending.
+9. Add, edit, test and delete named connector slots. YouTube, OpenAI and ElevenLabs have read-only metadata tests; MCP/Reddit setup slots explicitly report pending adapters. See [Connector guide](docs/CONNECTORS.md).
 
 The storyboard is **planning only**. It uses the supplied words and estimated timing; it is not generated media or an AI-directed script. Competitor research automation, AI writing, voiceover, translation, rendering, channel sign-in and publishing remain upcoming. Connection cards distinguish a saved key, a tested public lookup and channel ownership authorization.
 
@@ -35,7 +36,7 @@ The storyboard is **planning only**. It uses the supplied words and estimated ti
 
 `data/control-room.sqlite` contains your families, drafts, reviews, jobs and activity. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
 
-The exported planning JSON contains the selected draft and its source references; it never includes the API key. The optional key is encrypted separately in `data/youtube-key.dpapi`, protected for the Windows account that saved it. Other machines/accounts may require key re-entry. **Forget local key** removes the saved copy; revocation in Google Cloud is separate.
+The exported planning JSON contains the selected draft and its source references; it never includes API keys. Named slot keys are encrypted for your Windows account in the SQLite connectors table. Existing v0.2 keys remain in `data/youtube-key.dpapi`. Other machines/accounts may require key re-entry. Removing a key or slot affects the current local copy; provider revocation and old backups are separate.
 
 ## How to continue development
 

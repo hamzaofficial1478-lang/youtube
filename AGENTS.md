@@ -3,6 +3,7 @@
 Read README.md, docs/BUILD-PROGRESS.md, docs/REPOSITORIES.md, docs/YOUTUBE-SETUP.md and docs/build-status.json before changing code. docs/YouTube_Automation_Program_Blueprint.pdf is the product blueprint. Apply Ponytail when available.
 
 - GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. The user explicitly requested that existing and future code be committed and pushed here. Use local files only as a working/testing copy; do not create additional standalone project folders. Fetch the latest remote state before edits, preserve other work and push verified changes without force. Never claim a push succeeded without verifying the remote commit.
+- Deliver GitHub commit/file links to the user rather than PC working-copy links. Every completed code step must be pushed; if a turn is interrupted before pushing, clearly identify that pending work and finish the push before claiming completion.
 - Keep credentials, local databases, logs, test data and downloaded inspection archives out of the repository. GitHub stores code; the application still needs a runtime host to run.
 
 - Work step by step. Complete and test the current milestone before enabling dependent stages.
@@ -13,4 +14,5 @@ Read README.md, docs/BUILD-PROGRESS.md, docs/REPOSITORIES.md, docs/YOUTUBE-SETUP
 - Check version conflicts, channel/language isolation, approval invalidation, interrupted jobs and input validation whenever those paths change.
 - Do not mark YouTube, Reddit, translation, voice, rendering or MCP reading as connected merely because source code or an executable exists.
 - Version 0.2 supports one Windows-protected project API key for public channel lookup only. Per-channel OAuth is still unimplemented. Preserve header-only key transmission, fixed Google origin, no credential responses/logging, and refusal to store plaintext. Run the real DPAPI test under the normal Windows account; a sandbox failure is not evidence of a passing check. Browser fixtures never verify a live provider.
+- Version 0.3 adds named connector slots; read docs/CONNECTORS.md. Slot ciphertext lives in SQLite, with API responses exposing only key presence. Provider type is immutable and edits invalidate tests. Preserve the v0.2 key if it exists. MCP/Reddit are setup records until their adapters are implemented, never live connections.
 - After edits run `npm run check`, `npm test`, and relevant browser checks. Report what was not tested. Do not promise a bug-free system.

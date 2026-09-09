@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-08. Current application: 0.2.0, local planning and protected public-research setup. Full production automation remains in development.
+Last updated: 2026-09-09. Current application: 0.3.0, local planning, connector slots and protected public-research setup. Full production automation remains in development.
 
 ## Resume here
 
@@ -34,7 +34,7 @@ A dependable local workspace that preserves every draft and distinguishes planni
 
 Approved data access and evidence-led research without invented metrics.
 
-- [ ] **R01 Protected provider and channel credentials** (testing) - Implemented/tested Windows-protected public research key storage. Remaining: per-channel OAuth state/PKCE, verified identity, refresh/revocation and provider secrets.
+- [ ] **R01 Protected provider and channel credentials** (testing) - Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters.
 - [ ] **R02 YouTube read-only connector** (testing) - Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention.
 - [ ] **R03 Permitted web, Reddit and Agent-Reach tools** (planned) - Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching.
 - [ ] **R04 Daily niche and topic evidence briefs** (planned) - Collect dated evidence, explicit audience profiles, differentiation, confidence and topic deduplication. Gate API-derived scores on required permission.
@@ -96,6 +96,20 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Added Overview, Families, Studio, Connections and Build progress UI. Counts come from stored records; no demo metrics are seeded.
 
 ## Validation record
+
+### Current release 0.3.0 - connector slots
+
+- Completed the requested connector-management substep: add, edit, test and delete named slots; separate encrypted keys; duplicate-name and revision checks; key retention/removal; edit-triggered test invalidation; per-slot in-flight locks.
+- YouTube, OpenAI and ElevenLabs tests call fixed read-only metadata endpoints. They do not generate content or authorize channel ownership. MCP/Reddit slots accept setup notes and report adapter not implemented; they reject keys until their adapters exist.
+- Added a connectors table without changing family/content records. Existing v0.2 key storage and access are preserved. Named-slot ciphertext is kept in a BLOB column; state responses never return it or decrypted keys.
+- `npm run check` passed. `npm test`: 37 passed, no failures or skips under the normal Windows account, using synthetic credentials and responses. Real DPAPI encryption/decryption was verified. No real provider keys or live provider calls were used.
+- Desktop browser fixture verified slot creation, test result, edit dialog, blank password field on reopen, renamed slot with retained key and cleared test status. Store and HTTP tests verified deletion and other-slot preservation. Mobile connector-specific workflow has not yet been separately checked; the earlier foundation mobile checks remain valid for the tested draft flow.
+- Phase 01 remains complete. R01/R02 remain in progress because per-channel OAuth and live provider verification are still pending. Read CONNECTORS.md for the exact boundary.
+- GitHub is the delivery location. Local files are a working copy for testing only; completed changes must be pushed and linked by GitHub commit. Do not present a local edit link as evidence of a completed push.
+
+### Attribution and runtime decision
+
+GitHub's contributor endpoint was checked: only hamzaofficial1478-lang was listed, with the three existing commits. darkzOGx is credited in retained upstream references/license notices, not added as a project contributor or collaborator. The app uses Node.js for UI/API coordination; Python tools and FFmpeg workers remain suitable for specialized processing. Heavy rendering should run outside the request-handling process. No whole-program rewrite is planned just to change language.
 
 ### Current release 0.2.0 - 2026-09-08
 
