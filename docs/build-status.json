@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0",
-  "updated": "2026-09-09",
-  "nextAction": "Connector slots are implemented and fixture-tested. Verify real provider credentials, then implement per-channel OAuth identity/refresh/revocation and recent-video evidence collection.",
+  "version": "0.4.0",
+  "updated": "2026-09-10",
+  "nextAction": "Create a dedicated restricted Hermes profile, verify its local API connector, and generate/review the first live English script candidate before adding research or publishing powers.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -105,8 +105,8 @@
         {
           "id": "P01",
           "title": "LLM writing with claim and budget controls",
-          "status": "planned",
-          "remaining": "Connect one approved provider; validate structured outlines, hooks, original scripts and claim references; meter cost and retries."
+          "status": "testing",
+          "remaining": "Hermes local API connector, streaming-bounded generation, sourced factual claims, immutable candidates, tool-free profile checks and deliberate three-attempt retry UI are fixture-tested. Remaining: dedicated restricted profile, live model verification, cost policy and measured quality review."
         },
         {
           "id": "P02",

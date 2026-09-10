@@ -95,12 +95,16 @@ class Store {
     this.db.exec(`PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;
       CREATE TABLE IF NOT EXISTS families(id TEXT PRIMARY KEY, name_key TEXT UNIQUE NOT NULL, payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS content(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), payload TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES content(id), revision INTEGER NOT NULL, type TEXT NOT NULL, status TEXT NOT NULL, result TEXT, error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(content_id,revision,type));
+      CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES content(id), revision INTEGER NOT NULL, type TEXT NOT NULL, status TEXT NOT NULL, input TEXT, result TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(content_id,revision,type));
       CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, message TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS connectors(id TEXT PRIMARY KEY, name_key TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, secret BLOB);
+      CREATE TABLE IF NOT EXISTS script_candidates(id TEXT PRIMARY KEY, job_id TEXT UNIQUE NOT NULL REFERENCES jobs(id), content_id TEXT NOT NULL REFERENCES content(id), family_id TEXT NOT NULL REFERENCES families(id), content_revision INTEGER NOT NULL, family_revision INTEGER NOT NULL, connector_id TEXT NOT NULL, connector_revision INTEGER NOT NULL, language TEXT NOT NULL, locale TEXT NOT NULL, prompt_version INTEGER NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, usage TEXT NOT NULL, created_at TEXT NOT NULL);
       PRAGMA user_version=1;`);
+    if (!this.db.prepare("PRAGMA table_info(jobs)").all().some(column=>column.name==='input')) this.db.exec('ALTER TABLE jobs ADD COLUMN input TEXT');
+    if (!this.db.prepare("PRAGMA table_info(jobs)").all().some(column=>column.name==='attempts')) this.db.exec('ALTER TABLE jobs ADD COLUMN attempts INTEGER NOT NULL DEFAULT 1');
     // ponytail: synchronous transactions on one local host; migrate before multi-host workers.
-    this.db.prepare("UPDATE jobs SET status='queued', updated_at=? WHERE status='running'").run(now());
+    this.db.prepare("UPDATE jobs SET status='queued', updated_at=? WHERE status='running' AND type='storyboard'").run(now());
+    this.db.prepare("UPDATE jobs SET status='interrupted', error='Hermes stopped during an unknown request. Review before retrying to avoid duplicate spend.', updated_at=? WHERE status='running' AND type LIKE 'hermes_script:%'").run(now());
   }
   close() { this.db.close(); }
   transaction(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const result=fn();this.db.exec('COMMIT');return result; } catch(error) { this.db.exec('ROLLBACK');throw error; } }
@@ -173,7 +177,7 @@ class Store {
   }
   processNextJob() {
     return this.transaction(()=>{
-      const j=this.db.prepare("SELECT * FROM jobs WHERE status='queued' ORDER BY created_at,id LIMIT 1").get();if(!j)return null;
+      const j=this.db.prepare("SELECT * FROM jobs WHERE status='queued' AND type='storyboard' ORDER BY created_at,id LIMIT 1").get();if(!j)return null;
       this.db.prepare("UPDATE jobs SET status='running',updated_at=? WHERE id=?").run(now(),j.id);
       try {
       const c=this.content(j.content_id);
@@ -191,7 +195,73 @@ class Store {
       }
     });
   }
-  state() {return {families:this.families(),contents:this.contents(),jobs:this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,rowid DESC LIMIT 100').all(),events:this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 25').all()};}
+  queueHermesScript(id,input) {
+    object(input);return this.transaction(()=>{
+      const c=this.content(id);this.version(c,input.revision);const f=this.family(c.familyId);
+      requireValue(!f.archived,'Restore this family before asking Hermes to prepare a script.',409);
+      requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Hermes connector.');
+      requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Hermes connector before generating.');
+      if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Hermes needs permitted evidence notes for factual script generation.');
+      const promptInput={family:{name:f.name,audience:f.audience,locale:f.englishLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,promptInput};
+      const type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p1`;
+      const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
+      const jobId=randomUUID(),at=now();
+      this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,type,JSON.stringify(scope),at,at);
+      this.event(`Queued Hermes English script candidate: ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);
+    });
+  }
+  retryHermesScriptJob(jobId,input) {
+    object(input);return this.transaction(()=>{
+      const previous=this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);
+      requireValue(previous&&previous.type.startsWith('hermes_script:'),'Hermes job not found.',404);
+      requireValue(['failed','stale','cancelled','interrupted'].includes(previous.status),'Only a terminal Hermes job can be retried deliberately.',409);
+      requireValue(previous.status!=='interrupted'||input.confirmInterrupted===true,'Confirm the interrupted request before retrying because its provider outcome is unknown.',409);
+      requireValue(previous.attempts<3,'This Hermes job reached the maximum of 3 attempts.',409);
+      const c=this.content(previous.content_id);this.version(c,input.revision);const f=this.family(c.familyId);
+      requireValue(!f.archived,'Restore this family before retrying Hermes.',409);
+      requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Hermes connector.');
+      requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Hermes connector before retrying.');
+      if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Hermes needs permitted evidence notes for factual script generation.');
+      const promptInput={family:{name:f.name,audience:f.audience,locale:f.englishLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,promptInput};
+      const attempts=previous.attempts+1,type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p1:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
+      this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
+      this.db.prepare("UPDATE jobs SET status='retried',updated_at=? WHERE id=?").run(at,previous.id);
+      this.event(`Deliberately retried Hermes English script candidate (attempt ${attempts}/3): ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
+    });
+  }
+  hermesConnectorCurrent(scope) {
+    const row=this.db.prepare('SELECT payload,secret FROM connectors WHERE id=?').get(scope.connectorId);if(!row||!row.secret)return false;
+    const connector=JSON.parse(row.payload);
+    return connector.provider==='hermes'&&connector.revision===scope.connectorRevision&&connector.test?.status==='passed';
+  }
+  claimHermesScriptJob() {
+    return this.transaction(()=>{
+      const job=this.db.prepare("SELECT * FROM jobs WHERE status='queued' AND type LIKE 'hermes_script:%' ORDER BY created_at,id LIMIT 1").get();if(!job)return null;
+      const scope=JSON.parse(job.input),c=this.content(job.content_id),f=this.family(c.familyId);
+      if(c.revision!==scope.contentRevision||f.revision!==scope.familyRevision||f.archived||!this.hermesConnectorCurrent(scope)){
+        this.db.prepare("UPDATE jobs SET status='stale',error='Content, family, or tested Hermes connector is no longer current before generation.',updated_at=? WHERE id=?").run(now(),job.id);return null;
+      }
+      this.db.prepare("UPDATE jobs SET status='running',updated_at=? WHERE id=? AND status='queued'").run(now(),job.id);
+      return {...job,status:'running',scope};
+    });
+  }
+  completeHermesScriptJob(jobId,result) {
+    return this.transaction(()=>{
+      const job=this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);requireValue(job&&job.status==='running','Hermes job is not running.',409);
+      const scope=JSON.parse(job.input),c=this.content(job.content_id),f=this.family(c.familyId);
+      if(c.revision!==scope.contentRevision||f.revision!==scope.familyRevision||f.archived||!this.hermesConnectorCurrent(scope)){this.db.prepare("UPDATE jobs SET status='stale',error='Hermes completed, but its input scope or tested connector changed. Candidate was not attached.',updated_at=? WHERE id=?").run(now(),jobId);return null;}
+      const id=randomUUID(),at=now();
+      this.db.prepare("INSERT INTO script_candidates(id,job_id,content_id,family_id,content_revision,family_revision,connector_id,connector_revision,language,locale,prompt_version,status,payload,usage,created_at) VALUES(?,?,?,?,?,?,?,?,? ,?,?,?, ?,?,?)").run(id,jobId,c.id,f.id,c.revision,f.revision,scope.connectorId,scope.connectorRevision,'en',f.englishLocale,scope.promptVersion,'available',JSON.stringify(result.candidate),JSON.stringify(result.usage),at);
+      this.db.prepare("UPDATE jobs SET status='completed',result=?,error=NULL,updated_at=? WHERE id=?").run(JSON.stringify({candidateId:id,usage:result.usage}),at,jobId);
+      this.event(`Hermes prepared an English script candidate for review: ${c.title}`);return this.scriptCandidate(id);
+    });
+  }
+  failHermesScriptJob(jobId,message='Hermes generation failed. Review the connector and retry deliberately.') {this.db.prepare("UPDATE jobs SET status='failed',error=?,updated_at=? WHERE id=? AND status='running'").run(message,now(),jobId);}
+  scriptCandidate(id){const row=this.db.prepare('SELECT * FROM script_candidates WHERE id=?').get(id);requireValue(row,'Script candidate not found.',404);return {id:row.id,jobId:row.job_id,contentId:row.content_id,familyId:row.family_id,contentRevision:row.content_revision,familyRevision:row.family_revision,connectorId:row.connector_id,connectorRevision:row.connector_revision,language:row.language,locale:row.locale,promptVersion:row.prompt_version,status:row.status,payload:JSON.parse(row.payload),usage:JSON.parse(row.usage),createdAt:row.created_at};}
+  scriptCandidates(){return this.db.prepare('SELECT id FROM script_candidates ORDER BY created_at DESC,rowid DESC').all().map(row=>this.scriptCandidate(row.id));}
+  state() {return {families:this.families(),contents:this.contents(),jobs:this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,rowid DESC LIMIT 100').all().map(job=>({...job,input:undefined})),scriptCandidates:this.scriptCandidates(),events:this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 25').all()};}
   exportContent(id) {
     const c=this.content(id), f=this.family(c.familyId);
     return {schemaVersion:1,exportedAt:now(),family:{id:f.id,name:f.name,profile:f.audience,countries:f.countries,channels:f.channels},content:c,

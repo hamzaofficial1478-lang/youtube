@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.3.0 - planning foundation, connector slots and protected research setup.
+Version 0.4.0 - planning foundation, protected connectors and Hermes reasoning integration.
 
 The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
 
@@ -29,8 +29,9 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 7. Archive/restore families without deleting work, reopen saved data and inspect the build tracker.
 8. Save a YouTube Data API key with Windows account protection, then look up a public channel by handle, ID or URL. See [YouTube setup](docs/YOUTUBE-SETUP.md). The connector has fixture coverage; verification with your live project remains pending.
 9. Add, edit, test and delete named connector slots. YouTube, OpenAI and ElevenLabs have read-only metadata tests; MCP/Reddit setup slots explicitly report pending adapters. See [Connector guide](docs/CONNECTORS.md).
+10. Connect a dedicated, tool-free local Hermes Agent API, queue one evidence-bounded English script job, inspect sourced claims and review its immutable candidate without overwriting or approving the saved draft. Terminal jobs require deliberate, capped retries. See [Hermes setup](docs/HERMES-SETUP.md).
 
-The storyboard is **planning only**. It uses the supplied words and estimated timing; it is not generated media or an AI-directed script. Competitor research automation, AI writing, voiceover, translation, rendering, channel sign-in and publishing remain upcoming. Connection cards distinguish a saved key, a tested public lookup and channel ownership authorization.
+The storyboard is **planning only**. Hermes can now propose an English script candidate from saved evidence, but the candidate remains separate until the operator chooses to copy, edit and save it. Competitor research automation, voiceover, translation, rendering, channel sign-in and publishing remain upcoming. Connection cards distinguish a saved key, a tested capability and production authorization.
 
 ## Where your work is saved
 
@@ -45,6 +46,7 @@ The exported planning JSON contains the selected draft and its source references
 - **docs/REPOSITORIES.md**: the three supplied repos, pinned revisions, licenses and actual reuse.
 - **AGENTS.md**: instructions for future coding sessions.
 - **docs/YOUTUBE-SETUP.md**: key setup, security boundaries, live verification and the next research steps.
+- **docs/HERMES-SETUP.md**: dedicated Hermes profile, local API connection and reasoning boundary.
 - [Detailed PDF blueprint](docs/YouTube_Automation_Program_Blueprint.pdf).
 - `scripts/build_blueprint.py`: optional PDF source; requires Python, ReportLab and Windows Calibri/Consolas fonts. It is separate from the dependency-free Node application.
 

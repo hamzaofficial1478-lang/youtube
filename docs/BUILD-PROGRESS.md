@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-09. Current application: 0.3.0, local planning, connector slots and protected public-research setup. Full production automation remains in development.
+Last updated: 2026-09-10. Current application: 0.4.0, local planning, protected connectors and a bounded Hermes reasoning integration. Full production automation remains in development.
 
 ## Resume here
 
 Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable English loop, then three languages, then controlled portfolio growth. Do not interpret this first release as a finished automated channel business.
 
-The next action is to supply a restricted YouTube Data API key through Connections and verify a real public lookup. Protected Windows key storage and the public lookup code are implemented and tested with fixtures; no live key was supplied. Per-channel OAuth authorization and identity isolation remain the next account milestone. There is no publication endpoint. See YOUTUBE-SETUP.md for setup and security details.
+The next action is to create a dedicated restricted Hermes profile, start its loopback API server, save/test that key through Connections and generate the first live English script candidate. The candidate path is fixture-tested; no live Hermes generation was performed in this release. Per-channel OAuth authorization and identity isolation remain the next account milestone. There is no publication endpoint. See HERMES-SETUP.md and YOUTUBE-SETUP.md.
 
 ## What the user requested
 
@@ -43,7 +43,7 @@ Approved data access and evidence-led research without invented metrics.
 
 A sourced English master becomes a real, reviewable video.
 
-- [ ] **P01 LLM writing with claim and budget controls** (planned) - Connect one approved provider; validate structured outlines, hooks, original scripts and claim references; meter cost and retries.
+- [ ] **P01 LLM writing with claim and budget controls** (testing) - Hermes local API connector, streaming-bounded generation, sourced factual claims, immutable candidates, tool-free profile checks and deliberate three-attempt retry UI are fixture-tested. Remaining: dedicated restricted profile, live model verification, cost policy and measured quality review.
 - [ ] **P02 Directed, expressive English narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
 - [ ] **P03 Real scene editing and visual assets** (planned) - Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review.
 - [ ] **P04 FFmpeg render, preview and media QC** (planned) - Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes.
@@ -96,6 +96,18 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Added Overview, Families, Studio, Connections and Build progress UI. Counts come from stored records; no demo metrics are seeded.
 
 ## Validation record
+
+### Current release 0.4.0 - Hermes reasoning boundary
+
+- Added a dedicated Hermes connector using only the fixed local API at `127.0.0.1:8642`. Its bearer key uses the existing Windows-DPAPI connector storage and is never returned to the browser.
+- Added one bounded, stateless English script-candidate call through Hermes Chat Completions. Saved family/content/source data is treated as untrusted prompt data. Factual jobs require permitted evidence notes.
+- Added exact candidate validation for title, angle, hook, script, source-linked claims and uncertainties. Factual candidates require at least one claim and every claim must cite a supplied source ID; claims and IDs appear in review. Unknown source IDs, malformed shapes, prose wrappers and oversized responses fail closed while streaming.
+- Added durable, revision-scoped Hermes jobs and immutable `script_candidates`. Duplicate queue requests reuse one job. Generation never overwrites or approves the saved draft.
+- Added the Content Studio actions **Ask Hermes** and **Use candidate**. Using a candidate opens the normal editor; the operator must review and save it through the existing revision/approval rules.
+- Running requests are not silently replayed after restart. Failed, stale and cancelled jobs can be deliberately retried up to three total attempts; interrupted/unknown requests require a distinct confirmation. Before claim and completion, jobs recheck connector existence, Hermes provider, protected key, exact revision and latest passed test status.
+- Connector testing now authenticates to both `/v1/capabilities` and `/v1/toolsets`, uses bounded streaming JSON parsing, and refuses any enabled toolset with concrete tools. The first script milestone is reasoning-only.
+- Added `docs/HERMES-SETUP.md`. Live profile setup, model quality, token cost and a real candidate remain unverified; P01 stays in testing.
+- `npm run check` passed. `npm test`: 46 passed with no failures, skips or cancellations under the normal Windows account; fixtures made no live Hermes or paid-provider generation calls.
 
 ### Current release 0.3.0 - connector slots
 

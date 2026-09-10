@@ -1,4 +1,4 @@
-# Connector slots - version 0.3
+# Connector slots - version 0.4
 
 Open Connections and choose **Add connector**. Give the slot a unique name, choose a provider, and optionally enter its API key. Save, then select **Test** on the card. Saving does not contact a provider.
 
@@ -7,6 +7,7 @@ Open Connections and choose **Add connector**. Give the slot a unique name, choo
 | YouTube public research | Public channel lookup; card Test uses @GoogleDevelopers. The research form accepts another channel. | Owner OAuth, private analytics, uploads |
 | OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification |
 | ElevenLabs | GET /v2/voices?page_size=1, checking the response shape | Voice generation, rights verification and billing verification |
+| Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools | Live model quality, localization, voice, rendering and publishing |
 | MCP server | Reports adapter not implemented, without a network call | Protocol handshake, tools and credentials |
 | Reddit | Reports adapter not implemented, without a network call | OAuth, search and credentials |
 

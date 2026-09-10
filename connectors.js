@@ -2,11 +2,13 @@
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
 const {YouTubeResearch, responseJson} = require('./youtube');
+const {HermesClient} = require('./hermes');
 
 const PROVIDERS = {
   youtube: {name: 'YouTube public research', test: 'Public channel lookup', ready: true},
   openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
+  hermes: {name: 'Hermes reasoning engine', test: 'Authenticated capability and tool-free profile check; no generation', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
   reddit: {name: 'Reddit', test: 'OAuth adapter not implemented; setup record only', ready: false}
 };
@@ -61,6 +63,9 @@ class ConnectorSlots {
       if(slot.provider==='youtube'){
         const research=new YouTubeResearch({get:()=>key},this.fetch);
         result=await research.lookup(channel);
+      }else if(slot.provider==='hermes'){
+        result=await new HermesClient(key,this.fetch).capabilities();
+        result.message='Hermes authenticated capability and tool-free profile checks passed. No content was generated.';
       }else{
         const url=slot.provider==='openai'?'https://api.openai.com/v1/models':'https://api.elevenlabs.io/v2/voices?page_size=1';
         const headers=slot.provider==='openai'?{Authorization:`Bearer ${key}`}:{'xi-api-key':key};
