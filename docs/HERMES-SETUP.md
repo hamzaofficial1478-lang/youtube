@@ -72,9 +72,11 @@ Hermes requires bearer authentication even on loopback. Do not enable browser CO
 8. Review the candidate's claims and supplied source IDs, then select **Use candidate** to copy it into the existing edit form. Factual candidates without at least one sourced claim are rejected. Nothing is saved until the operator reviews and submits that form. Saving creates a new content revision and invokes the existing approval-invalidation rules.
 9. If a job ends failed, stale or cancelled, select **Retry Hermes** deliberately. Attempt 3 is the ceiling. An interrupted job additionally shows an unknown-outcome confirmation; cancel that prompt if provider activity or spend has not yet been reconciled.
 
-## Current limitation
+## Live validation record and current limitation
 
-The connection and generation path is fixture-tested, but no live Hermes gateway/key was supplied to this repository release. A live candidate must therefore be generated and reviewed on the operator's machine before P01 can be marked complete. Research browsing, Spanish/Italian localization, voice, rendering and publishing remain separate later milestones.
+On 2026-09-10, the operator machine created a separate `youtube-control-room` profile with no bundled skills, no MCP servers and every API-server toolset disabled. Its authenticated capability and toolset checks passed. One live factual candidate was generated from an official YouTube Help source. It completed on the first attempt with 1,974 total tokens, four source-linked claims and three uncertainties; the saved draft remained unchanged and the candidate/source links rendered in Content Studio.
+
+The live candidate was only 267 words, which is too short for the selected long-form format. The provider response reported token counts but not a dollar cost. P01 therefore remains in testing until the application enforces explicit token-budget and long-form quality gates. Research browsing, Spanish/Italian localization, voice, rendering and publishing remain separate later milestones.
 
 Official references:
 

@@ -1,7 +1,7 @@
 {
   "version": "0.4.0",
   "updated": "2026-09-10",
-  "nextAction": "Create a dedicated restricted Hermes profile, verify its local API connector, and generate/review the first live English script candidate before adding research or publishing powers.",
+  "nextAction": "Define explicit long-form quality and token-budget gates from the first live result, then begin permitted daily research and topic evidence briefs. Publishing powers remain disabled.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -106,7 +106,7 @@
           "id": "P01",
           "title": "LLM writing with claim and budget controls",
           "status": "testing",
-          "remaining": "Hermes local API connector, streaming-bounded generation, sourced factual claims, immutable candidates, tool-free profile checks and deliberate three-attempt retry UI are fixture-tested. Remaining: dedicated restricted profile, live model verification, cost policy and measured quality review."
+          "remaining": "A dedicated tool-free profile and first live factual candidate were verified on 2026-09-10: one completed attempt, 1,974 tokens, four S1-linked claims, three uncertainties and an unchanged saved draft. The 267-word result was too short for long-form production. Remaining: explicit per-job/monthly token policy and enforceable long-form quality criteria."
         },
         {
           "id": "P02",

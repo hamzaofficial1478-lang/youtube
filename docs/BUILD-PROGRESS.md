@@ -6,7 +6,23 @@ Last updated: 2026-09-10. Current application: 0.4.0, local planning, protected 
 
 Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable English loop, then three languages, then controlled portfolio growth. Do not interpret this first release as a finished automated channel business.
 
-The next action is to create a dedicated restricted Hermes profile, start its loopback API server, save/test that key through Connections and generate the first live English script candidate. The candidate path is fixture-tested; no live Hermes generation was performed in this release. Per-channel OAuth authorization and identity isolation remain the next account milestone. There is no publication endpoint. See HERMES-SETUP.md and YOUTUBE-SETUP.md.
+The restricted `youtube-control-room` Hermes profile, loopback API server, protected connector and first live factual candidate were verified on 2026-09-10. The next action is to define explicit long-form quality and token-budget gates from that result, then begin permitted daily research and topic evidence briefs. Per-channel OAuth authorization and identity isolation remain a later account milestone. There is no publication endpoint. See HERMES-SETUP.md and YOUTUBE-SETUP.md.
+
+## Agreed 11-step delivery sequence
+
+These 11 delivery steps group the remaining tracked milestones into the order agreed with the user. Complete and verify each step before enabling the next dependent capability.
+
+1. [x] Live Hermes validation, completed 2026-09-10.
+2. [ ] Daily research and topic evidence briefs.
+3. [ ] Expressive English narration.
+4. [ ] Real scenes and licensed visual assets.
+5. [ ] FFmpeg rendering and media quality control.
+6. [ ] Spanish and Italian localization.
+7. [ ] Per-channel YouTube OAuth and identity binding.
+8. [ ] Private test-channel upload and reconciliation.
+9. [ ] Scheduling, captions and thumbnails.
+10. [ ] Analytics and controlled autopilot.
+11. [ ] Gradual scaling toward 10 to 15 channel families.
 
 ## What the user requested
 
@@ -43,7 +59,7 @@ Approved data access and evidence-led research without invented metrics.
 
 A sourced English master becomes a real, reviewable video.
 
-- [ ] **P01 LLM writing with claim and budget controls** (testing) - Hermes local API connector, streaming-bounded generation, sourced factual claims, immutable candidates, tool-free profile checks and deliberate three-attempt retry UI are fixture-tested. Remaining: dedicated restricted profile, live model verification, cost policy and measured quality review.
+- [ ] **P01 LLM writing with claim and budget controls** (testing) - A dedicated tool-free profile and first live factual candidate were verified on 2026-09-10: one completed attempt, 1,974 tokens, four S1-linked claims, three uncertainties and an unchanged saved draft. The 267-word result was too short for long-form production. Remaining: explicit per-job/monthly token policy and enforceable long-form quality criteria.
 - [ ] **P02 Directed, expressive English narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
 - [ ] **P03 Real scene editing and visual assets** (planned) - Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review.
 - [ ] **P04 FFmpeg render, preview and media QC** (planned) - Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes.
@@ -106,8 +122,11 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Added the Content Studio actions **Ask Hermes** and **Use candidate**. Using a candidate opens the normal editor; the operator must review and save it through the existing revision/approval rules.
 - Running requests are not silently replayed after restart. Failed, stale and cancelled jobs can be deliberately retried up to three total attempts; interrupted/unknown requests require a distinct confirmation. Before claim and completion, jobs recheck connector existence, Hermes provider, protected key, exact revision and latest passed test status.
 - Connector testing now authenticates to both `/v1/capabilities` and `/v1/toolsets`, uses bounded streaming JSON parsing, and refuses any enabled toolset with concrete tools. The first script milestone is reasoning-only.
-- Added `docs/HERMES-SETUP.md`. Live profile setup, model quality, token cost and a real candidate remain unverified; P01 stays in testing.
-- `npm run check` passed. `npm test`: 46 passed with no failures, skips or cancellations under the normal Windows account; fixtures made no live Hermes or paid-provider generation calls.
+- Added `docs/HERMES-SETUP.md`. On 2026-09-10, created the separate `youtube-control-room` profile with no bundled skills, no MCP servers and every API-server toolset disabled. The authenticated live capability/toolset checks passed.
+- Generated one live factual candidate from the official YouTube Help recommendation-system page. The job completed on its first attempt with 1,331 prompt tokens, 643 completion tokens and 1,974 total tokens. It returned four S1-linked claims and three uncertainties; the original saved draft remained unchanged.
+- The live candidate was 267 words. Its structure, evidence discipline and uncertainty handling passed manual review, but its length is insufficient for the selected long-form format. The provider response exposed token usage but no dollar cost. P01 stays in testing until explicit token-budget and long-form quality gates are enforced.
+- The actual Content Studio UI was read through the Hermes desktop preview: the completed job, candidate, claims, official source links, uncertainties and **Use candidate** action rendered correctly. The separate Browser Use driver timed out before opening localhost; the preview and API checks completed instead.
+- `npm run check` passed. `npm test`: 46 passed with no failures, skips or cancellations under the normal Windows account before the live call; fixture tests themselves make no paid generation calls.
 
 ### Current release 0.3.0 - connector slots
 
