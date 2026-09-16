@@ -15,7 +15,7 @@ This release adds a public channel lookup. It does not connect a channel owner a
 
 Each lookup makes one `channels.list` call with the snippet and statistics parts. The documented cost is one unit. Actual quota availability belongs to the Google project; this app does not claim to know its remaining quota. Requests are manual, limited to one in flight, time out after ten seconds and do not automatically retry. [YouTube method reference](https://developers.google.com/youtube/v3/docs/channels/list).
 
-Totals are public data, not evidence of audience country, tier, retention, revenue or the reasons for ranking. Hidden/missing values are shown as unavailable. Large numeric counts remain strings to avoid JavaScript rounding. Results are kept only in the open page session; reloading clears them. No source-retention database or competitor scoring is implemented yet.
+Totals are public data, not evidence of audience country, tier, retention, revenue or the reasons for ranking. Hidden/missing values are shown as unavailable. Large numeric counts remain strings to avoid JavaScript rounding. Public channel lookup results are kept only in the open page session; reloading clears them. Version 0.5 has a separate manually curated evidence library and review-only topic briefs, but lookup results are not silently promoted into it and competitor scoring is not implemented.
 
 ## How the key is handled
 
@@ -28,10 +28,10 @@ Totals are public data, not evidence of audience country, tier, retention, reven
 
 ## Validation and next work
 
-`npm run check` and `npm test` validate the source and 29 automated cases. The Windows vault test uses a nonfunctional dummy key and exercises actual protection, reopen, replacement, corruption and removal. In restricted environments DPAPI may be unavailable: run this check under the normal Windows account; do not skip it and claim success. No paid service or Google call is made by the tests.
+`npm run check` and `npm test` validate the source and the current automated suite. The Windows vault test uses a nonfunctional dummy key and exercises actual protection, reopen, replacement, corruption and removal. In restricted environments DPAPI may be unavailable: run this check under the normal Windows account; do not skip it and claim success. No paid service or Google call is made by the tests.
 
 For repeatable browser QA, `node tests/browser-fixture.js` runs a separate in-memory fixture at port 3457. It uses a fake vault and fake provider. The handle `@denied` returns a simulated denial; other valid identifiers return conspicuously labeled test data. Never enter a real key there. The normal `npm start` command cannot enable this fixture. Browser checks cover phone-width key save/lookup/error/forget flows and desktop layout; actual encryption is checked separately by the automated Windows test.
 
-Next: supply a restricted key and verify one real public lookup; then build per-channel OAuth with state/PKCE, verified destination identity, refresh/revocation and separate EN/ES/IT bindings. The project API key is for public research and must never become an upload credential. After that, add recent-video collection, permitted evidence storage and differentiated topic briefs. Owner analytics require separate authorization.
+Next: supply a restricted key and verify one real public lookup; then build per-channel OAuth with state/PKCE, verified destination identity, refresh/revocation and separate bindings for every channel locale configured on each family. The project API key is for public research and must never become an upload credential. Automated recent-video collection remains separate from the manually curated version 0.5 evidence briefs. Owner analytics require separate authorization.
 
 References checked 2026-09-08. R01 and R02 remain in progress until their account isolation and live verification requirements are met.

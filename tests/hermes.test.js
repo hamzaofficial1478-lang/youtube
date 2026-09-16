@@ -8,6 +8,7 @@ const { createApp } = require('../server');
 
 const key = 'fixture-hermes-' + 'x'.repeat(32);
 const fixtureProtector = {transform:(operation, input) => Buffer.from([...input].reverse())};
+const qualityScript=(hook,count=650)=>{const filler=Array.from({length:count-hook.split(/\s+/).length},(_,index)=>`detail${index+1}`);const size=Math.floor(filler.length/4);return [hook+' '+filler.slice(0,size).join(' '),filler.slice(size,size*2).join(' '),filler.slice(size*2,size*3).join(' '),filler.slice(size*3).join(' ')].join('\n\n');};
 
 test('factual Hermes candidates require sourced claims', () => {
   const sourceIds = new Set(['S1']);
@@ -70,27 +71,29 @@ test('Hermes connector is stored as its own protected local reasoning provider',
   assert.equal(JSON.stringify(slots.list()).includes(key), false);
 });
 
-test('Hermes returns one validated English script candidate without mutating source input', async () => {
+test('Hermes returns one validated primary-locale script candidate without mutating source input', async () => {
   const calls = [];
+  const hook='The room is organized, so why does the task still feel slow?';
   const payload = {
     title:'Why routines feel harder than expected',
     angle:'Follow one ordinary routine and identify the hidden handoffs.',
-    hook:'The room is organized, so why does the task still feel slow?',
-    script:'A sufficiently detailed original English candidate script that explains the evidence carefully, avoids unsupported certainty, and ends with a useful payoff for the intended audience.',
+    hook,
+    script:qualityScript(hook),
     claims:[{text:'The supplied source describes the observed workflow.', sourceIds:['S1']}],
     uncertainties:['The evidence does not establish a universal result.']
   };
   const input = {
-    family:{name:'Everyday Explained', audience:'Curious adults', locale:'en-US'},
-    content:{title:'Why routines feel slow', kind:'factual', angle:'Original workflow explanation', hook:'Why is this slow?'},
-    sources:[{id:'S1', title:'Creator evidence', url:'https://example.com/evidence', notes:'Permitted summary of the supporting evidence.'}]
+    family:{name:'Everyday Explained', audience:'Curious adults', locale:'en-US',format:'long-form'},
+    content:{title:'Why routines feel harder than expected', kind:'factual', angle:'Follow one routine',hook:'Why is this slow?'},
+    sources:[{id:'S1',title:'Evidence',url:'https://example.com/evidence',notes:'Reviewed evidence.'}],
+    policy:{totalTokenLimit:8000,maxCompletionTokens:4000}
   };
   const snapshot = structuredClone(input);
   const client = new HermesClient(key, async (url, options) => {
     calls.push({url:String(url), options});
     return Response.json({choices:[{message:{content:JSON.stringify(payload)}}], usage:{prompt_tokens:120, completion_tokens:80, total_tokens:200}});
   });
-  const result = await client.generateEnglishScript(input);
+  const result = await client.generateScript(input);
   assert.deepEqual(input, snapshot);
   assert.deepEqual(result.candidate, payload);
   assert.deepEqual(result.usage, {promptTokens:120, completionTokens:80, totalTokens:200});
@@ -102,16 +105,18 @@ test('Hermes returns one validated English script candidate without mutating sou
   const sent = JSON.parse(calls[0].options.body);
   assert.equal(sent.stream, false);
   assert.equal(sent.messages.some(message => message.content.includes('https://example.com/evidence')), true);
+  assert.equal(sent.messages.some(message => message.content.includes('en-US')), true);
   assert.equal(JSON.stringify(result).includes(key), false);
 });
 
 test('reasoning job stores an immutable candidate and never overwrites the draft', async t => {
   const store = new Store(':memory:');
   t.after(() => store.close());
-  const family = store.saveFamily({name:'Everyday Explained',tier:'A',countries:['United States'],audience:'Curious adults seeking sourced explanations.',niche:'Everyday systems',spanishLocale:'es-419',englishLocale:'en-US',timezone:'Asia/Karachi',monthlyBudget:100,cadence:2,format:'long-form'});
+  const family = store.saveFamily({name:'Everyday Explained',tier:'A',countries:['Pakistan'],audience:'Curious adults seeking sourced explanations.',niche:'Everyday systems',locales:['ur-PK'],timezone:'Asia/Karachi',monthlyBudget:100,cadence:2,format:'long-form'});
   const content = store.saveContent({familyId:family.id,title:'Why routines feel slow',kind:'factual',angle:'Follow a routine and show hidden handoffs.',hook:'Why does an organized task still feel slow?',script:'Existing creator text must remain unchanged while Hermes proposes a separate candidate for deliberate review by the operator.',sources:[{title:'Creator evidence',url:'https://example.com/evidence',permission:'permitted',notes:'Permitted summary supporting the workflow example.'}],rightsConfirmed:true});
+  const generatedHook='The room is organized, so why is the task slow?';
   const generated = {
-    title:'Why routines feel harder than expected',angle:'Follow one routine and identify hidden handoffs.',hook:'The room is organized, so why is the task slow?',script:'A sufficiently detailed original English candidate script that explains the supplied evidence carefully, avoids unsupported certainty, and concludes with a useful practical payoff.',claims:[{text:'The supplied evidence describes a workflow example.',sourceIds:['S1']}],uncertainties:['The result is not universal.']
+    title:'Why routines feel harder than expected',angle:'Follow one routine and identify hidden handoffs.',hook:generatedHook,script:qualityScript(generatedHook),claims:[{text:'The supplied evidence describes a workflow example.',sourceIds:['S1']}],uncertainties:['The result is not universal.']
   };
   let generationCalls = 0, toolsetChecks = 0;
   const slots = new ConnectorSlots(store, fixtureProtector, async (url) => {
@@ -133,9 +138,15 @@ test('reasoning job stores an immutable candidate and never overwrites the draft
   assert.equal(state.jobs.find(job => job.id === first.id).status, 'completed');
   assert.equal(state.scriptCandidates.length, 1);
   assert.equal(state.scriptCandidates[0].contentId, content.id);
+  assert.equal(state.scriptCandidates[0].locale, 'ur-PK');
+  assert.equal(state.scriptCandidates[0].language, 'ur');
   assert.equal(state.scriptCandidates[0].payload.script, generated.script);
   assert.equal(store.content(content.id).script, content.script);
   assert.equal(store.content(content.id).state, 'draft');
+  assert.equal(state.scriptCandidates[0].status, 'available');
+  store.saveFamily({name:family.name,tier:family.tier,countries:family.countries,audience:family.audience,niche:family.niche,locales:['de-DE'],timezone:family.timezone,monthlyBudget:family.budgetCents/100,cadence:family.cadence,format:family.format,revision:family.revision,monthlyTokenLimit:family.tokenBudget.monthlyLimit,scriptTokenLimit:family.tokenBudget.scriptJobLimit,researchTokenLimit:family.tokenBudget.researchJobLimit},family.id);
+  assert.notEqual(store.scriptCandidate(state.scriptCandidates[0].id).status, 'available');
+  assert.equal(store.state().jobs.find(job=>job.id===first.id).scopeCurrent,false);
   slots.remove(connector.id, connector.revision);
   assert.equal(store.state().scriptCandidates.length, 1);
 });
@@ -189,11 +200,11 @@ test('Control Room HTTP queues Hermes reasoning and exposes only the review cand
   assert.equal((await send(`/api/hermes-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision})).response.status,409);
   const retry2=await send(`/api/hermes-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
   assert.equal(retry2.response.status,200);assert.equal(retry2.data.attempts,2);
-  app.store.db.prepare("UPDATE jobs SET status='failed' WHERE id=?").run(retry2.data.id);
-  const retry3=await send(`/api/hermes-jobs/${retry2.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  app.store.claimHermesScriptJob();app.store.failHermesScriptJob(retry2.data.id,'unknown provider outcome',{usageUnknown:true});
+  const retry3=await send(`/api/hermes-jobs/${retry2.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
   assert.equal(retry3.response.status,200);assert.equal(retry3.data.attempts,3);
-  app.store.db.prepare("UPDATE jobs SET status='failed' WHERE id=?").run(retry3.data.id);
-  assert.equal((await send(`/api/hermes-jobs/${retry3.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision})).response.status,409);
+  app.store.claimHermesScriptJob();app.store.failHermesScriptJob(retry3.data.id,'unknown provider outcome',{usageUnknown:true});
+  assert.equal((await send(`/api/hermes-jobs/${retry3.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true})).response.status,409);
   const ui = await (await fetch(base+'/app.js')).text();
   assert.match(ui,/Ask Hermes/);
   assert.match(ui,/hermes-script/);
@@ -202,7 +213,20 @@ test('Control Room HTTP queues Hermes reasoning and exposes only the review cand
   assert.match(ui,/confirmInterrupted/);
   assert.match(ui,/Source IDs/);
   assert.match(ui,/j\.content_id===c\.id&&j\.revision===c\.revision/);
+  assert.match(ui,/scopeCurrent!==false/);
   assert.match(ui,/c\.sources\[Number\(id\.slice\(1\)\)-1\]/);
   assert.match(ui,/source\.title/);
   assert.match(ui,/source\.url/);
+});
+
+test('Hermes retests revoke the previous passed state before queue admission',async t=>{
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const family=store.saveFamily({name:'Retest boundary',tier:'A',countries:['Pakistan'],audience:'Adults reviewing bounded original content.',niche:'Original fiction',locales:['en-US'],timezone:'Asia/Karachi',monthlyBudget:20,cadence:1,format:'long-form'});
+  const content=store.saveContent({familyId:family.id,title:'A retest boundary draft',kind:'fiction',angle:'Use an original scenario to verify connector retest isolation.',hook:'Can generation start while its connector is being retested?',script:'Existing creator text remains unchanged during this connector boundary test.',sources:[],rightsConfirmed:true});
+  let retesting=false,release;
+  const slots=new ConnectorSlots(store,fixtureProtector,async url=>{if(retesting&&String(url).endsWith('/v1/capabilities'))return new Promise(resolve=>{release=resolve;});if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});return Response.json([]);});
+  const connector=slots.save({name:'Retested Hermes',provider:'hermes',notes:'Boundary fixture',key});await slots.test(connector.id,connector.revision);const reasoning=new HermesReasoning(store,slots);retesting=true;const pending=slots.test(connector.id,connector.revision);
+  assert.equal(slots.list()[0].busy,true);assert.equal(store.hermesConnectorCurrent({connectorId:connector.id,connectorRevision:connector.revision}),false);
+  assert.throws(()=>reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision}),{status:409});
+  release(Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}}));await pending;
 });

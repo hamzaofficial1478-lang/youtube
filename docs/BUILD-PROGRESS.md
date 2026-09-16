@@ -1,23 +1,23 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-10. Current application: 0.4.0, local planning, protected connectors and a bounded Hermes reasoning integration. Full production automation remains in development.
+Last updated: 2026-09-16. Current application: 0.5.0, local planning, configurable family languages, quality-gated Hermes writing and immutable review-only daily research briefs. Full production automation remains in development.
 
 ## Resume here
 
-Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable English loop, then three languages, then controlled portfolio growth. Do not interpret this first release as a finished automated channel business.
+Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable primary-language loop, then optional localization into each family’s configured additional locales, then controlled portfolio growth. Do not interpret this first release as a finished automation product, a hosted app or a public recommendation system.
 
-The restricted `youtube-control-room` Hermes profile, loopback API server, protected connector and first live factual candidate were verified on 2026-09-10. The next action is to define explicit long-form quality and token-budget gates from that result, then begin permitted daily research and topic evidence briefs. Per-channel OAuth authorization and identity isolation remain a later account milestone. There is no publication endpoint. See HERMES-SETUP.md and YOUTUBE-SETUP.md.
+The restricted `youtube-control-room` Hermes profile now powers two bounded paths: quality-gated candidates in each family’s primary locale and permission-gated daily topic briefs. P01 and roadmap Step 2 passed live validation on 2026-09-11. The next action is Step 3, expressive primary-language narration. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint. See HERMES-SETUP.md, RESEARCH-BRIEFS.md and YOUTUBE-SETUP.md.
 
 ## Agreed 11-step delivery sequence
 
 These 11 delivery steps group the remaining tracked milestones into the order agreed with the user. Complete and verify each step before enabling the next dependent capability.
 
 1. [x] Live Hermes validation, completed 2026-09-10.
-2. [ ] Daily research and topic evidence briefs.
-3. [ ] Expressive English narration.
+2. [x] Daily research and topic evidence briefs, completed 2026-09-11.
+3. [ ] Expressive narration in the family’s selected primary locale.
 4. [ ] Real scenes and licensed visual assets.
 5. [ ] FFmpeg rendering and media quality control.
-6. [ ] Spanish and Italian localization.
+6. [ ] Optional localization into each family’s configured additional locales, with independent retries.
 7. [ ] Per-channel YouTube OAuth and identity binding.
 8. [ ] Private test-channel upload and reconciliation.
 9. [ ] Scheduling, captions and thumbnails.
@@ -26,14 +26,14 @@ These 11 delivery steps group the remaining tracked milestones into the order ag
 
 ## What the user requested
 
-A UI-based program that researches markets and competitors, proposes differentiated niches and daily topics, writes original scripts, directs expressive voice, edits videos, localizes to English/Spanish/Italian, uploads and manages 10-15 channel families (30-45 channels), then learns from results. Tier A/B are user-defined market profiles. The 90-100 day period is a validation target, not a guarantee of ranking or earnings. The user requested a separate folder and a detailed record of completed and remaining processes.
+A UI-based program that researches markets and competitors, proposes differentiated niches and daily topics, writes original scripts, directs expressive voice, edits videos, optionally localizes into user-selected family languages, uploads and manages 10-15 channel families with a variable number of channels, then learns from results. Tier A/B are user-defined market profiles. The 90-100 day period is a validation target, not a guarantee of ranking or earnings. The user requested a separate folder and a detailed record of completed and remaining work.
 
 ## Current milestone and acceptance
 
-Foundation: create a family, save a sourced English draft, review the exact version, prepare a saved planning scaffold, export it, restart the program and retain the work. Preserve original data during editing and tests. Explicitly distinguish planned language slots from connected YouTube channels.
+Current milestone: audition and verify expressive primary-language narration without weakening the approved-script, consent, budget or retry boundaries. P01 writing and Step 2 research are complete. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 6 / 23 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 8 / 23 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -53,24 +53,24 @@ Approved data access and evidence-led research without invented metrics.
 - [ ] **R01 Protected provider and channel credentials** (testing) - Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters.
 - [ ] **R02 YouTube read-only connector** (testing) - Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention.
 - [ ] **R03 Permitted web, Reddit and Agent-Reach tools** (planned) - Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching.
-- [ ] **R04 Daily niche and topic evidence briefs** (planned) - Collect dated evidence, explicit audience profiles, differentiation, confidence and topic deduplication. Gate API-derived scores on required permission.
+- [x] **R04 Daily niche and topic evidence briefs** (done) - Version 0.5 stores revisioned permission-labeled evidence and immutable date-scoped review-only briefs with source links, confidence, deduplication, expiry, token accounting and deliberate retries. A live brief completed on 2026-09-11; desktop and 390 x 844 layouts passed. Automatic collection is intentionally not enabled.
 
 ### 03 · Original scripts and production
 
-A sourced English master becomes a real, reviewable video.
+A sourced primary-language master becomes a real, reviewable video.
 
-- [ ] **P01 LLM writing with claim and budget controls** (testing) - A dedicated tool-free profile and first live factual candidate were verified on 2026-09-10: one completed attempt, 1,974 tokens, four S1-linked claims, three uncertainties and an unchanged saved draft. The 267-word result was too short for long-form production. Remaining: explicit per-job/monthly token policy and enforceable long-form quality criteria.
-- [ ] **P02 Directed, expressive English narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
+- [x] **P01 LLM writing with claim and budget controls** (done) - Version 0.5 enforces long-form/Shorts word and structure policy, current evidence links, transactional monthly/per-job token reservations, usage settlement, unknown-use blocking and capped deliberate retries. A live 888-word long-form candidate passed on 2026-09-11 using 2,855 tokens; the saved draft remained unchanged.
+- [ ] **P02 Directed, expressive primary-language narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
 - [ ] **P03 Real scene editing and visual assets** (planned) - Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review.
 - [ ] **P04 FFmpeg render, preview and media QC** (planned) - Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes.
 
-### 04 · Spanish and Italian editions
+### 04 · Optional configured-language editions
 
 Reuse the visual master while preserving meaning, natural voice and scene timing.
 
-- [ ] **L01 Scene translation and local packaging** (planned) - Adapt scripts, visible text, titles, descriptions and thumbnails for the selected Spanish locale and Italian.
+- [ ] **L01 Scene translation and local packaging** (planned) - Adapt scripts, visible text, titles, descriptions and thumbnails only for each family’s configured additional locales; keep every locale independently retryable.
 - [ ] **L02 Language narration and synchronization** (planned) - Generate actual voices, adjust natural wording/timing and verify with proficient language reviewers.
-- [ ] **L03 Independent edition approvals** (planned) - Track EN/ES/IT outputs and language-specific revisions; propagate source corrections and permit independent release decisions.
+- [ ] **L03 Independent edition approvals** (planned) - Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions.
 
 ### 05 · Controlled publishing
 
@@ -113,10 +113,23 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Validation record
 
+### Current release 0.5.0 - quality gate and daily evidence briefs
+
+- Added explicit family monthly, script-job and research-job token ceilings. Admission reserves a job ceiling inside the same SQLite transaction that claims work, so concurrent claims cannot oversubscribe the family-local month. Budget rejection makes zero completion calls.
+- Added separate script usage rows with reserved, settled, released, unknown and budget-violation states. Valid provider totals settle exactly; missing, inconsistent or over-limit usage blocks the result. Provider dollar cost was not reported, so no estimate was fabricated.
+- Added deterministic format gates. Long-form requires 600-1,200 words, targets 800-1,000, requires four paragraphs, the exact returned hook in the opening and a complete payoff. Shorts requires 80-180 words and at least two paragraphs. The earlier 267-word live candidate now renders as quality-blocked and cannot be used.
+- A fresh live script job `beb226dd-a8be-4bb3-9b0b-3774f673030d` completed on attempt 1. Immutable candidate `c8e4869c-9e5f-4525-bf39-b8bc99616094` passed at 888 words with 1,383 prompt, 1,472 completion and 2,855 total tokens. The saved draft remained unchanged.
+- Added family-scoped, revisioned research evidence with title, HTTPS URL, publisher, publication/access/expiry dates, permission, analysis mode, factual notes, rights notes and archive/restore history.
+- Added separate date-scoped research jobs and immutable topic briefs. Only same-family, current, unarchived, unexpired, human-permitted evidence marked for brief synthesis reaches Hermes. Duplicate submissions reuse the same evidence-hash job; exact/near-duplicate topics are retained as quality failures.
+- Research output is exact, bounded JSON: an honest no-topic decision or up to three source-linked topics with audience need, why-now evidence, original angle, three hooks, outline, claims, confidence, missing evidence, uncertainties and expiry. High confidence requires two distinct selected sources.
+- Live research first failed closed on an invalid empty `missingEvidence` item; no brief or content was attached and the unknown 4,000-token reservation was retained. The prompt was tightened and deliberate retry job `7a97055d-43d5-4630-bc60-8f40b9390c7a` completed on attempt 2 with 2,055 tokens. Brief `b6c06956-0b5f-4525-bf39-b8bc99616094` retained complete S1 provenance and did not create or edit content.
+- The live 0.5 health endpoint returned `local-planning-research-and-reasoning`. Desktop and exact 390 x 844 CDP screenshots showed a readable evidence selector, token summary, job history and source-linked review-only brief with no draft, approval or publishing action.
+- Final release verification passed: `npm run tracker`, `npm run check`, the complete 85/85 automated suite and `git diff --check` all succeeded. A clean independent fail-closed review reproduced the cached-browser connector retest, stale locale/format jobs, queue and worker boundaries, cost wording, and locale-aware planning with no release blockers. The reviewer used isolated memory/temporary state and did not access live credentials or the production database.
+
 ### Current release 0.4.0 - Hermes reasoning boundary
 
 - Added a dedicated Hermes connector using only the fixed local API at `127.0.0.1:8642`. Its bearer key uses the existing Windows-DPAPI connector storage and is never returned to the browser.
-- Added one bounded, stateless English script-candidate call through Hermes Chat Completions. Saved family/content/source data is treated as untrusted prompt data. Factual jobs require permitted evidence notes.
+- Added one bounded, stateless primary-locale script-candidate call through Hermes Chat Completions. Saved family/content/source data is treated as untrusted prompt data. Factual jobs require permitted evidence notes.
 - Added exact candidate validation for title, angle, hook, script, source-linked claims and uncertainties. Factual candidates require at least one claim and every claim must cite a supplied source ID; claims and IDs appear in review. Unknown source IDs, malformed shapes, prose wrappers and oversized responses fail closed while streaming.
 - Added durable, revision-scoped Hermes jobs and immutable `script_candidates`. Duplicate queue requests reuse one job. Generation never overwrites or approves the saved draft.
 - Added the Content Studio actions **Ask Hermes** and **Use candidate**. Using a candidate opens the normal editor; the operator must review and save it through the existing revision/approval rules.
@@ -181,10 +194,10 @@ The mobile and launcher gaps in this earlier record were resolved by the 0.2.0 c
 
 - This is a single-user local app. There is no public hosting, multi-user authentication, multi-machine worker coordination or tested unattended Windows service setup.
 - Node 24 is required. Node SQLite availability was checked on the actual local runtime; deployment to other runtimes needs verification.
-- There are no paid text, speech, translation or video providers connected. No content is uploaded to YouTube.
-- Draft evidence URLs remain manually entered and are not fetched. Optional public channel lookup contacts only the fixed Google API endpoint. Permission/accuracy status for draft evidence remains a creator attestation.
+- A restricted local Hermes reasoning provider is connected for manually authorized text candidates and briefs. Speech, translation and video providers remain unconnected. No content is uploaded to YouTube.
+- Draft and research evidence URLs remain manually entered and are not fetched by Hermes. Optional public channel lookup contacts only the fixed Google API endpoint. Permission, accuracy and rights status remain explicit creator attestations.
 - The storyboard is a rough six-part scaffold, not finished direction. It may split a sentence and cannot guarantee timing. It must be refined before TTS or rendering.
-- Spanish/Italian scripts, voices, thumbnails and subtitles are not produced. Language slots and pending states are real records, not translations.
+- Localized scripts, voices, thumbnails and subtitles are not produced yet. User-selected language slots and pending states are real records, not translations.
 - Media rendering is not implemented. FFmpeg detection must not be mistaken for a rendering test.
 - The database is durable on a local disk, but this milestone has no automated backup/restore facility. Stop the app and preserve the whole data directory before moving machines. Keep it off synchronized/network folders while running.
 - No dependency or runtime audit of the full upstream app was performed; only copied modules and their active callers are in the release test scope.
@@ -192,7 +205,7 @@ The mobile and launcher gaps in this earlier record were resolved by the 0.2.0 c
 
 ## Decisions still needed for future stages
 
-The exact market profiles, first niche/format, realistic operating budget, additional editing repositories, intended always-on host, Google project/channel access, permitted data sources, chosen Spanish locale, voice preferences and clone consent if relevant. The local family form captures the decisions that can be made now.
+The exact market profiles, first niche/format, realistic operating budget, additional editing repositories, intended always-on host, Google project/channel access, permitted data sources, each family’s primary and optional additional locales, voice preferences and clone consent if relevant. The local family form captures the decisions that can be made now.
 
 ## Change discipline
 

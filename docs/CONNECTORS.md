@@ -1,4 +1,4 @@
-# Connector slots - version 0.4
+# Connector slots - version 0.5
 
 Open Connections and choose **Add connector**. Give the slot a unique name, choose a provider, and optionally enter its API key. Save, then select **Test** on the card. Saving does not contact a provider.
 
@@ -7,7 +7,7 @@ Open Connections and choose **Add connector**. Give the slot a unique name, choo
 | YouTube public research | Public channel lookup; card Test uses @GoogleDevelopers. The research form accepts another channel. | Owner OAuth, private analytics, uploads |
 | OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification |
 | ElevenLabs | GET /v2/voices?page_size=1, checking the response shape | Voice generation, rights verification and billing verification |
-| Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools | Live model quality, localization, voice, rendering and publishing |
+| Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools; manually authorized script and daily-brief jobs have live validation | Automated evidence collection, localization, voice, rendering and publishing |
 | MCP server | Reports adapter not implemented, without a network call | Protocol handshake, tools and credentials |
 | Reddit | Reports adapter not implemented, without a network call | OAuth, search and credentials |
 
@@ -21,7 +21,7 @@ Named slots are stored in the planning database's new `connectors` table. Creden
 
 Tests use fixed HTTPS provider origins, header credentials, a ten-second timeout and no automatic retries. No script, voice or video generation request is made. A successful metadata test does not prove all permissions or production readiness. No real provider key has been supplied for this release, so external behavior remains pending live verification.
 
-Validation: 37 automated tests passed, including actual Windows encryption, slot isolation, CRUD, retained/cleared credentials, stale revisions, failure redaction, in-flight locks, pending adapters and HTTP token checks. Desktop browser fixtures verified create, test, edit, blank key on reopen, retained key and invalidation of the test result. Delete behavior is covered through the store and HTTP tests. These fixture checks do not constitute a live provider test.
+Validation: the current automated suite covers actual Windows encryption, slot isolation, CRUD, retained/cleared credentials, stale revisions, failure redaction, in-flight locks, pending adapters and HTTP token checks. Desktop browser fixtures verified create, test, edit, blank key on reopen, retained key and invalidation of the test result. Delete behavior is covered through the store and HTTP tests. These fixture checks do not constitute a live provider test.
 
 Next in Phase 02: verify a real restricted research key, implement per-channel OAuth state/PKCE and refresh/revocation, then collect recent public videos and source evidence for competitor analysis. Slots are a completed substep; the whole Accounts and research phase remains in progress.
 

@@ -7,6 +7,7 @@ const {Store,InputError}=require('./store');
 const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {HermesReasoning}=require('./hermes');
+const {ResearchReasoning}=require('./research');
 const {checkFFmpeg}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
@@ -15,6 +16,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   research ||= new YouTubeResearch(new WindowsVault(path.dirname(dataFile)));
   const connectors=new ConnectorSlots(store,protector||new WindowsVault(path.dirname(dataFile)),providerFetch);
   const reasoning=new HermesReasoning(store,connectors);
+  const researchReasoning=new ResearchReasoning(store,connectors);
   let timer, ffmpegAvailable=null;
   checkFFmpeg().then(available=>{ffmpegAvailable=available;}).catch(()=>{ffmpegAvailable=false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
@@ -37,9 +39,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.method==='GET'){
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
-        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.4.0',mode:'local-planning-and-reasoning'});
-        if(pathname==='/api/state')return json(res,200,{...store.state(),token,connectors:connectors.list(),connectorProviders:PROVIDERS,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
-          capabilities:{research:'not_connected',text:'not_connected',translation:'not_implemented',voice:'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});
+        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.5.0',mode:'local-planning-research-and-reasoning'});
+        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+          capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
@@ -65,7 +67,14 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       else if(pathname==='/api/youtube/channel' && req.method==='POST')result=await research.lookup(body.channel);
       else if(pathname==='/api/families' && req.method==='POST')result=store.saveFamily(body);
       else if(pathname==='/api/content' && req.method==='POST')result=store.saveContent(body);
+      else if(pathname==='/api/research/evidence'&&req.method==='POST')result=store.saveResearchEvidence(body);
       else {
+        const evidenceRoute=pathname.match(/^\/api\/research\/evidence\/([a-f0-9-]+)(?:\/(archive))?$/);
+        if(evidenceRoute){if(!evidenceRoute[2]&&req.method==='PUT')return json(res,200,store.saveResearchEvidence(body,evidenceRoute[1]));if(evidenceRoute[2]==='archive'&&req.method==='POST')return json(res,200,store.archiveResearchEvidence(evidenceRoute[1],body));throw new InputError('Action not found.',404);}
+        const researchRetry=pathname.match(/^\/api\/research-jobs\/([a-f0-9-]+)\/retry$/);
+        if(researchRetry&&req.method==='POST')return json(res,200,researchReasoning.retry(researchRetry[1],body));
+        const researchBrief=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/research-briefs$/);
+        if(researchBrief&&req.method==='POST')return json(res,200,researchReasoning.queue(researchBrief[1],body));
         const retry=pathname.match(/^\/api\/hermes-jobs\/([a-f0-9-]+)\/retry$/);
         if(retry&&req.method==='POST')return json(res,200,reasoning.retry(retry[1],body));
         const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|review|storyboard|hermes-script))?$/);
@@ -83,16 +92,16 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,reasoning};
+  return {server,store,reasoning,researchReasoning};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('PORT must be a whole number between 1024 and 65535.');
   const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
-  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.4.0\nOpen http://127.0.0.1:${port}\nLocal planning with optional Hermes reasoning and public YouTube lookup. Publishing is not enabled.`));
+  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.5.0\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research briefs and bounded Hermes reasoning. Publishing is not enabled.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
 }
 module.exports={createApp};

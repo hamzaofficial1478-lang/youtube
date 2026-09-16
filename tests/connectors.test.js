@@ -100,6 +100,7 @@ test('slot HTTP routes require the local token and expose no stored credentials'
   for(const suffix of ['/test','/delete'])assert.equal((await send(`/api/connectors/${c.id}${suffix}`,{revision:1},'')).status,403);
   assert.equal((await send(`/api/connectors/${c.id}/test`,{revision:1})).status,200);
   const after=await(await fetch(root+'/api/state')).json();assert.equal(JSON.stringify(after).includes(key),false);
-  assert.equal(after.connectors[0].test.status,'passed');assert.equal(after.capabilities.text,'not_connected');
+  assert.equal(after.connectors[0].test.status,'passed');assert.equal(after.capabilities.text,'not_connected');assert.equal(after.capabilities.research,'saved_evidence_only');
+  const ui=await(await fetch(root+'/app.js')).text();assert.match(ui,/c\.busy=true;c\.test=\{status:'testing'/);
   assert.equal((await send(`/api/connectors/${c.id}/delete`,{revision:1})).status,200);
 });

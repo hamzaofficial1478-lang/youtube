@@ -1,7 +1,7 @@
 {
-  "version": "0.4.0",
-  "updated": "2026-09-10",
-  "nextAction": "Define explicit long-form quality and token-budget gates from the first live result, then begin permitted daily research and topic evidence briefs. Publishing powers remain disabled.",
+  "version": "0.5.0",
+  "updated": "2026-09-16",
+  "nextAction": "Begin Step 3: audition expressive narration in each family’s selected primary locale with consent, pronunciation and delivery controls. Research remains review-only and publishing powers remain disabled.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -93,24 +93,24 @@
         {
           "id": "R04",
           "title": "Daily niche and topic evidence briefs",
-          "status": "planned",
-          "remaining": "Collect dated evidence, explicit audience profiles, differentiation, confidence and topic deduplication. Gate API-derived scores on required permission."
+          "status": "done",
+          "evidence": "Version 0.5 stores revisioned permission-labeled evidence and immutable date-scoped review-only briefs with source links, confidence, deduplication, expiry, token accounting and deliberate retries. A live brief completed on 2026-09-11; desktop and 390 x 844 layouts passed. Automatic collection is intentionally not enabled."
         }
       ]
     },
     {
       "title": "03 · Original scripts and production",
-      "goal": "A sourced English master becomes a real, reviewable video.",
+      "goal": "A sourced primary-language master becomes a real, reviewable video.",
       "tasks": [
         {
           "id": "P01",
           "title": "LLM writing with claim and budget controls",
-          "status": "testing",
-          "remaining": "A dedicated tool-free profile and first live factual candidate were verified on 2026-09-10: one completed attempt, 1,974 tokens, four S1-linked claims, three uncertainties and an unchanged saved draft. The 267-word result was too short for long-form production. Remaining: explicit per-job/monthly token policy and enforceable long-form quality criteria."
+          "status": "done",
+          "evidence": "Version 0.5 enforces long-form/Shorts word and structure policy, current evidence links, transactional monthly/per-job token reservations, usage settlement, unknown-use blocking and capped deliberate retries. A live 888-word long-form candidate passed on 2026-09-11 using 2,855 tokens; the saved draft remained unchanged."
         },
         {
           "id": "P02",
-          "title": "Directed, expressive English narration",
+          "title": "Directed, expressive primary-language narration",
           "status": "planned",
           "remaining": "Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior."
         },
@@ -129,14 +129,14 @@
       ]
     },
     {
-      "title": "04 · Spanish and Italian editions",
+      "title": "04 · Optional configured-language editions",
       "goal": "Reuse the visual master while preserving meaning, natural voice and scene timing.",
       "tasks": [
         {
           "id": "L01",
           "title": "Scene translation and local packaging",
           "status": "planned",
-          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails for the selected Spanish locale and Italian."
+          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails only for each family’s configured additional locales; keep every locale independently retryable."
         },
         {
           "id": "L02",
@@ -148,7 +148,7 @@
           "id": "L03",
           "title": "Independent edition approvals",
           "status": "planned",
-          "remaining": "Track EN/ES/IT outputs and language-specific revisions; propagate source corrections and permit independent release decisions."
+          "remaining": "Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions."
         }
       ]
     },

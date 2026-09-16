@@ -56,6 +56,8 @@ class ConnectorSlots {
       this.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(slot),id);
       return {connector:this.public(this.row(id)),result:null};
     }
+    slot.test={status:'testing',at:new Date().toISOString(),message:'Connector test in progress. Generation remains disabled until it passes.'};
+    this.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(slot),id);
     this.busy.add(id);
     let result=null, failure=null;
     try{

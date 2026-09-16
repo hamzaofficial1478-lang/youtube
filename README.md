@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.4.0 - planning foundation, protected connectors and Hermes reasoning integration.
+Version 0.5.0 - planning foundation, quality-gated Hermes writing and review-only daily research briefs.
 
 The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
 
@@ -20,22 +20,23 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 
 ## What works now
 
-1. Create a channel family with English, Spanish and Italian slots.
+1. Create a channel family and choose one primary content locale plus any optional additional language channels. One-language families are valid; no language trio is mandatory.
 2. Set the audience tier, countries, niche hypothesis, format, cadence, locales and budget.
-3. Write an original English draft, record a hook/angle and attach evidence with source-rights notes.
+3. Write an original draft in the family’s primary locale, record a hook/angle and attach evidence with source-rights notes.
 4. Submit it for review and approve the exact script version when the required checks pass.
 5. Prepare a saved, approximate six-scene planning scaffold and export the content as JSON.
 6. Edit and revise safely: changes invalidate old approvals and storyboards; conflicting edits are rejected instead of silently overwriting.
 7. Archive/restore families without deleting work, reopen saved data and inspect the build tracker.
 8. Save a YouTube Data API key with Windows account protection, then look up a public channel by handle, ID or URL. See [YouTube setup](docs/YOUTUBE-SETUP.md). The connector has fixture coverage; verification with your live project remains pending.
 9. Add, edit, test and delete named connector slots. YouTube, OpenAI and ElevenLabs have read-only metadata tests; MCP/Reddit setup slots explicitly report pending adapters. See [Connector guide](docs/CONNECTORS.md).
-10. Connect a dedicated, tool-free local Hermes Agent API, queue one evidence-bounded English script job, inspect sourced claims and review its immutable candidate without overwriting or approving the saved draft. Terminal jobs require deliberate, capped retries. The first live factual candidate and source-link UI were verified on 2026-09-10; explicit long-form quality and token-budget gates remain. See [Hermes setup](docs/HERMES-SETUP.md).
+10. Connect a dedicated, tool-free local Hermes Agent API, queue an evidence-bounded primary-locale script job and review its immutable candidate without overwriting the saved draft. Format-specific word/structure gates and family monthly/per-job token ceilings now block unusable or over-budget results. See [Hermes setup](docs/HERMES-SETUP.md).
+11. Save family-scoped, dated evidence with explicit permission and analysis labels, then manually prepare zero to three immutable daily topic briefs. Briefs retain source snapshots, confidence, uncertainty, duplicate checks, token usage and deliberate retry history. They are review-only and never create drafts or publishing work. See [Research briefs](docs/RESEARCH-BRIEFS.md).
 
-The storyboard is **planning only**. Hermes can now propose an English script candidate from saved evidence, but the candidate remains separate until the operator chooses to copy, edit and save it. Competitor research automation, voiceover, translation, rendering, channel sign-in and publishing remain upcoming. Connection cards distinguish a saved key, a tested capability and production authorization.
+The storyboard is **planning only**. Hermes can propose a quality-gated candidate in the family’s primary locale and review-only topic briefs from operator-approved evidence. Script candidates remain separate until the operator copies, edits and saves them. Evidence collection is manual in version 0.5; web/competitor collection, voiceover, optional localization into the family’s selected extra locales, rendering, channel sign-in and publishing remain upcoming.
 
 ## Where your work is saved
 
-`data/control-room.sqlite` contains your families, drafts, reviews, jobs and activity. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
+`data/control-room.sqlite` contains your families, drafts, evidence, immutable briefs/candidates, token ledger, reviews, jobs and activity. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
 
 The exported planning JSON contains the selected draft and its source references; it never includes API keys. Named slot keys are encrypted for your Windows account in the SQLite connectors table. Existing v0.2 keys remain in `data/youtube-key.dpapi`. Other machines/accounts may require key re-entry. Removing a key or slot affects the current local copy; provider revocation and old backups are separate.
 
@@ -47,6 +48,7 @@ The exported planning JSON contains the selected draft and its source references
 - **AGENTS.md**: instructions for future coding sessions.
 - **docs/YOUTUBE-SETUP.md**: key setup, security boundaries, live verification and the next research steps.
 - **docs/HERMES-SETUP.md**: dedicated Hermes profile, local API connection and reasoning boundary.
+- **docs/RESEARCH-BRIEFS.md**: evidence eligibility, daily brief workflow, schema, budget and safety boundaries.
 - [Detailed PDF blueprint](docs/YouTube_Automation_Program_Blueprint.pdf).
 - `scripts/build_blueprint.py`: optional PDF source; requires Python, ReportLab and Windows Calibri/Consolas fonts. It is separate from the dependency-free Node application.
 
@@ -60,7 +62,7 @@ Tests create temporary databases, not demo data in your workspace. This release 
 
 ## Current architecture
 
-`server.js` handles local requests and a small saved planning queue. `store.js` validates inputs and applies transactional SQLite changes. `public/` contains the interface. `vendor/` holds selected upstream files and license notices. `docs/` keeps the development record. One local process owns the database; move to a multi-worker database design before adding separate worker hosts.
+`server.js` handles local requests and saved planning/reasoning queues. `store.js` validates inputs and applies transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract. `public/` contains the interface. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
 
 ## Troubleshooting
 
@@ -69,6 +71,7 @@ Tests create temporary databases, not demo data in your workspace. This release 
 - **Connection refused:** rerun the launcher. Check data/server-error.log after a launcher-started failure.
 - **Item changed in another tab:** close the edit dialog, refresh the page, reopen the latest record and reapply your changes.
 - **Draft cannot enter review:** the draft card lists missing requirements. Source permissions are your explicit review, not a claim of automatic legal verification.
+- **Generation is budget blocked:** increase the family's explicit monthly or per-job token ceiling, or wait for its next local calendar month. Dollar budget and token ceilings are separate fields.
 - **FFmpeg not installed:** this does not prevent planning. Installation and media validation belong to the rendering milestone.
 
 The tests reduce known failure risks; they cannot establish that a program has no bugs. Live provider and channel behavior will need separate verification as those stages are implemented.
