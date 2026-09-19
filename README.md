@@ -44,7 +44,8 @@ The exported planning JSON contains the selected draft and its source references
 
 - **docs/BUILD-PROGRESS.md**: detailed completed/remaining process, decisions, tests and limitations.
 - **docs/build-status.json**: structured checklist used by the UI.
-- **docs/REPOSITORIES.md**: the three supplied repos, pinned revisions, licenses and actual reuse.
+- **docs/REPOSITORIES.md**: pinned source revisions, licenses, static production-reference reviews and actual reuse.
+- **docs/PRODUCTION-ROOM.md**: the Production Panel, ten rooms, five launch editing styles, artifact flow, mandatory gates, repository decisions and integration order.
 - **AGENTS.md**: instructions for future coding sessions.
 - **docs/YOUTUBE-SETUP.md**: key setup, security boundaries, live verification and the next research steps.
 - **docs/HERMES-SETUP.md**: dedicated Hermes profile, local API connection and reasoning boundary.
@@ -62,7 +63,7 @@ Tests create temporary databases, not demo data in your workspace. This release 
 
 ## Current architecture
 
-`server.js` handles local requests and saved planning/reasoning queues. `store.js` validates inputs and applies transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract. `public/` contains the interface. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
+`server.js` handles local requests and saved planning/reasoning queues. `store.js` validates inputs and applies transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract. `public/` contains the interface, including the honest read-only Production Panel shell and five planned style profiles. `docs/PRODUCTION-ROOM.md` is the production contract until each room and style adapter gains tested state and workers. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
 
 ## Troubleshooting
 

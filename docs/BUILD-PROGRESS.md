@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-16. Current application: 0.5.0, local planning, configurable family languages, quality-gated Hermes writing and immutable review-only daily research briefs. Full production automation remains in development.
+Last updated: 2026-09-19. Current application: 0.5.0, local planning, configurable family languages, quality-gated Hermes writing, immutable review-only daily research briefs and a read-only Production Panel with five planned editing-style profiles. Production media generation remains in development.
 
 ## Resume here
 
@@ -8,21 +8,26 @@ Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs f
 
 The restricted `youtube-control-room` Hermes profile now powers two bounded paths: quality-gated candidates in each family’s primary locale and permission-gated daily topic briefs. P01 and roadmap Step 2 passed live validation on 2026-09-11. The next action is Step 3, expressive primary-language narration. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint. See HERMES-SETUP.md, RESEARCH-BRIEFS.md and YOUTUBE-SETUP.md.
 
-## Agreed 11-step delivery sequence
+## Agreed delivery sequence
 
-These 11 delivery steps group the remaining tracked milestones into the order agreed with the user. Complete and verify each step before enabling the next dependent capability.
+These delivery steps group the tracked milestones into one dependency order. Complete and verify each step before enabling the next dependent capability.
 
 1. [x] Live Hermes validation, completed 2026-09-10.
 2. [x] Daily research and topic evidence briefs, completed 2026-09-11.
 3. [ ] Expressive narration in the family’s selected primary locale.
-4. [ ] Real scenes and licensed visual assets.
-5. [ ] FFmpeg rendering and media quality control.
-6. [ ] Optional localization into each family’s configured additional locales, with independent retries.
-7. [ ] Per-channel YouTube OAuth and identity binding.
-8. [ ] Private test-channel upload and reconciliation.
-9. [ ] Scheduling, captions and thumbnails.
-10. [ ] Analytics and controlled autopilot.
-11. [ ] Gradual scaling toward 10 to 15 channel families.
+4. [ ] Five versioned editing-style profiles and explicit channel-family assignments.
+5. [ ] Real scenes and licensed visual assets bound to narration and style revisions.
+6. [ ] FFmpeg readiness, deterministic proxy rendering and one sandboxed style proof.
+7. [ ] Revisioned editing timeline and single-scene repair.
+8. [ ] Production captions and visible-text QC.
+9. [ ] Licensed music, sound effects and audio-mix QC.
+10. [ ] Complete audiovisual Review & QC evidence.
+11. [ ] Reviewable packaging variants, then final render, recovery and human master approval.
+12. [ ] Optional configured-language editions with independent retries and approvals.
+13. [ ] Per-channel YouTube OAuth, private upload and reconciliation.
+14. [ ] Attach approved captions/thumbnails and schedule the exact approved edition.
+15. [ ] Authorized analytics and controlled autopilot.
+16. [ ] Gradual scaling toward 10 to 15 channel families.
 
 ## What the user requested
 
@@ -33,7 +38,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Current milestone: audition and verify expressive primary-language narration without weakening the approved-script, consent, budget or retry boundaries. P01 writing and Step 2 research are complete. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 8 / 23 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 8 / 30 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -61,8 +66,15 @@ A sourced primary-language master becomes a real, reviewable video.
 
 - [x] **P01 LLM writing with claim and budget controls** (done) - Version 0.5 enforces long-form/Shorts word and structure policy, current evidence links, transactional monthly/per-job token reservations, usage settlement, unknown-use blocking and capped deliberate retries. A live 888-word long-form candidate passed on 2026-09-11 using 2,855 tokens; the saved draft remained unchanged.
 - [ ] **P02 Directed, expressive primary-language narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
-- [ ] **P03 Real scene editing and visual assets** (planned) - Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review.
-- [ ] **P04 FFmpeg render, preview and media QC** (planned) - Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes.
+- [ ] **P03 Style Library and channel assignments** (planned) - Create five versioned launch profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. Assign one reviewed default to each channel family, inherit it across locale editions, and never switch or fall back silently.
+- [ ] **P04 Scene & Visual Room with rights provenance** (planned) - Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence and single-scene repair. Add visual providers only behind reviewed adapters.
+- [ ] **P05 FFmpeg readiness, proxy renderer and first style proof** (planned) - Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove one sandboxed style with captured manifests, command plans, checksums, probes and bounded logs.
+- [ ] **P06 Editing Room and deterministic timeline** (planned) - Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass.
+- [ ] **P07 Captions & Localization Room** (planned) - Align editable SRT/WebVTT to selected narration, enforce locale-aware reading/timing/safe-area checks, and keep visible text separate from later language editions.
+- [ ] **P08 Audio Room for licensed music, SFX and mix** (planned) - Track asset licenses and attribution, store ducking/fades as timeline data, and test loudness, peaks, clipping, silence and channel layout.
+- [ ] **P09 Review & QC Room with video intelligence** (planned) - Completely decode proxies/finals; create timestamped contact sheets and aligned transcript/captions; flag black/frozen frames, A/V drift, clipping, unsafe text, stale assets and abrupt cuts.
+- [ ] **P10 Packaging Room** (planned) - Create immutable reviewable thumbnail, title, description and disclosure variants with rights/provenance evidence, without changing live metadata.
+- [ ] **P11 Final render, recovery and primary master approval** (planned) - Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master.
 
 ### 04 · Optional configured-language editions
 
@@ -77,7 +89,7 @@ Reuse the visual master while preserving meaning, natural voice and scene timing
 Publish the right approved version to the right channel without duplicates.
 
 - [ ] **Y01 Private resumable upload and reconciliation** (planned) - Implement and test per-channel destination binding, upload session recovery and unknown-outcome reconciliation on a real test channel.
-- [ ] **Y02 Thumbnails, captions and scheduling** (planned) - Confirm attachments, future time zones, audience/disclosure settings, project audit status and each quota bucket.
+- [ ] **Y02 Attach approved thumbnails/captions and schedule** (planned) - Attach already approved production assets, confirm future time zones, audience/disclosure settings, project audit status and each quota bucket, then schedule the exact approved edition.
 - [ ] **Y03 Rules-based unattended operation** (planned) - Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts.
 
 ### 06 · Learning and portfolio scale
@@ -124,7 +136,15 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Research output is exact, bounded JSON: an honest no-topic decision or up to three source-linked topics with audience need, why-now evidence, original angle, three hooks, outline, claims, confidence, missing evidence, uncertainties and expiry. High confidence requires two distinct selected sources.
 - Live research first failed closed on an invalid empty `missingEvidence` item; no brief or content was attached and the unknown 4,000-token reservation was retained. The prompt was tightened and deliberate retry job `7a97055d-43d5-4630-bc60-8f40b9390c7a` completed on attempt 2 with 2,055 tokens. Brief `b6c06956-0b5f-4525-bf39-b8bc99616094` retained complete S1 provenance and did not create or edit content.
 - The live 0.5 health endpoint returned `local-planning-research-and-reasoning`. Desktop and exact 390 x 844 CDP screenshots showed a readable evidence selector, token summary, job history and source-linked review-only brief with no draft, approval or publishing action.
-- Final release verification passed: `npm run tracker`, `npm run check`, the complete 85/85 automated suite and `git diff --check` all succeeded. A clean independent fail-closed review reproduced the cached-browser connector retest, stale locale/format jobs, queue and worker boundaries, cost wording, and locale-aware planning with no release blockers. The reviewer used isolated memory/temporary state and did not access live credentials or the production database.
+- The original v0.5 release gate passed `npm run tracker`, `npm run check`, the complete 85/85 automated suite and `git diff --check`. A clean independent fail-closed review reproduced the cached-browser connector retest, stale locale/format jobs, queue and worker boundaries, cost wording, and locale-aware planning with no release blockers. The reviewer used isolated memory/temporary state and did not access live credentials or the production database.
+
+### 2026-09-19 - Production Panel and style architecture
+
+- Expanded production into one umbrella panel with ten rooms: Script & Brief, Voice, Style Library & Assignment, Scene & Visual, Editing, Captions & Localization, Audio, Review & QC, Packaging, and Render & Recovery. Only the Script & Brief foundation is live; Voice is next and all production-media powers remain off.
+- Added five planned, versioned editing profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. The default assignment belongs to a channel family and is inherited by locale editions; override or fallback requires a separate explicit decision.
+- Statically reviewed and pinned Creatorberry/flick `4442fe355644317aafbe15c55ea3fbcd0217cd8d`, calesthio/OpenMontage `08e2151fa02de28a5d6a312b3d575692bf147ad7`, and alesha-pro/tools hand-drawn Canvas `2083cb61310da66abb891bc495ee14018dd25106`. No upstream package, runtime or generated code was installed or enabled.
+- Desktop at 1440 x 1400 and exact mobile CDP at 390 x 844 rendered `#production` successfully. The page heading, architecture link, truthful statuses, ten room cards and five style cards were readable. Document width equaled viewport width at 390 pixels; only the intended horizontal navigation strip scrolls.
+- Verification passed: `npm run tracker` reported 8/30, `npm run check` passed, the complete 86/86 automated suite passed, and `git diff --check` passed. The first independent review found broad provider-spending wording, a stale ledger/order and one Flick capability overstatement; all were corrected before release.
 
 ### Current release 0.4.0 - Hermes reasoning boundary
 

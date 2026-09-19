@@ -1,19 +1,21 @@
 {
   "version": "0.5.0",
-  "updated": "2026-09-16",
-  "nextAction": "Begin Step 3: audition expressive narration in each family’s selected primary locale with consent, pronunciation and delivery controls. Research remains review-only and publishing powers remain disabled.",
+  "updated": "2026-09-19",
+  "nextAction": "Build the Voice Room data model and immutable audition flow for each family’s primary locale. Voice/visual media generation, editing, production rendering, production-provider spending and publishing remain disabled until their own milestones pass; bounded Hermes script/research calls may already consume configured provider capacity.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
       "url": "https://github.com/darkzOGx/youtube-automation-agent",
       "revision": "260d7a94ab2d5bb2a98ce6620bfda7efd56ebd6b",
+      "license": "MIT",
       "status": "Selected modules reused",
-      "usage": "Metadata validation is used for draft titles. The FFmpeg helper checks executable availability. Full upstream application and scheduler are not launched."
+      "usage": "Metadata validation and FFmpeg detection are already bounded locally. Scene repair, recovery, readiness, provenance, Shorts and retention patterns are candidates for fresh Control Room implementations; the upstream scheduler is not launched."
     },
     {
       "name": "Stickman Video Director",
       "url": "https://github.com/kaomei/stickman-video-director",
       "revision": "6d7f8c83a16c594c23bb73da832c8864ccd2aeb5",
+      "license": "MIT",
       "status": "Directing reference retained",
       "usage": "Its storyboard contract informs the six-scene planning scaffold and is accessible from the studio. It does not render a video or call a model."
     },
@@ -21,8 +23,65 @@
       "name": "Agent-Reach",
       "url": "https://github.com/Panniantong/Agent-Reach",
       "revision": "da5044d26fc6adddb6554d5679c94ac22e76e428",
+      "license": "MIT",
       "status": "Reference only",
       "usage": "Selected channel and MCP source files are retained with the MIT license. No installation, browser-session access or external reading is enabled."
+    },
+    {
+      "name": "Give Claude Eyes gist",
+      "url": "https://gist.github.com/conradcaffier03/ef914685fc9d7da91b6591947fa1ddb2",
+      "revision": "c246d670dfd22e9e6b8fe19f556bac428fd52483",
+      "license": "No explicit license",
+      "status": "Pattern only",
+      "usage": "Its contact-sheet and transcript-alignment idea informs Review & QC. No code is copied, and Hermes receives no downloader, shell or unrestricted file access."
+    },
+    {
+      "name": "Omni-Video",
+      "url": "https://github.com/SAIS-FUXI/Omni-Video",
+      "revision": "adcee0a4a5b439ad3615f825298221b21177d4e3",
+      "license": "Unresolved",
+      "status": "Optional future visual lab",
+      "usage": "Potential text/video generation and local-edit adapter. The repository lacks its referenced LICENSE and the A14B path needs roughly 80 GB VRAM, so nothing is copied, installed or enabled."
+    },
+    {
+      "name": "capcut-cli",
+      "url": "https://github.com/renezander030/capcut-cli",
+      "revision": "49f70e3b07f1a236d45acb9b49a70c141dd1ee98",
+      "license": "MIT",
+      "status": "Candidate optional adapter",
+      "usage": "Candidate pinned adapter for local CapCut draft JSON, timeline edits, captions, backups, linting and FFmpeg proxies. It remains uninstalled until schema fixtures and safety gates pass."
+    },
+    {
+      "name": "CapCut Pro Professional",
+      "url": "https://github.com/ElevationEDM/CapCut-Pro-Professional",
+      "revision": "40cfc5c267dc30ce36fbe81b88611e1357e7b85e",
+      "license": "Rejected and untrusted",
+      "status": "Rejected",
+      "usage": "README-only repository pointing to an unrelated Windows ZIP with no trustworthy source or provenance and apparent premium-access circumvention. It will not be downloaded, installed or integrated."
+    },
+    {
+      "name": "Flick",
+      "url": "https://github.com/Creatorberry/flick",
+      "revision": "4442fe355644317aafbe15c55ea3fbcd0217cd8d",
+      "license": "MIT",
+      "status": "Motion-graphics reference",
+      "usage": "Its approve-plan-then-render workflow, scene-spec contract and isolated Remotion scene outputs inform the Motion Graphics style. URL downloading, transcript extraction, package installation and arbitrary generated code remain outside Hermes and are not enabled."
+    },
+    {
+      "name": "OpenMontage",
+      "url": "https://github.com/calesthio/OpenMontage",
+      "revision": "08e2151fa02de28a5d6a312b3d575692bf147ad7",
+      "license": "AGPL-3.0",
+      "status": "Architecture reference only",
+      "usage": "Its pipeline manifests, approval checkpoints, artifact contracts, event ledger and style taxonomy inform fresh Control Room designs for Documentary Montage and Cinematic Hybrid. No AGPL source is copied into this application and the upstream agent/tool suite is not launched."
+    },
+    {
+      "name": "Hand-drawn Canvas Animation",
+      "url": "https://github.com/alesha-pro/tools/tree/main/skills/hand-drawn-canvas-animation",
+      "revision": "2083cb61310da66abb891bc495ee14018dd25106",
+      "license": "MIT",
+      "status": "Candidate renderer reference",
+      "usage": "Its Canvas 2D timeline, deterministic headless-Chrome frame export, FFmpeg encoding, contact sheets and drawing-first QC inform the Hand-drawn style. Any later adapter must sandbox authored HTML, block network access, validate output paths and preserve asset-level licenses and attribution."
     }
   ],
   "phases": [
@@ -116,15 +175,57 @@
         },
         {
           "id": "P03",
-          "title": "Real scene editing and visual assets",
+          "title": "Style Library and channel assignments",
           "status": "planned",
-          "remaining": "Replace the rough planning scaffold with editable scenes and license-tracked media. Integrate additional editor repositories only after review."
+          "remaining": "Create five versioned launch profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. Assign one reviewed default to each channel family, inherit it across locale editions, and never switch or fall back silently."
         },
         {
           "id": "P04",
-          "title": "FFmpeg render, preview and media QC",
+          "title": "Scene & Visual Room with rights provenance",
           "status": "planned",
-          "remaining": "Install/choose a reviewed FFmpeg build; render and completely decode fixtures, validate audio/captions, repair individual scenes."
+          "remaining": "Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence and single-scene repair. Add visual providers only behind reviewed adapters."
+        },
+        {
+          "id": "P05",
+          "title": "FFmpeg readiness, proxy renderer and first style proof",
+          "status": "planned",
+          "remaining": "Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove one sandboxed style with captured manifests, command plans, checksums, probes and bounded logs."
+        },
+        {
+          "id": "P06",
+          "title": "Editing Room and deterministic timeline",
+          "status": "planned",
+          "remaining": "Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass."
+        },
+        {
+          "id": "P07",
+          "title": "Captions & Localization Room",
+          "status": "planned",
+          "remaining": "Align editable SRT/WebVTT to selected narration, enforce locale-aware reading/timing/safe-area checks, and keep visible text separate from later language editions."
+        },
+        {
+          "id": "P08",
+          "title": "Audio Room for licensed music, SFX and mix",
+          "status": "planned",
+          "remaining": "Track asset licenses and attribution, store ducking/fades as timeline data, and test loudness, peaks, clipping, silence and channel layout."
+        },
+        {
+          "id": "P09",
+          "title": "Review & QC Room with video intelligence",
+          "status": "planned",
+          "remaining": "Completely decode proxies/finals; create timestamped contact sheets and aligned transcript/captions; flag black/frozen frames, A/V drift, clipping, unsafe text, stale assets and abrupt cuts."
+        },
+        {
+          "id": "P10",
+          "title": "Packaging Room",
+          "status": "planned",
+          "remaining": "Create immutable reviewable thumbnail, title, description and disclosure variants with rights/provenance evidence, without changing live metadata."
+        },
+        {
+          "id": "P11",
+          "title": "Final render, recovery and primary master approval",
+          "status": "planned",
+          "remaining": "Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master."
         }
       ]
     },
@@ -164,9 +265,9 @@
         },
         {
           "id": "Y02",
-          "title": "Thumbnails, captions and scheduling",
+          "title": "Attach approved thumbnails/captions and schedule",
           "status": "planned",
-          "remaining": "Confirm attachments, future time zones, audience/disclosure settings, project audit status and each quota bucket."
+          "remaining": "Attach already approved production assets, confirm future time zones, audience/disclosure settings, project audit status and each quota bucket, then schedule the exact approved edition."
         },
         {
           "id": "Y03",
