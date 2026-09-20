@@ -8,17 +8,21 @@ const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {HermesReasoning}=require('./hermes');
 const {ResearchReasoning}=require('./research');
-const {checkFFmpeg}=require('./vendor/youtube-automation-agent/ffmpeg');
+const {VoiceRuntime}=require('./voice');
+const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
-function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch}={}) {
-  const store=new Store(dataFile), token=randomBytes(32).toString('hex');
+function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
+  const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
+  const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
   research ||= new YouTubeResearch(new WindowsVault(path.dirname(dataFile)));
   const connectors=new ConnectorSlots(store,protector||new WindowsVault(path.dirname(dataFile)),providerFetch);
   const reasoning=new HermesReasoning(store,connectors);
   const researchReasoning=new ResearchReasoning(store,connectors);
+  const ffmpeg=voiceOptions.ffmpeg||getFFmpegPath(),ffprobe=voiceOptions.ffprobe||process.env.FFPROBE_PATH||(path.isAbsolute(ffmpeg)?path.join(path.dirname(ffmpeg),process.platform==='win32'?'ffprobe.exe':'ffprobe'):'ffprobe');
+  const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null;
-  checkFFmpeg().then(available=>{ffmpegAvailable=available;}).catch(()=>{ffmpegAvailable=false;});
+  const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
   async function readBody(req) {
     if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))throw new InputError('Use application/json.',415);
@@ -29,7 +33,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   }
   const server=http.createServer(async(req,res)=>{
     res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
-    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       const port=server.address().port, host=req.headers.host;
       if(![`127.0.0.1:${port}`,`localhost:${port}`].includes(host))throw new InputError('This application accepts local requests only.',403);
@@ -39,12 +43,14 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.method==='GET'){
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
-        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.5.0',mode:'local-planning-research-and-reasoning'});
-        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
-          capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
+        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:'0.6.0',mode:'local-control-room-with-bounded-voice-auditions'});
+        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+          capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
+        const voiceAudio=pathname.match(/^\/api\/voice-auditions\/([a-f0-9-]+)\/audio$/);
+        if(voiceAudio){const audition=store.voiceAudition(voiceAudio[1]),integrity=store.verifyVoiceArtifact(audition);if(!integrity.ok)throw new InputError(integrity.reason||'Voice artifact file is unavailable.',404);const {filename,stat}=integrity,range=req.headers.range;if(range){const match=range.match(/^bytes=(\d+)-(\d*)$/);if(!match)throw new InputError('Invalid audio byte range.',416);const start=Number(match[1]),end=match[2]?Number(match[2]):stat.size-1;if(!(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>=start&&end<stat.size))throw new InputError('Audio byte range is outside the artifact.',416);res.writeHead(206,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${stat.size}`,'Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(filename,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Length':stat.size,'Cache-Control':'no-store'});return fs.createReadStream(filename).pipe(res);}
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
         if(exported){const data=store.exportContent(exported[1]);res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}
         throw new InputError('Page not found.',404);
@@ -70,6 +76,16 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       else if(pathname==='/api/content' && req.method==='POST')result=store.saveContent(body);
       else if(pathname==='/api/research/evidence'&&req.method==='POST')result=store.saveResearchEvidence(body);
       else {
+        const voiceProfile=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/voice-profiles$/);
+        if(voiceProfile&&req.method==='POST')return json(res,200,store.saveVoiceProfile(voiceProfile[1],body));
+        const voiceAudition=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/voice-auditions$/);
+        if(voiceAudition&&req.method==='POST'){if(ffmpegAvailable!==true)throw new InputError('FFmpeg and ffprobe must pass local preflight before a billable voice audition can be admitted.',503);return json(res,200,store.queueVoiceAudition(voiceAudition[1],body));}
+        const voiceRetry=pathname.match(/^\/api\/voice-jobs\/([a-f0-9-]+)\/retry$/);
+        if(voiceRetry&&req.method==='POST')return json(res,200,store.retryVoiceAudition(voiceRetry[1],body));
+        const voiceSelect=pathname.match(/^\/api\/voice-auditions\/([a-f0-9-]+)\/select$/);
+        if(voiceSelect&&req.method==='POST')return json(res,200,store.selectVoiceAudition(voiceSelect[1],body));
+        const voiceRevoke=pathname.match(/^\/api\/voice-approvals\/([a-f0-9-]+)\/revoke$/);
+        if(voiceRevoke&&req.method==='POST')return json(res,200,store.revokeVoiceApproval(voiceRevoke[1],body));
         const evidenceRoute=pathname.match(/^\/api\/research\/evidence\/([a-f0-9-]+)(?:\/(archive))?$/);
         if(evidenceRoute){if(!evidenceRoute[2]&&req.method==='PUT')return json(res,200,store.saveResearchEvidence(body,evidenceRoute[1]));if(evidenceRoute[2]==='archive'&&req.method==='POST')return json(res,200,store.archiveResearchEvidence(evidenceRoute[1],body));throw new InputError('Action not found.',404);}
         const researchRetry=pathname.match(/^\/api\/research-jobs\/([a-f0-9-]+)\/retry$/);
@@ -93,16 +109,16 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,reasoning,researchReasoning};
+  return {server,store,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('PORT must be a whole number between 1024 and 65535.');
   const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
-  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.5.0\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research briefs and bounded Hermes reasoning. Publishing is not enabled.`));
+  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room 0.6.0\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research, bounded reasoning and human-controlled voice auditions. Publishing is not enabled.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
 }
 module.exports={createApp};

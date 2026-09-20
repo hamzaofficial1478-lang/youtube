@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.5.0 - planning foundation, quality-gated Hermes writing and review-only daily research briefs.
+Version 0.6.0 - planning foundation, review-gated reasoning/research, and a human-controlled primary-locale Voice Room.
 
 The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
 
@@ -31,12 +31,13 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 9. Add, edit, test and delete named connector slots. YouTube, OpenAI and ElevenLabs have read-only metadata tests; MCP/Reddit setup slots explicitly report pending adapters. See [Connector guide](docs/CONNECTORS.md).
 10. Connect a dedicated, tool-free local Hermes Agent API, queue an evidence-bounded primary-locale script job and review its immutable candidate without overwriting the saved draft. Format-specific word/structure gates and family monthly/per-job token ceilings now block unusable or over-budget results. See [Hermes setup](docs/HERMES-SETUP.md).
 11. Save family-scoped, dated evidence with explicit permission and analysis labels, then manually prepare zero to three immutable daily topic briefs. Briefs retain source snapshots, confidence, uncertainty, duplicate checks, token usage and deliberate retry history. They are review-only and never create drafts or publishing work. See [Research briefs](docs/RESEARCH-BRIEFS.md).
+12. Use the professional per-family Production Panel and complete Voice Room to record narrator rights, delivery direction, pronunciation revisions and character budgets; generate explicitly admitted primary-locale auditions through a tested OpenAI or ElevenLabs connector; inspect real FFmpeg audio evidence; and approve or revoke one exact narration handoff. See [Voice Room](docs/VOICE-ROOM.md).
 
-The storyboard is **planning only**. Hermes can propose a quality-gated candidate in the family’s primary locale and review-only topic briefs from operator-approved evidence. Script candidates remain separate until the operator copies, edits and saves them. Evidence collection is manual in version 0.5; web/competitor collection, voiceover, optional localization into the family’s selected extra locales, rendering, channel sign-in and publishing remain upcoming.
+The storyboard is **planning only**. Hermes can propose a quality-gated candidate in the family’s primary locale and review-only topic briefs from operator-approved evidence. Script candidates remain separate until the operator copies, edits and saves them. Evidence collection is manual. Voice auditions are explicit, potentially billable actions and still require complete human listening and approval. Optional localization into selected extra locales, visual generation, editing, rendering, channel sign-in and publishing remain upcoming.
 
 ## Where your work is saved
 
-`data/control-room.sqlite` contains your families, drafts, evidence, immutable briefs/candidates, token ledger, reviews, jobs and activity. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
+`data/control-room.sqlite` contains your families, drafts, evidence, immutable briefs/candidates, voice profiles, audition provenance, cost ledgers, approvals, jobs and activity. Generated narration is stored beneath `data/voice-artifacts/`. SQLite may keep `-wal` and `-shm` companion files while running. Do not remove these while the app is open. Stop the app before copying the whole data directory for a manual backup.
 
 The exported planning JSON contains the selected draft and its source references; it never includes API keys. Named slot keys are encrypted for your Windows account in the SQLite connectors table. Existing v0.2 keys remain in `data/youtube-key.dpapi`. Other machines/accounts may require key re-entry. Removing a key or slot affects the current local copy; provider revocation and old backups are separate.
 
@@ -50,6 +51,7 @@ The exported planning JSON contains the selected draft and its source references
 - **docs/YOUTUBE-SETUP.md**: key setup, security boundaries, live verification and the next research steps.
 - **docs/HERMES-SETUP.md**: dedicated Hermes profile, local API connection and reasoning boundary.
 - **docs/RESEARCH-BRIEFS.md**: evidence eligibility, daily brief workflow, schema, budget and safety boundaries.
+- **docs/VOICE-ROOM.md**: voice identity, provider, spending, real-audio validation, approval and downstream-handoff contract.
 - [Detailed PDF blueprint](docs/YouTube_Automation_Program_Blueprint.pdf).
 - `scripts/build_blueprint.py`: optional PDF source; requires Python, ReportLab and Windows Calibri/Consolas fonts. It is separate from the dependency-free Node application.
 
@@ -59,11 +61,11 @@ npm test
 npm run tracker
 ```
 
-Tests create temporary databases, not demo data in your workspace. This release uses Node's built-in libraries and two inspected MIT upstream helpers; it has no npm dependencies. No upstream scheduler or repository installation scripts run on startup.
+Tests create temporary databases and audio fixtures, not demo data in your workspace. This release uses Node's built-in libraries plus the locally installed FFmpeg/ffprobe executables for media validation; it has no npm dependencies. No upstream scheduler or repository installation scripts run on startup.
 
 ## Current architecture
 
-`server.js` handles local requests and saved planning/reasoning queues. `store.js` validates inputs and applies transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract. `public/` contains the interface, including the honest read-only Production Panel shell and five planned style profiles. `docs/PRODUCTION-ROOM.md` is the production contract until each room and style adapter gains tested state and workers. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
+`server.js` handles local requests and saved queues. `store.js` validates inputs, provenance, approvals and transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract; `voice.js` owns fixed-origin narration adapters, artifact assembly and real-audio validation. `public/` contains the professional per-family Production Panel, complete Voice Room and locked contracts for later rooms. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
 
 ## Troubleshooting
 
@@ -73,6 +75,6 @@ Tests create temporary databases, not demo data in your workspace. This release 
 - **Item changed in another tab:** close the edit dialog, refresh the page, reopen the latest record and reapply your changes.
 - **Draft cannot enter review:** the draft card lists missing requirements. Source permissions are your explicit review, not a claim of automatic legal verification.
 - **Generation is budget blocked:** increase the family's explicit monthly or per-job token ceiling, or wait for its next local calendar month. Dollar budget and token ceilings are separate fields.
-- **FFmpeg not installed:** this does not prevent planning. Installation and media validation belong to the rendering milestone.
+- **FFmpeg not installed:** planning still works, but Voice Room auditions remain blocked because returned audio cannot pass the mandatory local validation gate.
 
 The tests reduce known failure risks; they cannot establish that a program has no bugs. Live provider and channel behavior will need separate verification as those stages are implemented.

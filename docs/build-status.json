@@ -1,7 +1,7 @@
 {
-  "version": "0.5.0",
-  "updated": "2026-09-19",
-  "nextAction": "Build the Voice Room data model and immutable audition flow for each family’s primary locale. Voice/visual media generation, editing, production rendering, production-provider spending and publishing remain disabled until their own milestones pass; bounded Hermes script/research calls may already consume configured provider capacity.",
+  "version": "0.6.0",
+  "updated": "2026-09-20",
+  "nextAction": "Release Voice Room v0.6, then begin the Style Library & Assignment Room. A live provider audition remains a separate explicitly authorized potentially billable action. OpenHiggsfield is recorded for P04, and editing references remain recorded for P06.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -44,6 +44,14 @@
       "usage": "Potential text/video generation and local-edit adapter. The repository lacks its referenced LICENSE and the A14B path needs roughly 80 GB VRAM, so nothing is copied, installed or enabled."
     },
     {
+      "name": "OpenHiggsfield",
+      "url": "https://github.com/wide-trace/open-higgsfield",
+      "revision": "b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf",
+      "license": "No license file; GitHub license undetected",
+      "status": "Visual workflow reference only",
+      "usage": "Its 38-entry image/video capability catalog, per-model settings and media-role caps, batch semantics, asynchronous task lifecycle and gallery reuse flow inform a fresh Scene & Visual Room design. No code, dependency, credential, provider call or public-upload path is integrated; encrypted server-side connectors, rights/cost gates and immutable artifact verification are required."
+    },
+    {
       "name": "capcut-cli",
       "url": "https://github.com/renezander030/capcut-cli",
       "revision": "49f70e3b07f1a236d45acb9b49a70c141dd1ee98",
@@ -82,6 +90,22 @@
       "license": "MIT",
       "status": "Candidate renderer reference",
       "usage": "Its Canvas 2D timeline, deterministic headless-Chrome frame export, FFmpeg encoding, contact sheets and drawing-first QC inform the Hand-drawn style. Any later adapter must sandbox authored HTML, block network access, validate output paths and preserve asset-level licenses and attribution."
+    },
+    {
+      "name": "LosslessCut",
+      "url": "https://github.com/mifi/lossless-cut",
+      "revision": "20f2e34687a691dd15b18c030d108b3b66d44098",
+      "license": "GPL-2.0-only",
+      "status": "Editing workflow reference only",
+      "usage": "Its FFmpeg-backed lossless cuts, stream/track operations, remuxing, same-codec concatenation, segment projects, waveform/keyframe navigation, media probes, silence/black/scene detection and EDL interchange inform a future bounded Editing Room adapter. No GPL source is copied and its experimental unauthenticated local HTTP API is not enabled."
+    },
+    {
+      "name": "Palmier Pro",
+      "url": "https://github.com/palmier-io/palmier-pro",
+      "revision": "b4b1333f9404a2ca8a9509443955cd1c501de480",
+      "license": "GPLv3 historical source; post-v0.7.6 binaries proprietary",
+      "status": "Editing architecture reference only",
+      "usage": "Its stable-ID timeline, atomic undoable edit batches, linked A/V operations, transcript and silence cuts, sync/multicam, keyframes/layouts, color scopes and grading, effects, denoise, captions, export queue and project-frame receipts inform a fresh Control Room design. The macOS 26 Apple-Silicon app and broad MCP mutation/generation surface are not launched or integrated."
     }
   ],
   "phases": [
@@ -170,8 +194,8 @@
         {
           "id": "P02",
           "title": "Directed, expressive primary-language narration",
-          "status": "planned",
-          "remaining": "Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior."
+          "status": "done",
+          "evidence": "Version 0.6 implements immutable family voice profiles and pronunciation lexicons, consent/commercial-rights evidence, fixed OpenAI/ElevenLabs adapters, pre-request validation, family-local character reservation/settlement, capped deliberate retries, immutable checksummed WAV artifacts, fail-closed FFmpeg decode and measured QC, human comparison and intelligibility approval, revocation, artifact-integrity checks and downstream invalidation. The protected HTTP/runtime workflows, local real-audio fixtures, corruption/tampering cases, 1440 x 1400 desktop and exact 390 x 844 mobile reviews passed. The complete 100-test suite passed after all eight findings from the independent fail-closed review were fixed. No live provider request is claimed; that remains a separate explicit potentially billable operator action."
         },
         {
           "id": "P03",
@@ -183,7 +207,7 @@
           "id": "P04",
           "title": "Scene & Visual Room with rights provenance",
           "status": "planned",
-          "remaining": "Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence and single-scene repair. Add visual providers only behind reviewed adapters."
+          "remaining": "Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence, versioned model capability/media-role contracts and single-scene repair. OpenHiggsfield informs the independent schema and review flow; add visual providers only behind reviewed adapters."
         },
         {
           "id": "P05",

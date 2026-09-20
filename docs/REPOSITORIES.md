@@ -1,6 +1,6 @@
 # Repository register and integration decisions
 
-Reviewed 2026-09-19. The original three repositories are pinned as the v0.3 foundation; seven additional production references were statically reviewed for the expanded Production Panel. None is treated as proven production infrastructure merely because it has a README.
+Reviewed through 2026-09-20. The original three repositories are pinned as the v0.3 foundation; ten additional production references were statically reviewed for the expanded Production Panel. None is treated as proven production infrastructure merely because it has a README, stars or a hosted demo.
 
 | Repository | Pinned revision | Current use |
 |---|---|---|
@@ -40,6 +40,17 @@ Rather than presenting untested upstream features as ready, the first release re
 - Model licenses must be checked independently. The separate OmniVideo2-1.3B Hugging Face card states Apache-2.0; that does not automatically license every repository file or checkpoint.
 - Decision: optional future Scene & Visual Room adapter only. Nothing was copied, installed or enabled.
 - Reason: useful text-to-video/video-to-video and localized edit concepts, but the A14B path recommends about 80 GB VRAM and carries large-model, checkpoint, disclosure and rights obligations.
+
+### wide-trace/open-higgsfield
+
+- Source: <https://github.com/wide-trace/open-higgsfield>
+- Reviewed revision: `b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf`
+- License: no license file and GitHub reports no detected license. The README calls the project open source, but that is not a reusable-code license.
+- Decision: Scene & Visual Room product-flow and capability-schema reference only. No source, package, Vercel deployment, key, model endpoint or public upload path was copied, installed or enabled.
+- Reviewed brain: a 38-entry image/video model catalog; declarative per-model setting allowlists and defaults; aspect-ratio, resolution, duration, output-format, audio, batch and prompt-enhancement controls; start-frame, end-frame, reference-image, video and audio input roles with model-specific limits; request-plane normalization; native-count versus client-fan-out batching; asynchronous submit/poll/result handling; and a reusable gallery with history, favorites, selection, download and prompt/settings restoration.
+- What the catalog proves: 38 capability declarations exist at this revision. It does not prove that all 38 remote models are available, licensed, safe, deterministic, commercially permitted or successfully tested. The repository contains no automated test/spec files.
+- Security and operations boundary: the upstream app stores the platform credential in a long-lived HTTP-only cookie, logs generation request/response summaries, accepts provider-hosted URLs, and uploads input media to publicly readable Vercel Blob objects. Its blob route explicitly says anyone can upload until authentication exists and has no recorded maximum upload size. These behaviors are not adopted.
+- Required Control Room adaptation: encrypted server-side connector revisions; fixed reviewed provider origins; capability snapshots pinned to each job; private/local immutable inputs; MIME, size, decode, dimension and duration validation; role-count enforcement; prompt and asset-rights evidence; preflight cost admission; idempotency and unknown-outcome reconciliation; bounded polling and cancellation; immutable result hashes/probes; disclosure state; and human approval before downstream use. Secrets, prompts and provider bodies stay out of browser state and logs.
 
 ### capcut-cli
 
@@ -85,6 +96,29 @@ Rather than presenting untested upstream features as ready, the first release re
 - Decision: candidate Hand-drawn Canvas renderer reference; not installed or copied.
 - Safe patterns: Canvas 2D timelines, whole-pose drawing, finite exposures, palette/finish profiles, deterministic headless-Chrome frames, FFmpeg encode, contact sheets and explicit visual QC.
 - Required gates: treat authored HTML/JavaScript as executable code; run in a network-blocked worker with fixed roots and resource limits. Validate outputs and preserve asset-level source, license and attribution. Do not imitate a living artist's signature style or assume example photos, fonts, motion references and music are cleared by the code license.
+
+### mifi/lossless-cut
+
+- Source: <https://github.com/mifi/lossless-cut>
+- Reviewed revision: `20f2e34687a691dd15b18c030d108b3b66d44098`
+- Version at the reviewed revision: 3.69.0.
+- License: GPL-2.0-only. Its packaged FFmpeg notice is GPL v2+; third-party components retain their own licenses.
+- Decision: Editing Room workflow and FFmpeg-operation reference only. No upstream source, Electron runtime or bundled FFmpeg build was copied, installed or launched.
+- Useful capabilities: lossless trim, cut and segment reordering; stream copy and selective track replacement; same-codec concatenation; remuxing; audio/video/subtitle/attachment extraction; metadata, disposition, rotation and timecode editing; chapters; snapshots and frame export; waveform, timeline zoom and keyframe navigation; black-frame, silence and scene-change detection; undo/redo; project segment files; EDL/chapter/CUE/CSV/XML interchange; and an offline mode.
+- Fit: its strongest role is transport-preserving conform, technical media inspection and interchange. It is not the source of truth for color grading, compositing, advanced motion design or the complete Control Room timeline.
+- Boundary: the CLI is basic and its HTTP API is explicitly experimental. That API is loopback-only but unauthenticated, accepts file-open/actions and depends on Host/Origin checks. It must not be exposed to Hermes or trusted as an authorization boundary. Any future adapter needs fixed roots, an action allowlist, immutable command plans, versioned fixtures and deliberate GPL compliance review.
+
+### palmier-io/palmier-pro
+
+- Source: <https://github.com/palmier-io/palmier-pro>
+- Reviewed revision: `b4b1333f9404a2ca8a9509443955cd1c501de480`
+- License: GPLv3 for the historical published source through v0.7.6. Binary releases after v0.7.6 are proprietary and prohibit copying, modification, redistribution, reverse engineering and derivative works without a separate agreement.
+- Platform: macOS 26 on Apple Silicon. It cannot be the Windows Control Room runtime.
+- Decision: advanced Editing Room architecture and behavior reference only. No Swift source, proprietary binary, MCP server, model, package or account-connected feature was copied, installed or launched.
+- Useful timeline flow: stable project/track/clip IDs and project-frame coordinates; media inspection/search/organization; markers; linked A/V; atomic split, ripple-delete, insert, move, remove and media-swap operations; trims, speed, fades, crop, transforms, blend modes and settings-copy; clip-relative keyframes; layouts; synchronization by timecode/audio correlation; multicam groups and angle changes; shared undo; and structured mutation receipts.
+- Useful finishing flow: transcript-driven word removal, speech-aware silence removal, beat detection, text/captions, editable color controls, wheels, curves, hue qualification, LUTs, color scopes and reference comparison, live effects, speech denoise, H.264/H.265/ProRes/10-bit HDR, XML/FCPXML export and an export queue.
+- Required Control Room adaptation: editing plans remain deterministic data approved by the operator; every mutation is validated against expected revision and IDs; linked media moves together; every batch is atomic and undoable; post-edit reads verify the actual timeline; previews and exports retain probes/checksums; and paid generation is outside the Editing Room unless separately admitted by its owning room.
+- Boundary: Palmier's loopback MCP server exposes broad file, project, timeline, export and paid-generation mutation. It is not connected to Hermes. Current proprietary binaries may contain behavior absent from the GPL source, so their marketing or tool schemas are not treated as reusable code or a stable integration contract.
 
 ## Before importing another module
 

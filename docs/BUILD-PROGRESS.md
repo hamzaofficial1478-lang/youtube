@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-19. Current application: 0.5.0, local planning, configurable family languages, quality-gated Hermes writing, immutable review-only daily research briefs and a read-only Production Panel with five planned editing-style profiles. Production media generation remains in development.
+Last updated: 2026-09-20. Current application: 0.6.0, local planning, configurable family languages, quality-gated Hermes writing, immutable review-only daily research briefs, a controlled Voice Room and a professional Production Panel with five planned editing-style profiles. Production visual generation remains disabled while later rooms are built and verified.
 
 ## Resume here
 
@@ -14,7 +14,7 @@ These delivery steps group the tracked milestones into one dependency order. Com
 
 1. [x] Live Hermes validation, completed 2026-09-10.
 2. [x] Daily research and topic evidence briefs, completed 2026-09-11.
-3. [ ] Expressive narration in the family’s selected primary locale.
+3. [x] Expressive narration in the family’s selected primary locale, completed 2026-09-20.
 4. [ ] Five versioned editing-style profiles and explicit channel-family assignments.
 5. [ ] Real scenes and licensed visual assets bound to narration and style revisions.
 6. [ ] FFmpeg readiness, deterministic proxy rendering and one sandboxed style proof.
@@ -35,10 +35,10 @@ A UI-based program that researches markets and competitors, proposes differentia
 
 ## Current milestone and acceptance
 
-Current milestone: audition and verify expressive primary-language narration without weakening the approved-script, consent, budget or retry boundaries. P01 writing and Step 2 research are complete. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
+Current milestone: Voice Room v0.6 is complete and ready for release. The next implementation milestone is the Style Library & Assignment Room. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 8 / 30 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 9 / 30 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -65,9 +65,9 @@ Approved data access and evidence-led research without invented metrics.
 A sourced primary-language master becomes a real, reviewable video.
 
 - [x] **P01 LLM writing with claim and budget controls** (done) - Version 0.5 enforces long-form/Shorts word and structure policy, current evidence links, transactional monthly/per-job token reservations, usage settlement, unknown-use blocking and capped deliberate retries. A live 888-word long-form candidate passed on 2026-09-11 using 2,855 tokens; the saved draft remained unchanged.
-- [ ] **P02 Directed, expressive primary-language narration** (planned) - Audition voices; save pronunciation/delivery cues and consent; check actual audio and failed-provider behavior.
+- [x] **P02 Directed, expressive primary-language narration** (done) - Version 0.6 implements immutable family voice profiles and pronunciation lexicons, consent/commercial-rights evidence, fixed OpenAI/ElevenLabs adapters, pre-request validation, family-local character reservation/settlement, capped deliberate retries, immutable checksummed WAV artifacts, fail-closed FFmpeg decode and measured QC, human comparison and intelligibility approval, revocation, artifact-integrity checks and downstream invalidation. The protected HTTP/runtime workflows, local real-audio fixtures, corruption/tampering cases, 1440 x 1400 desktop and exact 390 x 844 mobile reviews passed. The complete 100-test suite passed after all eight findings from the independent fail-closed review were fixed. No live provider request is claimed; that remains a separate explicit potentially billable operator action.
 - [ ] **P03 Style Library and channel assignments** (planned) - Create five versioned launch profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. Assign one reviewed default to each channel family, inherit it across locale editions, and never switch or fall back silently.
-- [ ] **P04 Scene & Visual Room with rights provenance** (planned) - Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence and single-scene repair. Add visual providers only behind reviewed adapters.
+- [ ] **P04 Scene & Visual Room with rights provenance** (planned) - Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence, versioned model capability/media-role contracts and single-scene repair. OpenHiggsfield informs the independent schema and review flow; add visual providers only behind reviewed adapters.
 - [ ] **P05 FFmpeg readiness, proxy renderer and first style proof** (planned) - Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove one sandboxed style with captured manifests, command plans, checksums, probes and bounded logs.
 - [ ] **P06 Editing Room and deterministic timeline** (planned) - Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass.
 - [ ] **P07 Captions & Localization Room** (planned) - Align editable SRT/WebVTT to selected narration, enforce locale-aware reading/timing/safe-area checks, and keep visible text separate from later language editions.
@@ -145,6 +145,20 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Statically reviewed and pinned Creatorberry/flick `4442fe355644317aafbe15c55ea3fbcd0217cd8d`, calesthio/OpenMontage `08e2151fa02de28a5d6a312b3d575692bf147ad7`, and alesha-pro/tools hand-drawn Canvas `2083cb61310da66abb891bc495ee14018dd25106`. No upstream package, runtime or generated code was installed or enabled.
 - Desktop at 1440 x 1400 and exact mobile CDP at 390 x 844 rendered `#production` successfully. The page heading, architecture link, truthful statuses, ten room cards and five style cards were readable. Document width equaled viewport width at 390 pixels; only the intended horizontal navigation strip scrolls.
 - Verification passed: `npm run tracker` reported 8/30, `npm run check` passed, the complete 86/86 automated suite passed, and `git diff --check` passed. The first independent review found broad provider-spending wording, a stale ledger/order and one Flick capability overstatement; all were corrected before release.
+
+### 2026-09-20 - OpenHiggsfield static review
+
+- Statically reviewed and pinned `wide-trace/open-higgsfield` at `b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf`. No package was installed, no upstream app was run, no credential was entered and no model or upload request was sent.
+- Mapped its 38-entry image/video catalog, declarative settings, media-role caps, native/fanned-out batches, asynchronous task lifecycle and gallery reuse flow into future Scene & Visual Room requirements.
+- Did not copy or activate the project. No license file exists, GitHub reports no detected license, and no automated test/spec files were present at the reviewed revision.
+- Rejected its browser-cookie credential, request/response logging, unauthenticated upload-token and public-blob assumptions. Any future adapter must use encrypted server-side connectors, fixed origins, rights and cost admission, private immutable inputs, bounded polling/reconciliation and checksummed/probed result artifacts.
+
+### 2026-09-20 - Voice Room v0.6 release gate
+
+- Completed the bounded Voice Room: immutable profile and lexicon revisions, approved-script admission, rights and consent records, tested connector provenance, local budget reservation/settlement, explicit unknown-outcome retry confirmation, fixed OpenAI/ElevenLabs speech adapters, canonical WAV artifacts and FFmpeg/ffprobe QC.
+- Added human audition comparison, intelligibility approval, revocation and downstream invalidation. Approval, playback and handoff recheck path containment, exact size and SHA-256 so a replaced or missing file cannot remain trusted.
+- The independent read-only review reported eight blockers covering multi-chunk assembly, paid-attempt admission, request-start accounting, artifact integrity, FFmpeg preflight, corrupt decode handling, provider-specific preflight and playback-safe polling. All eight were fixed with regressions. A final clean rereview was attempted but the external Codex account hit its usage limit; no clean rereview result is claimed.
+- Release verification passed `npm run tracker`, `npm run check`, the complete 100/100 automated suite and `git diff --check`. Desktop `1440 x 1400` and exact mobile `390 x 844` visual reviews had no release-blocking overflow or clipping. No live narration provider request was sent.
 
 ### Current release 0.4.0 - Hermes reasoning boundary
 

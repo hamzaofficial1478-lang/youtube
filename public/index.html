@@ -88,6 +88,47 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="content-dialog">Cancel</button><button type="submit" class="button primary">Save draft</button></div>
     </form>
   </dialog>
+  <dialog id="voice-profile-dialog" aria-labelledby="voice-profile-heading">
+    <form id="voice-profile-form">
+      <div class="dialog-heading"><div><p class="eyebrow">PRIMARY-LOCALE NARRATOR</p><h2 id="voice-profile-heading">Configure Voice Room</h2></div><button type="button" class="icon-button" data-close="voice-profile-dialog" aria-label="Close voice profile dialog">×</button></div>
+      <input type="hidden" name="familyId"><input type="hidden" name="familyRevision"><input type="hidden" name="revision"><input type="hidden" name="provider">
+      <div class="form-grid">
+        <label>Profile name<input name="name" required minlength="2" maxlength="80" placeholder="Primary narrator"></label>
+        <label>Tested voice connector<select name="connectorId" required></select></label>
+        <label>Provider model<input name="model" required maxlength="128" placeholder="gpt-4o-mini-tts"></label>
+        <label>Voice ID<input name="voiceId" required maxlength="128" placeholder="alloy or provider voice ID"></label>
+        <label>Voice version<input name="voiceVersion" required maxlength="120" value="provider-current"></label>
+        <label>Ownership basis<select name="ownershipBasis"><option value="provider_stock_voice">Provider stock voice</option><option value="self_owned_voice">My own voice</option><option value="licensed_custom_voice">Licensed custom voice</option></select></label>
+        <label class="full">Rights holder<input name="rightsHolder" required minlength="2" maxlength="160"></label>
+        <label class="full">Consent or license evidence reference<textarea name="evidenceReference" required minlength="10" maxlength="1000" rows="2" placeholder="What was reviewed, where it is retained, and who has authority."></textarea></label>
+        <label>Terms reviewed on<input name="termsReviewedAt" type="date" required></label>
+        <label>Emotion<select name="emotion"><option value="neutral">Neutral</option><option value="warm">Warm</option><option value="serious">Serious</option><option value="energetic">Energetic</option><option value="calm">Calm</option><option value="dramatic">Dramatic</option></select></label>
+        <label>Pace<input name="pace" type="number" min="0.25" max="4" step="0.05" value="1" required></label>
+        <label>Energy, 0–100<input name="energy" type="number" min="0" max="100" step="1" value="55" required></label>
+        <label>Pause scale<input name="pauseScale" type="number" min="0.5" max="2" step="0.05" value="1" required></label>
+        <label>Emphasis, 0–100<input name="emphasis" type="number" min="0" max="100" step="1" value="50" required></label>
+        <label>Stability, 0–1<input name="stability" type="number" min="0" max="1" step="0.05" value="0.5" required></label>
+        <label>Similarity, 0–1<input name="similarity" type="number" min="0" max="1" step="0.05" value="0.75" required></label>
+        <label>Style strength, 0–1<input name="style" type="number" min="0" max="1" step="0.05" value="0"></label>
+        <label class="full">Delivery instructions<textarea name="instructions" maxlength="2000" rows="3" placeholder="Tone, cadence, emphasis and prohibited mannerisms."></textarea></label>
+        <label class="full">Pronunciation lexicon <span class="hint">One per line: term =&gt; replacement | optional note</span><textarea name="lexicon" maxlength="20000" rows="5" placeholder="SQL => sequel | Channel standard"></textarea></label>
+        <label>Monthly character limit<input name="monthlyCharacterLimit" type="number" min="1" max="100000000" step="1" value="100000" required></label>
+        <label>Per-audition character limit<input name="maxCharactersPerAudition" type="number" min="1" max="100000" step="1" value="12000" required></label>
+        <label>Estimated cents per 1M characters<input name="priceCentsPerMillionCharacters" type="number" min="0" max="10000000" step="1" value="0" required></label>
+        <label class="checkbox-label full"><input name="consentConfirmed" type="checkbox" required><span>I confirm the recorded owner or rights holder authorized this voice use.</span></label>
+        <label class="checkbox-label full"><input name="commercialUseConfirmed" type="checkbox" required><span>I reviewed and confirmed commercial use for this exact voice and provider arrangement.</span></label>
+      </div>
+      <p class="note">Saving creates an immutable new profile and pronunciation-lexicon revision. It never edits old auditions. Changing the approved narrator revokes stale downstream handoffs.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-profile-dialog">Cancel</button><button type="submit" class="button primary">Save voice profile</button></div>
+    </form>
+  </dialog>
+  <dialog id="voice-approval-dialog" aria-labelledby="voice-approval-heading">
+    <form id="voice-approval-form"><div class="dialog-heading"><div><p class="eyebrow">HUMAN LISTENING GATE</p><h2 id="voice-approval-heading">Approve narration</h2></div><button type="button" class="icon-button" data-close="voice-approval-dialog" aria-label="Close approval dialog">×</button></div><input type="hidden" name="auditionId"><div class="form-grid"><label>Approver name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Comparison notes<textarea name="comparisonNotes" required minlength="20" maxlength="2000" rows="4" placeholder="What you compared and why this take wins."></textarea></label><label class="checkbox-label full"><input name="intelligibilityConfirmed" type="checkbox" required><span>I listened to the complete narration and confirmed every word is intelligible, correctly pronounced and suitable for the intended audience.</span></label></div><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-approval-dialog">Cancel</button><button type="submit" class="button primary">Approve exact narration</button></div></form>
+  </dialog>
+  <dialog id="voice-revoke-dialog" aria-labelledby="voice-revoke-heading">
+    <form id="voice-revoke-form"><div class="dialog-heading"><div><p class="eyebrow">REVOKE THE HANDOFF</p><h2 id="voice-revoke-heading">Revoke approved narration</h2></div><button type="button" class="icon-button" data-close="voice-revoke-dialog" aria-label="Close revoke dialog">×</button></div><input type="hidden" name="approvalId"><div class="form-grid"><label>Operator name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Revocation reason<textarea name="reason" required minlength="10" maxlength="1000" rows="3"></textarea></label></div><p class="note">Revocation blocks the Voice Room handoff and invalidates scene timing, captions, audio mix, QC, packaging and render state.</p><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-revoke-dialog">Cancel</button><button type="submit" class="button danger">Revoke narration</button></div></form>
+  </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
     <form id="connector-form">
       <div class="dialog-heading"><h2 id="connector-heading">Add connector slot</h2><button type="button" class="icon-button" data-close="connector-dialog" aria-label="Close connector dialog">×</button></div>

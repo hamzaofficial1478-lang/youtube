@@ -97,6 +97,8 @@ Mandatory gates:
 - Uploaded media requires an explicit rights statement. Generated media records synthetic-media status and disclosure implications.
 - One scene can be repaired without regenerating unrelated voice or visuals.
 - Remote providers are optional adapters with explicit capability, resolution, duration, budget and cancellation contracts.
+- Every model adapter exposes a versioned capability snapshot rather than a hardcoded universal form: supported surface, setting allowlist/defaults, media-input roles and limits, output contract, commercial-use/disclosure constraints and current connector revision.
+- Generation jobs retain the exact prompt revision, capability snapshot, input asset IDs, provider request/task IDs, admitted cost, lifecycle events, returned URLs, downloaded immutable artifacts, checksums, probes and terminal outcome. Browser cookies, public uploads and gallery state are never the source of truth.
 
 ### 5. Editing Room
 
@@ -104,11 +106,15 @@ Owns a deterministic timeline rather than a flattened mystery file.
 
 Mandatory gates:
 
-- Revisioned video, audio, text and overlay tracks with stable scene IDs.
-- Trim, crop, speed, volume, fades, transitions, keyframes and caption styles are data.
-- Writes use optimistic concurrency, atomic replacement and recoverable history.
-- Low-resolution local proxies close the blind-edit loop.
-- FFmpeg is the dependable render boundary. CapCut is optional interchange, never the sole source of truth.
+- Revisioned video, audio, text and overlay tracks use stable scene, track, clip, asset and transition IDs plus one canonical frame/timebase contract.
+- Cuts, trims, ripple edits, gaps, linked A/V, merges, track order, sync locks and multicam choices are explicit timeline operations, never hidden renderer behavior.
+- Crop, transform, layout, speed changes and ramps, opacity, blend mode, fades, transitions, keyframes, typography, caption treatment, effects and color grades are versioned data.
+- Audio alignment, timecode/audio-correlation sync, dialogue edits, silence policy, beat markers, gain, denoise and room-tone decisions retain measurable evidence and stay compatible with the Audio Room boundary.
+- Color work records scopes, clipping, reference frame, primary corrections, wheels, curves, qualified hue changes and LUT provenance instead of storing only a flattened look.
+- Writes use optimistic concurrency, preconditioned stable IDs, atomic batches, post-edit receipts, shared undo, immutable history and safe single-scene repair.
+- Low-resolution local proxies, waveforms, thumbnails and frame/contact-sheet inspection close the blind-edit loop before any final render.
+- Interchange is explicit and versioned: Control Room JSON remains authoritative; EDL/XML/FCPXML, CapCut draft and lossless-conform exports are derived artifacts with compatibility reports.
+- FFmpeg is the dependable Windows render and probe boundary. LosslessCut, Palmier Pro and CapCut are optional references or adapters, never the sole source of truth.
 
 ### 6. Captions & Localization Room
 
@@ -168,6 +174,17 @@ Mandatory gates:
 
 ## New repository assessment
 
+### wide-trace/open-higgsfield
+
+- Source: https://github.com/wide-trace/open-higgsfield
+- Pinned revision: `b16a0efe4d7e2707b56f8ccb02387fd2a9d2eddf`
+- License: unresolved. There is no license file and GitHub reports no detected license, so no source is copied even though the README says open source.
+- Decision: Scene & Visual Room capability-schema, generation-lifecycle and gallery-workflow reference only. No Next.js app, dependency, credential, Vercel Blob path or provider call is integrated.
+- Keep as independently implemented requirements: one versioned catalog for image and video adapters; per-model allowlisted settings/defaults; start/end/reference/video/audio role limits; validated request-plane mapping; explicit native versus fanned-out batch semantics; bounded asynchronous task polling; immutable run history; favorite/select/reuse/download review tools; and restoration of the exact prompt/settings/input set into a new unsubmitted draft.
+- Reviewed scope: 38 catalog entries at this revision and controls for aspect ratio, resolution, duration, output format, generated/original audio, batch size, prompt enhancement, CFG, multi-shot and character orientation. Catalog presence is not live-provider verification or authorization.
+- Reject from the Control Room boundary: credentials persisted in browser cookies, request/response logging, arbitrary provider result URLs as durable artifacts, unauthenticated upload-token issuance, publicly readable Vercel Blob inputs, missing upload-size ceilings, automatic retries, silent model fallback and browser-only history as provenance.
+- Required adapter gates: fixed provider origin and connector revision, encrypted server-side secret, rights/disclosure review, local or private immutable inputs, role/count/type/size/decode validation, budget admission, idempotency, unknown-outcome reconciliation, cancellability evidence, downloaded result hashes/probes and human selection. The upstream repository has no automated test/spec files, so its behavior is not accepted without our own fixtures.
+
 ### Creatorberry/flick
 
 - Source: https://github.com/Creatorberry/flick
@@ -199,6 +216,27 @@ Mandatory gates:
 - Asset safety: keep asset-level source/license/attribution records. Example photos, fonts, motion references and music are not automatically cleared merely because the repository code is MIT.
 - Originality: use general media techniques, not imitation of a living artist's signature style or direct copying of example scenes.
 
+### mifi/lossless-cut
+
+- Source: https://github.com/mifi/lossless-cut
+- Pinned revision: `20f2e34687a691dd15b18c030d108b3b66d44098`
+- License: GPL-2.0-only.
+- Decision: lossless-conform and technical media-workflow reference only; no source or Electron runtime is integrated.
+- Keep as requirements: frame/keyframe-aware segments, lossless cut and reorder where codecs permit, deterministic remux/concatenate/track operations, chapter and EDL interchange, waveform/thumbnails, media/stream inspection, black/silence/scene detection, undo/redo and explicit FFmpeg command evidence.
+- Do not overclaim: lossless operations do not replace grading, compositing, effects or final encoding. Smart cut and the local HTTP API are experimental.
+- Guardrails: any later adapter is fixed-root, allowlisted and version-pinned; it produces a reviewed command plan and derived artifact. The upstream unauthenticated local API is never exposed to Hermes, and GPL obligations require deliberate review before code reuse or distribution.
+
+### palmier-io/palmier-pro
+
+- Source: https://github.com/palmier-io/palmier-pro
+- Pinned revision: `b4b1333f9404a2ca8a9509443955cd1c501de480`
+- License: GPLv3 historical source through v0.7.6; later binary releases are proprietary.
+- Platform: macOS 26 on Apple Silicon, so it is not a direct runtime candidate for this Windows-local application.
+- Decision: advanced nonlinear-editing architecture reference only; no source, binary or MCP service is integrated.
+- Keep as independently implemented requirements: stable IDs and project-frame coordinates; atomic batch edits and mutation receipts; linked A/V and sync-lock rules; split/ripple/insert/move/remove/swap; trims/speed/fades/transforms/crops/blends; settings copy and clip-relative keyframes; multi-clip layouts; timecode/audio sync and multicam; timeline transcripts, word/silence cuts and beat detection; text/captions; primary, wheel, curve, hue and LUT grading; scopes/reference comparison; effects and denoise; export queues and XML/FCPXML interchange.
+- Reject from the Control Room boundary: broad external-agent mutation, arbitrary project/file access, silent account-dependent cloud fallback and paid generation inside editing. Hermes cannot connect to Palmier's MCP server.
+- Licensing boundary: the current proprietary binary cannot be copied, modified, redistributed, reverse engineered or treated as proof that historical GPL source includes every current feature.
+
 ## Previous production references retained
 
 | Source | Pinned revision | Decision | Production use |
@@ -213,13 +251,13 @@ Mandatory gates:
 
 1. Voice Room data model, auditions, consent, direction and real-audio QC.
 2. Style Library schema, five immutable profiles and channel-family assignment rules.
-3. Scene manifest with narration/style dependencies and rights provenance.
+3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime.
 4. FFmpeg readiness and deterministic proxy renderer.
 5. One sandboxed style proof, likely Stickman or Hand-drawn Canvas, before broader adapters.
 6. Editing timeline and single-scene repair.
 7. Caption alignment, then Audio Room mix/QC.
 8. Full Review & QC evidence and Packaging Room variants.
-9. Optional pinned CapCut draft export after compatibility fixtures pass.
+9. Optional derived editing adapters only after compatibility and licensing fixtures pass: lossless conform first, then CapCut draft interchange; Palmier remains architecture-only on this Windows runtime.
 10. Final render, recovery and human master approval.
 11. Only then begin configured-language editions and publishing work.
 
