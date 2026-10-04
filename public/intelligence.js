@@ -3,7 +3,7 @@
 // Loaded before app.js; app.js helpers (state, esc, badge, action, api, refresh, toast,
 // saveForm, date, localeName, heading, empty, familyDialog) are only used inside functions.
 
-let competitorFamily = '', selectedAnalysis = '', selectedIdea = '';
+let competitorFamily = '', selectedAnalysis = '', selectedIdea = '', pendingPicks = {};
 
 const INTEL_STATUS = {
   queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Completed', 'green'], partial: ['Partial data', 'orange'], failed: ['Failed', 'gray'],
@@ -26,6 +26,20 @@ function intelBusy() {
 }
 function competitorLabel(item) { return item.kind === 'username' ? `/user/${item.value}` : item.value; }
 const competitorKeyOf = item => `${item.kind}:${item.value.toLowerCase()}`;
+// Owner picks per competitor link (what to learn from it). Unsaved changes live here until "Save blend".
+function picksFor(familyId) { return pendingPicks[familyId] || state.intelligence.competitors.families[familyId].picks.picks; }
+function picksChanged(familyId) {
+  if (!pendingPicks[familyId]) return 0;
+  const saved = state.intelligence.competitors.families[familyId].picks.picks, next = pendingPicks[familyId];
+  return [...new Set([...Object.keys(saved), ...Object.keys(next)])].filter(key => JSON.stringify(saved[key] || []) !== JSON.stringify(next[key] || [])).length;
+}
+function blendRecipe(family, names) {
+  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id);
+  return `<div class="blend-recipe">${Object.entries(traits).map(([trait, info]) => {
+    const from = family.competitors.filter(item => (picks[competitorKeyOf(item)] || []).includes(trait)).map(item => names.get(competitorKeyOf(item)));
+    return `<div class="blend-slot ${from.length ? '' : 'own'}"><b>${esc(info.label)}</b><span>${from.length ? `Learn from ${esc(from.join(' + '))}` : '100% your own'}</span><small>→ ${esc(info.route)}</small></div>`;
+  }).join('')}</div>`;
+}
 
 // ---------------------------------------------------------------- shared pieces
 function dataCapsCard() {
@@ -46,6 +60,12 @@ function competitorsView() {
   const latestScan = data.scans.find(scan => scan.result?.channels?.[0]?.nexlev !== undefined || scan.result?.channels?.some(channel => channel.youtube)) || null;
   const notesByKey = new Map();
   for (const note of data.notes) notesByKey.set(note.competitorKey, note);
+  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id), names = new Map();
+  for (const item of family.competitors) {
+    const channel = latestScan?.result?.channels?.find(entry => entry.competitorKey === competitorKeyOf(item));
+    names.set(competitorKeyOf(item), channel?.nexlev?.about?.title || (channel?.youtube && !channel.youtube.purged ? channel.youtube.title : null) || competitorLabel(item));
+  }
+  const changes = picksChanged(family.id);
   const rows = family.competitors.map(item => {
     const key = competitorKeyOf(item), channel = latestScan?.result?.channels?.find(entry => entry.competitorKey === key), note = notesByKey.get(key), stats = channel?.stats;
     const name = channel?.nexlev?.about?.title || (channel?.youtube && !channel.youtube.purged ? channel.youtube.title : null) || competitorLabel(item);
@@ -53,6 +73,7 @@ function competitorsView() {
       <div class="competitor-main"><span class="room-number">${esc(channel?.ref || '—')}</span><div><strong><a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a></strong><small>${esc(competitorLabel(item))}${channel ? ` · ${esc(channel.status)}` : ' · not scanned yet'}</small></div></div>
       <div class="competitor-stats">${stats ? `<span><b>${intelDuration(stats.medianDurationSeconds)}</b>median length</span><span><b>${stats.uploadsPerWeek ?? '—'}</b>uploads/week</span><span><b>${stats.shortsShare ?? '—'}%</b>Shorts</span><span><b>${stats.wordsPerMinute ?? '—'}</b>words/min</span><span><b>${stats.topOutlierScore ? `${stats.topOutlierScore}×` : '—'}</b>top outlier</span>` : '<span class="muted">Statistics appear after a scan with NexLev data.</span>'}</div>
       <div class="competitor-notes">${note ? `<small>Observations r${note.revision} · ${esc(note.createdBy)}</small><p>${esc([note.editingStyle, note.voice, note.visuals].filter(Boolean).join(' · ').slice(0, 160))}</p>` : '<small class="muted">No observations yet</small>'}${action(note ? 'Update observations' : 'Add observations', 'intel-note', key, 'text-button')}</div>
+      <div class="keep-row"><span>Keep from this channel</span>${Object.entries(traits).map(([trait, info]) => { const on = (picks[key] || []).includes(trait); return `<button type="button" class="keep-chip ${on ? 'on' : ''}" data-keep="${esc(key)}" data-trait="${trait}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(info.label)}</button>`; }).join('')}</div>
       ${channel?.errors?.length ? `<p class="inline-warning">${esc(channel.errors.join(' · '))}</p>` : ''}
     </article>`;
   }).join('');
@@ -63,10 +84,11 @@ function competitorsView() {
   return heading('Competitor intelligence', 'Study each family\'s 3-10 competitors to learn techniques — at most 30% reference patterns, at least 70% original work. Nothing changes your channels until you approve it.', action('Scan settings', 'intel-settings', family.id, 'secondary'))
     + `<div class="production-toolbar"><div><label for="competitor-family">Channel family</label><select id="competitor-family">${families.map(item => `<option value="${item.id}" ${item.id === family.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div><div class="production-context"><span>${family.competitors.length} competitor${family.competitors.length === 1 ? '' : 's'}</span><span>${esc(localeName(family.primaryLocale))}</span><span>${esc(family.format)}</span>${data.guidanceActive ? '<span class="good">Script guidance active</span>' : ''}</div></div>`
     + `<div class="intel-grid"><div>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels</h2></div>${action('Edit family list', 'edit-family', family.id, 'secondary')}</div>
+      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels</h2></div><div class="row-end">${changes ? action('Discard', 'intel-picks-discard', family.id, 'text-button') + action(`Save blend (${changes} change${changes === 1 ? '' : 's'})`, 'intel-picks-save', family.id, 'primary') : ''}${action('Edit family list', 'edit-family', family.id, 'secondary')}</div></div>
         ${family.competitors.length < 3 ? `<p class="inline-warning">Add ${family.competitors.length ? `${3 - family.competitors.length} more` : '3-10'} competitor channel${family.competitors.length === 2 ? '' : 's'} for a reliable comparison.</p>` : ''}
         ${rows || '<p class="muted">No competitors listed for this family yet.</p>'}
-        <p class="hint">Your own observations (editing style, voice, visuals, thumbnails) are the strongest evidence: no API watches the videos for you.</p></section>
+        <p class="hint">Your own observations (editing style, voice, visuals, thumbnails) are the strongest evidence: no API watches the videos for you.</p>
+        ${family.competitors.length ? `<h3 class="intel-subhead">Your blend recipe ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : '<small class="muted">nothing picked yet: Hermes learns from every channel</small>'}</h3>${blendRecipe(family, names)}<p class="hint">Pick what you like on each link; several picks per link are fine. Each area learns only from the channels you picked for it, keeps at most 30% reference, and areas without picks stay 100% your own. Saving new picks makes an approved blueprint outdated until you analyze again.</p>` : ''}</section>
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Run scan', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 3 · HERMES BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Hermes for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
@@ -98,6 +120,7 @@ function blueprintView(analysis, family, data) {
   return `${head}
     ${analysis.quality && !analysis.quality.passed ? `<div class="checks"><strong>Blocked:</strong>${intelList(analysis.quality.issues)}</div>` : ''}
     <p class="bp-summary">${esc(bp.summary)}</p>
+    ${analysis.blend ? `<div class="blend-recipe compact">${Object.entries(state.intelligence.competitors.traits).map(([trait, info]) => { const from = analysis.blend.areaSources[info.area] || []; return `<div class="blend-slot ${from.length ? '' : 'own'}"><b>${esc(info.label)}</b><span>${from.length ? `From ${esc(from.join(' + '))}` : '100% own'}</span>${analysis.quality?.areaShares ? `<small>${analysis.quality.areaShares[info.area]}% reference</small>` : ''}</div>`; }).join('')}</div>` : ''}
     <div class="share-bar" aria-label="Reference versus original share"><span class="share-ref" data-width="${share}">${share}% reference</span><span class="share-own">${100 - share}% original</span></div>
     <div class="bp-grid">
       ${section('Adopt (reference, ≤30%)', `<ul class="intel-list">${bp.adopt.map(item => `<li><b>${esc(item.area)}</b> · ${esc(item.pattern)} <small>${esc(item.refs.join(', '))}</small></li>`).join('')}</ul>`)}
@@ -122,7 +145,9 @@ function guidanceCard(family, data) {
     <div class="handoff-record"><span>${data.guidanceActive ? '✓' : '○'}</span><div><strong>Hermes script guidance</strong><p>${data.guidanceActive ? 'New Hermes script candidates for this family include the approved hook, structure, pacing and avoid list as technique guidance.' : 'Starts after you approve a blueprint for the current competitor list.'}</p></div></div>
     <div class="handoff-record"><span>${data.voiceDirection ? '✓' : '○'}</span><div><strong>Narrator direction</strong><p>${data.voiceDirection ? `${esc(data.voiceDirection.emotion)} · pace ${data.voiceDirection.pace} · energy ${data.voiceDirection.energy}. Applied only when you save a narrator profile.` : 'Available after approval.'}</p></div></div>
     <div class="handoff-record"><span>○</span><div><strong>Editing style</strong><p>"Create style draft" makes a new draft in the Style Library. You still review, approve and assign it.</p></div></div>
-    ${current?.outdated ? '<p class="inline-warning">The competitor list changed after this approval. Run a new scan and analysis.</p>' : ''}</section>`;
+    <div class="handoff-record"><span>${data.packagingBrief ? '✓' : '○'}</span><div><strong>Packaging brief</strong><p>${data.packagingBrief ? `${esc(data.packagingBrief.thumbnailNotes.slice(0, 2).join(' · '))}. Saved for the Packaging Room.` : 'Thumbnail and title lessons, saved for the Packaging Room after approval.'}</p></div></div>
+    <div class="handoff-record"><span>${current && !current.outdated ? '✓' : '○'}</span><div><strong>Scene planner guidance</strong><p>${current && !current.outdated ? 'Hermes scene plans use the approved visual and editing techniques.' : 'Starts after approval.'}</p></div></div>
+    ${current?.outdated ? `<p class="inline-warning">${esc(current.outdatedReason || 'The competitor list changed after this approval.')} Run a new scan and analysis.</p>` : ''}</section>`;
 }
 
 // ---------------------------------------------------------------- Niche Factory view
@@ -217,6 +242,11 @@ const nameField = (label = 'Your name', name = 'person') => `<label>${label}<inp
 function intelAction(command, id, button) {
   const family = state.families.find(item => item.id === id);
   const familyData = family && state.intelligence.competitors.families[family.id];
+  if (command === 'intel-picks-discard') { delete pendingPicks[id]; render(); return; }
+  if (command === 'intel-picks-save') {
+    const saved = state.intelligence.competitors.families[id].picks;
+    return intelDialog('picks', 'Save your blend picks', 'WHAT TO LEARN FROM EACH CHANNEL', `<p class="hint">Saves revision ${saved.revision + 1} of the picks for ${esc(family.name)}. The next analysis learns each area only from the channels you picked for it. An approved blueprint made with the old picks stops steering your rooms until you approve a new one.</p><div class="form-grid">${nameField()}</div>`, 'Save blend', {familyId: id, expectedRevision: saved.revision});
+  }
   if (command === 'intel-caps') {
     const quota = state.intelligence.competitors.quota.settings;
     return intelDialog('caps', 'Research data caps', 'SPEND LIMITS FOR OUTSIDE DATA', `<div class="form-grid"><label>NexLev requests per month<input name="nexlev" type="number" min="0" max="100000" step="1" required value="${quota.nexlevMonthlyRequestCap}"><span class="hint">Your NexLev plan has its own monthly allowance; keep this at or below it.</span></label><label>YouTube units per day<input name="youtube" type="number" min="0" max="10000" step="1" required value="${quota.youtubeDailyUnitCap}"><span class="hint">Google's default project quota is 10,000 units/day.</span></label></div>`, 'Save caps', {revision: quota.revision});
@@ -345,6 +375,7 @@ document.getElementById('intel-form').addEventListener('submit', event => {
   const number = name => Number(value(name));
   let message = null;
   saveForm(form, async () => {
+    if (kind === 'picks') { const result = await api(`/api/families/${data.familyId}/competitor-picks`, {expectedRevision: data.expectedRevision, createdBy: value('person'), picks: pendingPicks[data.familyId] || {}}); delete pendingPicks[data.familyId]; return result; }
     if (kind === 'caps') return api('/api/quota-settings', {revision: data.revision, nexlevMonthlyRequestCap: number('nexlev'), youtubeDailyUnitCap: number('youtube')});
     if (kind === 'settings') return api(`/api/families/${data.familyId}/competitor-settings`, {revision: data.revision, recentVideos: number('recentVideos'), transcriptsPerChannel: number('transcriptsPerChannel'), analysisTokenLimit: number('analysisTokenLimit'), useOutliers: checked('useOutliers'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
     if (kind === 'note') return api(`/api/families/${data.familyId}/competitor-notes`, {competitorKey: data.competitorKey, expectedRevision: data.expectedRevision, createdBy: value('person'), editingStyle: value('editingStyle'), voice: value('voice'), visuals: value('visuals'), thumbnails: value('thumbnails'), script: value('script'), strengths: value('strengths'), weaknesses: value('weaknesses')});
@@ -368,5 +399,15 @@ document.getElementById('intel-form').addEventListener('submit', event => {
 document.addEventListener('change', event => { if (event.target.id === 'competitor-family') { competitorFamily = event.target.value; selectedAnalysis = ''; render(); } });
 document.addEventListener('click', event => {
   const tab = event.target.closest('[data-select-analysis]');
-  if (tab) { selectedAnalysis = tab.dataset.selectAnalysis; render(); }
+  if (tab) { selectedAnalysis = tab.dataset.selectAnalysis; render(); return; }
+  const chip = event.target.closest('[data-keep]');
+  if (chip) {
+    const familyId = competitorFamily, next = structuredClone(picksFor(familyId)), key = chip.dataset.keep, trait = chip.dataset.trait;
+    const list = new Set(next[key] || []);
+    if (list.has(trait)) list.delete(trait); else list.add(trait);
+    const order = Object.keys(state.intelligence.competitors.traits);
+    if (list.size) next[key] = order.filter(item => list.has(item)); else delete next[key];
+    pendingPicks[familyId] = next;
+    render();
+  }
 });

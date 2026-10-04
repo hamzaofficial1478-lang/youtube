@@ -396,3 +396,49 @@ test('HTTP routes for intelligence require the local token and expose state', as
   assert.equal(discovery.status, 400);
   assert.match((await discovery.json()).error, /NexLev/);
 });
+
+test('blend picks: each competitor link chooses what to learn, every area learns only from its picks and keeps 30/70', async t => {
+  const original = (area, count) => Array.from({length: count}, (_, index) => ({area, contribution: `Our own ${area} idea number ${index + 1} for this family`}));
+  const blended = () => blueprint({
+    adopt: [{area: 'script', pattern: 'Open on a tangible object before the history', refs: ['C1', 'T1']}, {area: 'visuals', pattern: 'Use maps to show trade routes', refs: ['V1']}, {area: 'editing', pattern: 'Hold archival stills a little longer', refs: ['C2']}],
+    original: [...original('script', 3), ...original('visuals', 3), ...original('editing', 3), ...original('voice', 1), ...original('packaging', 1)],
+  });
+  const network = fakeNetwork({hermesContent: blended()});
+  const {intel, family, ids} = setup(t, network);
+  const [a, b] = [`channel_id:${channelIds[0].toLowerCase()}`, `channel_id:${channelIds[1].toLowerCase()}`];
+  assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {'handle:@stranger': ['voice']}}), /not in this family/);
+  assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['music']}}), /Choose voice, narration/);
+  const saved = intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['visuals', 'narration'], [b]: ['editing']}});
+  assert.equal(saved.revision, 1);
+  assert.deepEqual(saved.picks[a], ['narration', 'visuals'], 'traits are stored in a fixed order');
+  assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {}}), /another tab/);
+
+  intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev});
+  const scan = await intel.processNextScan();
+  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.hermes, requestedBy: 'Owner'});
+  assert.deepEqual(queued.blend.areaSources, {script: ['C1'], voice: [], editing: ['C2'], visuals: ['C1'], packaging: []});
+  assert.deepEqual(queued.blend.ownAreas, ['voice', 'packaging']);
+  await intel.processNextAnalysis();
+  const chat = network.calls.find(call => call.path === '/v1/chat/completions').body;
+  assert.match(chat.messages[0].content, /may only use an area that has picked channels/);
+  const sent = JSON.parse(chat.messages[1].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
+  assert.deepEqual(sent.channels.find(item => item.ref === 'C1').ownerWantsToLearn, ['Narration', 'Visuals']);
+  const analysis = intel.publicAnalysis(intel.analysisRow(queued.id));
+  assert.equal(analysis.status, 'completed', JSON.stringify(analysis.quality));
+  assert.equal(analysis.quality.areaShares.script, 25);
+  assert.equal(analysis.quality.areaShares.voice, 0);
+
+  const context = {refs: new Map(Object.entries(queued.refs)), channelRefs: new Set(['C1', 'C2', 'C3']), styleKeys: new Set(['documentary-montage']), blend: queued.blend};
+  assert.throws(() => validateBlueprint({...blended(), adopt: [...blended().adopt, {area: 'voice', pattern: 'Use a calm narrator', refs: ['C1']}], original: [...blended().original, ...original('voice', 3)]}, context), /no competitor was picked for that area/);
+  assert.throws(() => validateBlueprint({...blended(), adopt: [{area: 'editing', pattern: 'Hold stills longer', refs: ['C1']}]}, context), /C1 for editing, but that channel was not picked/);
+  assert.throws(() => validateBlueprint({...blended(), original: [...original('script', 1), ...original('visuals', 3), ...original('editing', 3), ...original('voice', 3)]}, context), /script area adopts 1 pattern\(s\) against 1/);
+
+  intel.review(queued.id, {decision: 'approve', reviewer: 'Owner', confirmations: {techniquesNotCopied: true, balanceAccepted: true, recommendationsReviewed: true}});
+  assert.ok(intel.scriptGuidance(family.id));
+  assert.deepEqual(intel.packagingBrief(family.id).learnedFrom, []);
+  intel.savePicks(family.id, {expectedRevision: 1, createdBy: 'Owner', picks: {[a]: ['voice']}});
+  const current = intel.currentBlueprint(family.id);
+  assert.equal(current.outdated, true);
+  assert.match(current.outdatedReason, /blend picks changed/);
+  assert.equal(intel.scriptGuidance(family.id), null);
+});

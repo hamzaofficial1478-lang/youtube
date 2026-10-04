@@ -93,8 +93,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/quota-settings'&&req.method==='POST')return json(res,200,quota.saveSettings(body));
         if(pathname==='/api/niche-settings'&&req.method==='POST')return json(res,200,nicheFactory.saveSettings(body));
         if(pathname==='/api/niche-ideas'&&req.method==='POST')return json(res,200,nicheFactory.saveIdea(body));
-        const familyIntel=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/(competitor-settings|competitor-notes|competitor-scans|competitor-analyses)$/);
-        if(familyIntel&&req.method==='POST'){const [,id,kind]=familyIntel;return json(res,200,kind==='competitor-settings'?competitorIntel.saveSettings(id,body):kind==='competitor-notes'?competitorIntel.saveNote(id,body):kind==='competitor-scans'?competitorIntel.queueScan(id,body):competitorIntel.queueAnalysis(id,body));}
+        const familyIntel=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/(competitor-settings|competitor-notes|competitor-scans|competitor-analyses|competitor-picks)$/);
+        if(familyIntel&&req.method==='POST'){const [,id,kind]=familyIntel;return json(res,200,kind==='competitor-settings'?competitorIntel.saveSettings(id,body):kind==='competitor-notes'?competitorIntel.saveNote(id,body):kind==='competitor-scans'?competitorIntel.queueScan(id,body):kind==='competitor-picks'?competitorIntel.savePicks(id,body):competitorIntel.queueAnalysis(id,body));}
         const scanAction=pathname.match(/^\/api\/competitor-scans\/([a-f0-9-]+)\/retry$/);
         if(scanAction&&req.method==='POST')return json(res,200,competitorIntel.retryScan(scanAction[1],body));
         const analysisAction=pathname.match(/^\/api\/competitor-analyses\/([a-f0-9-]+)\/(retry|review|style-draft)$/);

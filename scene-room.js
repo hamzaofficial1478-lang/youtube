@@ -355,7 +355,8 @@ class SceneRoom {
       const current = this.competitorIntel?.currentBlueprint(familyId);
       if (!current || current.outdated) return null;
       const clip = value => String(value).slice(0, 200);
-      return {analysisId: current.id, rule: 'Techniques only; at most 30% reference, at least 70% original.', visualObservations: current.result.visuals.observations.slice(0, 4).map(clip), editingObservations: current.result.editing.observations.slice(0, 4).map(clip), avoid: current.result.avoid.slice(0, 4).map(item => clip(item.pattern))};
+      return {analysisId: current.id, rule: 'Techniques only; at most 30% reference, at least 70% original.', visualObservations: current.result.visuals.observations.slice(0, 4).map(clip), editingObservations: current.result.editing.observations.slice(0, 4).map(clip),
+        learnedPatterns: current.result.adopt.filter(item => ['visuals', 'editing'].includes(item.area)).slice(0, 4).map(item => clip(item.pattern)), originalContributions: current.result.original.filter(item => ['visuals', 'editing'].includes(item.area)).slice(0, 6).map(item => clip(item.contribution)), avoid: current.result.avoid.slice(0, 4).map(item => clip(item.pattern))};
     } catch { return null; }
   }
 
