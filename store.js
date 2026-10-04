@@ -485,7 +485,7 @@ class Store {
       const filename=path.resolve(this.artifactRoot,artifact.relativePath),boundary=this.artifactRoot.endsWith(path.sep)?this.artifactRoot:`${this.artifactRoot}${path.sep}`;requireValue(filename.startsWith(boundary),'Voice artifact is outside the local artifact root.');
       const stat=fs.statSync(filename);requireValue(stat.isFile()&&stat.size===artifact.sizeBytes,'Voice artifact size no longer matches its immutable record.');
       const cacheKey=`${filename}:${stat.size}:${stat.mtimeMs}:${stat.ctimeMs}`,cached=this.artifactVerificationCache.get(cacheKey);let sha256=cached;
-      if(!sha256){sha256=createHash('sha256').update(fs.readFileSync(filename)).digest('hex');this.artifactVerificationCache.clear();this.artifactVerificationCache.set(cacheKey,sha256);}
+      if(!sha256){sha256=createHash('sha256').update(fs.readFileSync(filename)).digest('hex');if(this.artifactVerificationCache.size>=64)this.artifactVerificationCache.delete(this.artifactVerificationCache.keys().next().value);this.artifactVerificationCache.set(cacheKey,sha256);}
       requireValue(sha256===artifact.sha256,'Voice artifact checksum no longer matches its immutable record.');return {ok:true,filename,stat};
     }catch(error){return {ok:false,reason:error instanceof InputError?error.message:'Voice artifact file is unavailable.'};}
   }

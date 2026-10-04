@@ -10,6 +10,8 @@ const PROVIDERS = {
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   hermes: {name: 'Hermes reasoning engine', test: 'Authenticated capability and tool-free profile check; no generation', ready: true},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
+  pexels: {name: 'Pexels stock library', test: 'One photo search for "nature" (uses 1 Pexels request); nothing is downloaded', ready: true},
+  pixabay: {name: 'Pixabay stock library', test: 'One photo search for "nature" (uses 1 Pixabay request); nothing is downloaded', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
   reddit: {name: 'Reddit', test: 'OAuth adapter not implemented; setup record only', ready: false}
 };
@@ -71,6 +73,11 @@ class ConnectorSlots {
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
         if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
         result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
+      }else if(slot.provider==='pexels'||slot.provider==='pixabay'){
+        const {PexelsClient,PixabayClient}=require('./visual-sources');
+        const client=slot.provider==='pexels'?new PexelsClient(key,this.fetch):new PixabayClient(key,this.fetch);
+        const found=await client.search({capabilityId:`${slot.provider}-photo`,query:'nature',perPage:3});
+        result={access:'stock_search',message:`${PROVIDERS[slot.provider].name} accepted the API key and returned ${found.candidates.length} photo result(s) (1 request used). Nothing was downloaded.`};
       }else if(slot.provider==='hermes'){
         result=await new HermesClient(key,this.fetch).capabilities();
         result.message='Hermes authenticated capability and tool-free profile checks passed. No content was generated.';

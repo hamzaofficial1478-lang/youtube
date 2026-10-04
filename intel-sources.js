@@ -314,7 +314,9 @@ class YouTubePublicClient {
 }
 
 // ---------------------------------------------------------------- quota ledger
-const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000};
+const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000};
+// Stock libraries publish per-hour (Pexels 200/hour) and per-minute (Pixabay 100/60 s) limits; caps are counted per UTC hour.
+function hourPeriod(at = new Date()) { return at.toISOString().slice(0, 13); }
 function nexlevPeriod(at = new Date()) { return at.toISOString().slice(0, 7); }
 function youtubePeriod(at = new Date()) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'}).formatToParts(at).map(part => [part.type, part.value]));
@@ -336,20 +338,28 @@ class QuotaLedger {
   }
   saveSettings(input) {
     requireValue(input && typeof input === 'object' && !Array.isArray(input), 'Send a JSON object.');
-    const nexlev = input.nexlevMonthlyRequestCap, youtube = input.youtubeDailyUnitCap;
+    const stored = this.settings();
+    const nexlev = input.nexlevMonthlyRequestCap ?? stored.nexlevMonthlyRequestCap, youtube = input.youtubeDailyUnitCap ?? stored.youtubeDailyUnitCap;
+    const pexels = input.pexelsHourlyRequestCap ?? stored.pexelsHourlyRequestCap, pixabay = input.pixabayHourlyRequestCap ?? stored.pixabayHourlyRequestCap;
     requireValue(Number.isSafeInteger(nexlev) && nexlev >= 0 && nexlev <= 100000, 'NexLev monthly request cap must be a whole number from 0 to 100,000.');
     requireValue(Number.isSafeInteger(youtube) && youtube >= 0 && youtube <= 10000, 'YouTube daily unit cap must be a whole number from 0 to 10,000.');
+    requireValue(Number.isSafeInteger(pexels) && pexels >= 0 && pexels <= 200, 'Pexels hourly request cap must be a whole number from 0 to 200 (the Pexels default limit).');
+    requireValue(Number.isSafeInteger(pixabay) && pixabay >= 0 && pixabay <= 6000, 'Pixabay hourly request cap must be a whole number from 0 to 6,000.');
     return this.store.transaction(() => {
       const current = this.settings();
       requireValue(input.revision === current.revision, 'Quota settings changed in another tab. Reload before saving.', 409);
-      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube};
+      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube, pexelsHourlyRequestCap: pexels, pixabayHourlyRequestCap: pixabay};
       this.db.prepare("INSERT INTO quota_settings(id,revision,payload,updated_at) VALUES('global',?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at").run(current.revision + 1, JSON.stringify(payload), now());
-      this.store.event(`Updated research data caps: NexLev ${nexlev} requests/month, YouTube ${youtube} units/day`);
+      this.store.event(`Updated data caps: NexLev ${nexlev} requests/month, YouTube ${youtube} units/day, Pexels ${pexels} and Pixabay ${pixabay} requests/hour`);
       return this.settings();
     });
   }
-  periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : youtubePeriod(); }
-  capFor(provider) { const settings = this.settings(); return provider === 'nexlev' ? settings.nexlevMonthlyRequestCap : settings.youtubeDailyUnitCap; }
+  periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : provider === 'youtube' ? youtubePeriod() : hourPeriod(); }
+  capFor(provider) {
+    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap'}[provider];
+    requireValue(key, `Unknown data provider ${provider}.`, 500);
+    return settings[key];
+  }
   committed(provider, period) {
     return this.db.prepare("SELECT status, reserved_units, used_units FROM data_usage WHERE provider=? AND period=? AND status IN ('reserved','settled','unknown')").all(provider, period)
       .reduce((sum, row) => sum + (row.status === 'settled' ? row.used_units : Math.max(row.reserved_units, row.used_units || 0)), 0);
@@ -376,9 +386,11 @@ class QuotaLedger {
   markUnknown(jobId) { this.db.prepare("UPDATE data_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(now(), jobId); }
   release(jobId) { this.db.prepare("UPDATE data_usage SET status='released', used_units=0, updated_at=? WHERE job_id=? AND status='reserved'").run(now(), jobId); }
   summary() {
-    const settings = this.settings(), nexlev = nexlevPeriod(), youtube = youtubePeriod();
+    const settings = this.settings(), nexlev = nexlevPeriod(), youtube = youtubePeriod(), hour = hourPeriod();
     return {
       settings,
+      pexels: {period: hour, used: this.committed('pexels', hour), cap: settings.pexelsHourlyRequestCap, unit: 'requests this hour (UTC)'},
+      pixabay: {period: hour, used: this.committed('pixabay', hour), cap: settings.pixabayHourlyRequestCap, unit: 'requests this hour (UTC)'},
       nexlev: {period: nexlev, used: this.committed('nexlev', nexlev), cap: settings.nexlevMonthlyRequestCap, unit: 'requests this month (UTC)'},
       youtube: {period: youtube, used: this.committed('youtube', youtube), cap: settings.youtubeDailyUnitCap, unit: 'units today (Pacific time)'},
     };
@@ -412,5 +424,5 @@ function connectorReference(connectors, input, provider, label, required) {
 module.exports = {
   NEXLEV_ORIGIN, YOUTUBE_ORIGIN, NexLevClient, YouTubePublicClient, QuotaLedger, readJson,
   normVideo, normChannel, transcriptText, transcriptSummary, firstArray, count, durationSeconds, isoDate, median,
-  copiedPhrases, shingles, words, connectorCurrent, connectorReference, nexlevPeriod, youtubePeriod, cleanText,
+  copiedPhrases, shingles, words, connectorCurrent, connectorReference, nexlevPeriod, youtubePeriod, hourPeriod, cleanText,
 };
