@@ -26,6 +26,34 @@ function localeCode(value){try{return Intl.getCanonicalLocales([text(value,'Cont
 function channelLanguage(locale){return new Intl.Locale(locale).language;}
 function editionSlots(family,state='not_started'){return family.channels.map((channel,index)=>({language:channel.language,locale:channel.locale,state:index===0&&state==='storyboard'?'script_ready':state==='storyboard'?'awaiting_translation':state}));}
 
+const COMPETITOR_LIMIT=10;
+function competitorChannel(value){
+  const raw=text(value,'Competitor channel',3,300);
+  let reference=raw;
+  if(/^https?:\/\//i.test(raw)){
+    let url;try{url=new URL(raw);}catch{throw new InputError('Enter a valid YouTube competitor channel URL.');}
+    requireValue(url.protocol==='https:'&&['youtube.com','www.youtube.com','m.youtube.com'].includes(url.hostname)&&!url.port&&!url.username&&!url.password,'Competitor links must be https://www.youtube.com channel URLs.');
+    let parts;try{parts=decodeURIComponent(url.pathname).split('/').filter(Boolean);}catch{throw new InputError('A competitor channel URL contains invalid encoding.');}
+    requireValue(parts.length>=1,'Use a competitor channel URL such as https://www.youtube.com/@handle.');
+    if(parts[0].startsWith('@'))reference=parts[0];
+    else if(parts[0]==='channel'&&parts[1])reference=parts[1];
+    else if(parts[0]==='user'&&parts[1])reference=`user:${parts[1]}`;
+    else throw new InputError('Use a competitor channel link in the @handle, /channel/UC… or /user/ form. Video, playlist and /c/ links are not channel identities.');
+  }
+  if(/^UC[A-Za-z0-9_-]{22}$/.test(reference))return {kind:'channel_id',value:reference,url:`https://www.youtube.com/channel/${reference}`};
+  if(/^@[\p{L}\p{N}_.\-·]{3,100}$/u.test(reference))return {kind:'handle',value:reference,url:`https://www.youtube.com/${reference}`};
+  const user=reference.match(/^user:([A-Za-z0-9_.-]{1,100})$/);
+  if(user)return {kind:'username',value:user[1],url:`https://www.youtube.com/user/${user[1]}`};
+  throw new InputError(`"${raw.slice(0,80)}" is not a YouTube channel. Use an @handle, a UC… channel ID or a channel URL.`);
+}
+function competitorList(value){
+  if(value===undefined||value===null)return [];
+  requireValue(Array.isArray(value)&&value.length<=COMPETITOR_LIMIT,`Add at most ${COMPETITOR_LIMIT} competitor channels.`);
+  const seen=new Set(),result=[];
+  for(const item of value){const channel=competitorChannel(item),key=`${channel.kind}:${channel.value.toLowerCase()}`;requireValue(!seen.has(key),`Competitor ${channel.value} is listed twice.`);seen.add(key);result.push(channel);}
+  return result;
+}
+
 function familyInput(input) {
   object(input);
   requireValue(Array.isArray(input.countries) && input.countries.length >= 1 && input.countries.length <= 12, 'Enter 1-12 target countries.');
@@ -44,6 +72,7 @@ function familyInput(input) {
     locales,primaryLocale:locales[0],
     timezone, budgetCents, cadence: integer(input.cadence, 1, 14, 'Original videos per week'),
     format: choice(input.format, ['long-form', 'shorts'], 'format'),
+    competitors: competitorList(input.competitors),
     tokenBudget:{
       monthlyLimit:integer(input.monthlyTokenLimit??100000,0,10000000,'Monthly token limit'),
       scriptJobLimit:integer(input.scriptTokenLimit??6000,1000,8000,'Script job token limit'),
@@ -188,7 +217,7 @@ class Store {
   close() { this.db.close(); }
   transaction(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const result=fn();this.db.exec('COMMIT');return result; } catch(error) { this.db.exec('ROLLBACK');throw error; } }
   event(message) { this.db.prepare('INSERT INTO events(created_at,message) VALUES(?,?)').run(now(),message); }
-  hydrateFamily(f){const legacyChannels=Array.isArray(f.channels)&&f.channels.length?f.channels:[{language:'en',locale:f.englishLocale||'en-US',connection:'not_connected'},{language:'es',locale:f.spanishLocale||'es-419',connection:'not_connected'},{language:'it',locale:'it-IT',connection:'not_connected'}],locales=Array.isArray(f.locales)&&f.locales.length?f.locales:legacyChannels.map(channel=>channel.locale),channels=locales.map(locale=>{const previous=legacyChannels.find(channel=>channel.locale===locale);return {language:channelLanguage(locale),locale,connection:previous?.connection||'not_connected'};});return {...f,locales,primaryLocale:f.primaryLocale||locales[0],channels,tokenBudget:f.tokenBudget||{monthlyLimit:0,scriptJobLimit:6000,researchJobLimit:4000}};}
+  hydrateFamily(f){const legacyChannels=Array.isArray(f.channels)&&f.channels.length?f.channels:[{language:'en',locale:f.englishLocale||'en-US',connection:'not_connected'},{language:'es',locale:f.spanishLocale||'es-419',connection:'not_connected'},{language:'it',locale:'it-IT',connection:'not_connected'}],locales=Array.isArray(f.locales)&&f.locales.length?f.locales:legacyChannels.map(channel=>channel.locale),channels=locales.map(locale=>{const previous=legacyChannels.find(channel=>channel.locale===locale);return {language:channelLanguage(locale),locale,connection:previous?.connection||'not_connected'};});return {...f,competitors:Array.isArray(f.competitors)?f.competitors:[],locales,primaryLocale:f.primaryLocale||locales[0],channels,tokenBudget:f.tokenBudget||{monthlyLimit:0,scriptJobLimit:6000,researchJobLimit:4000}};}
   families() { return this.db.prepare('SELECT payload FROM families ORDER BY rowid DESC').all().map(r=>this.hydrateFamily(JSON.parse(r.payload))); }
   contents() { return this.db.prepare('SELECT payload FROM content ORDER BY rowid DESC').all().map(r=>{const c=JSON.parse(r.payload),family=this.family(c.familyId);return {...c,reviewIssues:reviewIssues(c,family.format,family.primaryLocale)};}); }
   family(id) { const r=this.db.prepare('SELECT payload FROM families WHERE id=?').get(id);requireValue(r,'Family not found.',404);return this.hydrateFamily(JSON.parse(r.payload)); }
@@ -483,4 +512,4 @@ class Store {
       limitations:['Planning document only; no media generated or uploaded.','Timing is an estimate at 145 words/minute. Scene breaks may fall inside sentences; revise before narration.',localization]};
   }
 }
-module.exports={Store,InputError,reviewIssues,storyboard};
+module.exports={competitorList,Store,InputError,reviewIssues,storyboard};

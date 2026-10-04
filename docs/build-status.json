@@ -152,8 +152,8 @@
         {
           "id": "F07",
           "title": "Family competitor channels",
-          "status": "testing",
-          "remaining": "Store 0-10 validated competitor YouTube channel references per family (target 3-10) as inputs for R05 Competitor Intelligence."
+          "status": "done",
+          "evidence": "2026-10-04: families store 0-10 validated competitor channels (@handle, UC… ID, /channel/, /user/ links; duplicates, video, /c/ and non-YouTube links rejected). Edits keep approved scripts. 3 automated checks in tests/competitors.test.js."
         }
       ]
     },
