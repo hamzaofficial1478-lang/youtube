@@ -5,11 +5,13 @@ Open Connections and choose **Add connector**. Give the slot a unique name, choo
 | Provider | Current test | Still not enabled |
 |---|---|---|
 | YouTube public research | Public channel lookup; card Test uses @GoogleDevelopers. The research form accepts another channel. | Owner OAuth, private analytics, uploads |
-| OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification |
+| OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification. Since 0.9 the same slot can generate Room 04 AI images (`/v1/images/generations`) after an explicit, budget-admitted request |
 | ElevenLabs | GET /v2/voices?page_size=1, checking the response shape | Voice generation, rights verification and billing verification |
 | Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools; manually authorized script and daily-brief jobs have live validation | Automated evidence collection, localization, voice, rendering and publishing |
 | MCP server | Reports adapter not implemented, without a network call | Protocol handshake, tools and credentials |
 | Reddit | Reports adapter not implemented, without a network call | OAuth, search and credentials |
+| Pexels stock library (0.9) | One photo search for "nature" on fixed origin `https://api.pexels.com` with the key in the `Authorization` header (uses 1 request); nothing is downloaded | Used by Room 04 searches only when you start them, within your hourly cap; see [Scene Room](SCENE-ROOM.md) |
+| Pixabay stock library (0.9) | One safe-search photo query on fixed origin `https://pixabay.com/api/` (uses 1 request). Pixabay only accepts the key as a query parameter; the URL is never logged or returned | Used by Room 04 searches only when you start them, within your hourly cap |
 | NexLev research API (0.8) | GET `/api/external/channels/about` for one public channel on fixed origin `https://prod.dashboard.nexlev.io`, `x-api-key` header, redirects refused (uses 1 NexLev request) | NexLev MCP (OAuth). Competitor scans and niche discovery use this slot only when you start them; see [Competitor Intelligence](COMPETITOR-INTELLIGENCE.md) and [Niche Factory](NICHE-FACTORY.md) |
 
 MCP and Reddit can be recorded as setup slots with notes. Their key fields are disabled and the server rejects credentials for those types. A pending adapter never receives a green test result. No custom endpoint is fetched or shell command executed from setup notes.

@@ -129,6 +129,13 @@ Rather than presenting untested upstream features as ready, the first release re
 - Quota: NexLev documents a monthly API request quota per plan (published figures at review time: 200 requests/month on Pro and 5,000/month on the n8n API plan). Treat every call as metered: reserve quota before calling, cache results with retrieval dates, no automatic retries.
 - Boundary: NexLev revenue/RPM and audience figures are third-party estimates, not owner analytics; label them as estimates and never present them as facts. Transcripts are research input for learning structure and pacing; never reuse wording. Review NexLev's terms before enabling the adapter.
 
+### Stock and image APIs (Scene & Visual Room data sources, 0.9)
+
+- Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).
+- Pixabay API (https://pixabay.com/api/docs/), checked 2026-10-04: `key` query parameter; `/api/` and `/api/videos/`; `safesearch`, `orientation`, `per_page` 3-200; 100 requests per 60 seconds; results must be cached for 24 hours and images may not be permanently hotlinked; `largeImageURL` is at most 1280 px without full API access. License: https://pixabay.com/service/license-summary/.
+- OpenAI Images API (https://developers.openai.com/api/reference/resources/images/methods/generate), checked 2026-10-04: `POST /v1/images/generations` with `model`, `prompt`, `n`, `size` (1536x1024, 1024x1536, 1024x1024 used here), `quality`, `output_format`, `moderation`; GPT image models return `b64_json`. Model names change often; the room keeps an allowlist and the owner picks the model and enters prices.
+- No SDK or code from these providers is bundled; the adapters in `visual-sources.js` are written from the documentation and tested only against fakes.
+
 ## Before importing another module
 
 1. Record repository, commit, file, license and dependencies.

@@ -12,6 +12,26 @@ Version 0.8 adds the **Competitors** page. It studies each channel family's 3-10
 3. **Hermes blueprint.** Hermes (tool-free profile) reads the latest scan and your observations and returns a structured blueprint: summary, positioning per competitor, script hooks/structure/pacing/call to action, voice tone/emotion/pace/energy, editing observations plus a recommended launch style and proposed setting adjustments, visual sources, packaging, opportunities, things to avoid, confidence and uncertainties. Each reference pattern must cite evidence (`C#` channel, `V#` video, `T#` transcript, `N#` your notes).
 4. **Your review.** Approve or reject with your name. Approval requires three confirmations: techniques only (no wording, footage, thumbnails or channel identity copied), the 30/70 balance is acceptable, and every recommendation and its evidence was reviewed. Approving a new blueprint supersedes the previous approval; you can revoke an approval with a reason.
 
+## Blend picks: what to keep from each channel (0.9)
+
+Under every competitor link on the Competitors page you can tick what you like about that channel: **Voice-over**, **Narration**, **Editing**, **Thumbnails** and **Visuals**. Tick several on one link, and pick the same area on several links if you want to blend them (for example editing from A and C, voice-over and narration from B). **Save blend** stores the picks as a new revision with your name.
+
+| Pick | Blueprint area | Where the result goes |
+|---|---|---|
+| Voice-over | voice | Voice Room narrator draft |
+| Narration | script | Hermes script guidance |
+| Editing | editing | New style draft in the Style Library |
+| Thumbnails | packaging | Packaging brief (kept for the Packaging Room) |
+| Visuals | visuals | Scene planner guidance (Room 04) |
+
+The **blend recipe** under the list shows, for each area, which channels it learns from, or "100% your own" when nothing is picked. When picks exist, Hermes receives them and the program enforces them:
+
+- an adopted pattern may only use an area that has picked channels, and every piece of evidence it cites must come from a channel picked for that area;
+- areas without picks get original contributions only;
+- **each area** keeps at most 30% reference (one adopted pattern needs at least three original contributions in the same area), in addition to the overall 30/70 rule.
+
+With no picks at all, the analysis learns from every channel, as before. Saving new picks makes an approved blueprint **outdated** (guidance stops) until you analyze and approve again.
+
 ## Checks before you can review
 
 A blueprint is blocked (status **Blocked by checks**) when:

@@ -1,6 +1,6 @@
 {
   "name": "youtube-control-room",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "private": true,
   "description": "Local multilingual YouTube planning and production control room",
   "engines": { "node": ">=24.0.0 <25" },

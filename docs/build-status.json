@@ -1,7 +1,7 @@
 {
-  "version": "0.8.0",
+  "version": "0.9.0",
   "updated": "2026-10-04",
-  "nextAction": "Owner adds and tests NexLev, YouTube Data API and Hermes connectors, then runs one real competitor scan, blueprint review and one niche discovery/evaluation to verify live behaviour (fake-provider checks passed). Owner also reviews/approves the launch styles and assigns a default style per family. Next build room: P04 Scene & Visual Room (needs stock-library and AI-image provider keys).",
+  "nextAction": "Owner adds and tests Pexels, Pixabay and OpenAI connectors (plus NexLev, YouTube and Hermes), saves blend picks for each family, then runs one real scene plan and visual board to verify live behaviour (fake-provider checks passed). Next build room: P05 FFmpeg readiness, deterministic proxy renderer and the Documentary Montage style proof using the approved visual board and narration.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -189,7 +189,7 @@
           "id": "R05",
           "title": "Competitor Intelligence Room",
           "status": "done",
-          "evidence": "Version 0.8 (2026-10-04): Competitors page with revisioned owner observations, explicit NexLev/YouTube scans against reserved data caps (no automatic retries; 3 deliberate attempts), YouTube data display-only and purged after 30 days unless derived-metrics approval is recorded, Hermes technique blueprints with evidence refs, prompt compaction, 30/70 rule and 8-word copy guard, named review with three confirmations, revoke/supersede/outdated detection; approved blueprints feed Hermes script guidance, narrator-form prefill and a validated style draft, each still human-gated. Fake-provider tests in tests/intelligence.test.js; full suite 123 tests, 121 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Live NexLev/YouTube/Hermes verification pending owner keys."
+          "evidence": "Version 0.8 (2026-10-04): Competitors page with revisioned owner observations, explicit NexLev/YouTube scans against reserved data caps (no automatic retries; 3 deliberate attempts), YouTube data display-only and purged after 30 days unless derived-metrics approval is recorded, Hermes technique blueprints with evidence refs, prompt compaction, 30/70 rule and 8-word copy guard, named review with three confirmations, revoke/supersede/outdated detection; approved blueprints feed Hermes script guidance, narrator-form prefill and a validated style draft, each still human-gated. Fake-provider tests in tests/intelligence.test.js; full suite 123 tests, 121 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Live NexLev/YouTube/Hermes verification pending owner keys. 0.9 adds per-competitor blend picks (voice-over, narration, editing, thumbnails, visuals): revisioned, enforced per area (picked channels only, at most 30% reference per area), with a blend recipe, packaging brief and outdated detection when picks change."
         },
         {
           "id": "R06",
@@ -224,8 +224,8 @@
         {
           "id": "P04",
           "title": "Scene & Visual Room with rights provenance",
-          "status": "planned",
-          "remaining": "Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence, versioned model capability/media-role contracts and single-scene repair. OpenHiggsfield informs the independent schema and review flow; add visual providers only behind reviewed adapters."
+          "status": "done",
+          "evidence": "Version 0.9 (2026-10-04): Scene & Visual Room with rule-based and Hermes scene plans (stable scene/shot IDs, word-share timing from the approved narration, style-bound checks, immutable revisions, single-scene repair), versioned capability registry, Pexels/Pixabay search with hourly caps and 24-hour cache, licensed downloads restricted to provider media hosts with checksum and ffprobe evidence, OpenAI image generation with monthly budget admission, deliberate retries, visual approval with rights and AI-disclosure decisions, snapshot handoff and invalidation. 9 scene checks with real FFmpeg on generated media and fake providers; full suite 133 tests, 131 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. AI video, generated graphics and maps have no adapter yet; live provider verification pending owner keys."
         },
         {
           "id": "P05",
@@ -354,7 +354,9 @@
     "2026-10-04: Competitor learning uses roughly 30% reference patterns and 70% original contribution.",
     "2026-10-04: ElevenLabs is the narration provider.",
     "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas.",
-    "2026-10-04: R05/R06 use the NexLev REST API (x-api-key in a protected connector slot); the OAuth MCP endpoint is not used. YouTube data about other channels is display-only and purged after 30 days unless the owner records YouTube derived-metrics approval."
+    "2026-10-04: R05/R06 use the NexLev REST API (x-api-key in a protected connector slot); the OAuth MCP endpoint is not used. YouTube data about other channels is display-only and purged after 30 days unless the owner records YouTube derived-metrics approval.",
+    "2026-10-04: Each competitor link carries owner picks (voice-over, narration, editing, thumbnails, visuals); the blueprint learns each area only from the picked channels and keeps 30/70 per area.",
+    "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters."
   ],
-  "milestone": "Competitor Intelligence & Niche Factory"
+  "milestone": "Scene & Visual Room"
 }

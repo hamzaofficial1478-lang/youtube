@@ -87,9 +87,9 @@ Mandatory gates:
 - Block unsupported format/aspect/renderer combinations.
 - Never silently fall back to another style or mutate previously approved videos.
 
-### 4. Scene & Visual Room
+### 4. Scene & Visual Room, live (0.9)
 
-Owns the scene manifest and visual assets.
+Owns the scene manifest and visual assets. See [SCENE-ROOM.md](SCENE-ROOM.md) for the implemented contract: rule-based or Hermes scene plans with stable scene and shot IDs, word-share timing from the approved narration, style-bound checks, immutable revisions and single-scene repair; Pexels/Pixabay search with 24-hour caching and licensed downloads; OpenAI image generation with budget admission; checksummed, ffprobe-verified assets with rights records; and a human-approved visual board handed to editing.
 
 Mandatory gates:
 
@@ -251,7 +251,7 @@ Mandatory gates:
 
 1. Voice Room data model, auditions, consent, direction and real-audio QC. Done (0.6).
 2. Style Library schema, five immutable profiles and channel-family assignment rules. Done (0.7).
-3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime.
+3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime. Done (0.9): stock images/video and AI images; AI video, generated graphics and maps remain without adapters.
 4. FFmpeg readiness and deterministic proxy renderer.
 5. One sandboxed style proof before broader adapters. Decision 2026-10-04: Documentary Montage through the FFmpeg montage adapter, because visuals come from stock libraries and AI generation.
 6. Editing timeline and single-scene repair.
