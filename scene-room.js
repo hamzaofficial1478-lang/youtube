@@ -1078,13 +1078,19 @@ class SceneRoom {
       const asset = this.assetRow(selection.asset_id), check = this.integrity(asset, full), probe = JSON.parse(asset.probe);
       if (!check.ok) blockers.push(`${shot.label}: ${check.reason}`);
       if (asset.media_type === 'video' && probe.durationSeconds + 0.05 < shot.durationSeconds) warnings.push(`${shot.label}: the clip lasts ${probe.durationSeconds.toFixed(1)} s for a ${shot.durationSeconds.toFixed(1)} s shot; it will be slowed or held.`);
-      if (Math.min(probe.width, probe.height) < Math.min(target.width, target.height)) warnings.push(`${shot.label}: ${probe.width}×${probe.height} is below ${target.width}×${target.height}; it will be upscaled.`);
+      // Mild upscaling (for example 1536×1024 AI images in a 1080p frame) is normal; warn only below 75% of the frame.
+      if (Math.min(probe.width, probe.height) < Math.min(target.width, target.height) * 0.75) warnings.push(`${shot.label}: ${probe.width}×${probe.height} is well below ${target.width}×${target.height}; it will look soft when upscaled.`);
       if ((probe.height > probe.width) !== (target.height > target.width)) warnings.push(`${shot.label}: the visual's orientation differs from the ${family.format} frame; it will be cropped.`);
       const planned = shot.source.endsWith('video') ? 'video' : 'image';
       if (planned !== asset.media_type) warnings.push(`${shot.label}: planned as ${shot.source}, selected ${asset.origin === 'ai' ? 'an AI image' : `a stock ${asset.media_type}`}.`);
       shots.push({shot, selection, asset, check});
     }
     return {shots, blockers, warnings, aiPolicy: spec.visuals.aiDisclosure};
+  }
+  boardSummary(manifestId) {
+    const row = this.manifestRow(manifestId), board = this.board(row);
+    return {manifestId, blockers: board.blockers, warnings: board.warnings, aiPolicy: board.aiPolicy,
+      ai: board.shots.filter(item => item.asset?.origin === 'ai').map(item => ({assetId: item.asset.id, label: item.shot.label, thumb: item.asset.thumb_path ? `/api/visual-assets/${item.asset.id}/thumb` : null}))};
   }
   async approveVisuals(manifestId, input) {
     object(input);

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/app.js" defer></script></head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
@@ -212,6 +212,19 @@
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-decision-dialog">Cancel</button><button type="submit" class="button danger">Record decision</button></div>
     </form>
+  </dialog>
+  <dialog id="scene-dialog" class="wide-dialog" aria-labelledby="scene-heading">
+    <form id="scene-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="scene-kicker"></p><h2 id="scene-heading">Scene room</h2></div><button class="icon-button" type="button" data-close="scene-dialog" aria-label="Close dialog">×</button></div>
+      <div id="scene-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="scene-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="shot-dialog" class="wide-dialog shot-dialog" aria-labelledby="shot-heading">
+    <div class="dialog-heading"><div><p class="eyebrow">FIND A VISUAL FOR THIS SHOT</p><h2 id="shot-heading">Shot</h2></div><button class="icon-button" type="button" data-close="shot-dialog" aria-label="Close dialog">×</button></div>
+    <div id="shot-body" class="shot-dialog-body"></div>
+    <div class="dialog-actions"><button type="button" class="button secondary" data-close="shot-dialog">Done</button></div>
   </dialog>
   <dialog id="intel-dialog" class="wide-dialog" aria-labelledby="intel-heading">
     <form id="intel-form">
