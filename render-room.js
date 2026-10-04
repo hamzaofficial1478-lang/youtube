@@ -1,0 +1,370 @@
+'use strict';
+// P05 - Assembly proxy and style proof (Room 05 preview stage).
+// Renders the approved visual board on the approved narration with the family style through the pinned
+// FFmpeg build, runs technical QC, keeps an immutable manifest and asks a human for the style-proof verdict.
+const fs = require('node:fs');
+const path = require('node:path');
+const {randomUUID} = require('node:crypto');
+const {InputError} = require('./store');
+const R = require('./render');
+const VS = require('./visual-sources');
+const {requireValue, now, round, object, text, person} = R;
+
+const ACTIVE = ['queued', 'running'];
+
+class RenderRoom {
+  constructor(store, styles, sceneRoom, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe'} = {}) {
+    this.store = store;
+    this.db = store.db;
+    this.styles = styles;
+    this.scenes = sceneRoom;
+    this.dataRoot = dataRoot || path.join(process.cwd(), 'data');
+    this.renderDir = path.join(this.dataRoot, 'renders');
+    this.ffmpeg = ffmpeg;
+    this.ffprobe = ffprobe;
+    this.busy = false;
+    this.checking = false;
+    this.current = null;
+    this.migrate();
+    this.recoverInterrupted();
+  }
+
+  migrate() {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS render_readiness(id TEXT PRIMARY KEY, payload TEXT NOT NULL, passed INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS render_pins(id TEXT PRIMARY KEY, readiness_id TEXT NOT NULL REFERENCES render_readiness(id), ffmpeg_sha256 TEXT NOT NULL, ffprobe_sha256 TEXT NOT NULL, version TEXT NOT NULL, pinned_by TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, ended_at TEXT);
+      CREATE TABLE IF NOT EXISTS render_jobs(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL REFERENCES content(id), visual_approval_id TEXT NOT NULL, preset TEXT NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, progress TEXT, result TEXT, error TEXT, attempts INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, review TEXT);
+      CREATE TRIGGER IF NOT EXISTS render_results_final BEFORE UPDATE OF result ON render_jobs WHEN OLD.result IS NOT NULL BEGIN SELECT RAISE(ABORT, 'A completed render result is immutable.'); END;
+    `);
+  }
+  // Rendering is local: an interrupted render cost nothing and may be retried, but never silently.
+  recoverInterrupted() {
+    for (const row of this.db.prepare("SELECT id FROM render_jobs WHERE status='running'").all())
+      this.db.prepare("UPDATE render_jobs SET status='interrupted', error='The program stopped during this render. Partial files were discarded; retry when ready.', updated_at=? WHERE id=?").run(now(), row.id);
+    fs.rmSync(path.join(this.renderDir, '.work'), {recursive: true, force: true});
+  }
+
+  // ------------------------------------------------------------ readiness and pinned build
+  latestReadiness() {
+    const row = this.db.prepare('SELECT * FROM render_readiness ORDER BY created_at DESC, rowid DESC LIMIT 1').get();
+    return row ? {id: row.id, ...JSON.parse(row.payload), passed: !!row.passed, createdBy: row.created_by, createdAt: row.created_at} : null;
+  }
+  activePin() {
+    const row = this.db.prepare('SELECT * FROM render_pins WHERE ended_at IS NULL ORDER BY created_at DESC LIMIT 1').get();
+    return row ? {id: row.id, readinessId: row.readiness_id, ffmpegSha256: row.ffmpeg_sha256, ffprobeSha256: row.ffprobe_sha256, version: row.version, pinnedBy: row.pinned_by, reason: row.reason, createdAt: row.created_at} : null;
+  }
+  async checkReadiness(input) {
+    object(input);
+    const by = person(input.requestedBy);
+    requireValue(!this.checking, 'A readiness check is already running.', 409);
+    this.checking = true;
+    try {
+      const report = await R.inspectFFmpeg({ffmpeg: this.ffmpeg, ffprobe: this.ffprobe, workDir: path.join(this.renderDir, '.work', `readiness-${randomUUID()}`)});
+      const id = randomUUID();
+      this.store.transaction(() => {
+        this.db.prepare('INSERT INTO render_readiness(id,payload,passed,created_by,created_at) VALUES(?,?,?,?,?)').run(id, JSON.stringify(report), report.passed ? 1 : 0, by, now());
+        this.store.event(`FFmpeg readiness check ${report.passed ? 'passed' : 'failed'} (${report.ffmpeg?.version || 'not found'})`);
+      });
+      return this.latestReadiness();
+    } finally {
+      this.checking = false;
+    }
+  }
+  pin(input) {
+    object(input);
+    const by = person(input.pinnedBy), reason = text(input.reason || '', 'Reason', 8, 500);
+    return this.store.transaction(() => {
+      const latest = this.latestReadiness();
+      requireValue(latest && latest.id === input.readinessId, 'Run a fresh readiness check and pin that one.', 409);
+      requireValue(latest.passed, 'Only a build that passed every readiness check can be pinned.', 409);
+      this.db.prepare('UPDATE render_pins SET ended_at=? WHERE ended_at IS NULL').run(now());
+      this.db.prepare('INSERT INTO render_pins(id,readiness_id,ffmpeg_sha256,ffprobe_sha256,version,pinned_by,reason,created_at) VALUES(?,?,?,?,?,?,?,?)').run(randomUUID(), latest.id, latest.ffmpeg.sha256, latest.ffprobe.sha256, latest.ffmpeg.version, by, reason, now());
+      this.store.event(`Pinned FFmpeg ${latest.ffmpeg.version} (${latest.ffmpeg.sha256.slice(0, 12)}) for rendering`);
+      return this.activePin();
+    });
+  }
+  // The pinned build must still be the binary on disk; a silent FFmpeg upgrade blocks rendering.
+  pinCheck() {
+    const pin = this.activePin(), latest = this.latestReadiness();
+    if (!pin) return {ok: false, reason: 'Pin a reviewed FFmpeg build first.'};
+    const ffmpegPath = R.resolveExecutable(this.ffmpeg), ffprobePath = R.resolveExecutable(this.ffprobe);
+    if (!ffmpegPath || !ffprobePath) return {ok: false, reason: 'FFmpeg or ffprobe is no longer installed.'};
+    const current = {ffmpeg: R.fileSha256(ffmpegPath), ffprobe: R.fileSha256(ffprobePath)};
+    if (current.ffmpeg !== pin.ffmpegSha256 || current.ffprobe !== pin.ffprobeSha256) return {ok: false, reason: 'The FFmpeg or ffprobe binary changed since it was pinned. Run the readiness check and pin the new build deliberately.'};
+    return {ok: true, pin, readinessId: latest?.id || null, paths: {ffmpeg: ffmpegPath, ffprobe: ffprobePath}};
+  }
+
+  // ------------------------------------------------------------ inputs
+  inputs(content) {
+    const family = this.store.family(content.familyId), blockers = [];
+    const visual = this.scenes.handoff(content.id);
+    const voice = this.store.voiceHandoffs(family.id).find(item => item.contentId === content.id) || null;
+    if (!visual.ready) blockers.push(visual.blocker || 'Approve the visuals in Room 04.');
+    if (!voice?.ready) blockers.push(voice?.blocker || 'Approve a narration in the Voice Room.');
+    let spec = null, manifestRow = null, approvalRow = null;
+    if (visual.ready) {
+      manifestRow = this.scenes.manifestRow(visual.manifestId);
+      approvalRow = this.db.prepare('SELECT * FROM visual_approvals WHERE id=?').get(visual.approvalId);
+      spec = JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec);
+      if (spec.renderer.adapter !== 'ffmpeg-montage') blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet. Only FFmpeg montage styles render in this milestone.`);
+      if (voice?.ready && manifestRow.voice_approval_id !== voice.approvalId) blockers.push('The approved narration differs from the one the scene plan was timed with.');
+    }
+    return {family, visual, voice, spec, manifestRow, approvalRow, blockers, ready: !blockers.length};
+  }
+
+  // ------------------------------------------------------------ jobs
+  row(id) { const row = this.db.prepare('SELECT * FROM render_jobs WHERE id=?').get(id); requireValue(row, 'Render not found.', 404); return row; }
+  publicJob(row) {
+    const scope = JSON.parse(row.scope), result = row.result ? JSON.parse(row.result) : null;
+    const content = (() => { try { return this.store.content(row.content_id); } catch { return null; } })();
+    const visual = this.scenes.handoff(row.content_id);
+    const current = !!(visual.ready && visual.approvalId === row.visual_approval_id && content && content.revision === scope.contentRevision);
+    return {id: row.id, familyId: row.family_id, contentId: row.content_id, visualApprovalId: row.visual_approval_id, preset: row.preset, status: row.status, attempts: row.attempts,
+      progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg},
+      result: result ? {...result, plan: undefined, logs: undefined, video: `/api/renders/${row.id}/video`, sheet: result.sheet ? `/api/renders/${row.id}/sheet` : null, manifest: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
+  }
+  queueRender(contentId, input) {
+    object(input);
+    const by = person(input.requestedBy);
+    return this.store.transaction(() => {
+      const content = this.store.content(contentId), inputs = this.inputs(content);
+      requireValue(inputs.ready, inputs.blockers[0], 409);
+      requireValue(input.visualApprovalId === inputs.visual.approvalId, 'The visual approval changed. Reload before rendering.', 409);
+      const readiness = this.latestReadiness();
+      requireValue(readiness?.passed, 'Run the FFmpeg readiness check first.', 409);
+      const pin = this.activePin();
+      requireValue(pin, 'Pin a reviewed FFmpeg build before rendering.', 409);
+      requireValue(!this.db.prepare("SELECT 1 FROM render_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A render for this script is already queued or running.', 409);
+      const snapshot = JSON.parse(inputs.approvalRow.snapshot), payload = JSON.parse(inputs.manifestRow.payload);
+      const planned = new Map(payload.scenes.flatMap(scene => scene.shots.map(shot => [shot.id, shot])));
+      const shots = snapshot.shots.map(item => {
+        const shot = planned.get(item.shotId), asset = this.scenes.assetRow(item.assetId), probe = JSON.parse(asset.probe);
+        return {shotId: item.shotId, label: item.label, assetId: asset.id, sha256: asset.sha256, relativePath: asset.relative_path, mediaType: asset.media_type, clipSeconds: probe.durationSeconds || null,
+          startSeconds: shot.startSeconds, durationSeconds: shot.durationSeconds, motion: shot.motion, source: shot.source};
+      });
+      const revision = this.styles.revisionRow(inputs.manifestRow.style_revision_id);
+      const scope = {
+        contentRevision: content.revision, manifestId: inputs.manifestRow.id, manifestRevision: inputs.manifestRow.revision, manifestHash: inputs.manifestRow.payload_hash,
+        narration: {approvalId: inputs.voice.approvalId, relativePath: inputs.voice.artifact.relativePath, sha256: inputs.voice.artifact.sha256, durationSeconds: inputs.voice.analysis.durationSeconds},
+        style: {revisionId: revision.id, revision: revision.revision, name: inputs.spec.name, specHash: revision.spec_hash, spec: inputs.spec},
+        ffmpeg: {version: pin.version, sha256: pin.ffmpegSha256, pinId: pin.id}, rendererVersion: R.RENDERER_VERSION, format: inputs.family.format, shots,
+      };
+      const id = randomUUID(), at = now();
+      this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'proxy','queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, inputs.visual.approvalId, JSON.stringify(scope), by, at, at);
+      this.store.event(`Queued proxy render for "${content.title}" (${shots.length} shots)`);
+      return this.publicJob(this.row(id));
+    });
+  }
+  retry(id, input) {
+    object(input);
+    return this.store.transaction(() => {
+      const row = this.row(id);
+      requireValue(['failed', 'interrupted', 'cancelled', 'stale'].includes(row.status), `A ${row.status} render cannot be retried.`, 409);
+      requireValue(row.attempts < 3, 'This render already used 3 attempts. Start a new render.', 409);
+      this.db.prepare("UPDATE render_jobs SET status='queued', error=NULL, progress=NULL, updated_at=? WHERE id=?").run(now(), id);
+      this.store.event(`Requeued proxy render ${id}`);
+      return this.publicJob(this.row(id));
+    });
+  }
+  cancel(id, input) {
+    object(input);
+    const by = person(input.requestedBy);
+    const row = this.row(id);
+    requireValue(ACTIVE.includes(row.status), 'Only a queued or running render can be cancelled.', 409);
+    if (row.status === 'queued') {
+      this.db.prepare("UPDATE render_jobs SET status='cancelled', error=?, updated_at=? WHERE id=? AND status='queued'").run(`Cancelled by ${by} before it started.`, now(), id);
+    } else if (this.current?.id === id) {
+      this.current.cancelledBy = by;
+      this.current.handle?.kill('cancelled');
+    }
+    return this.publicJob(this.row(id));
+  }
+  claim() {
+    return this.store.transaction(() => {
+      const row = this.db.prepare("SELECT * FROM render_jobs WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
+      if (!row) return null;
+      const scope = JSON.parse(row.scope), at = now();
+      const content = this.store.content(row.content_id), inputs = this.inputs(content);
+      if (!inputs.ready || inputs.visual.approvalId !== row.visual_approval_id || content.revision !== scope.contentRevision) {
+        this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run(`${inputs.blockers[0] || 'The visual approval changed.'} Nothing was rendered.`, at, row.id);
+        return null;
+      }
+      const pin = this.pinCheck();
+      if (!pin.ok || pin.pin.id !== scope.ffmpeg.pinId) {
+        this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run(pin.ok ? 'A different FFmpeg build was pinned after this render was queued. Start a new render.' : pin.reason, at, row.id);
+        return null;
+      }
+      this.db.prepare("UPDATE render_jobs SET status='running', attempts=attempts+1, progress=?, updated_at=? WHERE id=?").run(JSON.stringify({stage: 'verifying inputs', done: 0, total: scope.shots.length + 4}), at, row.id);
+      return {...row, scope, paths: pin.paths};
+    });
+  }
+  progress(id, stage, done, total) { this.db.prepare('UPDATE render_jobs SET progress=?, updated_at=? WHERE id=?').run(JSON.stringify({stage, done, total}), now(), id); }
+  localFile(relative) {
+    const file = path.resolve(this.dataRoot, relative);
+    requireValue(file.startsWith(path.resolve(this.dataRoot) + path.sep), 'Invalid media path.', 400);
+    return file;
+  }
+  async processNext() {
+    if (this.busy) return null;
+    const job = this.claim();
+    if (!job) return null;
+    this.busy = true;
+    this.current = {id: job.id, handle: null, cancelledBy: null};
+    const work = path.join(this.renderDir, '.work', job.id), finalDir = path.join(this.renderDir, job.family_id, job.content_id, job.id);
+    const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
+    const exec = async (label, command, args, timeout) => {
+      if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
+      try {
+        const out = await R.run(command, args, {timeout, onSpawn: handle => { this.current.handle = handle; }});
+        logs.push({step: label, ok: true, stderr: R.tail(out.stderr)});
+        return out;
+      } catch (error) {
+        logs.push({step: label, ok: false, stderr: R.tail(error.stderr)});
+        throw error;
+      } finally {
+        this.current.handle = null;
+      }
+    };
+    try {
+      fs.rmSync(work, {recursive: true, force: true});
+      fs.mkdirSync(work, {recursive: true});
+      // 1. Every input must still match the checksum recorded when it was approved.
+      const narrationFile = this.localFile(scope.narration.relativePath);
+      requireValue(fs.existsSync(narrationFile) && R.fileSha256(narrationFile) === scope.narration.sha256, 'The approved narration file is missing or changed.', 409);
+      const shots = scope.shots.map(shot => {
+        const file = this.localFile(shot.relativePath);
+        requireValue(fs.existsSync(file) && R.fileSha256(file) === shot.sha256, `${shot.label}: the approved visual file is missing or changed.`, 409);
+        return {...shot, file};
+      });
+      const out = path.join(work, 'proxy.mp4');
+      const plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out});
+      // 2. One segment per shot, frame-exact.
+      for (const segment of plan.segments) {
+        this.progress(job.id, `rendering ${segment.label}`, segment.index + 1, total);
+        await exec(`segment ${segment.label}`, job.paths.ffmpeg, segment.args, Math.max(60000, (segment.frames + segment.extraFrames) * 400));
+      }
+      // 3. Assemble with the narration.
+      this.progress(job.id, 'assembling with narration', plan.segments.length + 1, total);
+      if (plan.final.mode === 'concat') fs.writeFileSync(plan.final.listFile, plan.final.list);
+      await exec('assemble', job.paths.ffmpeg, plan.final.args, Math.max(120000, plan.totalFrames * 200));
+      // 4. Technical QC on the real file.
+      this.progress(job.id, 'checking the proxy', plan.segments.length + 2, total);
+      const probe = await VS.probeMedia(out, job.paths.ffprobe);
+      const streams = JSON.parse((await exec('ffprobe streams', job.paths.ffprobe, ['-v', 'error', '-show_streams', '-of', 'json', out], 60000)).stdout).streams || [];
+      const audio = streams.find(stream => stream.codec_type === 'audio');
+      const spec = scope.style.spec, qc = spec.qc;
+      const scan = await exec('blackdetect and freezedetect', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-i', out, '-vf', `blackdetect=d=0.1:pix_th=0.10,freezedetect=n=0.003:d=${qc.maxFrozenSeconds}`, '-an', '-f', 'null', '-'], Math.max(120000, plan.totalFrames * 100));
+      const found = R.detections(scan.stderr);
+      const shotAt = seconds => scope.shots.find((shot, index) => seconds >= shot.startSeconds - 0.001 && (index === scope.shots.length - 1 || seconds < scope.shots[index + 1].startSeconds))?.label || '—';
+      const expected = plan.totalFrames / plan.preset.fps, tolerance = 1 / plan.preset.fps + 0.15;
+      const checks = [
+        {name: 'duration', passed: Math.abs(probe.durationSeconds - expected) <= tolerance && Math.abs(probe.durationSeconds - scope.narration.durationSeconds) <= tolerance + 0.05, detail: `${probe.durationSeconds.toFixed(2)} s video for ${scope.narration.durationSeconds.toFixed(2)} s narration`},
+        {name: 'frame', passed: probe.width === plan.preset.width && probe.height === plan.preset.height && Math.abs((probe.frameRate || 0) - plan.preset.fps) < 0.01, detail: `${probe.width}×${probe.height} at ${probe.frameRate} fps`},
+        {name: 'narration audio', passed: !!audio && audio.codec_name === 'aac', detail: audio ? `${audio.codec_name} ${audio.sample_rate} Hz` : 'no audio stream'},
+        {name: 'black frames', passed: found.black.every(span => span.duration <= qc.maxBlackSeconds), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : 'none'},
+        {name: 'frozen picture', passed: !found.frozen.length, detail: found.frozen.length ? found.frozen.map(span => `${span.duration === null ? 'until the end' : `${span.duration.toFixed(1)} s`} from ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : `no hold longer than ${qc.maxFrozenSeconds} s`},
+      ];
+      // 5. Contact sheet for review.
+      this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);
+      let every = qc.contactSheetEverySeconds;
+      if (expected / every > 60) every = Math.ceil(expected / 60);
+      const count = Math.max(1, Math.ceil(expected / every)), cols = Math.min(scope.format === 'shorts' ? 8 : 6, count), rows = Math.ceil(count / cols);
+      const sheet = path.join(work, 'contact-sheet.jpg');
+      await exec('contact sheet', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', out, '-vf', `fps=1/${every},scale=${scope.format === 'shorts' ? 120 : 240}:-2,tile=${cols}x${rows}:padding=4:margin=4`, '-frames:v', '1', '-q:v', '4', '-y', sheet], Math.max(60000, plan.totalFrames * 50));
+      // 6. Immutable outputs and manifest.
+      this.progress(job.id, 'saving', total, total);
+      fs.mkdirSync(finalDir, {recursive: true});
+      const video = path.join(finalDir, 'proxy.mp4'), sheetFinal = path.join(finalDir, 'contact-sheet.jpg');
+      fs.renameSync(out, video);
+      fs.renameSync(sheet, sheetFinal);
+      const relative = file => path.relative(this.dataRoot, file).replaceAll('\\', '/');
+      const scrub = args => args.map(arg => String(arg).replaceAll(work, '<work>').replaceAll(this.dataRoot, '<data>'));
+      const manifest = {
+        renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg},
+        shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, assetId: segment.assetId, sha256: scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
+        commands: [...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), {step: 'assemble', args: scrub(plan.final.args)}],
+        output: {sha256: R.fileSha256(video), sizeBytes: fs.statSync(video).size, probe}, qc: checks, detections: found, logs,
+      };
+      const manifestFile = path.join(finalDir, 'render-manifest.json');
+      fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2), {flag: 'wx'});
+      const result = {
+        video: {relativePath: relative(video), sha256: manifest.output.sha256, sizeBytes: manifest.output.sizeBytes, probe},
+        sheet: {relativePath: relative(sheetFinal), sha256: R.fileSha256(sheetFinal), everySeconds: every, frames: count},
+        manifest: {relativePath: relative(manifestFile), sha256: R.fileSha256(manifestFile)},
+        preset: plan.preset, transition: plan.transition, qc: checks, qcPassed: checks.every(check => check.passed), renderSeconds: round((Date.now() - started) / 1000, 1),
+        plan: {commands: manifest.commands}, logs,
+      };
+      this.store.transaction(() => {
+        this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
+        this.store.event(`Proxy render ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
+      });
+      return this.publicJob(this.row(job.id));
+    } catch (error) {
+      const cancelled = !!error.cancelled;
+      const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : 'The render failed.';
+      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
+      fs.rmSync(finalDir, {recursive: true, force: true});
+      return null;
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
+      this.current = null;
+      this.busy = false;
+    }
+  }
+
+  // ------------------------------------------------------------ human style-proof verdict
+  review(id, input) {
+    object(input);
+    const reviewer = person(input.reviewer, 'Reviewer name');
+    requireValue(['pass', 'changes'].includes(input.decision), 'Choose "style proof passed" or "needs changes".');
+    return this.store.transaction(() => {
+      const row = this.row(id), job = this.publicJob(row);
+      requireValue(row.status === 'completed', 'Only a finished render can be reviewed.', 409);
+      requireValue(!row.review, 'This render already has a verdict. Render again to review a new proxy.', 409);
+      let review = {decision: input.decision === 'pass' ? 'passed' : 'changes_requested', reviewer, notes: text(input.notes || '', 'Notes', input.decision === 'changes' ? 8 : 0, 2000), at: now()};
+      if (input.decision === 'pass') {
+        requireValue(job.current, 'The visuals or narration changed after this render. Render again before passing the proof.', 409);
+        const result = JSON.parse(row.result);
+        const confirmations = object(input.confirmations, 'Confirmations');
+        requireValue(confirmations.watchedFully === true, 'Confirm that you watched the whole proxy with sound.');
+        requireValue(confirmations.styleMatches === true, 'Confirm that motion, pacing and transitions match the assigned style.');
+        requireValue(confirmations.syncReviewed === true, 'Confirm that the visuals stay in step with the narration.');
+        if (!result.qcPassed) requireValue(confirmations.qcAccepted === true, 'Accept the technical QC findings or fix them first.');
+        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: result.qcPassed ? null : true}};
+      }
+      this.db.prepare('UPDATE render_jobs SET review=?, updated_at=? WHERE id=?').run(JSON.stringify(review), now(), id);
+      this.store.event(`Style proof for render ${id.slice(0, 8)}: ${review.decision} by ${reviewer}`);
+      return this.publicJob(this.row(id));
+    });
+  }
+  file(id, kind) {
+    const row = this.row(id);
+    requireValue(row.result, 'This render has no output yet.', 404);
+    const result = JSON.parse(row.result);
+    const entry = kind === 'video' ? result.video : kind === 'sheet' ? result.sheet : result.manifest;
+    requireValue(entry, 'File not found.', 404);
+    const file = this.localFile(entry.relativePath);
+    requireValue(fs.existsSync(file) && fs.statSync(file).size === (entry.sizeBytes ?? fs.statSync(file).size), 'The render file is missing or changed.', 404);
+    return {file, mime: kind === 'video' ? 'video/mp4' : kind === 'sheet' ? 'image/jpeg' : 'application/json; charset=utf-8', size: fs.statSync(file).size};
+  }
+
+  state() {
+    const readiness = this.latestReadiness(), pin = this.activePin();
+    const contents = this.store.contents().filter(content => content.state === 'approved' || this.db.prepare('SELECT 1 FROM render_jobs WHERE content_id=? LIMIT 1').get(content.id));
+    return {
+      rendererVersion: R.RENDERER_VERSION, checking: this.checking, readiness: readiness ? {...readiness, determinism: readiness.determinism} : null,
+      pin, pinMatchesLatest: !!(pin && readiness && pin.ffmpegSha256 === readiness.ffmpeg?.sha256 && pin.ffprobeSha256 === readiness.ffprobe?.sha256), requiredFilters: R.REQUIRED_FILTERS, requiredEncoders: R.REQUIRED_ENCODERS,
+      contents: contents.map(content => {
+        const inputs = this.inputs(content);
+        return {
+          contentId: content.id, familyId: content.familyId, title: content.title, contentRevision: content.revision,
+          inputs: {ready: inputs.ready, blockers: inputs.blockers, visualApprovalId: inputs.visual.approvalId || null, shots: inputs.visual.shots || 0, style: inputs.spec ? {name: inputs.spec.name, adapter: inputs.spec.renderer.adapter, transition: inputs.spec.transitions.default, fps: inputs.spec.canvas.frameRate} : null, narrationSeconds: inputs.voice?.analysis?.durationSeconds ?? null},
+          renders: this.db.prepare('SELECT * FROM render_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 10').all(content.id).map(row => this.publicJob(row)),
+        };
+      }),
+    };
+  }
+}
+
+module.exports = {RenderRoom};
