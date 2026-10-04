@@ -1,8 +1,8 @@
 # YouTube Control Room
 
-Version 0.6.0 - planning foundation, review-gated reasoning/research, and a human-controlled primary-locale Voice Room.
+Version 0.7.0 - planning foundation, competitor channels per family, review-gated reasoning/research, a human-controlled primary-locale Voice Room and the Style Library & Assignment Room.
 
-The main project lives at [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube). Existing and future development is committed there. A local checkout is only needed to run and test the application; uploading code to GitHub does not run its server.
+The owner's working copy lives in the local program folder (Desktop\YT\youtube). Verified changes are delivered there; [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube) is updated only when the owner asks for a push. Uploading code to GitHub does not run its server.
 
 ## Open the program
 
@@ -32,6 +32,8 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 10. Connect a dedicated, tool-free local Hermes Agent API, queue an evidence-bounded primary-locale script job and review its immutable candidate without overwriting the saved draft. Format-specific word/structure gates and family monthly/per-job token ceilings now block unusable or over-budget results. See [Hermes setup](docs/HERMES-SETUP.md).
 11. Save family-scoped, dated evidence with explicit permission and analysis labels, then manually prepare zero to three immutable daily topic briefs. Briefs retain source snapshots, confidence, uncertainty, duplicate checks, token usage and deliberate retry history. They are review-only and never create drafts or publishing work. See [Research briefs](docs/RESEARCH-BRIEFS.md).
 12. Use the professional per-family Production Panel and complete Voice Room to record narrator rights, delivery direction, pronunciation revisions and character budgets; generate explicitly admitted primary-locale auditions through a tested OpenAI or ElevenLabs connector; inspect real FFmpeg audio evidence; and approve or revoke one exact narration handoff. See [Voice Room](docs/VOICE-ROOM.md).
+13. Add 3-10 competitor channels to each family (@handle, channel ID or channel link). They are stored and validated now; Competitor Intelligence (R05) will study them to learn techniques with roughly 30% reference and 70% original contribution.
+14. Use Room 03, the Style Library & Assignment Room, to review five launch editing styles (or your own custom/derived styles), approve exact revisions, assign one default style per family, add deliberate per-channel overrides and approve manual-only fallbacks. Every change is a new immutable revision with a visible diff and a decision trail. See [Style Room](docs/STYLE-ROOM.md).
 
 The storyboard is **planning only**. Hermes can propose a quality-gated candidate in the family’s primary locale and review-only topic briefs from operator-approved evidence. Script candidates remain separate until the operator copies, edits and saves them. Evidence collection is manual. Voice auditions are explicit, potentially billable actions and still require complete human listening and approval. Optional localization into selected extra locales, visual generation, editing, rendering, channel sign-in and publishing remain upcoming.
 
@@ -52,6 +54,7 @@ The exported planning JSON contains the selected draft and its source references
 - **docs/HERMES-SETUP.md**: dedicated Hermes profile, local API connection and reasoning boundary.
 - **docs/RESEARCH-BRIEFS.md**: evidence eligibility, daily brief workflow, schema, budget and safety boundaries.
 - **docs/VOICE-ROOM.md**: voice identity, provider, spending, real-audio validation, approval and downstream-handoff contract.
+- **docs/STYLE-ROOM.md**: style specification, review gate, assignments, overrides, fallbacks, renderer contracts and the first executable style decision.
 - [Detailed PDF blueprint](docs/YouTube_Automation_Program_Blueprint.pdf).
 - `scripts/build_blueprint.py`: optional PDF source; requires Python, ReportLab and Windows Calibri/Consolas fonts. It is separate from the dependency-free Node application.
 
@@ -65,7 +68,7 @@ Tests create temporary databases and audio fixtures, not demo data in your works
 
 ## Current architecture
 
-`server.js` handles local requests and saved queues. `store.js` validates inputs, provenance, approvals and transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract; `voice.js` owns fixed-origin narration adapters, artifact assembly and real-audio validation. `public/` contains the professional per-family Production Panel, complete Voice Room and locked contracts for later rooms. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
+`server.js` handles local requests and saved queues. `store.js` validates inputs, provenance, approvals and transactional SQLite changes. `hermes.js` owns script quality and the fixed reasoning boundary; `research.js` owns the exact daily-brief contract; `voice.js` owns fixed-origin narration adapters, artifact assembly and real-audio validation. `style.js` owns the style library, immutable revisions, assignments and renderer contracts. `public/` contains the professional per-family Production Panel, the Voice Room, the Style Room (`style-room.js`) and locked contracts for later rooms. One local process owns SQLite; move to a multi-worker database design before adding separate worker hosts.
 
 ## Troubleshooting
 

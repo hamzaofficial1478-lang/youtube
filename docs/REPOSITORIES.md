@@ -120,6 +120,15 @@ Rather than presenting untested upstream features as ready, the first release re
 - Required Control Room adaptation: editing plans remain deterministic data approved by the operator; every mutation is validated against expected revision and IDs; linked media moves together; every batch is atomic and undoable; post-edit reads verify the actual timeline; previews and exports retain probes/checksums; and paid generation is outside the Editing Room unless separately admitted by its owning room.
 - Boundary: Palmier's loopback MCP server exposes broad file, project, timeline, export and paid-generation mutation. It is not connected to Hermes. Current proprietary binaries may contain behavior absent from the GPL source, so their marketing or tool schemas are not treated as reusable code or a stable integration contract.
 
+### NexLev (Niche Factory and Competitor Intelligence data source)
+
+- Service: <https://www.nexlev.io> (owner decision 2026-10-04: use the NexLev API or MCP for niche discovery).
+- Reference reviewed: [alge-soft/n8n-nodes-nexlev](https://github.com/alge-soft/n8n-nodes-nexlev) at `7fbd02f189a29f71b6905d2028b3d1bc03074117`, MIT. Read statically for endpoint shapes only; nothing copied, installed or run.
+- REST API as used by that node: base `https://prod.dashboard.nexlev.io/api`, API key in the `x-api-key` header. Endpoints live under `/external/...`: niche overview analysis (`/external/niche-overview/analyze`), similar channels (`/external/similar-channels/search`), similar videos and thumbnails, channel about/videos/shorts/playlists/outliers (`/external/channels/...`), channel analytics including geography/revenue estimates (`/external/analytics/channel-analytics...`), asynchronous channel analysis jobs and video details, comments and transcripts (`/external/videos/...`).
+- MCP server: `https://prod.dashboard.nexlev.io/api/claude-mcp` with browser OAuth, per-tool daily limits by plan. The Control Room cannot complete an interactive OAuth flow on its own, so the planned adapter targets the REST API key; MCP remains an option for owner-side research in Claude.
+- Quota: NexLev documents a monthly API request quota per plan (published figures at review time: 200 requests/month on Pro and 5,000/month on the n8n API plan). Treat every call as metered: reserve quota before calling, cache results with retrieval dates, no automatic retries.
+- Boundary: NexLev revenue/RPM and audience figures are third-party estimates, not owner analytics; label them as estimates and never present them as facts. Transcripts are research input for learning structure and pacing; never reuse wording. Review NexLev's terms before enabling the adapter.
+
 ## Before importing another module
 
 1. Record repository, commit, file, license and dependencies.

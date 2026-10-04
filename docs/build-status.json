@@ -1,7 +1,7 @@
 {
-  "version": "0.6.0",
-  "updated": "2026-09-20",
-  "nextAction": "Release Voice Room v0.6, then begin the Style Library & Assignment Room. A live provider audition remains a separate explicitly authorized potentially billable action. OpenHiggsfield is recorded for P04, and editing references remain recorded for P06.",
+  "version": "0.7.0",
+  "updated": "2026-10-04",
+  "nextAction": "Owner reviews and approves the launch styles, then assigns a default style per family. Next build milestone (owner decides order): R05 Competitor Intelligence + R06 Niche Factory (needs a YouTube Data API key and a NexLev API key), or P04 Scene & Visual Room (needs stock-library and AI-image provider keys).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -218,8 +218,8 @@
         {
           "id": "P03",
           "title": "Style Library and channel assignments",
-          "status": "planned",
-          "remaining": "Create five versioned launch profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. Assign one reviewed default to each channel family, inherit it across locale editions, and never switch or fall back silently."
+          "status": "done",
+          "evidence": "Version 0.7 (2026-10-04): five launch profiles seeded as reviewable drafts; immutable, trigger-protected revisions with diffs; named human approval with three confirmations; custom and derived styles; family default, acknowledged channel overrides and manual-only approved fallbacks; renderer compatibility checks; retire/revoke without silent switching; per-family style handoff; invalidation ledger. 9 style checks; full suite 110 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Documentary Montage chosen as the first executable style."
         },
         {
           "id": "P04",
@@ -231,7 +231,7 @@
           "id": "P05",
           "title": "FFmpeg readiness, proxy renderer and first style proof",
           "status": "planned",
-          "remaining": "Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove one sandboxed style with captured manifests, command plans, checksums, probes and bounded logs."
+          "remaining": "Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove the Documentary Montage style (FFmpeg montage adapter, chosen 2026-10-04) with captured manifests, command plans, checksums, probes and bounded logs."
         },
         {
           "id": "P06",
@@ -354,5 +354,6 @@
     "2026-10-04: Competitor learning uses roughly 30% reference patterns and 70% original contribution.",
     "2026-10-04: ElevenLabs is the narration provider.",
     "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas."
-  ]
+  ],
+  "milestone": "Style Library & Assignment"
 }

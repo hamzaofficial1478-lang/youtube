@@ -1,12 +1,23 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-09-20. Current application: 0.6.0, local planning, configurable family languages, quality-gated Hermes writing, immutable review-only daily research briefs, a controlled Voice Room and a professional Production Panel with five planned editing-style profiles. Production visual generation remains disabled while later rooms are built and verified.
+Last updated: 2026-10-04. Current application: 0.7.0, local planning, configurable family languages, competitor channels per family, quality-gated Hermes writing, immutable review-only daily research briefs, a controlled Voice Room and a live Style Library & Assignment Room. Visual generation, editing and rendering remain disabled while later rooms are built and verified.
 
 ## Resume here
 
-Read this file, build-status.json, REPOSITORIES.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. Fetch current repository changes before continuing; use a working copy for tests and push verified changes. Follow the blueprint sequence: one dependable primary-language loop, then optional localization into each family’s configured additional locales, then controlled portfolio growth. Do not interpret this first release as a finished automation product, a hosted app or a public recommendation system.
+Read this file, build-status.json, REPOSITORIES.md, STYLE-ROOM.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. Follow AGENTS.md: deliver verified changes into the owner's local program folder (Desktop\YT\youtube) and push to GitHub only when the owner asks. Follow the blueprint sequence: one dependable primary-language loop, then optional localization into each family's configured additional locales, then controlled portfolio growth. Do not interpret this release as a finished automation product, a hosted app or a public recommendation system.
 
-The restricted `youtube-control-room` Hermes profile now powers two bounded paths: quality-gated candidates in each family’s primary locale and permission-gated daily topic briefs. P01 and roadmap Step 2 passed live validation on 2026-09-11. The next action is Step 3, expressive primary-language narration. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint. See HERMES-SETUP.md, RESEARCH-BRIEFS.md and YOUTUBE-SETUP.md.
+The restricted `youtube-control-room` Hermes profile powers quality-gated script candidates and permission-gated daily topic briefs. Room 03 (Style Library & Assignment) is live as of 0.7. The next milestones are R05 Competitor Intelligence and R06 Niche Factory (owner requests, need YouTube Data API and NexLev API keys) and P04 Scene & Visual Room. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint.
+
+## Owner decisions (2026-10-04)
+
+- Verified changes go to the owner's local folder; GitHub pushes happen only on request.
+- Hermes stays the writer for scripts and research briefs.
+- Each room is built to full depth before moving on; integrated testing of all rooms follows.
+- Human approval gates stay until the Y03 autopilot gate passes per format.
+- The owner assigns styles to channels; Documentary Montage is the first executable style because visuals come from stock libraries and AI generation.
+- Each family stores 3-10 competitor channels; competitor learning uses roughly 30% reference patterns and 70% original contribution.
+- ElevenLabs is the narration provider.
+- A Niche Factory will use the NexLev API/MCP plus the owner's niche ideas.
 
 ## Agreed delivery sequence
 
@@ -15,7 +26,8 @@ These delivery steps group the tracked milestones into one dependency order. Com
 1. [x] Live Hermes validation, completed 2026-09-10.
 2. [x] Daily research and topic evidence briefs, completed 2026-09-11.
 3. [x] Expressive narration in the family’s selected primary locale, completed 2026-09-20.
-4. [ ] Five versioned editing-style profiles and explicit channel-family assignments.
+4. [x] Five versioned editing-style profiles and explicit channel-family assignments, completed 2026-10-04.
+4a. [ ] Competitor Intelligence (R05) and Niche Factory (R06), added by the owner on 2026-10-04.
 5. [ ] Real scenes and licensed visual assets bound to narration and style revisions.
 6. [ ] FFmpeg readiness, deterministic proxy rendering and one sandboxed style proof.
 7. [ ] Revisioned editing timeline and single-scene repair.
@@ -35,10 +47,10 @@ A UI-based program that researches markets and competitors, proposes differentia
 
 ## Current milestone and acceptance
 
-Current milestone: Voice Room v0.6 is complete and ready for release. The next implementation milestone is the Style Library & Assignment Room. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
+Current milestone: Style Library & Assignment Room v0.7 is complete. Acceptance: five launch styles exist as reviewable drafts; no draft can be assigned; every revision is immutable; a family default must be approved and format-compatible; overrides need explicit acknowledgement; fallbacks are manual-only; retiring or revoking blocks the handoff instead of switching styles. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 9 / 30 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 11 / 33 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -50,6 +62,7 @@ A dependable local workspace that preserves every draft and distinguishes planni
 - [x] **F04 Saved storyboard planning jobs and export** (done) - Automated checks passed on 2026-09-08; desktop family, draft, review and storyboard flow verified. See BUILD-PROGRESS.md.
 - [x] **F05 Local request protection and browser usability** (done) - Request boundary tests passed; desktop and 390 x 844 browser draft editing/revision checks passed on 2026-09-08.
 - [x] **F06 Process ledger, launcher and release checks** (done) - 29 automated checks passed; Windows start/stop/restart passed under the same user. Ledger, setup guide and GitHub workflow updated.
+- [x] **F07 Family competitor channels** (done) - 2026-10-04: families store 0-10 validated competitor channels (@handle, UC… ID, /channel/, /user/ links; duplicates, video, /c/ and non-YouTube links rejected). Edits keep approved scripts. 3 automated checks in tests/competitors.test.js.
 
 ### 02 · Accounts and research
 
@@ -59,6 +72,8 @@ Approved data access and evidence-led research without invented metrics.
 - [ ] **R02 YouTube read-only connector** (testing) - Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention.
 - [ ] **R03 Permitted web, Reddit and Agent-Reach tools** (planned) - Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching.
 - [x] **R04 Daily niche and topic evidence briefs** (done) - Version 0.5 stores revisioned permission-labeled evidence and immutable date-scoped review-only briefs with source links, confidence, deduplication, expiry, token accounting and deliberate retries. A live brief completed on 2026-09-11; desktop and 390 x 844 layouts passed. Automatic collection is intentionally not enabled.
+- [ ] **R05 Competitor Intelligence Room** (planned) - Scan each family's 3-10 competitor channels (YouTube Data API public metadata plus NexLev channel, outlier and transcript data where permitted), then produce a reviewable competitor blueprint for editing style, voice-over, script structure, visuals and packaging with roughly 30% reference patterns and 70% original contribution. Recommendations require human approval before they influence a style revision, narrator profile or script prompt.
+- [ ] **R06 Niche Factory** (planned) - Combine owner niche ideas with NexLev API/MCP niche discovery (niche overview, similar channels, outliers, channel analytics) into scored, evidence-linked niche candidates using the blueprint rubric; an approved niche can seed a new channel family. Never invent metrics; show unavailable values honestly.
 
 ### 03 · Original scripts and production
 
@@ -66,9 +81,9 @@ A sourced primary-language master becomes a real, reviewable video.
 
 - [x] **P01 LLM writing with claim and budget controls** (done) - Version 0.5 enforces long-form/Shorts word and structure policy, current evidence links, transactional monthly/per-job token reservations, usage settlement, unknown-use blocking and capped deliberate retries. A live 888-word long-form candidate passed on 2026-09-11 using 2,855 tokens; the saved draft remained unchanged.
 - [x] **P02 Directed, expressive primary-language narration** (done) - Version 0.6 implements immutable family voice profiles and pronunciation lexicons, consent/commercial-rights evidence, fixed OpenAI/ElevenLabs adapters, pre-request validation, family-local character reservation/settlement, capped deliberate retries, immutable checksummed WAV artifacts, fail-closed FFmpeg decode and measured QC, human comparison and intelligibility approval, revocation, artifact-integrity checks and downstream invalidation. The protected HTTP/runtime workflows, local real-audio fixtures, corruption/tampering cases, 1440 x 1400 desktop and exact 390 x 844 mobile reviews passed. The complete 100-test suite passed after all eight findings from the independent fail-closed review were fixed. No live provider request is claimed; that remains a separate explicit potentially billable operator action.
-- [ ] **P03 Style Library and channel assignments** (planned) - Create five versioned launch profiles: Stickman Sketch Explainer, Hand-drawn Canvas, Motion Graphics, Documentary Montage and Cinematic Hybrid. Assign one reviewed default to each channel family, inherit it across locale editions, and never switch or fall back silently.
+- [x] **P03 Style Library and channel assignments** (done) - Version 0.7 (2026-10-04): five launch profiles seeded as reviewable drafts; immutable, trigger-protected revisions with diffs; named human approval with three confirmations; custom and derived styles; family default, acknowledged channel overrides and manual-only approved fallbacks; renderer compatibility checks; retire/revoke without silent switching; per-family style handoff; invalidation ledger. 9 style checks; full suite 110 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Documentary Montage chosen as the first executable style.
 - [ ] **P04 Scene & Visual Room with rights provenance** (planned) - Replace the rough scaffold with stable editable scene IDs, narration and style-profile dependencies, per-asset license/disclosure evidence, versioned model capability/media-role contracts and single-scene repair. OpenHiggsfield informs the independent schema and review flow; add visual providers only behind reviewed adapters.
-- [ ] **P05 FFmpeg readiness, proxy renderer and first style proof** (planned) - Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove one sandboxed style with captured manifests, command plans, checksums, probes and bounded logs.
+- [ ] **P05 FFmpeg readiness, proxy renderer and first style proof** (planned) - Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove the Documentary Montage style (FFmpeg montage adapter, chosen 2026-10-04) with captured manifests, command plans, checksums, probes and bounded logs.
 - [ ] **P06 Editing Room and deterministic timeline** (planned) - Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass.
 - [ ] **P07 Captions & Localization Room** (planned) - Align editable SRT/WebVTT to selected narration, enforce locale-aware reading/timing/safe-area checks, and keep visible text separate from later language editions.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (planned) - Track asset licenses and attribution, store ducking/fades as timeline data, and test loudness, peaks, clipping, silence and channel layout.
@@ -122,6 +137,16 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 - Added export with version, family, script, sources, scenes, language statuses and limitations. User text is rendered as text or escaped HTML.
 - Added loopback binding, allowed Host/Origin checks, per-process write token, JSON input limit, fixed static routes and optimistic conflict detection.
 - Added Overview, Families, Studio, Connections and Build progress UI. Counts come from stored records; no demo metrics are seeded.
+
+### 2026-10-04 - owner decisions, competitor channels and Style Library (0.7.0)
+
+- Recorded the owner's decisions in AGENTS.md, build-status.json and this file. Delivery changed to the owner's local folder; GitHub pushes only on request.
+- Housekeeping: test fixtures that hard-coded September 2026 expiry dates now compute dates relative to today (one test had started failing after 30 Sep 2026). The app version is read from package.json and shown in the sidebar and health endpoint instead of a stale "Version 0.5" label.
+- F07: families store 0-10 validated competitor channel references (@handle, UC… ID, /channel/ and /user/ links). Duplicates, video, playlist, /c/ and non-YouTube links are rejected. Competitor edits do not revoke approved scripts. The family card shows the list and asks for 3-10.
+- P03: new `style.js` module and `public/style-room.js` UI. Five launch profiles are seeded as drafts. Revisions are immutable (SQLite triggers block spec updates and deletes), carry SHA-256 hashes and field-level diffs, and need named human approval with three confirmations. Custom and derived styles are supported. Assignments: family default, acknowledged channel overrides, manual-only approved fallbacks, revoke and retire, all with a supersede history and dependency-ledger entries. Renderer support matrices block impossible format/fps/transition/camera combinations. Text/background contrast must reach 4.5:1 and the reference share is capped at 30%.
+- Documentary Montage (FFmpeg montage) is chosen as the first executable style for P05.
+- NexLev integration research for R06: the REST API uses base `https://prod.dashboard.nexlev.io/api` with an `x-api-key` header (endpoints under `/external/...` for niche overview, similar channels, outliers, channel videos, analytics and transcripts); the MCP server uses OAuth. Recorded in REPOSITORIES.md; nothing is connected yet.
+- Verification: `npm run check` passed; full suite 112 tests, 110 passed, 2 skipped (Windows-only DPAPI) on Node 22 in the build sandbox; new files `tests/style.test.js` (9) and `tests/competitors.test.js` (3). Chromium drove approve → assign → override → fallback → new revision → spec viewer at 1440 × 1400 and the Style Room at 390 × 844 with no horizontal overflow and no console/CSP errors. Not yet run: the suite on the owner's Node 24 Windows machine and the Windows DPAPI checks.
 
 ## Validation record
 
