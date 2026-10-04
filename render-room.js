@@ -122,7 +122,7 @@ class RenderRoom {
     return {id: row.id, familyId: row.family_id, contentId: row.content_id, visualApprovalId: row.visual_approval_id, preset: row.preset, status: row.status, attempts: row.attempts,
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg},
-      result: result ? {...result, plan: undefined, logs: undefined, video: `/api/renders/${row.id}/video`, sheet: result.sheet ? `/api/renders/${row.id}/sheet` : null, manifest: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
+      result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
   }
   queueRender(contentId, input) {
     object(input);

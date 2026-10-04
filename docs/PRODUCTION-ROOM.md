@@ -100,9 +100,9 @@ Mandatory gates:
 - Every model adapter exposes a versioned capability snapshot rather than a hardcoded universal form: supported surface, setting allowlist/defaults, media-input roles and limits, output contract, commercial-use/disclosure constraints and current connector revision.
 - Generation jobs retain the exact prompt revision, capability snapshot, input asset IDs, provider request/task IDs, admitted cost, lifecycle events, returned URLs, downloaded immutable artifacts, checksums, probes and terminal outcome. Browser cookies, public uploads and gallery state are never the source of truth.
 
-### 5. Editing Room
+### 5. Editing Room, assembly preview live (0.10)
 
-Owns a deterministic timeline rather than a flattened mystery file.
+Owns a deterministic timeline rather than a flattened mystery file. As of 0.10 the room shows the **assembly preview**: the approved board rendered on the approved narration by the pinned FFmpeg build, with technical QC, a contact sheet, an immutable render manifest and a human style-proof verdict. See [RENDER-PROOF.md](RENDER-PROOF.md). The editable timeline below is the next milestone (P06).
 
 Mandatory gates:
 
@@ -252,8 +252,8 @@ Mandatory gates:
 1. Voice Room data model, auditions, consent, direction and real-audio QC. Done (0.6).
 2. Style Library schema, five immutable profiles and channel-family assignment rules. Done (0.7).
 3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime. Done (0.9): stock images/video and AI images; AI video, generated graphics and maps remain without adapters.
-4. FFmpeg readiness and deterministic proxy renderer.
-5. One sandboxed style proof before broader adapters. Decision 2026-10-04: Documentary Montage through the FFmpeg montage adapter, because visuals come from stock libraries and AI generation.
+4. FFmpeg readiness and deterministic proxy renderer. Done (0.10): readiness check, pinned build, bit-exact proxy.
+5. One sandboxed style proof before broader adapters. Decision 2026-10-04: Documentary Montage through the FFmpeg montage adapter, because visuals come from stock libraries and AI generation. Done (0.10) with fixture media; the owner's first proof on real visuals is pending.
 6. Editing timeline and single-scene repair.
 7. Caption alignment, then Audio Room mix/QC.
 8. Full Review & QC evidence and Packaging Room variants.

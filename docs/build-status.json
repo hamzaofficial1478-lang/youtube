@@ -1,7 +1,7 @@
 {
-  "version": "0.9.0",
+  "version": "0.10.0",
   "updated": "2026-10-04",
-  "nextAction": "Owner adds and tests Pexels, Pixabay and OpenAI connectors (plus NexLev, YouTube and Hermes), saves blend picks for each family, then runs one real scene plan and visual board to verify live behaviour (fake-provider checks passed). Next build room: P05 FFmpeg readiness, deterministic proxy renderer and the Documentary Montage style proof using the approved visual board and narration.",
+  "nextAction": "Owner installs a full FFmpeg build (for example winget install Gyan.FFmpeg), runs the readiness check, pins it and renders the first assembly proxy from a real visual board, then records the style-proof verdict. Next build milestone: P06 Editing Room timeline (revisioned tracks, single-scene repair, proxy re-render), then captions (P07) and audio (P08).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -230,8 +230,8 @@
         {
           "id": "P05",
           "title": "FFmpeg readiness, proxy renderer and first style proof",
-          "status": "planned",
-          "remaining": "Select a reviewed pinned FFmpeg build, render deterministic proxy fixtures, and prove the Documentary Montage style (FFmpeg montage adapter, chosen 2026-10-04) with captured manifests, command plans, checksums, probes and bounded logs."
+          "status": "done",
+          "evidence": "Version 0.10 (2026-10-04): FFmpeg readiness (versions, binary SHA-256, filter/encoder inventory, byte-identical fixture), owner-pinned binaries re-checked before every render, deterministic 360p assembly proxy of the approved board on the approved narration (frame-snapped shots, Ken Burns stills, held/trimmed clips, cut via concat or crossfade/dip via frame-exact xfade), QC (duration, frame, audio, black, frozen), contact sheet, immutable render manifest with commands and logs, cancellation, restart recovery and a human style-proof verdict. 5 render checks with real FFmpeg; full suite 138 tests, 136 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Documentary Montage proven with fixture media; the owner's first proof on real visuals and his Windows FFmpeg build is pending."
         },
         {
           "id": "P06",
@@ -356,7 +356,8 @@
     "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas.",
     "2026-10-04: R05/R06 use the NexLev REST API (x-api-key in a protected connector slot); the OAuth MCP endpoint is not used. YouTube data about other channels is display-only and purged after 30 days unless the owner records YouTube derived-metrics approval.",
     "2026-10-04: Each competitor link carries owner picks (voice-over, narration, editing, thumbnails, visuals); the blueprint learns each area only from the picked channels and keeps 30/70 per area.",
-    "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters."
+    "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
+    "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Scene & Visual Room"
+  "milestone": "Assembly proxy & style proof"
 }
