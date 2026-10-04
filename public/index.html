@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/app.js" defer></script></head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
@@ -129,6 +129,87 @@
   </dialog>
   <dialog id="voice-revoke-dialog" aria-labelledby="voice-revoke-heading">
     <form id="voice-revoke-form"><div class="dialog-heading"><div><p class="eyebrow">REVOKE THE HANDOFF</p><h2 id="voice-revoke-heading">Revoke approved narration</h2></div><button type="button" class="icon-button" data-close="voice-revoke-dialog" aria-label="Close revoke dialog">×</button></div><input type="hidden" name="approvalId"><div class="form-grid"><label>Operator name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Revocation reason<textarea name="reason" required minlength="10" maxlength="1000" rows="3"></textarea></label></div><p class="note">Revocation blocks the Voice Room handoff and invalidates scene timing, captions, audio mix, QC, packaging and render state.</p><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-revoke-dialog">Cancel</button><button type="submit" class="button danger">Revoke narration</button></div></form>
+  </dialog>
+    <dialog id="style-spec-dialog" class="wide-dialog" aria-labelledby="style-spec-heading">
+    <form method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">IMMUTABLE STYLE SPECIFICATION</p><h2 id="style-spec-heading">Style</h2></div><button class="icon-button" type="button" data-close="style-spec-dialog" aria-label="Close style specification">×</button></div>
+      <div id="style-spec-body"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-spec-dialog">Close</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-editor-dialog" class="wide-dialog" aria-labelledby="style-editor-heading">
+    <form id="style-editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="style-editor-kicker">NEW DRAFT REVISION</p><h2 id="style-editor-heading">Edit style</h2></div><button class="icon-button" type="button" data-close="style-editor-dialog" aria-label="Close style editor">×</button></div>
+      <input type="hidden" name="mode"><input type="hidden" name="profileId"><input type="hidden" name="expectedRevision"><input type="hidden" name="baseRevisionId">
+      <div id="style-editor-body"></div>
+      <div class="form-grid editor-sign">
+        <label class="full">What changed and why<textarea name="changeNote" required minlength="8" maxlength="1000" rows="2" placeholder="e.g. Longer shots for calmer finance explainers"></textarea></label>
+        <label class="full">Your name<input name="createdBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+      </div>
+      <p class="note">Saving creates a new draft. Existing revisions never change, and a draft cannot be assigned until someone reviews and approves it.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-editor-dialog">Cancel</button><button type="submit" class="button primary">Save draft revision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-review-dialog" class="wide-dialog" aria-labelledby="style-review-heading">
+    <form id="style-review-form">
+      <div class="dialog-heading"><div><p class="eyebrow">HUMAN STYLE REVIEW</p><h2 id="style-review-heading">Review style</h2></div><button class="icon-button" type="button" data-close="style-review-dialog" aria-label="Close style review">×</button></div>
+      <input type="hidden" name="revisionId">
+      <div id="style-review-summary"></div>
+      <div class="form-grid">
+        <label>Reviewer name<input name="approvedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Review notes <span class="hint">Optional.</span><input name="notes" maxlength="2000"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" name="specReviewed" required>I reviewed the pacing, transitions, typography, captions and QC thresholds.</label>
+      <label class="checkbox-label"><input type="checkbox" name="rightsReviewed" required>I reviewed the visual-source, licensed-music and AI-disclosure policy.</label>
+      <label class="checkbox-label"><input type="checkbox" name="originalityReviewed" required>I reviewed the originality guard: reference patterns stay at or below 30% and nothing is copied from another channel.</label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-review-dialog">Cancel</button><button type="submit" class="button primary">Approve this exact revision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-assign-dialog" aria-labelledby="style-assign-heading">
+    <form id="style-assign-form">
+      <div class="dialog-heading"><div><p class="eyebrow">EXPLICIT STYLE DECISION</p><h2 id="style-assign-heading">Assign style</h2></div><button class="icon-button" type="button" data-close="style-assign-dialog" aria-label="Close style assignment">×</button></div>
+      <input type="hidden" name="familyId"><input type="hidden" name="familyRevision"><input type="hidden" name="scope"><input type="hidden" name="expectedAssignmentId">
+      <div class="form-grid">
+        <label class="full" data-style-scope="channel">Channel edition<select name="locale"></select></label>
+        <label class="full">Approved style revision<select name="revisionId" required></select></label>
+        <div class="full style-preview" id="style-assign-preview"></div>
+        <label>Your name<input name="assignedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000" placeholder="Why this style fits the channel"></label>
+      </div>
+      <label class="checkbox-label" data-style-scope="channel"><input type="checkbox" name="separateProductionAcknowledged">I understand this override creates a separate visual production, cost plan and approval trail for that channel.</label>
+      <p class="note" id="style-assign-note"></p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-assign-dialog">Cancel</button><button type="submit" class="button primary">Assign style</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-fallback-dialog" aria-labelledby="style-fallback-heading">
+    <form id="style-fallback-form">
+      <div class="dialog-heading"><div><p class="eyebrow">NO SILENT FALLBACK</p><h2 id="style-fallback-heading">Approve a fallback style</h2></div><button class="icon-button" type="button" data-close="style-fallback-dialog" aria-label="Close fallback dialog">×</button></div>
+      <input type="hidden" name="assignmentId"><input type="hidden" name="familyRevision">
+      <div class="form-grid">
+        <label class="full">Fallback revision<select name="fallbackRevisionId"></select></label>
+        <label>Your name<input name="approvedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000" placeholder="When this fallback is acceptable"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" name="confirmManualActivation">I understand the fallback is never used automatically. If a render fails, I still decide per job whether to use it.</label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-fallback-dialog">Cancel</button><button type="submit" class="button primary">Save fallback decision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-decision-dialog" aria-labelledby="style-decision-heading">
+    <form id="style-decision-form">
+      <div class="dialog-heading"><div><p class="eyebrow">RECORDED DECISION</p><h2 id="style-decision-heading">Confirm</h2></div><button class="icon-button" type="button" data-close="style-decision-dialog" aria-label="Close decision dialog">×</button></div>
+      <input type="hidden" name="kind"><input type="hidden" name="targetId"><input type="hidden" name="familyRevision">
+      <p class="note" id="style-decision-note"></p>
+      <div class="form-grid">
+        <label>Your name<input name="person" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000"></label>
+      </div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-decision-dialog">Cancel</button><button type="submit" class="button danger">Record decision</button></div>
+    </form>
   </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
     <form id="connector-form">

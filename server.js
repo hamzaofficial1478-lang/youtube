@@ -9,10 +9,11 @@ const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {HermesReasoning}=require('./hermes');
 const {ResearchReasoning}=require('./research');
 const {VoiceRuntime}=require('./voice');
+const {StyleLibrary}=require('./style');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
 function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
   const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
   const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
@@ -21,6 +22,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const reasoning=new HermesReasoning(store,connectors);
   const researchReasoning=new ResearchReasoning(store,connectors);
   const ffmpeg=voiceOptions.ffmpeg||getFFmpegPath(),ffprobe=voiceOptions.ffprobe||process.env.FFPROBE_PATH||(path.isAbsolute(ffmpeg)?path.join(path.dirname(ffmpeg),process.platform==='win32'?'ffprobe.exe':'ffprobe'):'ffprobe');
+  const styles=new StyleLibrary(store);
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null;
   const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
@@ -44,8 +46,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.method==='GET'){
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
-        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-bounded-voice-auditions'});
-        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-voice-auditions-and-style-library'});
+        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
           capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
@@ -77,6 +79,15 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       else if(pathname==='/api/content' && req.method==='POST')result=store.saveContent(body);
       else if(pathname==='/api/research/evidence'&&req.method==='POST')result=store.saveResearchEvidence(body);
       else {
+        if(pathname==='/api/styles'&&req.method==='POST')return json(res,200,styles.createProfile(body));
+        const styleRevision=pathname.match(/^\/api\/styles\/([a-f0-9-]+)\/revisions$/);
+        if(styleRevision&&req.method==='POST')return json(res,200,styles.createRevision(styleRevision[1],body));
+        const styleDecision=pathname.match(/^\/api\/style-revisions\/([a-f0-9-]+)\/(approve|retire)$/);
+        if(styleDecision&&req.method==='POST')return json(res,200,styleDecision[2]==='approve'?styles.approveRevision(styleDecision[1],body):styles.retireRevision(styleDecision[1],body));
+        const styleAssign=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/style-assignments$/);
+        if(styleAssign&&req.method==='POST')return json(res,200,styles.assign(styleAssign[1],body));
+        const styleAssignment=pathname.match(/^\/api\/style-assignments\/([a-f0-9-]+)\/(revoke|fallback)$/);
+        if(styleAssignment&&req.method==='POST')return json(res,200,styleAssignment[2]==='revoke'?styles.revoke(styleAssignment[1],body):styles.setFallback(styleAssignment[1],body));
         const voiceProfile=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/voice-profiles$/);
         if(voiceProfile&&req.method==='POST')return json(res,200,store.saveVoiceProfile(voiceProfile[1],body));
         const voiceAudition=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/voice-auditions$/);
@@ -112,14 +123,14 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   server.requestTimeout=15000;server.headersTimeout=10000;
   server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,reasoning,researchReasoning,voiceRuntime,voiceReady};
+  return {server,store,styles,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('PORT must be a whole number between 1024 and 65535.');
   const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
-  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room ${APP_VERSION}\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research, bounded reasoning and human-controlled voice auditions. Publishing is not enabled.`));
+  server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room ${APP_VERSION}\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research, bounded reasoning, human-controlled voice auditions and the style library. Publishing is not enabled.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
 }
 module.exports={createApp};
