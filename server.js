@@ -10,10 +10,13 @@ const {HermesReasoning}=require('./hermes');
 const {ResearchReasoning}=require('./research');
 const {VoiceRuntime}=require('./voice');
 const {StyleLibrary}=require('./style');
+const {QuotaLedger}=require('./intel-sources');
+const {CompetitorIntelligence}=require('./competitor-intel');
+const {NicheFactory}=require('./niche-factory');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
 function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
   const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
   const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
@@ -23,8 +26,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const researchReasoning=new ResearchReasoning(store,connectors);
   const ffmpeg=voiceOptions.ffmpeg||getFFmpegPath(),ffprobe=voiceOptions.ffprobe||process.env.FFPROBE_PATH||(path.isAbsolute(ffmpeg)?path.join(path.dirname(ffmpeg),process.platform==='win32'?'ffprobe.exe':'ffprobe'):'ffprobe');
   const styles=new StyleLibrary(store);
+  const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles),nicheFactory=new NicheFactory(store,connectors,quota,styles);
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
-  let timer, ffmpegAvailable=null;
+  let timer, ffmpegAvailable=null, ticks=0;
   const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
   async function readBody(req) {
@@ -44,10 +48,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.headers['sec-fetch-site']==='cross-site')throw new InputError('Cross-site requests are not allowed.',403);
       const url=new URL(req.url,`http://${host}`), pathname=url.pathname;
       if(req.method==='GET'){
-        if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname];res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(fs.readFileSync(path.join(root,filename)));}
+        if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
         if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-voice-auditions-and-style-library'});
-        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
           capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
@@ -79,6 +83,21 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       else if(pathname==='/api/content' && req.method==='POST')result=store.saveContent(body);
       else if(pathname==='/api/research/evidence'&&req.method==='POST')result=store.saveResearchEvidence(body);
       else {
+        if(pathname==='/api/quota-settings'&&req.method==='POST')return json(res,200,quota.saveSettings(body));
+        if(pathname==='/api/niche-settings'&&req.method==='POST')return json(res,200,nicheFactory.saveSettings(body));
+        if(pathname==='/api/niche-ideas'&&req.method==='POST')return json(res,200,nicheFactory.saveIdea(body));
+        const familyIntel=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/(competitor-settings|competitor-notes|competitor-scans|competitor-analyses)$/);
+        if(familyIntel&&req.method==='POST'){const [,id,kind]=familyIntel;return json(res,200,kind==='competitor-settings'?competitorIntel.saveSettings(id,body):kind==='competitor-notes'?competitorIntel.saveNote(id,body):kind==='competitor-scans'?competitorIntel.queueScan(id,body):competitorIntel.queueAnalysis(id,body));}
+        const scanAction=pathname.match(/^\/api\/competitor-scans\/([a-f0-9-]+)\/retry$/);
+        if(scanAction&&req.method==='POST')return json(res,200,competitorIntel.retryScan(scanAction[1],body));
+        const analysisAction=pathname.match(/^\/api\/competitor-analyses\/([a-f0-9-]+)\/(retry|review|style-draft)$/);
+        if(analysisAction&&req.method==='POST'){const [,id,kind]=analysisAction;return json(res,200,kind==='retry'?competitorIntel.retryAnalysis(id,body):kind==='review'?competitorIntel.review(id,body):competitorIntel.createStyleDraft(id,body));}
+        const ideaRoute=pathname.match(/^\/api\/niche-ideas\/([a-f0-9-]+)(?:\/(archive|discoveries|evaluations))?$/);
+        if(ideaRoute){const [,id,kind]=ideaRoute;if(!kind&&req.method==='PUT')return json(res,200,nicheFactory.saveIdea(body,id));if(req.method==='POST'&&kind)return json(res,200,kind==='archive'?nicheFactory.archiveIdea(id,body):kind==='discoveries'?nicheFactory.queueDiscovery(id,body):nicheFactory.queueEvaluation(id,body));throw new InputError('Action not found.',404);}
+        const discoveryAction=pathname.match(/^\/api\/niche-discoveries\/([a-f0-9-]+)\/retry$/);
+        if(discoveryAction&&req.method==='POST')return json(res,200,nicheFactory.retryDiscovery(discoveryAction[1],body));
+        const evaluationAction=pathname.match(/^\/api\/niche-evaluations\/([a-f0-9-]+)\/(retry|review|link-family)$/);
+        if(evaluationAction&&req.method==='POST'){const [,id,kind]=evaluationAction;return json(res,200,kind==='retry'?nicheFactory.retryEvaluation(id,body):kind==='review'?nicheFactory.review(id,body):nicheFactory.linkFamily(id,body));}
         if(pathname==='/api/styles'&&req.method==='POST')return json(res,200,styles.createProfile(body));
         const styleRevision=pathname.match(/^\/api\/styles\/([a-f0-9-]+)\/revisions$/);
         if(styleRevision&&req.method==='POST')return json(res,200,styles.createRevision(styleRevision[1],body));
@@ -121,9 +140,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));if(++ticks%1200===0)competitorIntel.purgeExpiredYouTubeData();}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,styles,reasoning,researchReasoning,voiceRuntime,voiceReady};
+  return {server,store,styles,quota,competitorIntel,nicheFactory,connectors,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);

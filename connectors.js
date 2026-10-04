@@ -9,6 +9,7 @@ const PROVIDERS = {
   openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   hermes: {name: 'Hermes reasoning engine', test: 'Authenticated capability and tool-free profile check; no generation', ready: true},
+  nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
   reddit: {name: 'Reddit', test: 'OAuth adapter not implemented; setup record only', ready: false}
 };
@@ -65,6 +66,11 @@ class ConnectorSlots {
       if(slot.provider==='youtube'){
         const research=new YouTubeResearch({get:()=>key},this.fetch);
         result=await research.lookup(channel);
+      }else if(slot.provider==='nexlev'){
+        const {NexLevClient}=require('./intel-sources');
+        const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
+        if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
+        result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
       }else if(slot.provider==='hermes'){
         result=await new HermesClient(key,this.fetch).capabilities();
         result.message='Hermes authenticated capability and tool-free profile checks passed. No content was generated.';
