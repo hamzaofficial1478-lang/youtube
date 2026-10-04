@@ -2,9 +2,20 @@
 
 Read README.md, docs/BUILD-PROGRESS.md, docs/REPOSITORIES.md, docs/YOUTUBE-SETUP.md and docs/build-status.json before changing code. docs/YouTube_Automation_Program_Blueprint.pdf is the product blueprint. Apply Ponytail when available.
 
-- GitHub is the source of truth: https://github.com/hamzaofficial1478-lang/youtube. The user explicitly requested that existing and future code be committed and pushed here. Use local files only as a working/testing copy; do not create additional standalone project folders. Fetch the latest remote state before edits, preserve other work and push verified changes without force. Never claim a push succeeded without verifying the remote commit.
-- Deliver GitHub commit/file links to the user rather than PC working-copy links. Every completed code step must be pushed; if a turn is interrupted before pushing, clearly identify that pending work and finish the push before claiming completion.
+- Delivery rule (owner decision, 2026-10-04): deliver every verified change into the owner's local program folder (`Desktop\YT\youtube` on the owner's PC). Push to GitHub (https://github.com/hamzaofficial1478-lang/youtube) only when the owner explicitly asks. Before a requested push, fetch the remote, reconcile without force and verify the remote commit; never claim a push that was not verified. Do not create additional standalone project folders.
+- Report which files changed and where they were written. Provide GitHub commit/file links only after a requested push.
 - Keep credentials, local databases, logs, test data and downloaded inspection archives out of the repository. GitHub stores code; the application still needs a runtime host to run.
+
+## Owner decisions (2026-10-04)
+
+- Hermes stays the in-app writer for script candidates and research briefs.
+- Build each room to full depth, then move to the next room. After the rooms are built, test all rooms together and fix issues.
+- Keep the human approval gates until the Y03 autopilot gate passes for a specific format.
+- The owner assigns editing styles to channel families/channels; the builder chooses which style becomes executable first.
+- Visuals come from stock libraries and AI generation only; the owner supplies no media.
+- Each family stores 3-10 competitor channels. The program analyzes them to inform editing style, voice-over, script and visual style with roughly 30% reference patterns and 70% original contribution. Learn techniques; never copy wording, footage, identity or a signature look.
+- ElevenLabs is the narration provider.
+- A Niche Factory finds new niches with the NexLev API/MCP and accepts the owner's own niche ideas.
 
 - Work step by step. Complete and test the current milestone before enabling dependent stages.
 - Update docs/build-status.json and the detailed BUILD-PROGRESS.md after each meaningful milestone. Record actual tests and remaining work, never assumed success. `npm run tracker` refreshes the generated checklist in BUILD-PROGRESS.md.

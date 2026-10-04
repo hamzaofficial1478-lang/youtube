@@ -10,6 +10,7 @@ const protector={transform:(operation,input)=>Buffer.from([...input].reverse())}
 const key='fixture-hermes-'+'r'.repeat(32);
 const familyLocalDay=(timeZone='Asia/Karachi')=>{const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date()).map(part=>[part.type,part.value]));return `${parts.year}-${parts.month}-${parts.day}`;};
 const localBriefDate=familyLocalDay(),outputExpiry=new Date(`${localBriefDate}T12:00:00.000Z`);outputExpiry.setUTCDate(outputExpiry.getUTCDate()+7);
+const addDays=(day,count)=>{const date=new Date(`${day}T12:00:00.000Z`);date.setUTCDate(date.getUTCDate()+count);return date.toISOString().slice(0,10);};
 const familyInput=(extra={})=>({name:'Research family',tier:'A',countries:['United States'],audience:'Adults seeking evidence-led practical explanations.',niche:'Creator systems',spanishLocale:'es-419',englishLocale:'en-US',timezone:'Asia/Karachi',monthlyBudget:100,cadence:2,format:'long-form',monthlyTokenLimit:100000,scriptTokenLimit:6000,researchTokenLimit:4000,...extra});
 const evidenceInput=(familyId,extra={})=>({familyId,title:'Official creator research',url:'https://example.com/research',publisher:'Example Publisher',publishedAt:'2026-09-09',permission:'permitted',analysisMode:'brief_synthesis_permitted',notes:'This evidence supports a dated observation about creator workflow.',rightsNotes:'Public factual source; summarize with attribution, do not copy expression.',...extra});
 const output={decision:'topics',rationale:'One timely, well-supported topic fits the saved audience.',topics:[{title:'Why creator workflows stall at handoffs',audienceNeed:'A practical way to find hidden delays.',whyNow:{text:'The supplied evidence documents a current workflow observation.',sourceIds:['S1']},angle:'Turn one dated observation into an original diagnostic method.',hooks:['Your workflow is not slow where you think.','The hidden delay starts between two ordinary steps.','One handoff may be costing your whole routine.'],outline:['Open with the surprising handoff.','Explain the evidence carefully.','Demonstrate an original diagnostic example.','End with a practical test.'],evidenceClaims:[{text:'The source documents the workflow observation.',sourceIds:['S1']}],confidence:{level:'medium',rationale:'One permitted source supports the core observation.',missingEvidence:['A second independent source would improve confidence.']},uncertainties:['The observation may not generalize to every creator.'],expiresAt:outputExpiry.toISOString().slice(0,10)}]};
@@ -61,10 +62,10 @@ test('research output requires exact evidence-linked topic fields',()=>{
   assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],whyNow:{text:'Unsupported',sourceIds:['S2']}}]},sourceIds),/source/i);
   assert.throws(()=>validateResearchResult({...output,decision:'no_strong_topic'},sourceIds),/zero topics/i);
   assert.deepEqual(validateResearchResult({decision:'no_strong_topic',rationale:'No topic has enough current evidence today.',topics:[]},sourceIds).topics,[]);
-  const context={briefDate:localBriefDate,sourceExpiries:new Map([['S1','2026-09-30']])};
+  const context={briefDate:localBriefDate,sourceExpiries:new Map([['S1',addDays(localBriefDate,10)]])};
   assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],expiresAt:'2026-02-30'}]},sourceIds,context),/expiry/i);
-  assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],expiresAt:'2026-09-09'}]},sourceIds,context),/expiry/i);
-  assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],expiresAt:'2026-10-01'}]},sourceIds,context),/expiry/i);
+  assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],expiresAt:addDays(localBriefDate,-1)}]},sourceIds,context),/expiry/i);
+  assert.throws(()=>validateResearchResult({...output,topics:[{...output.topics[0],expiresAt:addDays(localBriefDate,11)}]},sourceIds,context),/expiry/i);
 });
 
 test('brief dates reject impossible, backdated, and expired-at-claim work before Hermes',async t=>{
@@ -87,7 +88,7 @@ test('research usage rejects inconsistent partial counters',async t=>{
 });
 
 test('research preflight failures release usage before any completion request',async()=>{
-  let completions=0,failed;const promptInput={family:{name:'x'},briefDate:localBriefDate,sources:[{id:'S1',recordId:'r1',expiresAt:'2026-09-30',notes:'x'.repeat(66000)}],policy:{maxCompletionTokens:500,totalTokenLimit:8000}},store={claimResearchBrief:()=>({id:'job',scope:{connectorId:'connector',promptInput}}),completeResearchBrief:()=>{},failResearchBrief:(id,message,options)=>{failed={id,message,options};}},connectors={key:()=>key,fetch:async url=>{if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});if(String(url).endsWith('/v1/toolsets'))return Response.json([]);completions++;return Response.json({});}};await new ResearchReasoning(store,connectors).processNext();assert.equal(completions,0);assert.equal(failed.options.usageUnknown,false);
+  let completions=0,failed;const promptInput={family:{name:'x'},briefDate:localBriefDate,sources:[{id:'S1',recordId:'r1',expiresAt:addDays(localBriefDate,30),notes:'x'.repeat(66000)}],policy:{maxCompletionTokens:500,totalTokenLimit:8000}},store={claimResearchBrief:()=>({id:'job',scope:{connectorId:'connector',promptInput}}),completeResearchBrief:()=>{},failResearchBrief:(id,message,options)=>{failed={id,message,options};}},connectors={key:()=>key,fetch:async url=>{if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});if(String(url).endsWith('/v1/toolsets'))return Response.json([]);completions++;return Response.json({});}};await new ResearchReasoning(store,connectors).processNext();assert.equal(completions,0);assert.equal(failed.options.usageUnknown,false);
 });
 
 test('daily research brief uses only selected permitted evidence and stores immutable review-only topics',async t=>{

@@ -148,6 +148,12 @@
           "title": "Process ledger, launcher and release checks",
           "status": "done",
           "evidence": "29 automated checks passed; Windows start/stop/restart passed under the same user. Ledger, setup guide and GitHub workflow updated."
+        },
+        {
+          "id": "F07",
+          "title": "Family competitor channels",
+          "status": "testing",
+          "remaining": "Store 0-10 validated competitor YouTube channel references per family (target 3-10) as inputs for R05 Competitor Intelligence."
         }
       ]
     },
@@ -178,6 +184,18 @@
           "title": "Daily niche and topic evidence briefs",
           "status": "done",
           "evidence": "Version 0.5 stores revisioned permission-labeled evidence and immutable date-scoped review-only briefs with source links, confidence, deduplication, expiry, token accounting and deliberate retries. A live brief completed on 2026-09-11; desktop and 390 x 844 layouts passed. Automatic collection is intentionally not enabled."
+        },
+        {
+          "id": "R05",
+          "title": "Competitor Intelligence Room",
+          "status": "planned",
+          "remaining": "Scan each family's 3-10 competitor channels (YouTube Data API public metadata plus NexLev channel, outlier and transcript data where permitted), then produce a reviewable competitor blueprint for editing style, voice-over, script structure, visuals and packaging with roughly 30% reference patterns and 70% original contribution. Recommendations require human approval before they influence a style revision, narrator profile or script prompt."
+        },
+        {
+          "id": "R06",
+          "title": "Niche Factory",
+          "status": "planned",
+          "remaining": "Combine owner niche ideas with NexLev API/MCP niche discovery (niche overview, similar channels, outliers, channel analytics) into scored, evidence-linked niche candidates using the blueprint rubric; an approved niche can seed a new channel family. Never invent metrics; show unavailable values honestly."
         }
       ]
     },
@@ -325,5 +343,16 @@
         }
       ]
     }
+  ],
+  "decisions": [
+    "2026-10-04: Deliver verified changes to the owner's local folder (Desktop\\YT\\youtube); push to GitHub only on request.",
+    "2026-10-04: Hermes stays the writer for scripts and research briefs.",
+    "2026-10-04: Build each room to full depth before moving on; integrated testing of all rooms follows.",
+    "2026-10-04: Human approval gates stay until the Y03 autopilot gate passes per format.",
+    "2026-10-04: The owner assigns styles to channels; Documentary Montage is chosen as the first executable style (stock + AI visuals).",
+    "2026-10-04: Visuals come from stock libraries and AI generation; the owner supplies competitor channel links (3-10 per family) and niche ideas only.",
+    "2026-10-04: Competitor learning uses roughly 30% reference patterns and 70% original contribution.",
+    "2026-10-04: ElevenLabs is the narration provider.",
+    "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas."
   ]
 }
