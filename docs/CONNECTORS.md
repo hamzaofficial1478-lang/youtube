@@ -10,6 +10,7 @@ Open Connections and choose **Add connector**. Give the slot a unique name, choo
 | Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools; manually authorized script and daily-brief jobs have live validation | Automated evidence collection, localization, voice, rendering and publishing |
 | MCP server | Reports adapter not implemented, without a network call | Protocol handshake, tools and credentials |
 | Reddit | Reports adapter not implemented, without a network call | OAuth, search and credentials |
+| NexLev research API (0.8) | GET `/api/external/channels/about` for one public channel on fixed origin `https://prod.dashboard.nexlev.io`, `x-api-key` header, redirects refused (uses 1 NexLev request) | NexLev MCP (OAuth). Competitor scans and niche discovery use this slot only when you start them; see [Competitor Intelligence](COMPETITOR-INTELLIGENCE.md) and [Niche Factory](NICHE-FACTORY.md) |
 
 MCP and Reddit can be recorded as setup slots with notes. Their key fields are disabled and the server rejects credentials for those types. A pending adapter never receives a green test result. No custom endpoint is fetched or shell command executed from setup notes.
 

@@ -1,7 +1,7 @@
 {
-  "version": "0.7.0",
+  "version": "0.8.0",
   "updated": "2026-10-04",
-  "nextAction": "Owner reviews and approves the launch styles, then assigns a default style per family. Next build milestone (owner decides order): R05 Competitor Intelligence + R06 Niche Factory (needs a YouTube Data API key and a NexLev API key), or P04 Scene & Visual Room (needs stock-library and AI-image provider keys).",
+  "nextAction": "Owner adds and tests NexLev, YouTube Data API and Hermes connectors, then runs one real competitor scan, blueprint review and one niche discovery/evaluation to verify live behaviour (fake-provider checks passed). Owner also reviews/approves the launch styles and assigns a default style per family. Next build room: P04 Scene & Visual Room (needs stock-library and AI-image provider keys).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -188,14 +188,14 @@
         {
           "id": "R05",
           "title": "Competitor Intelligence Room",
-          "status": "planned",
-          "remaining": "Scan each family's 3-10 competitor channels (YouTube Data API public metadata plus NexLev channel, outlier and transcript data where permitted), then produce a reviewable competitor blueprint for editing style, voice-over, script structure, visuals and packaging with roughly 30% reference patterns and 70% original contribution. Recommendations require human approval before they influence a style revision, narrator profile or script prompt."
+          "status": "done",
+          "evidence": "Version 0.8 (2026-10-04): Competitors page with revisioned owner observations, explicit NexLev/YouTube scans against reserved data caps (no automatic retries; 3 deliberate attempts), YouTube data display-only and purged after 30 days unless derived-metrics approval is recorded, Hermes technique blueprints with evidence refs, prompt compaction, 30/70 rule and 8-word copy guard, named review with three confirmations, revoke/supersede/outdated detection; approved blueprints feed Hermes script guidance, narrator-form prefill and a validated style draft, each still human-gated. Fake-provider tests in tests/intelligence.test.js; full suite 123 tests, 121 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Live NexLev/YouTube/Hermes verification pending owner keys."
         },
         {
           "id": "R06",
           "title": "Niche Factory",
-          "status": "planned",
-          "remaining": "Combine owner niche ideas with NexLev API/MCP niche discovery (niche overview, similar channels, outliers, channel analytics) into scored, evidence-linked niche candidates using the blueprint rubric; an approved niche can seed a new channel family. Never invent metrics; show unavailable values honestly."
+          "status": "done",
+          "evidence": "Version 0.8 (2026-10-04): Niche Factory with revisioned owner ideas (keywords, seed channels), explicit NexLev discovery (niche overview, similar channels, keyword search, labelled analytics estimates), Hermes rubric evaluation with evidence refs and 20 distinct episode ideas, score computed in code (25/25/20/15/15), hard filters forcing do-not-produce, 6-word title copy guard, separate monthly token budget, shortlist/reject/approve review and family creation from an approved niche. Fake-provider tests and browser flows passed; live NexLev MCP (OAuth) not used, REST API only; live verification pending owner keys."
         }
       ]
     },
@@ -353,7 +353,8 @@
     "2026-10-04: Visuals come from stock libraries and AI generation; the owner supplies competitor channel links (3-10 per family) and niche ideas only.",
     "2026-10-04: Competitor learning uses roughly 30% reference patterns and 70% original contribution.",
     "2026-10-04: ElevenLabs is the narration provider.",
-    "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas."
+    "2026-10-04: Niche Factory uses the NexLev API/MCP plus owner ideas.",
+    "2026-10-04: R05/R06 use the NexLev REST API (x-api-key in a protected connector slot); the OAuth MCP endpoint is not used. YouTube data about other channels is display-only and purged after 30 days unless the owner records YouTube derived-metrics approval."
   ],
-  "milestone": "Style Library & Assignment"
+  "milestone": "Competitor Intelligence & Niche Factory"
 }

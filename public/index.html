@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/app.js" defer></script></head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
@@ -9,6 +9,8 @@
       <a href="#overview" data-view="overview"><span>◫</span> Overview</a>
       <a href="#families" data-view="families"><span>▦</span> Channel families</a>
       <a href="#research" data-view="research"><span>⌁</span> Research briefs</a>
+      <a href="#competitors" data-view="competitors"><span>◎</span> Competitors</a>
+      <a href="#niches" data-view="niches"><span>✦</span> Niche Factory</a>
       <a href="#studio" data-view="studio"><span>✎</span> Content studio</a>
       <a href="#production" data-view="production"><span>◆</span> Production panel</a>
       <a href="#connections" data-view="connections"><span>⌘</span> Connections</a>
@@ -209,6 +211,14 @@
       </div>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-decision-dialog">Cancel</button><button type="submit" class="button danger">Record decision</button></div>
+    </form>
+  </dialog>
+  <dialog id="intel-dialog" class="wide-dialog" aria-labelledby="intel-heading">
+    <form id="intel-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="intel-kicker"></p><h2 id="intel-heading">Intelligence</h2></div><button class="icon-button" type="button" data-close="intel-dialog" aria-label="Close dialog">×</button></div>
+      <div id="intel-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="intel-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
     </form>
   </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
