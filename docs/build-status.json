@@ -1,7 +1,7 @@
 {
   "version": "0.10.0",
-  "updated": "2026-10-04",
-  "nextAction": "Owner installs a full FFmpeg build (for example winget install Gyan.FFmpeg), runs the readiness check, pins it and renders the first assembly proxy from a real visual board, then records the style-proof verdict. Next build milestone: P06 Editing Room timeline (revisioned tracks, single-scene repair, proxy re-render), then captions (P07) and audio (P08).",
+  "updated": "2026-10-05",
+  "nextAction": "Project moved to Claude Code on the owner's PC (read docs/HANDOFF.md). Next build milestone: the Skills Engine (docs/SKILLS-ENGINE-PLAN.md), then the P06 Editing Room on top of it. Owner actions still pending: install a full FFmpeg build, run readiness, pin it, render the first assembly proxy from real visuals and record the style-proof verdict.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",

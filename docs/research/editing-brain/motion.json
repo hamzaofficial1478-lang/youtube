@@ -1,0 +1,2036 @@
+[
+  {
+    "id": "motion.graphics-vs-footage",
+    "title": "Motion graphics vs real footage: the proves/explains rule",
+    "rooms": [
+      "motion",
+      "editing",
+      "script"
+    ],
+    "kind": "ruleset",
+    "when": "Assigning a visual medium to each beat of a documentary or explainer script, before any stock search or image generation.",
+    "summary": "Footage proves that something exists or happened and carries emotion; motion graphics explain what cannot be filmed (mechanisms, quantities, places, sequences, structure). Classify every beat by what it must prove, then choose footage, graphic or a hybrid overlay.",
+    "steps": [
+      "Split the script into beats of one spoken claim each (typically 3-8 s).",
+      "Classify each beat: CONCRETE (real place/person/object/event), ABSTRACT (mechanism, cause, rule), QUANTITATIVE (number, comparison, trend), SPATIAL (where, route), TEMPORAL (when, order), STRUCTURAL (parts, hierarchy, flow), QUOTE (someone said X), PUNCH (the line itself is the point).",
+      "Map: CONCRETE -> footage/photo (stock, archival, CC0 museum, user media); ABSTRACT -> diagram build or metaphor animation; QUANTITATIVE -> stat reveal or chart build; SPATIAL -> map route; TEMPORAL -> timeline; STRUCTURAL -> diagram or list build; QUOTE -> quote card; PUNCH -> title card / kinetic type.",
+      "If footage exists but the line also names a number, person, date or place, use a HYBRID: keep the footage and add an overlay (lower third, stat callout, keyword highlight, map inset).",
+      "If no footage can exist (prehistory, future, microscopic, counterfactual), use illustration, hand-drawn reconstruction, maps/timelines, or real artifact photos with drawn overlays; never pass an AI image off as evidence.",
+      "Choose the source in this order: supplied/owned material -> an animated version of supplied material -> an original concept metaphor -> a text-forward card only when the words themselves are the visual.",
+      "Record per beat: medium + one-word reason (proves / explains / quantifies / locates / dates / structures / quotes) in the edit plan, then pass the plan through the human approval gate."
+    ],
+    "do": [
+      "Let footage carry emotion and texture between graphic-heavy passages so the video breathes.",
+      "Give every spoken number, name, date and place a visual carrier.",
+      "Render all on-screen text with the type engine; do not rely on text baked into generated images.",
+      "For Stone-Age / deep-history topics, default to maps, timelines, CC0 museum artifact photos with doodle overlays and clearly stylised reconstructions."
+    ],
+    "avoid": [
+      "Decorative B-roll under an abstract claim (e.g., generic office footage over an explanation of compounding).",
+      "Abstract patterns, colour washes or generic motion that could belong to any script.",
+      "A full-screen graphic that stops changing for more than about 6-8 s (heuristic).",
+      "Photoreal AI reconstructions presented as if archival."
+    ],
+    "numbers": {
+      "beat_length_s": "3-8 typical",
+      "new_visual_information_every_s": "2-4 (heuristic)",
+      "max_static_fullscreen_graphic_s": "6-8 (heuristic)"
+    },
+    "checks": [
+      "Every beat has a medium and a one-word reason.",
+      "No abstract/quantitative beat is covered only by decorative B-roll.",
+      "Every spoken number/name/date/place has an overlay or graphic.",
+      "Reconstructions are stylised or labelled so they cannot be mistaken for evidence."
+    ],
+    "tags": [
+      "decision",
+      "documentary",
+      "explainer",
+      "b-roll",
+      "planning",
+      "footage"
+    ],
+    "inputs": {
+      "script_beats": "list of {text, start_s, end_s}",
+      "available_media": "stock/archival/user media found per beat",
+      "channel_style": "editing style assigned to the channel"
+    },
+    "source": "OpenMontage skills/creative/broll-planning.md (AGPL-3.0, ideas restated); flick skills/flick/references/step-2-plan.md + SKILL.md creative laws (MIT); synthesis"
+  },
+  {
+    "id": "motion.graphic-type-selector",
+    "title": "Which graphic template for which beat",
+    "rooms": [
+      "motion",
+      "editing",
+      "script"
+    ],
+    "kind": "ruleset",
+    "when": "A beat has been assigned to motion graphics and a template must be chosen.",
+    "summary": "Pick the template from the story the beat tells (one number, comparison, trend, share, process, sequence, place, list, person, quote, punchline) and fall back to the simplest type that carries the claim.",
+    "steps": [
+      "One number to emphasise -> stat reveal.",
+      "Two states or two options -> comparison split (or stat reveal with a delta badge).",
+      "3-9 data points: categories -> bar chart (horizontal when labels exceed 2 words or for rankings, sorted descending); trend over time -> line chart; parts of a whole -> donut with 3-6 slices; several headline metrics -> KPI grid of 3-6.",
+      "Fewer than 3 points -> stat card, not a chart. More than ~12 -> top 5-7 + 'Other', or split across scenes.",
+      "Process, cause, mechanism -> diagram build (flow) or metaphor animation.",
+      "Dates or ordered events -> timeline. Place or movement -> map route.",
+      "Enumerated points -> list build (3-6 items).",
+      "Person on screen -> lower third. Quotation -> quote card. Chapter opener or punchline -> title card / kinetic type.",
+      "Key term inside text, a document or a screenshot -> keyword highlight.",
+      "Story-led explanation, character acting out an idea, or no footage possible -> hand-drawn reveal / doodle."
+    ],
+    "do": [
+      "Use LR layouts for sequences and pipelines, TD for hierarchies and processes.",
+      "Keep one template per idea type within a video so viewers learn the grammar, but vary composition between neighbouring scenes."
+    ],
+    "avoid": [
+      "3D charts, dual y-axes, scatter plots in video.",
+      "Pie/donut charts with more than 6 slices.",
+      "A chart when the narration delivers only one number.",
+      "Bottom-to-top diagrams."
+    ],
+    "numbers": {
+      "bars": "5-7 ideal, 9 max",
+      "line_points": "5-12, 15 max (label start/end/peaks only)",
+      "pie_slices": "3-5, 6 max",
+      "kpi_cards": "3-6",
+      "list_items": "3-6",
+      "diagram_nodes_1080p": "15-20 max, edges 20-25",
+      "diagram_nodes_vertical": "10-12 max"
+    },
+    "checks": [
+      "Template matches the beat's story type.",
+      "Data-point counts within limits or aggregated.",
+      "Neighbouring scenes do not reuse the same template + composition back to back."
+    ],
+    "tags": [
+      "decision",
+      "templates",
+      "data-viz",
+      "diagram"
+    ],
+    "inputs": {
+      "beat": "text + classification from motion.graphics-vs-footage",
+      "data": "numbers/rows if any"
+    },
+    "source": "OpenMontage skills/creative/data-visualization.md, skills/creative/diagram-gen-usage.md, skills/core/remotion.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.visual-proof-per-beat",
+    "title": "One visual proof per beat, no two scenes alike",
+    "rooms": [
+      "motion",
+      "script",
+      "editing"
+    ],
+    "kind": "principle",
+    "when": "Turning a timestamped transcript into a motion-graphics scene plan for approval.",
+    "summary": "Every spoken line gets a concrete on-screen event that makes the idea clearer, with exact on-screen text, an ordered interaction and a transition; neighbouring scenes must differ in primary subject, scale or composition, and the video's signature device appears in at most two beats.",
+    "steps": [
+      "For each transcript line write: what is on screen; exact text on screen (or none); supplied assets used; what appears/moves in exact order; sound effect + visible trigger; transition out.",
+      "Find the live moment of the scene: something arrives one by one, is typed, clicked, counts, transforms, reveals or exits. State it explicitly; never leave rhythm for the renderer to guess.",
+      "Pick the visual source: supplied asset -> animated supplied asset -> original concept metaphor -> text-forward only if the line is the visual.",
+      "List each scene's primary visual subject. If two adjacent scenes share it, change scale (close/wide), layout (centred/thirds/split), motion register (still/busy) or palette emphasis.",
+      "Choose one signature device for the video and allow it in at most 1-2 beats (usually the climax).",
+      "Let transcript timestamps define scene timing; if text does not fit, reduce text or split the beat rather than speeding it up.",
+      "Show the full plan and wait for approval before building anything."
+    ],
+    "do": [
+      "Name scenes by content (e.g. 'salt-becomes-money'), not 'scene-3'.",
+      "Apply the deletion test: if a scene works without the signature device, the device is filler there."
+    ],
+    "avoid": [
+      "One hero visual reused under every line (branded slides, not a film).",
+      "Generic title-card layouts used as filler.",
+      "Prescribing implementation details in the creative plan."
+    ],
+    "numbers": {
+      "signature_device_max_beats": 2,
+      "plan_fields_per_scene": 7
+    },
+    "checks": [
+      "Every line has a visual proof and exact on-screen text.",
+      "No two adjacent scenes share primary subject and composition.",
+      "Plan approved before build."
+    ],
+    "tags": [
+      "planning",
+      "storyboard",
+      "approval-gate",
+      "scene-plan"
+    ],
+    "inputs": {
+      "transcript": "timestamped lines (from TTS/Whisper)",
+      "assets": "approved brand/user assets",
+      "direction": "owner's creative direction for the channel"
+    },
+    "source": "flick skills/flick/SKILL.md, references/step-2-plan.md (MIT); OpenMontage skills/meta/bespoke-composition.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.metaphor-generator",
+    "title": "Concept-to-metaphor generator for abstract ideas",
+    "rooms": [
+      "motion",
+      "script"
+    ],
+    "kind": "procedure",
+    "when": "A beat explains an abstract idea with no footage and no data (risk, inflation, trust, compounding, bottleneck).",
+    "summary": "Reduce the concept to one physical verb, give it one low-tech object, and make an agent perform the verb on the object; or 'misread' a real photographed object into something else. If the performer can be deleted without loss, it is decoration.",
+    "steps": [
+      "Name the concept's verb: stuck, leaking, compounding, sorting, filtering, pushing uphill, sinking, unravelling, splitting, extracting.",
+      "Pick one low-tech object that does that verb: press, funnel, well, jar, conveyor, ladder, bridge, scale, gate, boulder, snowball, sieve.",
+      "Make an agent perform it (mascot, hand, cursor, coin, the channel's recurring character): cranks, pushes, pours, scoops, stamps.",
+      "Deletion test: remove the performer; if the image still works as a static icon, redo the metaphor.",
+      "Pick a motion archetype: contraption (feed -> crank -> output pops), before/after load-shift, journey with pitfalls, one-to-many fan-out, push-uphill/roll-away (slow strain, fast release), well/extract (lower, scoop, lift the one good thing).",
+      "For object photos use the doodle misreadings: shape rhyme, scale flip, function taken literally, extend what it emits (steam, light, sound, time), carry it. Write one line per shot: what it is / what it becomes / who lives there / what happens.",
+      "Fix a colour grammar for the whole video: structure and actors in ink, flow/arrows in one colour only, the problem in a warning colour, the good end-state in a calm colour."
+    ],
+    "do": [
+      "Keep one recurring cast or anchor object across the video.",
+      "Put the payoff in the last third of the shot.",
+      "Stage on a plain page with generous negative space."
+    ],
+    "avoid": [
+      "Busy or cute mascots that steal focus from the idea.",
+      "Changing what a colour means mid-video.",
+      "Metaphors that need a caption to be understood."
+    ],
+    "numbers": {
+      "negative_space_min_pct": 35,
+      "subject_frame_share_pct": "40-60",
+      "payoff_window": "last 30% of the shot",
+      "push_uphill_easing": "slow ease-in strain, then fast ease-in roll-away"
+    },
+    "checks": [
+      "Performer passes the deletion test.",
+      "Metaphor readable with sound off.",
+      "Colour meanings consistent with the video's grammar."
+    ],
+    "tags": [
+      "metaphor",
+      "explainer",
+      "storyboard",
+      "hand-drawn",
+      "concept"
+    ],
+    "inputs": {
+      "concept": "the abstract idea in one sentence",
+      "recurring_cast": "optional mascot/anchor"
+    },
+    "source": "OpenMontage skills/creative/ink-theater.md + ink-theater/README.md (AGPL-3.0, ideas restated); alesha-tools skills/hand-drawn-canvas-animation/references/doodle.md (MIT)"
+  },
+  {
+    "id": "motion.easing-curves",
+    "title": "Easing curves by role (formulas + cubic-bezier)",
+    "rooms": [
+      "motion"
+    ],
+    "kind": "formula",
+    "when": "Choosing the interpolation curve for any animated property.",
+    "summary": "Ease by role: decelerate into place for entrances, accelerate away for exits, symmetric slow-in/out for camera and position-to-position moves, overshoot only for pops, linear only for constant processes.",
+    "steps": [
+      "Local progress: sm(a, b, t, e) = e(clamp((t - a) / (b - a), 0, 1)). Always clamp before easing.",
+      "easeOutCubic(u) = 1 - (1 - u)^3 -> default text/element entrance.",
+      "easeInCubic(u) = u^3 -> exits.",
+      "easeInOutCubic(u) = u < .5 ? 4u^3 : 1 - (-2u + 2)^3 / 2 -> layout moves, scale changes, wipes.",
+      "easeInOutSine(u) = -(cos(pi*u) - 1) / 2 -> cameras, slow drifts (gentlest).",
+      "easeOutQuint(u) = 1 - (1 - u)^5 -> hard stop that still lands soft.",
+      "easeOutExpo(u) = u >= 1 ? 1 : 1 - 2^(-10u) -> snaps, count-up landings (last digits slow down).",
+      "easeOutBack(u, s=1.70158) = 1 + (s+1)(u-1)^3 + s(u-1)^2 -> pops with ~10% overshoot (badges, pins, nodes).",
+      "For a move through several keys, ease the whole path once (arc-length or Catmull-Rom) instead of easing each segment, which creates a stop at every key."
+    ],
+    "do": [
+      "Use 2-4 distinct easings per piece, one per role, applied consistently.",
+      "Make exits roughly half the length of entrances.",
+      "Use linear for particles, conveyors, tickers, scroll loops and progress that represents real time."
+    ],
+    "avoid": [
+      "Linear easing on text or UI-like elements.",
+      "Back/elastic easing on data values (bars or counters would show wrong values mid-move).",
+      "Default ease-in-out on every keyframe of a continuous action."
+    ],
+    "numbers": {
+      "easeOutCubic": "cubic-bezier(0.33, 1, 0.68, 1)",
+      "easeOutQuart": "cubic-bezier(0.25, 1, 0.5, 1)",
+      "easeInCubic": "cubic-bezier(0.32, 0, 0.67, 0)",
+      "easeInOutCubic": "cubic-bezier(0.65, 0, 0.35, 1)",
+      "easeInOutQuad": "cubic-bezier(0.45, 0, 0.55, 1)",
+      "easeInOutSine": "cubic-bezier(0.37, 0, 0.63, 1)",
+      "easeOutExpo": "cubic-bezier(0.16, 1, 0.3, 1)",
+      "easeOutBack": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "easeOutCubic_at_half_time": 0.875
+    },
+    "checks": [
+      "Every animated property declares its easing.",
+      "No data value overshoots its target.",
+      "No linear text motion."
+    ],
+    "tags": [
+      "easing",
+      "timing",
+      "formula",
+      "bezier"
+    ],
+    "inputs": {
+      "property": "what animates",
+      "role": "entrance | exit | move | camera | pop | process"
+    },
+    "source": "alesha-tools skills/hand-drawn-canvas-animation/assets/core.js easing section (MIT); OpenMontage skills/creative/typography.md (AGPL-3.0, ideas restated; bezier constants are the standard easings.net values)"
+  },
+  {
+    "id": "motion.spring-physics",
+    "title": "Closed-form springs (and why heavy Remotion damping is a slow drift)",
+    "rooms": [
+      "motion"
+    ],
+    "kind": "formula",
+    "when": "An element with 'mass' should arrive organically (card landing, badge pop, letter drop) and the render must stay seek-safe.",
+    "summary": "Use an analytic damped-spring step response as a pure function of time, parameterised by damping ratio and frequency. Remotion-style configs with damping 150-200 are heavily overdamped (zeta 4-10) and take 2.8-6 s to reach 95%, which is why they are paired with a separate fast opacity ramp.",
+    "steps": [
+      "omega = 2*pi*f. If zeta < 1: x(t) = 1 - e^(-zeta*omega*t) * (cos(wd*t) + (zeta*omega/wd) * sin(wd*t)), wd = omega*sqrt(1 - zeta^2). If zeta = 1: x(t) = 1 - (1 + omega*t) e^(-omega*t). x(t <= 0) = 0.",
+      "Value = from + (to - from) * x(t - t0).",
+      "Convert a Remotion config (mass 1): omega = sqrt(stiffness), zeta = damping / (2*sqrt(stiffness)).",
+      "Pair a spring transform with an independent 8-10 frame opacity ramp so the arrival reads even when the spring tail is long.",
+      "Delay secondary springs (follow-through) by 2-4 frames; keep them smaller than the main action."
+    ],
+    "do": [
+      "Use springs for things that arrive and settle.",
+      "Prefer 'settle' (zeta ~0.75) for UI-like cards and 'pop' (zeta ~0.5) only for small accents."
+    ],
+    "avoid": [
+      "Springs on rigid, motor-driven or data motion.",
+      "The same spring on every element.",
+      "Per-frame numerical integration with stored state (breaks seeking)."
+    ],
+    "numbers": {
+      "preset_snap": "zeta 1.0, f 2.5 Hz (k 246.7, c 31.4): no overshoot, 95% at 0.30 s",
+      "preset_settle": "zeta 0.75, f 1.6 Hz (k 101, c 15.1): 2.8% overshoot, 95% at 0.31 s, within 2% at 0.57 s",
+      "preset_pop": "zeta 0.5, f 2.0 Hz (k 158, c 12.6): 16% overshoot, settles 0.64 s",
+      "preset_bouncy": "zeta 0.35, f 2.4 Hz: 31% overshoot, settles 0.73 s",
+      "remotion_damping200_stiffness100": "zeta 10: 50% at 1.39 s, 95% at 5.98 s (drift)",
+      "remotion_damping150_stiffness160": "zeta 5.9: 95% at 2.80 s",
+      "remotion_damping82_stiffness340": "zeta 2.2: 95% at 0.70 s (snappy letter drop)",
+      "remotion_damping13_stiffness135": "zeta 0.56: 12% overshoot",
+      "remotion_damping8_stiffness170": "zeta 0.31: 36% overshoot",
+      "follow_through_delay_frames": "2-4"
+    },
+    "checks": [
+      "Spring is evaluated from absolute time, not accumulated state.",
+      "Overshoot never pushes text outside the safe area.",
+      "Rendered frame k is identical after seeking backward."
+    ],
+    "tags": [
+      "spring",
+      "physics",
+      "easing",
+      "seek-safe"
+    ],
+    "inputs": {
+      "zeta": "damping ratio",
+      "f_hz": "natural frequency",
+      "t0": "start time"
+    },
+    "source": "alesha-tools assets/core.js spring()/settle() (MIT); flick skills/flick/saved-animations/*.tsx spring configs (MIT); OpenMontage ink-theater/README.md (AGPL-3.0, idea: closed-form springs are seek-safe); numbers computed for this report"
+  },
+  {
+    "id": "motion.reading-time",
+    "title": "Reading-time formulas for on-screen text",
+    "rooms": [
+      "motion",
+      "captions",
+      "qc"
+    ],
+    "kind": "formula",
+    "when": "Deciding how long any text must stay fully settled and readable.",
+    "summary": "Hold time is measured from when text stops moving until its exit starts, and is computed from word or character count with a floor. When the beat is too short, cut or split the text; never make readable text flash faster.",
+    "steps": [
+      "Count words (whitespace tokens) or characters including spaces.",
+      "Choose the rate by context: title/statement card 3.2 words/s; sentence overlay 0.3 s per word; dense text read without narration 13 chars/s; captions echoing narration 21 chars/s.",
+      "hold = max(floor, reaction + words / rate). Reaction ~0.35 s when text appears in a new place. Floors: 1.2 s for a sentence or card, 0.8 s for a short label.",
+      "Add time for things the viewer must retain: ~0.3 s per multi-digit number or unfamiliar proper noun (heuristic).",
+      "Scene length must be >= entrance + hold + exit; if not, shorten or split the text.",
+      "For sequential reveals, hold each item long enough to read, then hold the complete set."
+    ],
+    "do": [
+      "Compute holds in code from the actual strings.",
+      "Let transitions overlap only the non-reading parts of a scene."
+    ],
+    "avoid": [
+      "Holding a 1-2 word card longer than ~2 s without motion (feels stalled).",
+      "Counting animation time as reading time."
+    ],
+    "numbers": {
+      "owner_title_card_hold_s": "max(1.2, 0.35 + words/3.2) -> 1-2 words 1.2, 3: 1.29, 4: 1.6, 5: 1.91, 6: 2.23",
+      "owner_formula_break_even_words": 2.72,
+      "sentence_overlay": "0.3 s/word, min 1.2 s",
+      "short_label_settled_s": 0.8,
+      "overlay_dwell_chars_per_s": 13,
+      "rule_of_thumb": "3 s per 63 characters; a 30-char line >= 2.3 s",
+      "caption_chars_per_s": 21,
+      "caption_duration_s": "1-7",
+      "youtube_reading_wpm": "160-180 (educational 120-140)",
+      "chart_hold_after_build_s": ">= 3",
+      "title_card_without_vo_s": "3-6 on screen"
+    },
+    "checks": [
+      "Every text block has a computed hold.",
+      "Scene duration >= in + hold + out for every block.",
+      "No text exits before its hold completes."
+    ],
+    "tags": [
+      "reading",
+      "timing",
+      "typography",
+      "captions",
+      "formula"
+    ],
+    "inputs": {
+      "text": "string(s) on screen",
+      "context": "card | overlay | caption | label | quote",
+      "has_voiceover": "bool"
+    },
+    "source": "owner brief (title-card formula); flick skills/flick/references/step-2-plan.md (MIT); OpenMontage skills/creative/typography.md, data-visualization.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.entrance-exit-timing",
+    "title": "Entrance, exit and stagger timings",
+    "rooms": [
+      "motion"
+    ],
+    "kind": "ruleset",
+    "when": "Setting durations, travel distances and staggers for elements entering or leaving.",
+    "summary": "Short, decelerating entrances with small travel; faster accelerating exits; staggered arrivals so the eye is led in reading order; everything on screen by ~70% of the scene so the rest is hold or payoff.",
+    "steps": [
+      "Fade-only entrance 0.3-0.5 s; slide/scale entrance 0.5-1.0 s; multi-element kinetic sequence 1-2 s total.",
+      "Travel 16-40 px at 1080p (flick uses 18-24 px; the owner's title card uses 40 px); scale-in from 0.82-0.90 to 1.",
+      "Separate opacity from transform: opacity reaches 1 in 8-10 frames (0.27-0.33 s at 30 fps) while the transform settles.",
+      "Stagger related elements 0.2-0.4 s apart (flick reveal: elements start at frames 10, 16, 18, 28, 38, 50); letters 3 frames (0.1 s); chart bars 0.1 s; list/grid reveals with a lag of 10-20% of each element's duration.",
+      "Annotations/value labels 0.2-0.3 s; highlighting a chart element 0.3-0.5 s.",
+      "Exits 0.25-0.5 s with ease-in, about half the entrance; group exits may stagger 0.05 s.",
+      "During a reading hold allow only subtle motion (<= 2% scale drift or a slow camera)."
+    ],
+    "do": [
+      "Animate transform and opacity only for text.",
+      "Lead the eye: title, then supporting text, then details."
+    ],
+    "avoid": [
+      "Everything entering at once.",
+      "Exits slower than entrances.",
+      "Large travel distances (> 80 px) for text, which read as sliding panels."
+    ],
+    "numbers": {
+      "fade_s": "0.3-0.5",
+      "slide_scale_s": "0.5-1.0",
+      "kinetic_sequence_s": "1-2",
+      "travel_px_1080p": "16-40",
+      "scale_from": "0.82-0.90",
+      "opacity_ramp_frames_30fps": "8-10",
+      "stagger_s": "0.2-0.4",
+      "letter_stagger_frames": 3,
+      "bar_stagger_s": 0.1,
+      "label_s": "0.2-0.3",
+      "exit_s": "0.25-0.5",
+      "lower_third_in_s": "<= 1-2",
+      "lower_third_out_s": "0.5-1",
+      "all_on_screen_by": "70% of scene"
+    },
+    "checks": [
+      "No two primary elements share a start frame unless intended.",
+      "Exit duration <= entrance duration.",
+      "All elements settled by 70% of scene length."
+    ],
+    "tags": [
+      "timing",
+      "entrance",
+      "exit",
+      "stagger"
+    ],
+    "inputs": {
+      "elements": "ordered list of things that appear"
+    },
+    "source": "flick skills/flick/saved-animations/website-resource-reveal/SceneKarpathyGithubRepoHighlight.tsx (MIT); alesha-tools references/doodle.md draw-on budget (MIT); OpenMontage skills/creative/typography.md, data-visualization.md, manim-usage.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.pacing-beat-sheet",
+    "title": "Beat sheet and shot-length norms",
+    "rooms": [
+      "motion",
+      "editing",
+      "script"
+    ],
+    "kind": "ruleset",
+    "when": "Laying out a motion sequence or graphic-heavy chapter before animating.",
+    "summary": "Write a beat-sheet table first (start, duration, what the viewer notices, main action, camera, sound cue) and size each beat from shot-type norms; snap cues to the frame or music grid.",
+    "steps": [
+      "Write the beat sheet as a table above the timeline code: start, duration, scene, viewer focus, main action, camera, sound cue.",
+      "Size beats from the norms below; a chart scene needs build + hold.",
+      "Snap cue times to frames; for music-driven edits use the beat grid (120 bpm -> 0.5 s per beat; shot lengths in multiples of 0.5 s).",
+      "Never put two transition devices back to back; use a flash at most twice per film; a style/look change lands on a cut and lasts >= 1 s.",
+      "Give each action time to read; finish the hardest/representative shot first, review it, then build the rest."
+    ],
+    "do": [
+      "Keep picture and sound cues on one timeline so they cannot drift."
+    ],
+    "avoid": [
+      "Uniform scene lengths for every beat.",
+      "Starting the full build before one representative scene is approved."
+    ],
+    "numbers": {
+      "establishing_s": "2-2.5",
+      "interlude_s": "0.6-1.2",
+      "action_s": "1.5-3",
+      "montage_card_s": "0.25 (4 per second)",
+      "insert": "2 drawn frames",
+      "closing_card_s": ">= 1.5, held until readable",
+      "explainer_graphic_scene_s": "4-6",
+      "chart_scene_s": ">= 5 (2-4 build + 3-5 hold)",
+      "hero_title_s": "~4",
+      "graphic_scenes_per_45_50s": "8-10",
+      "doodle_cut_every_s": "1.5-2.5",
+      "term_or_equation_write_s": "1.5-2.0",
+      "shape_create_s": "0.8-1.2",
+      "wait_after_key_reveal_s": "1.0-2.0",
+      "fast_punctuation_s": "0.3-0.5",
+      "max_new_elements_at_once": "3-4"
+    },
+    "checks": [
+      "Beat sheet exists before code.",
+      "No back-to-back transition devices.",
+      "Every chart scene >= 5 s."
+    ],
+    "tags": [
+      "pacing",
+      "beat-sheet",
+      "timing",
+      "editing"
+    ],
+    "inputs": {
+      "beats": "list from the scene plan",
+      "music_bpm": "optional"
+    },
+    "source": "alesha-tools references/scenes.md, references/reference-films.md, SKILL.md workflow (MIT); OpenMontage skills/core/remotion.md, skills/creative/manim-usage.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.type-hierarchy",
+    "title": "Typographic hierarchy for 1080p video",
+    "rooms": [
+      "motion",
+      "captions",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "Setting font sizes, weights, line lengths and families for any on-screen text.",
+    "summary": "Few sizes with large steps, one or two families, tight display setting, generous body leading, strict line/character limits and contrast at or above 4.5:1 (aim 7:1).",
+    "steps": [
+      "Define a size scale in tokens: hero 120-160, title 60-90, body 40-60, label 28-36, chart axis/value >= 24-28, citation 16-18 px (multiply by 2 for 4K).",
+      "Title at least 1.5x body. Lower third: name 48-60 bold, role 36-44 regular.",
+      "Display line-height 1.0-1.1 with slightly negative tracking (about -1 to -2%); body line-height ~1.3; all-caps labels get +5-10% tracking (heuristic).",
+      "Limit overlays to 3 lines and ~30 characters per line; captions 2 lines, 42 characters per line.",
+      "Use 1-2 families: a bold display/sans for headlines and a neutral sans for body; serif only for editorial/cinematic cards; never script fonts in motion.",
+      "Balance multi-line breaks (no single-word last line on 3+ word blocks)."
+    ],
+    "do": [
+      "Left-align multi-line reading text; centre only 1-2 line statements.",
+      "Emphasise with colour OR weight, not both at once."
+    ],
+    "avoid": [
+      "Reading text under 40 px at 1080p.",
+      "More than two families.",
+      "Centred paragraphs longer than two lines."
+    ],
+    "numbers": {
+      "hero_px": "120-160",
+      "title_px": "60-90",
+      "body_px": "40-60",
+      "lower_third_name_px": "48-60",
+      "lower_third_role_px": "36-44",
+      "chart_title_px": "36-40 (>= 32)",
+      "chart_axis_value_px": "28 (>= 24)",
+      "annotation_px": ">= 20-24",
+      "citation_px": "16-18",
+      "subtitle_px": ">= 42",
+      "overlay_max_lines": 3,
+      "overlay_max_chars_per_line": 30,
+      "caption_max_chars_per_line": 42,
+      "families_max": 2,
+      "contrast_min": "4.5:1",
+      "contrast_target": "7:1",
+      "title_to_body_ratio_min": 1.5
+    },
+    "checks": [
+      "Every text block's px size >= its role minimum.",
+      "Line and character limits respected.",
+      "Contrast computed from palette tokens (and sampled over footage)."
+    ],
+    "tags": [
+      "typography",
+      "hierarchy",
+      "legibility",
+      "contrast"
+    ],
+    "inputs": {
+      "tokens": "font families, weights, size scale"
+    },
+    "source": "OpenMontage skills/creative/typography.md, skills/creative/data-visualization.md (AGPL-3.0, ideas restated); owner brief; synthesis"
+  },
+  {
+    "id": "motion.safe-areas-grid",
+    "title": "Safe areas, margins and layout grid",
+    "rooms": [
+      "motion",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "Placing any text or key graphic on a 16:9 or 9:16 frame.",
+    "summary": "All text stays inside a declared safe box (owner standard: 144 px on every side at 1920x1080); layouts sit on a 12-column grid inside that box; positions are expressed relative to W/H/CX/CY, never as literal pixels.",
+    "steps": [
+      "Declare SAFE in tokens. Owner standard 144 px -> content box x 144-1776, y 144-936 (1632x792). Broadcast title-safe (10%) is 192/108 px; action-safe (5%) is 96/54 px.",
+      "Grid: 12 columns across 1632 px with 24 px gutters -> 114 px columns; 8 px baseline for vertical rhythm.",
+      "Use logical units (short side = 1080) and CX/CY/W/H in code so a 9:16 render does not break; recompose (not just resize) for other aspect ratios.",
+      "Vertical 1080x1920: a centred 900x1400 box is safe across TikTok/Reels/Shorts; Shorts dead zones are ~120 px top, ~300 px bottom, ~96 px right.",
+      "Keep the bottom band clear where burned captions sit; reserve the end-screen area in the last 5-20 s of long-form videos (YouTube end screens).",
+      "Check bounds at the extreme of every animation (entrance offset, overshoot, scale), not only at rest."
+    ],
+    "do": [
+      "Hang text on the left margin line for editorial layouts.",
+      "Output even dimensions (yuv420p requires them)."
+    ],
+    "avoid": [
+      "Hard-coded 540/960 literals in scene code.",
+      "Overshoot or entrance offsets that push glyphs past the margin."
+    ],
+    "numbers": {
+      "owner_safe_margin_px": 144,
+      "content_box_px": "1632x792",
+      "title_safe_px": "192 H / 108 V",
+      "action_safe_px": "96 H / 54 V",
+      "grid_columns": 12,
+      "gutter_px": 24,
+      "column_px": 114,
+      "baseline_px": 8,
+      "vertical_universal_safe_px": "900x1400",
+      "shorts_dead_zones_px": "top 120, bottom 300, right 96"
+    },
+    "checks": [
+      "Every glyph bounding box inside the safe box at every frame.",
+      "No literal centre coordinates in scene code.",
+      "9:16 variants reviewed as compositions."
+    ],
+    "tags": [
+      "layout",
+      "grid",
+      "safe-area",
+      "vertical"
+    ],
+    "inputs": {
+      "aspect": "16:9 | 9:16 | 1:1",
+      "safe_margin_px": "default 144"
+    },
+    "source": "owner brief; OpenMontage skills/creative/typography.md (AGPL-3.0, ideas restated); alesha-tools references/architecture.md format/units (MIT); synthesis (grid)"
+  },
+  {
+    "id": "motion.accent-discipline",
+    "title": "Accent-colour discipline",
+    "rooms": [
+      "motion",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "Assigning colour to text, data and diagrams in any graphic.",
+    "summary": "One accent, one meaning, one use per screen: the accent marks the single thing to remember; everything else is ink or muted. Colour meanings stay fixed for the whole video and colour is never the only carrier of meaning.",
+    "steps": [
+      "Tokens: bg, ink, muted (ink at 50-60%), accent; optional semantic warning and positive colours.",
+      "Exactly one accent element per screen: one accent word per title card, one highlighted bar, one active diagram step.",
+      "Push non-focus data to ~30% opacity or the muted colour.",
+      "Create depth with tints/shades of the same hue, never a new hue.",
+      "Fix semantic meaning for the video (e.g., flow = one colour only, problem = warning colour, end-state = positive colour).",
+      "Check accent against background AND against ink. Owner palette: accent #c8ff3d vs ink #f4f2ec is 1.05:1, so the accent word differs by hue/chroma only; fine for emphasis, but for critical distinctions add weight, underline or position.",
+      "Text sitting on an accent fill uses the background colour (#0b0b0f on #c8ff3d = 16.68:1)."
+    ],
+    "do": [
+      "Spend the accent on the noun or number that carries the claim.",
+      "Use 4-5 chart colours maximum per video, derived from the palette."
+    ],
+    "avoid": [
+      "Two accent elements competing on one screen.",
+      "Accent used decoratively (borders, bullets, dividers).",
+      "Red/green as the only distinction."
+    ],
+    "numbers": {
+      "owner_contrast_ink_bg": "17.55:1",
+      "owner_contrast_accent_bg": "16.68:1",
+      "owner_contrast_accent_ink": "1.05:1",
+      "bg_on_accent": "16.68:1",
+      "non_focus_opacity": 0.3,
+      "chart_colours_max": "4-5",
+      "accent_elements_per_screen": 1
+    },
+    "checks": [
+      "Count accent-coloured elements per still = 1.",
+      "Colour meanings consistent across scenes.",
+      "Critical distinctions also encoded by shape/label/position."
+    ],
+    "tags": [
+      "colour",
+      "accent",
+      "palette",
+      "accessibility"
+    ],
+    "inputs": {
+      "palette": "bg, ink, accent (+ semantic colours)"
+    },
+    "source": "owner brief; OpenMontage skills/creative/data-visualization.md, skills/creative/ink-theater.md (AGPL-3.0, ideas restated); alesha-tools references/palettes.md (MIT); contrast computed for this report"
+  },
+  {
+    "id": "motion.text-over-footage",
+    "title": "Legible text over footage",
+    "rooms": [
+      "editing",
+      "motion",
+      "captions"
+    ],
+    "kind": "ruleset",
+    "when": "Placing titles, lower thirds, callouts or captions over stock/archival video.",
+    "summary": "Dim and slightly desaturate the footage instead of lowering its opacity, add a local scrim sized to the text, and give text a soft shadow or thin stroke; prepare stock so it fills the frame.",
+    "steps": [
+      "Probe the source resolution first; scale-to-cover and crop (never pad) and sharpen upscaled stock: scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,unsharp=3:3:0.6.",
+      "Re-encode stock with a keyframe every second before compositing (-r 30 -g 30 -keyint_min 30 -sc_threshold 0 -movflags +faststart) so seeks are exact.",
+      "Dim footage behind text to brightness ~0.55 and saturation ~0.85 (FFmpeg: eq=brightness/saturation or a colour overlay).",
+      "Add a local gradient scrim behind the text block (about rgba(7,7,12,0.5)) or a 70-80% dark box; for text-heavy screens a 30-50% full-frame darkening.",
+      "Give light text a soft shadow (0 2px 24px rgba(0,0,0,0.8)) or a 2-4 px dark stroke.",
+      "Sample several frames of the shot and compute contrast on the worst one."
+    ],
+    "do": [
+      "Keep the footage visibly alive behind the text.",
+      "Size scrims to the text block, not the frame."
+    ],
+    "avoid": [
+      "Lowering video opacity into grey mush.",
+      "Letterboxed low-res stock passed off as 'moody'.",
+      "Text over the busiest region of the shot when a calmer region exists."
+    ],
+    "numbers": {
+      "footage_brightness": 0.55,
+      "footage_saturation": 0.85,
+      "box_opacity": "0.70-0.80",
+      "fullframe_darken": "0.30-0.50",
+      "stroke_px": "2-4",
+      "keyframe_interval_frames_30fps": 30
+    },
+    "checks": [
+      "Worst-frame contrast >= 4.5:1.",
+      "No padded/letterboxed stock inside a 1920x1080 frame.",
+      "Stock re-encoded with dense keyframes."
+    ],
+    "tags": [
+      "footage",
+      "legibility",
+      "ffmpeg",
+      "stock",
+      "scrim"
+    ],
+    "inputs": {
+      "clip": "source video",
+      "text_block": "position and size"
+    },
+    "source": "OpenMontage skills/core/hyperframes.md (gotchas section), skills/creative/typography.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.captions-vs-onscreen-text",
+    "title": "Captions vs on-screen text: one role per phrase",
+    "rooms": [
+      "captions",
+      "motion",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "A scene has both burned captions and designed on-screen text.",
+    "summary": "Decide per scene whether text echoes narration (caption) or adds meaning (graphic: a number, name, translation, attribution). Never show the same words twice; keep the caption band clear of graphics.",
+    "steps": [
+      "Mark every text element as CAPTION (echo) or GRAPHIC (adds meaning).",
+      "Where a graphic displays narrated words verbatim, suppress burned captions for that span.",
+      "Reserve the bottom caption band (~20% of height) when captions are burned; lift lower thirds above it.",
+      "Drive word-level highlight from TTS/Whisper word timestamps; switch colour at each word's start frame.",
+      "Caption blocks: 1-7 s, 2 lines max, 42 chars per line, 21 chars/s, 2-frame gap between blocks."
+    ],
+    "do": [
+      "Use captions to add names, numbers and translations the audio cannot show."
+    ],
+    "avoid": [
+      "Doubled phrases (caption + identical title).",
+      "Captions colliding with lower thirds or charts."
+    ],
+    "numbers": {
+      "caption_px_1080p": ">= 42",
+      "caption_lines_max": 2,
+      "caption_chars_per_line": 42,
+      "caption_rate_chars_per_s": 21,
+      "caption_duration_s": "1-7",
+      "gap_frames": 2,
+      "bottom_margin_px": ">= 60",
+      "box_opacity": "0.70-0.80",
+      "sync_tolerance_frames": 3
+    },
+    "checks": [
+      "No phrase appears simultaneously as caption and graphic.",
+      "No overlap between caption band and graphic text boxes."
+    ],
+    "tags": [
+      "captions",
+      "subtitles",
+      "typography",
+      "accessibility"
+    ],
+    "inputs": {
+      "captions": "word-timed transcript",
+      "graphics": "per-scene text elements"
+    },
+    "source": "OpenMontage skills/meta/bespoke-composition.md, skills/creative/typography.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.title-cards-canvas",
+    "title": "Silent title-card video (Canvas2D frame-by-frame + ffmpeg)",
+    "rooms": [
+      "motion",
+      "editing",
+      "qc"
+    ],
+    "kind": "template",
+    "when": "Producing a 15-20 s silent sequence of 4-6 short statements (cold open, chapter opener, end card, Shorts hook) rendered deterministically in headless Chromium.",
+    "summary": "Each statement is a card that fades in while rising 40 px over 0.5 s, holds for max(1.2, 0.35 + words/3.2) s and fades out over 0.25 s; exactly one accent-coloured word per card; all text inside a 144 px safe margin. index.html exposes a pure window.renderFrame(t); render.mjs captures PNG frames over http; ffmpeg encodes with the fixed command.",
+    "steps": [
+      "FILES: index.html (canvas id 'c', width 1920, height 1080), tokens.js (all constants + LINES), render.mjs (headless harness), package.json, fonts/SpaceGrotesk-Bold.woff2 + fonts/OFL.txt, frames/ and out/ created at render time.",
+      "VALIDATE INPUTS: 4 <= lines <= 6; each line 1-6 words after removing markers; exactly one *accent* per line. If a line has no marker, propose the last non-stopword (skip the/a/an/of/to/in/on/and/or/is/was/are/for) and require approval; reject lines with 2+ markers.",
+      "TIMING: for card k (0-based) hold_k = max(1.2, 0.35 + words_k/3.2); len_k = 0.5 + hold_k + 0.25; start_0 = 0; start_(k+1) = start_k + len_k. Cards are strictly sequential; between cards only background shows (none by default).",
+      "FIT TO 15-20 s: natural = sum(len_k). If natural >= 15, DURATION = natural. If natural < 15, stretch holds only (never the 0.5/0.25 s motion): s = (15 - 0.75*n)/sum(hold_k), hold_k *= s, recompute starts; report s and warn when s > 1.6 (suggest more lines or words). natural > 20 cannot occur within the input limits (max 17.85 s); assert it.",
+      "QUANTISE: DURATION = ceil(total*FPS)/FPS; N = DURATION*FPS as an integer. Expose window.DURATION and window.FPS = 30.",
+      "TOKENS.JS: window.TOKENS = { W, H, FPS, SAFE, PALETTE, FONT_FAMILY: 'Space Grotesk', FONT_WEIGHT: 700, FONT_URL, SIZE_MAX: 144, SIZE_MIN: 96, LINE_HEIGHT: 1.05, TRACKING: -2, IN: 0.5, RISE: 40, OUT: 0.25, ALIGN, LINES }. No logic beyond constants.",
+      "INDEX.HTML HEAD: @font-face { font-family: 'Space Grotesk'; src: url('fonts/SpaceGrotesk-Bold.woff2') format('woff2'); font-weight: 700; font-display: block; } body { margin: 0; background: #0b0b0f } canvas { display: block }. No CSS animation or transition anywhere.",
+      "BOOT (async, runs once): await document.fonts.load(\"700 144px 'Space Grotesk'\", allLinesText); require document.fonts.check(...) === true; fallback test: width of the sample in \"700 144px 'Space Grotesk', monospace\" must differ from \"700 144px monospace\", else set window.RENDER_ERROR. Then precompute layout + timeline, set window.READY = true.",
+      "LAYOUT PER CARD (pure, precomputed): ctx.font = `700 ${size}px \"Space Grotesk\"`, ctx.letterSpacing = '-2px', textBaseline 'alphabetic'. Try size 144: if the whole line fits 1632 px use one line; else split into two lines at the word boundary minimising the wider line (balanced, no widow). If still too wide, shrink by 4 px and retry down to 96 px; below that reject the input. Block height = lines*size*1.05, vertically centred in the content box (y centre 540); x = 144 (left) or centred at 960.",
+      "ACCENT SEGMENTS: for each line store prefix / accent / suffix strings and x offsets measured cumulatively from the line start: xAccent = x0 + measureText(prefix).width (prefix includes its trailing space), xSuffix = x0 + measureText(prefix + accent).width. Draw three fillText calls (ink, accent, ink) so no colour bleeds by overdrawing.",
+      "RENDERFRAME(t): reset state (setTransform(1,0,0,1,0,0), globalAlpha 1, globalCompositeOperation 'source-over'); fillStyle bg, fillRect(0,0,1920,1080) (opaque, never clearRect). Find card k with start_k <= t < start_k + len_k; if none, return after the background. u = t - start_k. If u < 0.5: p = easeOutCubic(u/0.5), alpha = p, dy = 40*(1-p). Else if u < 0.5 + hold_k: alpha = 1, dy = 0. Else: q = (u - 0.5 - hold_k)/0.25, alpha = 1 - clamp(q,0,1), dy = 0. Draw segments with globalAlpha = alpha at y + dy.",
+      "RENDER.MJS (puppeteer, as in the brief): start a node:http static server on 127.0.0.1:0 for the folder (MIME: .html text/html, .js text/javascript, .woff2 font/woff2); launch headless Chromium; viewport 1920x1080, deviceScaleFactor 1; goto http://127.0.0.1:PORT/index.html; waitForFunction('window.READY === true || !!window.RENDER_ERROR', 60 s); abort on RENDER_ERROR, pageerror or console error.",
+      "STILLS FIRST (--stills): for each card render t = start_k + 0.5 + hold_k/2 into stills/card_<k>.png; also export the precomputed layout bounds (window.META) and assert them; stop for review.",
+      "FULL RENDER: delete any old frames; for i in 0..N-1 evaluate `(renderFrame(${i}/FPS), document.getElementById('c').toDataURL('image/png'))`, decode base64, write frames/f%05d.png (5-digit, zero-based). Write into a staging folder and rename on success so a shorter re-render cannot inherit stale frames.",
+      "ENCODE exactly: ffmpeg -y -framerate 30 -i frames/f%05d.png -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart out/title_cards.mp4",
+      "PACKAGE.JSON: { name: 'title-cards', private: true, type: 'module', scripts: { stills: 'node render.mjs --stills', render: 'node render.mjs', encode: '<the ffmpeg command>' }, dependencies: { puppeteer: '^23' } }. In the zero-dependency app keep index.html and tokens.js unchanged and swap render.mjs for the built-in CDP harness (motion.cdp-frame-harness)."
+    ],
+    "do": [
+      "Review stills before the full render.",
+      "Pass an integer frame index and compute t = i/FPS in the page.",
+      "Serve over http so the font loads and the canvas is never tainted.",
+      "Keep every number in tokens.js so channel styles can swap palettes/fonts without touching logic."
+    ],
+    "avoid": [
+      "Math.random, Date.now, performance.now, new Date(), setTimeout, setInterval, requestAnimationFrame, CSS @keyframes/transition anywhere in the page.",
+      "Google Fonts hot-links or unicode-range subset woff2 files (silent fallback).",
+      "clearRect/transparent backgrounds (PNG alpha + yuv420p surprises).",
+      "Zero or multiple accent words on a card; overlapping cards.",
+      "Changing the encode command (the brief fixes it)."
+    ],
+    "numbers": {
+      "W": 1920,
+      "H": 1080,
+      "FPS": 30,
+      "SAFE_MARGIN_PX": 144,
+      "content_box": "x 144-1776, y 144-936 (1632x792)",
+      "IN_S": 0.5,
+      "RISE_PX": 40,
+      "OUT_S": 0.25,
+      "HOLD_S": "max(1.2, 0.35 + words/3.2)",
+      "card_total_s_by_words": "1: 1.95, 2: 1.95, 3: 2.0375, 4: 2.35, 5: 2.6625, 6: 2.975",
+      "natural_total_s": "7.8 (4 cards of <= 2 words) to 17.85 (6 cards of 6 words)",
+      "formula_break_even_words": 2.72,
+      "stretch_rule": "if natural < 15 s: hold_k *= s, s = (15 - 0.75*n) / sum(hold_k); warn if s > 1.6",
+      "FONT_SIZE_PX": "start 144, shrink in 4 px steps to min 96; max 2 lines",
+      "LINE_HEIGHT": 1.05,
+      "LETTER_SPACING_PX": -2,
+      "EASE_IN": "easeOutCubic on opacity and y (brief does not specify; default chosen)",
+      "EASE_OUT": "linear opacity, no movement",
+      "mid_entrance_check": "at start + 0.25 s: opacity 0.875, offset 5 px",
+      "contrast": "ink/bg 17.55:1, accent/bg 16.68:1, accent/ink 1.05:1",
+      "frames": "N = DURATION*FPS (DURATION rounded up to whole frames); frame i renders t = i/30; files f00000.png .. f(N-1)",
+      "encode": "ffmpeg -y -framerate 30 -i frames/f%05d.png -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart out/title_cards.mp4"
+    },
+    "checks": [
+      "Inputs: 4-6 lines, 1-6 words each, exactly one accent each.",
+      "Purity grep on index.html/tokens.js: no Math.random|Date.now|performance.now|new Date|setTimeout|setInterval|requestAnimationFrame|@keyframes|transition:.",
+      "READY only after document.fonts.check passes and the fallback-width test differs.",
+      "Stills: exactly one accent-coloured word per card; all glyph bounds (including the +40 px start offset) inside x 144-1776, y 144-936.",
+      "Mid-entrance frame (start_k + 0.25 s): opacity 0.875 and 5 px offset.",
+      "Determinism: hash(frame k) unchanged after rendering frame N-1 and seeking back; two renders give identical PNG bytes on the same machine.",
+      "frames/ holds exactly N files f00000.png..f(N-1), no leftovers.",
+      "ffprobe: h264, 1920x1080, r_frame_rate 30/1, nb_frames = N, duration = N/30 within one frame, pix_fmt yuv420p, no audio stream, moov atom before mdat (faststart).",
+      "Duration 15-20 s, or the stretch factor was reported and approved.",
+      "Decode test: ffmpeg -v error -i out/title_cards.mp4 -f null - prints nothing.",
+      "Contact sheet (ffmpeg -i out/title_cards.mp4 -vf fps=2,scale=320:-2,tile=6x7 -frames:v 1 out/contact.jpg) shows every card and no unintended blank spans."
+    ],
+    "tags": [
+      "template",
+      "title-card",
+      "kinetic-type",
+      "canvas2d",
+      "deterministic",
+      "ffmpeg",
+      "owner-brief"
+    ],
+    "inputs": {
+      "LINES": "4-6 statements, 1-6 words each. Mark the accent word with asterisks, e.g. 'Money began as *salt*'. Exactly one marker per line.",
+      "PALETTE": "{ bg: '#0b0b0f', ink: '#f4f2ec', accent: '#c8ff3d' }",
+      "FONT": "Space Grotesk 700 as a local woff2 (SIL OFL; keep OFL.txt beside it), e.g. fonts/SpaceGrotesk-Bold.woff2",
+      "FORMAT": "1920x1080 at 30 fps",
+      "TARGET_RANGE_S": "15-20 (see fit rule)",
+      "ALIGN": "optional: 'left' (default, hung on the 144 px margin) or 'center'"
+    },
+    "source": "owner brief (motion-designer title-card prompt); alesha-tools skills/hand-drawn-canvas-animation/scripts/render.mjs + assets/core.js defineFilm runtime (MIT, harness and READY pattern); OpenMontage ink-theater/README.md font-subset gotcha (AGPL-3.0, idea restated); timing and contrast numbers computed for this report"
+  },
+  {
+    "id": "motion.lower-third",
+    "title": "Lower third (name + role)",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "A person, organisation or location is introduced on screen.",
+    "summary": "A compact two-line identifier hung on the left safe margin above the caption band: accent bar grows, name rises, role follows, holds 3-6 s, exits faster than it entered.",
+    "steps": [
+      "0.00-0.35 s: accent bar scales in vertically from its base (easeOutCubic).",
+      "0.15-0.55 s: name fades in and rises 16 px (easeOutCubic).",
+      "0.25-0.65 s: role fades in and rises 16 px.",
+      "Hold for max(3, reading time of name + role) up to ~6 s.",
+      "Exit 0.4 s: text fades and drops 8 px (easeInCubic); bar retracts 0.1 s later."
+    ],
+    "do": [
+      "Appear ~0.5-1 s after the person starts speaking, never on a cut.",
+      "Show once per person; repeat only after a long absence.",
+      "Use a backing panel on busy footage."
+    ],
+    "avoid": [
+      "Colliding with burned captions or end-screen areas.",
+      "Long role strings that wrap to a third line."
+    ],
+    "numbers": {
+      "name_px": "48-60, weight 700",
+      "role_px": "36-44, weight 400-500, muted colour",
+      "accent_bar": "6-8 px wide, height of the text block",
+      "text_offset_from_bar_px": 24,
+      "left_x_px": 144,
+      "block_bottom_y_px": "<= 936, raised above the caption band when captions are burned",
+      "panel_opacity": "0.80-0.85 with 20-24 px padding",
+      "entrance_total_s": "<= 0.8 (cap 1-2)",
+      "hold_s": "3-6 and >= reading time",
+      "exit_s": "0.4-0.5"
+    },
+    "checks": [
+      "Within safe area and outside caption band.",
+      "Hold >= reading time.",
+      "Exit shorter than entrance."
+    ],
+    "tags": [
+      "template",
+      "lower-third",
+      "identification",
+      "overlay"
+    ],
+    "inputs": {
+      "name": "<= 32 characters",
+      "role": "<= 32-40 characters (title, affiliation or place)",
+      "side": "left (default) | right",
+      "in_time_s": "when to appear",
+      "panel": "optional backing panel on busy footage"
+    },
+    "source": "OpenMontage skills/creative/typography.md lower-third specs (AGPL-3.0, ideas restated: bottom-third region, entrance 1-2 s cap, display 3-6 s, exit 0.5-1 s); synthesis"
+  },
+  {
+    "id": "motion.quote-card",
+    "title": "Quote card",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "Showing a verbatim quotation, testimony or primary-source excerpt.",
+    "summary": "Verbatim quote set large on 8 of 12 columns with an oversized accent quotation mark and a muted attribution; lines (or VO-synced words) reveal in reading order, one optional keyword highlight after the text settles.",
+    "steps": [
+      "0.0-0.4 s: quotation mark fades and scales 0.9 -> 1.",
+      "From 0.2 s: lines rise 16 px + fade, 0.4 s each, staggered 0.25 s (or words appear at their VO timestamps).",
+      "Attribution fades in 0.3 s after the last line.",
+      "Optional keyword highlight 0.6-0.8 s after all text settles (see motion.keyword-highlight).",
+      "Hold: VO length + 1 s, or 0.35 + words/2.5 s when read silently (heuristic slower rate for quotes).",
+      "Exit 0.4 s."
+    ],
+    "do": [
+      "Always attribute with source and year.",
+      "Keep the quote verbatim; use ellipses for cuts."
+    ],
+    "avoid": [
+      "Paraphrase inside quotation marks.",
+      "More than one highlight.",
+      "Quotes over 4 lines on one card."
+    ],
+    "numbers": {
+      "quote_px": "56-64 (sans 500 or editorial serif)",
+      "line_height": 1.25,
+      "text_width_px": "1080 (8 grid columns)",
+      "quote_mark_px": "160-200 at 30-40% opacity",
+      "attribution_px": 34,
+      "max_lines": "3-4",
+      "line_stagger_s": 0.25,
+      "line_in_s": 0.4,
+      "highlight_delay_after_settle_s": "0.6-0.8",
+      "exit_s": 0.4
+    },
+    "checks": [
+      "Attribution present.",
+      "Verbatim against source text.",
+      "Hold >= reading time."
+    ],
+    "tags": [
+      "template",
+      "quote",
+      "documentary",
+      "typography"
+    ],
+    "inputs": {
+      "quote": "verbatim text, <= ~30 words (split longer quotes)",
+      "attribution": "name, role/source, year",
+      "highlight": "optional key phrase",
+      "word_timestamps": "optional, for VO sync",
+      "backdrop": "optional muted portrait/footage on the right 4 columns"
+    },
+    "source": "synthesis; flick website-resource-reveal highlight timing (MIT); OpenMontage skills/core/remotion.md callout/quote scene type (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "motion.stat-reveal",
+    "title": "Stat / number reveal (count-up)",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "One number carries the beat (price, percentage, population, date span).",
+    "summary": "A large human-scaled number counts up with an exponential/cubic ease-out so the last digits slow down and land readable, then a label and optional delta badge arrive; source cited on screen.",
+    "steps": [
+      "Format to human scale first; never count raw huge numbers with a suffix.",
+      "0.0-0.3 s: label and frame fade in.",
+      "0.2-2.0 s: value = round(target * ease(p), decimals); the final frame must show the exact formatted target.",
+      "On landing: 0.3 s scale pulse and a 0.3 s accent underline draw.",
+      "Delta badge 0.2-0.3 s after landing; hold 2-3 s; exit 0.3 s.",
+      "Prevent digit jitter: Canvas has no tabular-nums switch, so lay out each digit in a fixed cell equal to the widest digit advance (or use a font whose figures are tabular)."
+    ],
+    "do": [
+      "Cite the source on screen.",
+      "Use the accent only if this number is THE point of the beat."
+    ],
+    "avoid": [
+      "Counting through misleading intermediate units.",
+      "Proportional figures that make the number wobble while counting.",
+      "Overshoot easing on the value."
+    ],
+    "numbers": {
+      "number_px": "200-280 bold",
+      "label_px": "44-52",
+      "source_px": 18,
+      "count_up_s": "1.5-2.0",
+      "count_ease": "easeOutExpo or easeOutCubic",
+      "landing_pulse": "scale 1 -> 1.04 -> 1 over 0.3 s",
+      "delta_badge_delay_s": "0.2-0.3",
+      "hold_s": "2-3 (>= reading time)",
+      "exit_s": 0.3
+    },
+    "checks": [
+      "Last frame equals the formatted target exactly.",
+      "Number width stable during count (no jitter).",
+      "Source visible for external data."
+    ],
+    "tags": [
+      "template",
+      "stat",
+      "number",
+      "counter",
+      "data"
+    ],
+    "inputs": {
+      "value": "target number",
+      "format": "prefix/suffix/unit/decimals, human scale (e.g. 8.1 + ' billion')",
+      "label": "what it measures (<= 6 words)",
+      "delta": "optional change with sign",
+      "source": "citation for external data"
+    },
+    "source": "OpenMontage skills/creative/data-visualization.md + skills/core/remotion.md KPI rules (AGPL-3.0, ideas restated); flick saved-animations/token-waste-terminal count-up via interpolate (MIT); synthesis"
+  },
+  {
+    "id": "motion.chart-build",
+    "title": "Animated chart build (bar / line / donut / KPI)",
+    "rooms": [
+      "motion",
+      "editing",
+      "qc"
+    ],
+    "kind": "template",
+    "when": "A beat compares 3-9 values, shows a trend or a share, and the narration discusses the data.",
+    "summary": "Show the empty frame, build the data in reading order over 2-4 s, then hold 3-5 s; label directly, highlight one key element, keep honest axes and cite the source.",
+    "steps": [
+      "Build-up: title, axes and gridlines (0-0.3 s), then data from the baseline in reading order, labels as each element lands, everything built by 2-4 s, hold 3-5 s.",
+      "Narrative highlight: all elements dim to 30% except the one being discussed (full colour, scale 1.05) for 2-3 s per point.",
+      "Comparison reveal: hold the baseline 2 s, animate to the new values over 1-2 s, then delta labels.",
+      "Label placement: values above vertical bars (inside if tall), right of horizontal bars; line charts label start, end and notable peaks only; donut labels inside slices >= 10%, leader lines for smaller.",
+      "Colours from palette tokens: context bars muted, the key bar accent."
+    ],
+    "do": [
+      "Start bar axes at 0.",
+      "Round aggressively ($1,234,567 -> $1.2M) and always show units.",
+      "Label directly instead of using a legend."
+    ],
+    "avoid": [
+      "3D, perspective, dual y-axes, scatter plots.",
+      "Back/elastic easing on bars or values.",
+      "Cutting away before the hold completes."
+    ],
+    "numbers": {
+      "title_px": "36-40",
+      "axis_value_px": 28,
+      "source_px": "16-18",
+      "gridlines": "3-5, muted at 50%",
+      "frame_in_s": 0.3,
+      "bar_grow_s": "0.6-0.8 each, 0.1 s stagger",
+      "line_draw_s": "1.5-2.5, arc-length, easeInOutSine",
+      "donut": "clockwise from 12 o'clock, largest slice first",
+      "value_label_s": "0.2-0.3",
+      "full_build_s": "2-4",
+      "hold_s": "3-5",
+      "highlight_s": "0.3-0.5; others to 30% opacity; focus scale 1.05",
+      "comparison_pattern_s": "baseline hold 2, change 1-2, delta labels 0.2-0.3, hold 3-5",
+      "scene_min_s": 5
+    },
+    "checks": [
+      "Bar baseline at zero.",
+      "Title and units present; source cited if external.",
+      "Point counts within limits.",
+      "Readable when paused at any frame of the hold."
+    ],
+    "tags": [
+      "template",
+      "chart",
+      "data-viz",
+      "bar",
+      "line",
+      "donut",
+      "kpi"
+    ],
+    "inputs": {
+      "type": "bar | hbar | line | donut | kpi",
+      "rows": "[{label, value}] or series [{label, data:[{x,y}]}]",
+      "title": "descriptive, with units",
+      "source": "citation",
+      "highlight": "key element id",
+      "cues": "optional narration timestamps for narrative highlights"
+    },
+    "source": "OpenMontage skills/creative/data-visualization.md (AGPL-3.0, ideas restated); synthesis"
+  },
+  {
+    "id": "motion.comparison-split",
+    "title": "Comparison split (before/after, A vs B)",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "The beat contrasts two states, options, eras or prices.",
+    "summary": "Two equal panels on identical scale: the baseline side arrives and holds for comprehension, then the other side arrives and a delta badge states the difference; or a wipe divider reveals the after-state over the same framing.",
+    "steps": [
+      "0.0-0.5 s: divider draws top to bottom (easeInOutCubic).",
+      "0.3-0.8 s: left (baseline/before) content rises and fades in; hold 1-2 s while narration describes it.",
+      "Right content arrives over 0.5 s; then the delta badge (0.25 s).",
+      "Hold 3-5 s. Wipe variant: same framing, a vertical wipe moves across in 0.6-1.0 s revealing the after-state."
+    ],
+    "do": [
+      "Use identical scales/axes and framing on both sides.",
+      "Put earlier/before on the left.",
+      "Accent only the side that matters."
+    ],
+    "avoid": [
+      "Different scales per side.",
+      "More than 3 attributes per side.",
+      "Both sides accented."
+    ],
+    "numbers": {
+      "panel_width_px": "792 each with a 48 px centre gutter (inside 1632)",
+      "label_px": "44-52",
+      "value_px": "120-160",
+      "divider_draw_s": 0.5,
+      "side_in_s": 0.5,
+      "baseline_hold_s": "1-2",
+      "delta_badge_s": 0.25,
+      "final_hold_s": "3-5",
+      "wipe_s": "0.6-1.0 easeInOutCubic",
+      "attributes_per_side_max": 3
+    },
+    "checks": [
+      "Same scale both sides.",
+      "Delta has sign and unit.",
+      "Panels inside safe area."
+    ],
+    "tags": [
+      "template",
+      "comparison",
+      "before-after",
+      "split"
+    ],
+    "inputs": {
+      "left": "{label, value, visual}",
+      "right": "{label, value, visual}",
+      "metric": "what is compared + unit",
+      "delta": "signed difference",
+      "emphasis": "which side gets the accent"
+    },
+    "source": "OpenMontage skills/core/remotion.md comparison type, skills/creative/data-visualization.md comparison reveal (AGPL-3.0, ideas restated); synthesis"
+  },
+  {
+    "id": "motion.list-build",
+    "title": "List build (sequential points)",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "The narration enumerates 3-6 points, steps, reasons or examples.",
+    "summary": "Items appear one at a time on their narration cue, the active item stays full strength while earlier ones dim, and the complete set is restored and held at the end.",
+    "steps": [
+      "Title 0-0.4 s.",
+      "Each item on its cue: 0.35 s rise 16-24 px + fade (easeOutCubic); numbers/bullets in accent.",
+      "When the next item activates, previous items dim to 55%.",
+      "After the last item restore all to 100% and hold the full set.",
+      "Exit together (0.3 s) or with a 0.05 s stagger."
+    ],
+    "do": [
+      "Reveal an item only when the narration reaches it.",
+      "Keep items grammatically parallel."
+    ],
+    "avoid": [
+      "More than 6 items on one screen (split).",
+      "Revealing all items at once before they are discussed."
+    ],
+    "numbers": {
+      "title_px": "64-72",
+      "item_px": "48-56",
+      "row_pitch": "1.6-1.8 x item size",
+      "item_in_s": 0.35,
+      "item_rise_px": "16-24",
+      "cadence_without_cues_s": "0.3-0.4 apart",
+      "dim_previous_opacity": 0.55,
+      "final_full_set_hold_s": ">= 2 and >= total reading time",
+      "max_items": 6,
+      "exit_s": 0.3
+    },
+    "checks": [
+      "Items <= 6 and <= 5 words.",
+      "Full set held at the end.",
+      "Rows inside the 792 px content height."
+    ],
+    "tags": [
+      "template",
+      "list",
+      "sequential",
+      "kinetic-type"
+    ],
+    "inputs": {
+      "title": "optional heading",
+      "items": "3-6 items, <= 5 words each, parallel grammar",
+      "cues": "narration timestamps per item (or a fixed cadence)",
+      "numbered": "bool (only if order matters)"
+    },
+    "source": "flick references/step-2-plan.md sequential text rule + website-resource-reveal staggers (MIT); OpenMontage skills/creative/manim-usage.md staggered reveals (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "motion.timeline-build",
+    "title": "Timeline build",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "The beat orders events in time (history, company milestones, deep time).",
+    "summary": "A left-to-right axis draws on, events pop in order as a playhead/camera travels, past events dim, and the time scale is honest (proportional, or explicitly logarithmic/broken).",
+    "steps": [
+      "Axis draws left to right (0.6-1.0 s).",
+      "For each event on its cue: dot pops (0.3 s easeOutBack), date and label rise 0.3 s; labels alternate above/below to avoid collisions.",
+      "For long timelines pan the camera (easeInOutSine) so the active event sits at ~40% of the width; earlier events dim to 50%.",
+      "Hold the full view 2 s at the end."
+    ],
+    "do": [
+      "Keep spacing proportional to time, or show a visible axis break (zig-zag) / a labelled log scale for deep time (e.g., 3.3 million years ago to 10,000 BCE).",
+      "Use one era notation (BCE/CE) consistently."
+    ],
+    "avoid": [
+      "Silently compressed time scales.",
+      "More than 7 labelled events per screen."
+    ],
+    "numbers": {
+      "axis_y": "~0.58 H",
+      "date_px": "36-44",
+      "label_px": "32-40",
+      "events_per_screen_max": "5-7",
+      "axis_draw_s": "0.6-1.0",
+      "event_pop_s": "0.3 easeOutBack",
+      "label_rise_s": 0.3,
+      "event_spacing_s": ">= 1.5-2 or on narration cue",
+      "camera_pan": "easeInOutSine, active event held at ~40% of frame width",
+      "past_event_opacity": 0.5,
+      "end_hold_s": 2
+    },
+    "checks": [
+      "Scale type stated or proportional.",
+      "No label overlaps.",
+      "Dates verified against the script."
+    ],
+    "tags": [
+      "template",
+      "timeline",
+      "history",
+      "chronology"
+    ],
+    "inputs": {
+      "events": "[{date, label}] in order",
+      "scale": "linear | log | broken",
+      "range": "start/end dates",
+      "highlight": "key event"
+    },
+    "source": "synthesis; OpenMontage skills/creative/diagram-gen-usage.md (LR for timelines) (AGPL-3.0, idea restated); alesha-tools assets/core.js camera easing (MIT)"
+  },
+  {
+    "id": "motion.map-route",
+    "title": "Map route animation",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "The beat is about where something is, moved, traded or spread.",
+    "summary": "A muted static basemap, pins that pop, and a route drawn at constant speed along its arc length with an eased overall progress, while the camera follows with a lead in the direction of travel.",
+    "steps": [
+      "0-0.6 s: basemap fades/pushes in (muted, desaturated so the route is the brightest element).",
+      "Origin pin pops (0.3 s) with label.",
+      "Route draws over 1.5-3 s: precompute the arc-length table once; reveal with setLineDash([L*p, L]) where p = easeInOutSine(progress); a head marker sits at the arc-length point.",
+      "Camera follows the head with a 120 px lead in the travel direction.",
+      "Destination pin pops, label rises, hold 1-2 s."
+    ],
+    "do": [
+      "Keep north up unless there is a reason.",
+      "Use dashed lines for uncertain or historical routes.",
+      "Animate one route at a time."
+    ],
+    "avoid": [
+      "Animating projections or rotating the globe without purpose.",
+      "Unlabelled unfamiliar places.",
+      "Speed changes caused by uneven polyline segments (use arc length)."
+    ],
+    "numbers": {
+      "map_push": "camera 1.0 -> 1.05 easeInOutSine",
+      "pin_pop_s": "0.3 easeOutBack",
+      "route_draw_s": "1.5-3.0",
+      "camera_follow": "view = CX + (p - CX) * 0.35 (y factor 0.22)",
+      "camera_lead_px": 120,
+      "arc_lift": "y - lift * 4u(1 - u), lift proportional to distance",
+      "label_px": "32-40 with halo/stroke",
+      "route_width_of_frame_max": "70%",
+      "destination_hold_s": "1-2"
+    },
+    "checks": [
+      "Route speed constant along the path.",
+      "Labels readable and inside safe area.",
+      "Map data licence recorded."
+    ],
+    "tags": [
+      "template",
+      "map",
+      "route",
+      "geography",
+      "draw-on"
+    ],
+    "inputs": {
+      "basemap": "pre-rendered image or vector (public-domain data such as Natural Earth), fixed projection",
+      "route": "polyline of lon/lat projected to px",
+      "stops": "[{name, lon, lat}]",
+      "duration_s": "travel time",
+      "certainty": "known | approximate (dashed)"
+    },
+    "source": "alesha-tools assets/core.js selfDraw/arc/camKeys, assets/studio.js motionPath (arc length), references/scenes.md recipe G (camera lead 120 px), references/doodle.md follow camera (MIT); synthesis"
+  },
+  {
+    "id": "motion.keyword-highlight",
+    "title": "Keyword highlight / underline / circle",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "One word or phrase in on-screen text, a document or a screenshot must be singled out.",
+    "summary": "After the text has settled, a marker sweeps behind the word, an underline draws on, or a hand-drawn circle encloses it; one highlight per screen, with a stable (seeded once) rough edge.",
+    "steps": [
+      "Wait until the text is fully settled.",
+      "Marker: draw the highlight shape BEHIND the text, revealed left-to-right by a clip rectangle whose width grows with eased progress.",
+      "Underline/circle: stroke a pre-built path with setLineDash([L*p, 2L]), L = path length.",
+      "Rough edges: generate the jitter once from a fixed seed (never per frame) so the shape holds still.",
+      "If the highlight fill sits under text, switch that text to the background colour (keep >= 4.5:1)."
+    ],
+    "do": [
+      "Highlight the noun or number that carries the claim.",
+      "Time the sweep to the spoken word when narration exists."
+    ],
+    "avoid": [
+      "More than one highlight per screen.",
+      "Boiling/flickering highlight edges in a clean style.",
+      "Highlighting before the viewer has read the sentence."
+    ],
+    "numbers": {
+      "delay_after_text_settles_s": ">= 0.3-0.5 (flick: text in at 0.33 s, highlight from 1.73 s)",
+      "marker_sweep_s": "0.6-0.8 (flick: 24 frames at 30 fps)",
+      "underline_draw_s": "0.4-0.6 easeOutCubic",
+      "circle_draw_s": "0.5-0.7 with ~3% overdraw",
+      "underline_offset": "0.12-0.18 em below baseline",
+      "underline_thickness": "0.06-0.10 em",
+      "marker_opacity": "0.90-0.97",
+      "sfx_volume": "~0.38 relative"
+    },
+    "checks": [
+      "One highlight per still.",
+      "Text contrast on the highlight >= 4.5:1.",
+      "Shape identical across held frames."
+    ],
+    "tags": [
+      "template",
+      "highlight",
+      "underline",
+      "emphasis",
+      "draw-on"
+    ],
+    "inputs": {
+      "target_bounds": "glyph box of the word (from measureText or layout)",
+      "style": "marker | underline | circle | box",
+      "colour": "accent",
+      "sfx": "optional pop at start"
+    },
+    "source": "flick skills/flick/saved-animations/website-resource-reveal/SceneKarpathyGithubRepoHighlight.tsx RoughHighlight (MIT); alesha-tools assets/core.js selfDraw (MIT); synthesis"
+  },
+  {
+    "id": "motion.diagram-build",
+    "title": "Diagram / flow build",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "Explaining a process, system, cause-and-effect chain or hierarchy.",
+    "summary": "Build the diagram progressively in narration order: node pops, edge draws, arrowhead lands; the current step is accented, completed steps stay ink, upcoming steps are faint; never more than 3-4 new elements at once.",
+    "steps": [
+      "Precompute layout (positions are constants; no nondeterministic layout engine at render time).",
+      "For each step: node pops, then its incoming edge draws (dash reveal), arrowhead pops at the end.",
+      "State colours: current = accent, completed = ink, upcoming = 30-50% opacity.",
+      "If the diagram exceeds the limits, split into frames or move the camera into a subgraph.",
+      "Hold the complete diagram 2-3 s."
+    ],
+    "do": [
+      "One concept per scene; show the simple version first and transform it into the complex one.",
+      "Use consistent shapes per meaning."
+    ],
+    "avoid": [
+      "Bottom-to-top flow.",
+      "Edge labels longer than 2 words.",
+      "Revealing the whole diagram at once."
+    ],
+    "numbers": {
+      "nodes_max_1080p": "15-20",
+      "nodes_max_vertical": "10-12",
+      "node_min_width_px": "150 (prefer >= 220)",
+      "node_padding_px": "16-20",
+      "node_label_px": ">= 28",
+      "node_pop_s": "0.3 (scale 0.86 -> 1, easeOutBack)",
+      "edge_draw_s": "0.3-0.5",
+      "stagger_s": "0.15-0.2",
+      "new_elements_at_once_max": "3-4",
+      "upcoming_opacity": "0.3-0.5",
+      "hold_after_key_reveal_s": ">= 1.5",
+      "final_hold_s": "2-3"
+    },
+    "checks": [
+      "Node/edge counts within limits.",
+      "Labels >= 28 px and <= 5 words.",
+      "Reveal order matches narration."
+    ],
+    "tags": [
+      "template",
+      "diagram",
+      "flowchart",
+      "process",
+      "explainer"
+    ],
+    "inputs": {
+      "nodes": "[{id, label <= 5 words}]",
+      "edges": "[{from, to, label <= 2 words}]",
+      "direction": "TD (process/hierarchy) | LR (pipeline/sequence)",
+      "order": "reveal order tied to narration cues"
+    },
+    "source": "OpenMontage skills/creative/diagram-gen-usage.md, skills/creative/manim-usage.md (AGPL-3.0, ideas restated); flick saved-animations/connected-workflow-terminals pattern (MIT); synthesis"
+  },
+  {
+    "id": "motion.hand-drawn-reveal",
+    "title": "Hand-drawn reveal and doodle animation (Canvas2D)",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "template",
+    "when": "The explanation is story-led, the channel style is illustrative, or no footage exists (e.g., prehistory) and a drawn look fits.",
+    "summary": "Strokes are authored point lists drawn on with a dash-length reveal, several pens working in parallel; drawings and their marks are seeded once and held for their exposure; everything is on the page by 70% of the shot so the last 30% is the payoff.",
+    "steps": [
+      "Fill a short brief + beat sheet (start, duration, viewer focus, action, camera, sound).",
+      "Author strokes as point lists with semantic ids; compile each drawing once with a fixed seed.",
+      "Draw-on: progress = sm(start, start + dur, t, easeOut); ctx.setLineDash([L * progress, 2 * L]).",
+      "Run several pens with different start times so the page fills from several places at once.",
+      "Expose drawings on twos for the drawn feel; keep camera and light continuous; never quantise twice.",
+      "Doodle-on-photo: CC0 object cut out on a pastel sheet; attach drawings in the object's (u, v) coordinates so they follow when it moves; white gouache bodies under ink on busy photos; the object itself reacts at least once (tips, shakes, bobs).",
+      "Between looks use a drawn transition (blot 0.6-0.8 s, iris, torn edge) or a hard cut; carry an anchor (object, position, colour) across.",
+      "Review: grid of 24 frames, consecutive strip around the fastest action, full-size still, normal-speed playback with sound off."
+    ],
+    "do": [
+      "Use one finish per shot.",
+      "Batch hatching into one path per layer (one beginPath + one stroke).",
+      "Cache static layers once per scene.",
+      "Record source and licence of every photo."
+    ],
+    "avoid": [
+      "Math.random (boiling textures).",
+      "One stroke() call per hatch segment (seconds per frame).",
+      "Uniform wobble/boil and grain everywhere as a substitute for drawing.",
+      "Drawings attached in frame pixels to a moving photo."
+    ],
+    "numbers": {
+      "output_fps": 24,
+      "drawn_cadence": "twos (12 fps) for hand-drawn feel; ones for fast action; holds allowed",
+      "draw_on_budget": "all drawn by 70% of shot; last 30% is payoff; nothing still appearing in last 20%",
+      "character_draw_on_s": "0.6-1.0 (~1500 units/s)",
+      "selfdraw_length": "real path length x 1.03 + 2 x wobble amplitude",
+      "brush_line_units": "3-5",
+      "hatch_spacing_px": "4-6",
+      "riso_dot_cell_px": "7-8",
+      "screen_angles_deg": "15 / 75 / 0",
+      "print_coverage_cap": 0.78,
+      "photo_frame_share": "1/4 to 2/3 of frame",
+      "min_character_size_units": 120,
+      "optional_boil": "stepped seed ~3 changes/s (or ~9 fps); off by default",
+      "frame_budget_ms": "50-300"
+    },
+    "checks": [
+      "Held frames are byte-identical.",
+      "Repeat-after-seek identical.",
+      "Nothing appears in the last 20% of a shot unless it is the payoff."
+    ],
+    "tags": [
+      "template",
+      "hand-drawn",
+      "doodle",
+      "draw-on",
+      "illustration",
+      "canvas2d"
+    ],
+    "inputs": {
+      "beat": "what the viewer must understand",
+      "look": "ink | pencil | riso | screen | doodle-on-photo",
+      "palette": "paper, ink, fills, accents",
+      "photo": "optional CC0 object photo cut out",
+      "duration_s": "shot length"
+    },
+    "source": "alesha-tools skills/hand-drawn-canvas-animation/SKILL.md, references/doodle.md, scenes.md, style.md, motion.md, architecture.md, palettes.md, reference-films.md, assets/core.js (MIT); OpenMontage skills/creative/ink-theater.md (AGPL-3.0, idea restated: stepped-seed boil)"
+  },
+  {
+    "id": "motion.kinetic-typography",
+    "title": "Kinetic typography and word-synced text",
+    "rooms": [
+      "motion",
+      "captions"
+    ],
+    "kind": "ruleset",
+    "when": "Text itself is the visual: hooks, punchlines, emphasised phrases, typed commands.",
+    "summary": "Reveal by word in sync with narration timestamps, by letter only for 1-2 word logos/titles, or by typing for UI/command moments; one idea per screen, phrase-based line breaks, full phrase held after the last word.",
+    "steps": [
+      "Break lines by phrase, not by width.",
+      "Word-synced: show each word at its timestamp; karaoke colour change at word start.",
+      "Letter animation only for 1-2 words (logo, title); body copy animates by word or line.",
+      "Typing: chars = floor(interpolate(t, [t0, t1], [0, len])); blinking cursor while typing, removed on submit.",
+      "Hold the completed phrase for its reading time after the last word lands."
+    ],
+    "do": [
+      "Move the eye in reading order.",
+      "Use scale/colour emphasis on at most one word per phrase."
+    ],
+    "avoid": [
+      "Per-letter animation on sentences.",
+      "Linear motion on text.",
+      "Words appearing before they are spoken."
+    ],
+    "numbers": {
+      "word_reveal": "at the word's start frame (0-2 frames early)",
+      "letter_stagger_frames": 3,
+      "letter_drop": "y -18 -> 0 px, rotate -20 -> +9 -> 0 deg (overdamped spring, zeta ~2.2)",
+      "typing_rate": "~2 frames per char (15 chars/s) or a fixed 16-18 frame window for a short command",
+      "cursor_blink": "toggle every 7-8 frames",
+      "scale_pop": "0.86-0.90 -> 1",
+      "max_lines": 3
+    },
+    "checks": [
+      "Word timings within 1 frame of transcript.",
+      "Final phrase held >= reading time."
+    ],
+    "tags": [
+      "kinetic-type",
+      "typography",
+      "word-sync",
+      "typing"
+    ],
+    "inputs": {
+      "text": "phrase(s)",
+      "word_timestamps": "from TTS or Whisper",
+      "emphasis": "word(s) to accent/scale"
+    },
+    "source": "flick saved-animations/website-resource-reveal (letters), page-scroll-and-title-focus + pdf-token-limit (typing/cursor) (MIT); OpenMontage skills/creative/typography.md reveal techniques, skills/meta/animation-runtime-selector.md word-synced reveals (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.transitions-camera",
+    "title": "Transitions between graphic scenes and 2D camera moves",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "ruleset",
+    "when": "Connecting two graphic scenes, or moving a virtual camera within one.",
+    "summary": "Choose the transition from the relationship between scenes and carry something across the boundary; render overlapping scenes into separate layers with clamped local time; one camera move per beat, eased gently, still while the important thing happens.",
+    "steps": [
+      "Continuation -> hard cut or match/transform (an element of A becomes an element of B).",
+      "Same topic, new view -> slide/push 0.4-0.6 s.",
+      "Time passes -> crossfade 0.5 s.",
+      "Energy/hook -> whip pan; new world/reveal -> iris or blot; new chapter -> title card.",
+      "Implementation: render A and B into separate offscreen canvases, each with its own local time clamped to its range, then composite through a mask; total length = sum(scenes) - sum(overlaps).",
+      "Camera: one move per beat, eased with easeInOutSine; stop moving while the key action happens; lead moving subjects."
+    ],
+    "do": [
+      "Carry position, direction, colour or an object across every cut.",
+      "Default to hard cuts in fast sections."
+    ],
+    "avoid": [
+      "Two transition devices in a row.",
+      "Transitions that eat into a reading hold.",
+      "Soft blends between drawn looks (use drawn devices or cuts).",
+      "Continuous camera orbits (screensaver effect)."
+    ],
+    "numbers": {
+      "hard_cut_s": 0,
+      "crossfade_s": "0.5 (15 frames at 30 fps)",
+      "slide_push_s": "0.4-0.6 easeInOutCubic",
+      "whip_pan": "0.17 s out + 0.17 s in, ~520 px, quadratic",
+      "blot_iris_s": "0.6-0.8",
+      "material_seam_s": "~1.0-1.35 (0.38-0.65 before + 0.58-0.70 after)",
+      "still_image_crossfade_overlap_s": "~1.2",
+      "flash_max_per_film": 2,
+      "establishing_push": "zoom 1.15 -> 1.30 over 2-2.5 s",
+      "subtle_push": "1.0 -> 1.055 over ~6 s",
+      "follow_cam": "x = CX + (p - CX)*0.35, y factor 0.22, zoom 1.16",
+      "macro_insert": "zoom 4-6x for 2 drawn frames, hard cuts",
+      "energetic_entry": "scale 1.14 -> 0.86 -> 1 with blur 2.2 -> 0 px over ~1.5 s",
+      "camera_ease": "easeInOutSine"
+    },
+    "checks": [
+      "Overlaps accounted for in total duration.",
+      "Last readable frame of A and first readable frame of B both get their holds.",
+      "No more than two flashes per film."
+    ],
+    "tags": [
+      "transitions",
+      "camera",
+      "editing",
+      "continuity"
+    ],
+    "inputs": {
+      "outgoing": "scene A",
+      "incoming": "scene B",
+      "relationship": "continuation | new view | time passes | energy | new world | chapter"
+    },
+    "source": "alesha-tools references/scenes.md, references/mixed-media.md, references/doodle.md (whip), references/paper3d.md (camera), examples/becoming-phoenix/continuity.js seams (MIT); flick references/step-2-plan.md transition vocabulary + website-resource-reveal camera (MIT); OpenMontage skills/core/remotion.md (15-frame transitions, crossfade overlap) (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.deterministic-render-contract",
+    "title": "Deterministic render contract: frame = f(t, constants)",
+    "rooms": [
+      "motion",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "Writing or reviewing any HTML/Canvas template that will be captured frame by frame.",
+    "summary": "The page exposes renderFrame(t) that repaints the whole frame from t and constants only, plus DURATION, FPS and READY; all randomness is seeded, all assets decoded before READY, and any frame reproduces exactly after seeking in the same pinned runtime.",
+    "steps": [
+      "Expose window.DURATION (s), window.FPS, window.READY (boolean), window.renderFrame(t); optionally window.META (scene list, text bounds) and window.RENDER_ERROR.",
+      "The harness sends an integer frame index; the page computes t = i / FPS.",
+      "Start every renderFrame by resetting state: setTransform(1,0,0,1,0,0), globalAlpha 1, globalCompositeOperation 'source-over', setLineDash([]), filter 'none', shadowBlur 0; paint an opaque background.",
+      "Banned in templates: Math.random, Date.now, new Date(), performance.now, setTimeout, setInterval, requestAnimationFrame, CSS animations/transitions, media elements as clocks, infinite tween repeats, async work inside renderFrame.",
+      "Randomness: seeded PRNG (e.g., mulberry32) keyed by object id; integer hash for per-index noise; seed per drawing/object, never per frame.",
+      "Memoise only pure precomputation done before READY (layout, measureText, path lengths, static layers) or caches keyed purely by inputs.",
+      "Simulations: fixed timestep from t = 0 with checkpoints, so backward seeks rebuild the same state.",
+      "Assets: same-origin over http or data URLs (a cross-origin image taints the canvas and toDataURL throws); await img.decode() and document.fonts.load before READY.",
+      "Capture pixels from the canvas (toDataURL/toBlob), not page screenshots, so CSS size and device pixel ratio never matter.",
+      "Optionally key frames (scene id + local time) so identical held frames are reused instead of re-encoded."
+    ],
+    "do": [
+      "Keep constants in a tokens file so styles can be swapped per channel.",
+      "Report page errors with frame number and time, and abort."
+    ],
+    "avoid": [
+      "Reading the clock anywhere.",
+      "Per-frame random seeds (boil/shimmer).",
+      "Loading the same shared script twice (top-level const clashes stop READY)."
+    ],
+    "numbers": {
+      "ready_timeout_s": 60
+    },
+    "checks": [
+      "Static grep for banned APIs passes.",
+      "Frame k identical after rendering the last frame and seeking back.",
+      "Two full renders produce identical frame hashes on the same machine/browser/font."
+    ],
+    "tags": [
+      "determinism",
+      "render",
+      "canvas2d",
+      "contract",
+      "seek-safe"
+    ],
+    "inputs": {
+      "template_dir": "folder with index.html + tokens.js + assets"
+    },
+    "source": "alesha-tools references/architecture.md invariants + assets/core.js defineFilm (MIT); owner brief; OpenMontage skills/core/remotion.md, skills/core/hyperframes.md, skills/meta/bespoke-composition.md, ink-theater/README.md (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.cdp-frame-harness",
+    "title": "Zero-dependency frame-capture harness (Node + Chrome DevTools Protocol)",
+    "rooms": [
+      "motion",
+      "editing",
+      "qc"
+    ],
+    "kind": "procedure",
+    "when": "Rendering a Canvas2D template to frames/MP4 from the Node app without npm packages (Puppeteer/Playwright only in the test sandbox).",
+    "summary": "Serve the template with node:http, launch an installed Chromium (Chrome, Edge or the sandbox's Playwright Chromium) with remote debugging, talk CDP over Node's built-in WebSocket, evaluate renderFrame + canvas.toDataURL per frame, and stream PNGs to ffmpeg; stage outputs and publish atomically.",
+    "steps": [
+      "Locate the browser: env CHROME; Windows: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe, then C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe (Edge is preinstalled on Windows, Chromium-based, speaks CDP); macOS /Applications/Google Chrome.app/Contents/MacOS/Google Chrome; Linux google-chrome / chromium; sandbox: Playwright's Chromium executable path.",
+      "Static server: node:http on 127.0.0.1 port 0 serving only the template folder; MIME map (.html text/html, .js text/javascript, .json application/json, .woff2 font/woff2, .ttf font/ttf, .png image/png, .svg image/svg+xml); refuse path traversal.",
+      "Launch: spawn(browser, ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=<tmp>', '--no-first-run', '--no-default-browser-check', '--hide-scrollbars', '--mute-audio', '--force-device-scale-factor=1', '--force-color-profile=srgb', '--window-size=1920,1080', 'about:blank']).",
+      "Endpoint: read <user-data-dir>/DevToolsActivePort (line 1 = port) or parse stderr 'DevTools listening on ws://...'; GET http://127.0.0.1:PORT/json/list for the page's webSocketDebuggerUrl (or use the browser endpoint with Target.createTarget + Target.attachToTarget {flatten: true}).",
+      "CDP client: Node >= 22 has a global WebSocket; send {id, method, params, sessionId?}, resolve pending promises by id, dispatch events by method. For older Node, a ~150-line RFC 6455 client over http upgrade (masked client frames, 126/127 extended lengths, continuation frames; responses carry multi-MB base64 PNGs).",
+      "Session: Runtime.enable, Page.enable, Log.enable; Emulation.setDeviceMetricsOverride {width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false}; record Runtime.exceptionThrown, console errors and failed requests -> abort.",
+      "Page.navigate to http://127.0.0.1:PORT/index.html; poll Runtime.evaluate('window.READY === true || !!window.RENDER_ERROR', returnByValue) every 50 ms up to 60 s.",
+      "Read DURATION and FPS; N = Math.round(DURATION * FPS).",
+      "Per frame: Runtime.evaluate({expression: `(renderFrame(${i}/FPS), document.getElementById('c').toDataURL('image/png'))`, returnByValue: true}); strip the data-URL prefix; Buffer.from(b64, 'base64').",
+      "Sink A (owner contract): write frames/f%05d.png into a fresh staging folder, then run the fixed ffmpeg command. Sink B (faster, no disk): pipe PNGs to ffmpeg -f image2pipe -framerate 30 -c:v png -i - ... honouring stdin backpressure (await 'drain').",
+      "Preview modes: --stills (one settled frame per scene), --grid N (N evenly spaced frames), --strip START,COUNT (consecutive frames), --only i,j,k.",
+      "Publish atomically: on success rename staging over the target; on failure keep staging for diagnosis and report frame index + time; write render.json {fps, frames, duration, size, browserVersion (Browser.getVersion), fontHashes, inputsHash}.",
+      "Teardown: Browser.close, kill the process tree, delete the temp profile."
+    ],
+    "do": [
+      "Use one browser per job and reuse the page for every frame.",
+      "Render scenes sequentially unless memory allows parallel browsers.",
+      "Pin the browser build for pixel-identical re-renders."
+    ],
+    "avoid": [
+      "Spawning a browser per frame or using the --screenshot CLI per frame.",
+      "file:// URLs (font loading and canvas taint problems).",
+      "Page.captureScreenshot of a CSS-scaled canvas (DPR-dependent, slower).",
+      "Trusting exit codes without verifying outputs."
+    ],
+    "numbers": {
+      "expected_ms_per_1080p_png_frame": "~30-150 (machine dependent)",
+      "frames_for_20s_at_30fps": 600,
+      "ready_poll_ms": 50,
+      "ready_timeout_s": 60,
+      "node_websocket_global": "Node >= 22"
+    },
+    "checks": [
+      "Frame count written = N.",
+      "No page errors during the run.",
+      "render.json written with versions and hashes.",
+      "ffprobe gate passes (motion.render-qa)."
+    ],
+    "tags": [
+      "harness",
+      "cdp",
+      "chromium",
+      "zero-dependency",
+      "node",
+      "ffmpeg",
+      "windows"
+    ],
+    "inputs": {
+      "template_dir": "folder with index.html",
+      "mode": "stills | grid | strip | full",
+      "out": "output folder"
+    },
+    "source": "alesha-tools skills/hand-drawn-canvas-animation/scripts/render.mjs, scripts/verify.mjs, references/architecture.md Rendering section (MIT); owner brief; synthesis (CDP protocol details)"
+  },
+  {
+    "id": "motion.ffmpeg-native-graphics",
+    "title": "Pure-FFmpeg graphics: when ASS/drawtext beats a browser",
+    "rooms": [
+      "motion",
+      "editing",
+      "captions"
+    ],
+    "kind": "ruleset",
+    "when": "A template is text-only (title card, lower third, quote, caption, counter) and must render fast with no browser, or Chromium is unavailable.",
+    "summary": "libass (ASS subtitles via the ass/subtitles filter) handles inline colour, fades, moves and wrapping; drawtext handles per-frame x/y/alpha expressions and counters; anything with paths, charts, draw-on, springs or glyph-measured layout belongs in Canvas2D.",
+    "steps": [
+      "Background: -f lavfi -i color=c=0x0b0b0f:s=1920x1080:r=30:d=<DURATION>.",
+      "ASS route (best for text cards): PlayResX 1920 / PlayResY 1080; style Fontname 'Space Grotesk', Bold, Fontsize; one Dialogue per card with {\\fad(500,250)\\move(x,y+40,x,y,0,500)} and inline accent {\\c&H3DFFC8&}word{\\c&HECF2F4&} (ASS colours are &HBBGGRR&); render with -vf \"ass=cards.ass:fontsdir=fonts\".",
+      "ASS easing: \\move and \\fad are linear; \\t(t1,t2,accel,...) gives a power curve (accel < 1 decelerates) but cannot animate position. Approximate an eased rise with contiguous Dialogue events each holding a short linear \\move: 5 segments keep a 40 px easeOutCubic rise within 1.1 px, 8 segments within 0.44 px.",
+      "drawtext route: drawtext=fontfile=fonts/SpaceGrotesk-Bold.ttf:textfile=line.txt:fontsize=144:fontcolor=0xf4f2ec:x=144:y='470+40*pow(1-clip((t-1)/0.5,0,1),3)':alpha='clip((t-1)/0.5,0,1)':enable='between(t,1,3.35)'. Use textfile= to avoid escaping; counters via text='%{eif\\:round(1234*(1-pow(1-min(t/2\\,1)\\,3)))\\:d}' (no thousands separators).",
+      "Boxes/bars: drawbox has no time variable (its 't' is thickness); animate via sendcmd, an overlay of a color source with x/y expressions, or pre-render with Canvas.",
+      "Fonts: give FreeType/libass a TTF/OTF file (WOFF2 support depends on the build); point libass at it with fontsdir; complex scripts need HarfBuzz/FriBidi builds (drawtext text_shaping is on by default where available).",
+      "Verify exactly like Canvas renders (ffprobe gate, contact sheet)."
+    ],
+    "do": [
+      "Use the FFmpeg route for lower thirds, captions, simple title/quote cards and counters over footage.",
+      "Keep one renderer per template across a video."
+    ],
+    "avoid": [
+      "Inline multi-colour text with drawtext (needs one filter per segment and widths it cannot measure).",
+      "Mixing FreeType and Chrome renderings of the same template (glyph rasterisation differs).",
+      "Relying on system fonts."
+    ],
+    "numbers": {
+      "ass_colour_ink": "&HECF2F4&",
+      "ass_colour_accent": "&H3DFFC8&",
+      "ass_fad_ms": "500,250",
+      "piecewise_segments_for_40px_rise": "5 (<= 1.1 px error) or 8 (<= 0.44 px)"
+    },
+    "checks": [
+      "Font file actually used (no fallback warnings in ffmpeg log).",
+      "Accent colour correct (BBGGRR order).",
+      "Frame count and duration as planned."
+    ],
+    "tags": [
+      "ffmpeg",
+      "ass",
+      "libass",
+      "drawtext",
+      "zero-dependency",
+      "captions"
+    ],
+    "inputs": {
+      "template": "text-only spec",
+      "font_file": "TTF/OTF path"
+    },
+    "source": "synthesis (FFmpeg drawtext/drawbox/ass filters and ASS override tags; option names verified against local ffmpeg -h); alesha-tools references/architecture.md manual PNG packing + contact sheet (MIT); error figures computed for this report"
+  },
+  {
+    "id": "motion.font-loading",
+    "title": "Font loading and coverage for deterministic renders",
+    "rooms": [
+      "motion",
+      "qc",
+      "captions"
+    ],
+    "kind": "ruleset",
+    "when": "Any template draws text in a browser or with FFmpeg.",
+    "summary": "Ship the complete font file locally with its licence, load it explicitly before READY, prove it is not a fallback, and check glyph coverage for every language the channel uses.",
+    "steps": [
+      "Bundle the full font file (not a Google Fonts css2 unicode-range subset, which may lack Basic Latin) plus OFL.txt; record source and version.",
+      "@font-face with a relative URL, explicit weight/style, font-display: block.",
+      "Before READY: await document.fonts.load('<weight> <size>px \"<Family>\"', <all strings>); require document.fonts.check(...) === true.",
+      "Fallback test: measureText of the real strings in '\"Family\", monospace' must differ from 'monospace'; equal widths mean the font silently fell back -> RENDER_ERROR.",
+      "Coverage: Space Grotesk covers Latin, Latin Extended and Vietnamese only. Use OFL Noto fonts for Arabic (Noto Naskh Arabic), Urdu (Noto Nastaliq Urdu), Bengali (Noto Sans Bengali), Hindi (Noto Sans Devanagari); set ctx.direction = 'rtl' and right alignment for Arabic/Urdu; split accent segments only at spaces in joining scripts.",
+      "Never fetch fonts from the network at render time.",
+      "Pin browser + font versions and record them in render.json; pixels can differ across machines."
+    ],
+    "do": [
+      "Test every channel language once with a still before batch renders."
+    ],
+    "avoid": [
+      "Trusting a framework's 'fonts loaded' log line without the fallback test.",
+      "Hot-linked webfonts."
+    ],
+    "numbers": {},
+    "checks": [
+      "document.fonts.check true for each family/weight used.",
+      "Fallback-width test passes.",
+      "Every input character covered by the chosen font."
+    ],
+    "tags": [
+      "fonts",
+      "typography",
+      "multilingual",
+      "rtl",
+      "determinism"
+    ],
+    "inputs": {
+      "family": "font family name",
+      "file": "local font path",
+      "languages": "scripts used by the channel"
+    },
+    "source": "OpenMontage ink-theater/README.md font-subset gotcha, skills/core/hyperframes.md font-compiler fallback note (AGPL-3.0, ideas restated); alesha-tools assets/core.js (document.fonts.ready before first frame) + references/architecture.md pitfalls (MIT); synthesis (script coverage)"
+  },
+  {
+    "id": "motion.render-qa",
+    "title": "Render verification and visual QA",
+    "rooms": [
+      "qc",
+      "motion",
+      "editing"
+    ],
+    "kind": "checklist",
+    "when": "Before showing any rendered motion scene to the owner and before assembly.",
+    "summary": "Verify in layers: static purity, settled stills, grid contact sheet, consecutive-frame strips, full-size detail, determinism, bounds/contrast, then the encoded file (ffprobe, decode, black/freeze detection) and a normal-speed watch; report exactly which checks ran.",
+    "steps": [
+      "Static: purity grep for banned APIs; inputs validated.",
+      "Stills first: one settled frame per scene/card (text fully readable, action complete, no transition in progress).",
+      "Grid: 24 evenly spaced frames labelled with index and time (composition/pacing overview).",
+      "Strip: 12-48 consecutive frames around fast actions, contacts and transitions (catches pops, jumps and one-frame flashes).",
+      "Full-size detail of the densest frame (thin lines and small text after 4:2:0 chroma subsampling).",
+      "Determinism: render frame k, then the last frame, then k again -> identical hash.",
+      "Bounds and legibility: text boxes (including offsets/overshoot) inside the safe box; sizes above minimums; contrast >= 4.5:1 from tokens and sampled over footage.",
+      "Encode gate: ffprobe width, height, r_frame_rate, nb_frames, duration, pix_fmt, codec; audio present only if expected; ffmpeg -v error -i out.mp4 -f null - is silent; blackdetect/freezedetect spans match planned holds/backgrounds.",
+      "Contact sheet of the encode: ffmpeg -i out.mp4 -vf fps=2,scale=240:-2,tile=6xR -frames:v 1 contact.jpg.",
+      "Watch once at normal speed with sound off (timing), once with sound.",
+      "Poster: extract a settled frame (not a blank first frame or mid-transition).",
+      "Report automated checks and visual review separately; never claim a render or review that did not happen."
+    ],
+    "do": [
+      "Keep stills, grids and strips as artefacts next to the render for the approval gate."
+    ],
+    "avoid": [
+      "Judging motion from a contact sheet alone.",
+      "Reviewing PNGs but not the encoded MP4."
+    ],
+    "numbers": {
+      "grid_frames": 24,
+      "strip_frames": "12-48",
+      "contact_sheet": "2 tiles per second at 240 px wide, 6 columns",
+      "duration_tolerance_silent": "+/- 1 frame",
+      "duration_tolerance_narrated": "+/- 5%",
+      "contrast_min": "4.5:1"
+    },
+    "checks": [
+      "All steps above logged with pass/fail.",
+      "Poster frame chosen at a settled beat."
+    ],
+    "tags": [
+      "qa",
+      "verification",
+      "contact-sheet",
+      "ffprobe",
+      "determinism"
+    ],
+    "inputs": {
+      "render": "frames folder and/or MP4",
+      "plan": "scene list with planned durations and holds"
+    },
+    "source": "alesha-tools SKILL.md workflow steps 7-8, scripts/render.mjs, scripts/verify.mjs (MIT); flick references/step-3-compose.md self-review, step-4-deliver.md poster frame (MIT); OpenMontage skills/core/remotion.md post-render verification, skills/meta/bespoke-composition.md per-scene stills (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.scene-isolated-render-repair",
+    "title": "Scene-isolated rendering, repair and template library",
+    "rooms": [
+      "motion",
+      "editing",
+      "qc"
+    ],
+    "kind": "procedure",
+    "when": "Producing multi-scene motion sequences that will be reviewed, revised and reused.",
+    "summary": "Every scene is its own render unit with its own inputs, output and poster; feedback re-renders only the named scene; scenes share encode settings so assembly is lossless; approved scenes can be saved as reusable templates with a pattern / use-for / avoid-for catalog entry.",
+    "steps": [
+      "One scene = one template instance = one render unit: id, inputs JSON, duration, scenes/<id>/<id>.mp4 + poster.jpg.",
+      "Plan approval -> build -> render every scene -> review gate.",
+      "On feedback, change only the named scene, re-render it, re-run its QA, re-assemble.",
+      "Cache key = hash(template source + inputs + font files + browser version + size/fps); skip unchanged scenes.",
+      "Encode scenes with identical settings (codec, fps, size, pix_fmt, keyframe at start) and assemble with the concat demuxer (-f concat -safe 0 -i list.txt -c copy), or render lossless intermediates and do one final encode.",
+      "Stage every render in a temp folder and publish atomically; keep failed staging folders and a render.json sidecar.",
+      "After approval, offer to save the scene as a template: editable source only (no MP4s, no private brand assets), plus a catalog entry with pattern, use-for and avoid-for; reuse a template only on a strong fit."
+    ],
+    "do": [
+      "Name outputs by approved scene name.",
+      "Read the catalog before building a new scene."
+    ],
+    "avoid": [
+      "A single all-scenes composition that forces full re-renders.",
+      "Stale frames from a longer previous render.",
+      "Saving private assets into the shared library."
+    ],
+    "numbers": {},
+    "checks": [
+      "Only the changed scene's hash differs after a repair.",
+      "Concat output duration = sum of scene durations.",
+      "Catalog entry has pattern, use-for and avoid-for."
+    ],
+    "tags": [
+      "pipeline",
+      "render",
+      "repair",
+      "cache",
+      "library",
+      "approval-gate"
+    ],
+    "inputs": {
+      "scenes": "list of scene specs",
+      "feedback": "scene id + requested change"
+    },
+    "source": "flick skills/flick/SKILL.md, references/step-3-compose.md, step-4-deliver.md, scripts/render-scene.mjs, scripts/save-animation.mjs, saved-animations/README.md (MIT); alesha-tools scripts/render.mjs staging/publish (MIT); OpenMontage skills/meta/bespoke-composition.md checkpoints and per-scene snapshots (AGPL-3.0, ideas restated)"
+  },
+  {
+    "id": "motion.sfx-sync",
+    "title": "Sound effects synced to visible motion",
+    "rooms": [
+      "audio",
+      "motion",
+      "editing"
+    ],
+    "kind": "ruleset",
+    "when": "Adding sound to motion-graphic scenes.",
+    "summary": "A sound effect exists only for a visible event (type, click, pop/reveal, impact, counter tick, whoosh) and lands on that event's exact frame, generated from the same timeline data as the picture; sound reinforces but is never required to understand the scene.",
+    "steps": [
+      "List visible events per scene from the timeline (reveal, impact, typing, counter, transition).",
+      "Attach at most one SFX per event type; skip events that do not need sound.",
+      "Place cues on the event's frame (cues may fall on any frame, including odd frames during action on ones).",
+      "Mix: SFX around 0.3-0.4 relative level; music bed 0.06-0.15 under narration; master headroom (generated scores <= 0.6 gain).",
+      "Review once muted to confirm the picture works alone."
+    ],
+    "do": [
+      "Derive cue times from the same constants that drive the animation.",
+      "Keep silent templates (e.g., the owner's title cards) without an audio stream."
+    ],
+    "avoid": [
+      "SFX to fill silence.",
+      "Quantising audio separately from the animation it follows.",
+      "Music inside individual motion scenes when the Audio Room owns the bed."
+    ],
+    "numbers": {
+      "sfx_relative_volume": "0.30-0.38 (flick)",
+      "music_bed_under_vo": "0.06-0.15",
+      "av_sync_detectability_ms": "about +45 audio-early / -125 audio-late (ITU-R BT.1359); target within 1 frame (33 ms at 30 fps)"
+    },
+    "checks": [
+      "Every SFX maps to a visible event.",
+      "Cue frame equals event frame.",
+      "Scene understandable muted."
+    ],
+    "tags": [
+      "audio",
+      "sfx",
+      "sync",
+      "editing"
+    ],
+    "inputs": {
+      "events": "visible events with frame times",
+      "library": "approved SFX files"
+    },
+    "source": "flick skills/flick/SKILL.md + references/step-2-plan.md + saved-animation audio volumes (MIT); alesha-tools references/scenes.md score section, references/motion.md (MIT); OpenMontage skills/core/remotion.md music levels (AGPL-3.0, ideas restated); ITU-R BT.1359 (general knowledge)"
+  }
+]
