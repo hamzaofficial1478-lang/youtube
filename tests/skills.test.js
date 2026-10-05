@@ -45,6 +45,11 @@ const PLANNED_IDS = [
   'os.faceless-automation-os', 'visuals.path-selector', 'research.credible-sources', 'niche.trend-24h-faceless',
   // 8.4 the owner's motion-designer title-card prompt.
   'motion.title-cards-canvas',
+  // CB YT AI Mastery Prompts Bundle (docs/research/mastery-bundle-analysis.md), the load-bearing ones.
+  'script.chapter-section-allocation', 'script.exact-word-expansion', 'script.owner-angle-questions',
+  'ideas.core-idea-topic-title-ladder', 'niche.outlier-entry-signals', 'competitors.editing-pattern-decode',
+  'editing.clip-source-policy', 'editing.zero-decision-assembly-package', 'editing.format-rotation',
+  'strategy.authenticity-guardrails', 'analytics.stall-response-order', 'niche.profile-true-crime',
 ];
 
 function setup(t, {seed = true} = {}) {
@@ -70,21 +75,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 249, 'expected 38 Precision OS + 51 prompt library + 160 editing-brain skills');
+  assert.equal(loaded.length, 313, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 249);
+  assert.equal(ids.size, 313);
   const state = skills.state();
-  assert.equal(state.counts.total, 249);
-  assert.equal(state.counts.draft, 249);
+  assert.equal(state.counts.total, 313);
+  assert.equal(state.counts.draft, 313);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 249);
+  assert.equal(state.counts.builtin, 313);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root});
-  assert.equal(second.skills().length, 249);
+  assert.equal(second.skills().length, 313);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -192,6 +197,24 @@ test('selection ranks owner and learned skills above builtin, and honours pins a
   const binding = skills.bindings().find(item => item.mode === 'block');
   skills.unbind(binding.id, {removedBy: 'Owner'});
   assert.ok(skills.select('script.candidate', {familyId: family.id}).some(item => item.skill.id === 'hooks.universal-3-hook'));
+});
+
+test('a pin-only profile reaches a brief only for the family it is pinned to', t => {
+  const {store, skills} = setup(t);
+  const crime = store.saveFamily(familyFixture);
+  const history = store.saveFamily({...familyFixture, name: 'Second fixture family', niche: 'Sleep history'});
+  approveById(skills, 'niche.profile-true-crime');
+  assert.equal(skills.promptBrief('script.candidate'), null, 'approval alone must not spread a profile to every family');
+  assert.equal(skills.promptBrief('script.candidate', {familyId: crime.id}), null);
+  skills.bind({createdBy: 'Owner', note: 'This family covers court cases.', mode: 'pin', skillId: 'niche.profile-true-crime', taskKey: 'script.candidate', familyId: crime.id});
+  assert.deepEqual(skills.promptBrief('script.candidate', {familyId: crime.id}).skillIds, ['niche.profile-true-crime']);
+  assert.equal(skills.promptBrief('script.candidate', {familyId: history.id}), null, 'another family never receives the profile');
+  // The flag is part of the skill, survives an owner revision, and older payloads without it keep their hash.
+  assert.equal(validateSkill(ownerSkill()).pinOnly, undefined);
+  assert.equal(validateSkill({...ownerSkill(), pinOnly: true}).pinOnly, true);
+  assert.throws(() => validateSkill({...ownerSkill(), pinOnly: 'yes'}), /Pin-only/);
+  const loaded = loadPacks(root).filter(item => item.skill.id.startsWith('niche.profile-'));
+  assert.ok(loaded.length >= 10 && loaded.every(item => item.skill.pinOnly), 'every niche profile is pin-only');
 });
 
 test('the brief stays inside its byte budget and reports what it dropped', t => {
@@ -398,6 +421,29 @@ test('deterministic rules are applied in code, not left to the model', () => {
   assert.match(RULES.loudnessIssues({lufs: -9, truePeakDbtp: -2}).join(' '), /Integrated loudness is -9 LUFS/);
   assert.match(RULES.loudnessIssues({lufs: -14, truePeakDbtp: -0.2}).join(' '), /True peak is -0.2 dBTP/);
   assert.throws(() => RULES.loudnessIssues({lufs: 'loud', truePeakDbtp: -2}), /Integrated loudness/);
+  // Mastery bundle: runtime to words, exact allocation, paragraph tiers, image holds, title variety.
+  assert.equal(RULES.wordsForMinutes(60), 9300);
+  assert.equal(RULES.wordsForMinutes(10, 150), 1500);
+  assert.throws(() => RULES.wordsForMinutes(10, 400), /Words per minute/);
+  assert.deepEqual(RULES.wordAllocationIssues({target: 1000, sections: [{words: 150}, {words: 200}, {words: 175}, {words: 250}, {words: 125}, {words: 100}]}), []);
+  assert.match(RULES.wordAllocationIssues({target: 1000, sections: [{words: 150}, {words: 200}, {words: 200}, {words: 250}, {words: 150}, {words: 100}]})[0], /1050 words, not the target 1000/);
+  const chapters = {target: 6000, chapters: [{words: 3000, sections: [{words: 1500}, {words: 1500}]}, {words: 3000, sections: [{words: 1000}, {words: 1900}]}]};
+  assert.deepEqual(RULES.wordAllocationIssues(chapters), ["Chapter 2 sections add up to 2900 words, not the chapter's 3000."]);
+  assert.throws(() => RULES.wordAllocationIssues({target: 100, sections: [{words: 0}]}), /word count/);
+  assert.equal(RULES.paragraphImageCount(100), 3);
+  assert.equal(RULES.paragraphImageCount(101), 6);
+  assert.equal(RULES.paragraphImageCount(99, 'oil-sketch'), 3);
+  assert.equal(RULES.paragraphImageCount(150, 'oil-sketch'), 5);
+  assert.equal(RULES.paragraphImageCount(201, 'oil-sketch'), 15);
+  assert.equal(RULES.paragraphImageCount(150, 'renaissance'), null, 'this tier asks the owner first');
+  assert.equal(RULES.paragraphImageCount(0), 0);
+  assert.throws(() => RULES.paragraphImageCount(50, 'unknown'), /tier style/);
+  assert.equal(RULES.imageIntervalSeconds(600, 50), 12);
+  assert.throws(() => RULES.imageIntervalSeconds(600, 0), /Image count/);
+  assert.deepEqual(RULES.titleVariationIssues(['Quiet rain over an old library', 'A lantern walk through winter fields']), []);
+  assert.match(RULES.titleVariationIssues(['Fall asleep to one', 'Fall asleep to two', 'Fall Asleep to three'])[0], /in a row open with "fall asleep"/);
+  const tired = ['Drift off a', 'Calm b', 'Drift off c', 'Night d', 'Drift off e', 'Rain f', 'Drift off g', 'Snow h'];
+  assert.match(RULES.titleVariationIssues(tired).join(' '), /opens 4 of 8 titles/);
 });
 
 test('skill validation rejects malformed input and keeps typed reference numbers', () => {
@@ -425,7 +471,7 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.skills.counts.total, 249);
+  assert.equal(state.skills.counts.total, 313);
   assert.equal(state.skills.counts.approved, 0);
   assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);

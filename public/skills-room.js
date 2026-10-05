@@ -56,7 +56,7 @@ function skillsView() {
   const skills = state?.skills;
   if (!skills) return heading('Skills', 'Loading the skill library.');
   const counts = skills.counts, approved = skillRuntimeCount();
-  const hero = `<section class="voice-hero"><div><span class="stage-kicker">SKILLS ENGINE · REVIEWED OPERATING KNOWLEDGE</span><h2>Skills</h2><p>Every skill extracted from your two main-brain documents and from the editing research lives here, in our own words. They all start as <b>drafts</b>: a skill changes how a room works only after you approve that exact revision. What the program learns from its own reviews arrives as a proposal in the Lessons queue, never as a silent edit.</p></div>
+  const hero = `<section class="voice-hero"><div><span class="stage-kicker">SKILLS ENGINE · REVIEWED OPERATING KNOWLEDGE</span><h2>Skills</h2><p>Every skill extracted from your main-brain documents (Precision OS, the YT Empire Builders library and the CB YT AI Mastery bundle) and from the editing research lives here, in our own words. They all start as <b>drafts</b>: a skill changes how a room works only after you approve that exact revision. What the program learns from its own reviews arrives as a proposal in the Lessons queue, never as a silent edit. Skills marked <b>pin to a family</b> are channel or niche profiles: they reach only a family you pin them to.</p></div>
     <div class="voice-health"><span class="health-light ${approved ? 'ready' : ''}"></span><strong>${approved ? `${approved} skill${approved === 1 ? '' : 's'} in use` : 'Nothing approved yet'}</strong><small>${approved ? `of ${counts.total} in the library` : `${counts.total} drafts waiting for review`}</small></div></section>`;
   const tally = `<div class="production-context skill-tally"><span>${counts.total} skills</span><span>${counts.approved} approved</span><span>${counts.draft} draft</span><span>${counts.retired} retired</span><span>${counts.builtin} builtin</span><span>${counts.owner} owner</span><span>${counts.learned} learned</span><span>${counts.lessonsProposed} lesson${counts.lessonsProposed === 1 ? '' : 's'} waiting</span></div>`;
   const tabs = [['library', 'Library'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
@@ -84,7 +84,7 @@ function skillLibraryPanel() {
 function skillCard(skill) {
   const current = skill.approved || skill.latest, open = skillOpen === skill.id;
   const spec = current.skill;
-  const head = `<div class="production-card-head"><div><span class="micro-label">${esc(spec.rooms.map(skillTitle).join(' · ').toUpperCase())} · ${esc(spec.kind)}</span><h2>${esc(spec.title)}</h2><code class="skill-id">${esc(skill.id)}</code></div><div class="row-end">${skillOriginBadge(skill.origin)}${skillStatusBadge(skill.status)}</div></div>`;
+  const head = `<div class="production-card-head"><div><span class="micro-label">${esc(spec.rooms.map(skillTitle).join(' · ').toUpperCase())} · ${esc(spec.kind)}${spec.pinOnly ? ' · PIN TO A FAMILY' : ''}</span><h2>${esc(spec.title)}</h2><code class="skill-id">${esc(skill.id)}</code></div><div class="row-end">${skillOriginBadge(skill.origin)}${skillStatusBadge(skill.status)}</div></div>`;
   if (!open) {
     return `<section class="production-card skill-card">${head}<p class="skill-when">${esc(spec.when)}</p><p>${esc(spec.summary)}</p><div class="card-actions">${action('Open', 'skill-open', skill.id, 'secondary')}${skill.status === 'draft' ? action('Review & approve', 'skill-approve', current.id, 'primary') : ''}</div></section>`;
   }
@@ -99,7 +99,7 @@ function skillCard(skill) {
     ${Object.keys(spec.numbers).length ? `<h3>Numbers</h3>${skillNumbers(spec.numbers)}` : ''}
     ${spec.checks.length ? `<h3>Checks</h3>${skillList(spec.checks)}` : ''}
     ${Object.keys(spec.inputs || {}).length ? `<h3>Inputs</h3>${skillNumbers(spec.inputs)}` : ''}
-    <dl class="style-facts"><div><dt>Applies at</dt><dd class="mono-wrap">${esc(spec.tasks.join(', '))}</dd></div><div><dt>Tags</dt><dd>${esc(spec.tags.join(', ') || '—')}</dd></div><div><dt>Priority</dt><dd>${spec.priority}</dd></div><div><dt>Source</dt><dd>${esc(spec.source)}</dd></div></dl>
+    <dl class="style-facts"><div><dt>Applies at</dt><dd class="mono-wrap">${esc(spec.tasks.join(', '))}${spec.pinOnly ? ' (only where pinned)' : ''}</dd></div><div><dt>Tags</dt><dd>${esc(spec.tags.join(', ') || '—')}</dd></div><div><dt>Priority</dt><dd>${spec.priority}</dd></div><div><dt>Source</dt><dd>${esc(spec.source)}</dd></div></dl>
     ${pins}${effect}
     <details class="scene-history"><summary>${skill.revisions.length} revision${skill.revisions.length === 1 ? '' : 's'}</summary>${skill.revisions.slice().reverse().map(item => `<div class="handoff-record"><span>r${item.revision}</span><div><strong>${skillStatusBadge(item.status)} ${esc(item.changeNote)}</strong><p>${esc(item.createdBy)} · ${esc(date(item.createdAt))}${item.lessonId ? ' · from a reviewed lesson' : ''}${item.review ? ` · approved by ${esc(item.review.approvedBy)}` : ''}${item.retirement ? ` · retired: ${esc(item.retirement.reason)}` : ''}</p>${item.status === 'draft' ? `<div class="card-actions">${action('Review & approve', 'skill-approve', item.id, 'primary')}</div>` : ''}${item.status === 'approved' ? `<div class="card-actions">${action('Retire', 'skill-retire', item.id, 'text-button danger')}</div>` : ''}</div></div>`).join('')}</details>
     <div class="card-actions">${action('Close', 'skill-open', '', 'secondary')}${action('Propose a change', 'skill-edit', skill.id, 'secondary')}${action('Pin or block', 'skill-bind', skill.id, 'secondary')}</div></section>`;
@@ -166,7 +166,7 @@ function skillRulesPanel() {
     <h3>Banned filler phrases</h3>${skillList(rules.bannedPhrases)}
     <h3>Source-of-truth order sent with every brief</h3><ol class="skill-rules">${(state.skills.sourceHierarchy || []).map(item => `<li>${esc(item)}</li>`).join('')}</ol>
     <h3>Where the library came from</h3>${skillList(state.skills.packs)}
-    <p class="hint">The owner's two source documents are private course material and stay outside this program's folder. Every skill here is written in our own words.</p></section>`;
+    <p class="hint">The owner's source documents are private course material and stay outside this program's folder. Every skill here is written in our own words.</p></section>`;
 }
 
 // ---------------------------------------------------------------- dialog
@@ -200,6 +200,7 @@ function skillFormFields(skill) {
     <label>Priority<input name="priority" type="number" min="0" max="100" value="${spec?.priority ?? 50}"><small>Higher wins the limited room in a brief. Your skills already outrank builtin ones.</small></label>
     <label class="full">Rooms<select name="rooms" multiple size="6" required>${vocabulary.rooms.map(room => `<option value="${room}" ${spec?.rooms.includes(room) ? 'selected' : ''}>${esc(skillTitle(room))}</option>`).join('')}</select><small>Hold Ctrl to pick several. Task bindings follow the rooms unless you choose them below.</small></label>
     <label class="full">Applies at (optional)<select name="tasks" multiple size="6">${vocabulary.tasks.map(task => `<option value="${task}" ${spec?.tasks.includes(task) ? 'selected' : ''}>${esc(task)}</option>`).join('')}</select><small>Leave empty to use the rooms' default tasks.</small></label>
+    <label class="checkbox-label full"><input name="pinOnly" type="checkbox" ${spec?.pinOnly ? 'checked' : ''}><span>Only where pinned. Use this for a channel or niche profile, so it reaches a family only after you pin it there.</span></label>
     ${skillTextarea('when', 'When it applies', {rows: 2, required: true, min: 10, max: 400, value: spec?.when || '', hint: 'One sentence.'})}
     ${skillTextarea('summary', 'Summary', {rows: 3, required: true, min: 10, max: 1500, value: spec?.summary || ''})}
     ${skillTextarea('steps', 'Steps (one per line)', {rows: 4, value: lines(spec?.steps)})}
@@ -294,7 +295,7 @@ function skillFromForm(form) {
   const tasks = picked('tasks');
   return {
     id: form.elements.id.value.trim(), title: form.elements.title.value.trim(),
-    rooms: picked('rooms'), ...(tasks.length ? {tasks} : {}),
+    rooms: picked('rooms'), ...(tasks.length ? {tasks} : {}), ...(form.elements.pinOnly.checked ? {pinOnly: true} : {}),
     kind: form.elements.kind.value, when: form.elements.when.value.trim(), summary: form.elements.summary.value.trim(),
     steps: lines('steps'), do: lines('do'), avoid: lines('avoid'), checks: lines('checks'), numbers,
     tags: form.elements.tags.value.split(',').map(item => item.trim().toLowerCase()).filter(Boolean),

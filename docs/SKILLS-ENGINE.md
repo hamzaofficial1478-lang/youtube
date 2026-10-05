@@ -1,4 +1,4 @@
-# Skills Engine (v0.11.0)
+# Skills Engine (v0.11.1)
 
 The Skills Engine is the program's reusable operating knowledge: what to do, what to avoid, and the
 exact numbers each room applies. It was built from `docs/SKILLS-ENGINE-PLAN.md`; this file records
@@ -15,19 +15,20 @@ never deleted, so what was in force on any given day stays reconstructible.
 
 ## 2. What is in the library
 
-249 builtin skills, all written in our own words:
+313 builtin skills, all written in our own words:
 
 | Pack | Skills | Source |
 |---|---|---|
 | `skills/precision-os.json` | 38 | Precision AI Operating System, 36 sections plus the pipeline and setup notes |
 | `skills/prompt-library.json` | 51 | YT Empire Builders Reusable Prompt Library, library rules plus 44 prompts |
+| `skills/mastery-bundle.json` | 64 | CB YT AI Mastery Prompts Bundle (475 pages, read in full; notes in `docs/research/mastery-bundle-analysis.md`) |
 | `docs/research/editing-brain/om-creative.json` | 49 | How a professional editor decides |
 | `docs/research/editing-brain/om-meta.json` | 41 | Orchestration, reviewer rubric, the lesson loop |
 | `docs/research/editing-brain/motion.json` | 35 | Motion graphics, 2D animation, the owner's title-card prompt |
 | `docs/research/editing-brain/timeline.json` | 35 | Timeline model, cuts, captions, FFmpeg render graph |
 
-The owner's two source documents are private course material and stay **outside** this folder and
-outside GitHub. No long passage from either is reproduced; each skill carries a `source` note saying
+The owner's source documents are private course material and stay **outside** this folder and
+outside GitHub. No long passage from any of them is reproduced; each skill carries a `source` note saying
 which section it restates. `tests/skills.test.js` asserts that every skill ID the build brief maps
 in its section 8 exists in the seeded library, so nothing from the documents was dropped.
 
@@ -47,6 +48,7 @@ summary     one or two sentences
 steps/do/avoid/checks   the operating content
 numbers     reference values; strings, numbers, booleans, ranges or small tables
 tags, source, priority
+pinOnly     optional; true = applies only where the owner pins it (channel and niche profiles)
 ```
 
 `numbers` keeps its JSON shape, because the editing-brain packs rely on ranges and per-style tables.
@@ -58,6 +60,10 @@ concrete to act on.
 1. **Selection** (`select`): approved revisions whose `tasks` include the task key. A family **pin**
    lifts a skill to the front even where its own bindings do not reach; a **block** removes it, and a
    block always beats a pin. Order: pinned, then owner > learned > builtin, then priority, then ID.
+   A **pin-only** skill (`pinOnly: true`) is never selected by default, even when approved: it
+   reaches a brief only where it is pinned, usually to one family. All niche profiles and the
+   format-specific script, visual and editing templates of the mastery bundle are pin-only, so a
+   sleep-history rule can never leak into a true-crime family's prompt.
 2. **Compilation** (`brief`): a compact brief of `id, title, when, do, avoid, numbers, checks` plus
    the source-of-truth order, and the family's open project state. Long prose fields are left out.
 3. **Budget**: the brief is capped at **1800 bytes**, taken out of the family's job token limit. A
@@ -90,6 +96,13 @@ Numbers that must not drift are applied in code, not left to a model. `RULES` in
 | `placeholderIssues` | a raw `[PLACEHOLDER]` blocks the prompt and the artifact |
 | `sentenceLengthIssues` | 25 words per narration sentence |
 | `loudnessIssues` | −14 LUFS ±1, true peak ≤ −1.5 dBTP |
+| `wordsForMinutes` | runtime × 150-170 words a minute, 155 by default |
+| `wordAllocationIssues` | sections must add up to their chapter and chapters to the target, exactly |
+| `paragraphImageCount` | per-style paragraph tiers: standard 3/6, oil-sketch 3/5/15, renaissance 5/ask/15 |
+| `imageIntervalSeconds` | narration seconds ÷ image count, the zero-decision assembly hold |
+| `titleVariationIssues` | no opening three times in a row; no opening on more than a quarter of 8+ titles |
+
+The last five are ready for the script outline step and the Editing Room; no room calls them yet.
 
 Each has unit tests covering both the passing and the failing side.
 
@@ -137,6 +150,12 @@ returns the approved set by default.
 - "Verified stock only" matches what the Scene Room already enforces: stock comes from provider
   search results on the providers' own media hosts.
 - Outreach drafting, uploads and paid generation stay owner actions.
+- From the mastery bundle, these were **not** adopted: invented authority ("a spy agency used this",
+  "scientists baffled" without a source), title formulas built on ethnicity or immigration status,
+  religion "lies exposed" outrage titles, AI video of real people, realistic fake CCTV, film clips and
+  YouTube downloads as visuals, franchise retellings, deleting and re-uploading the same videos, and
+  device, network, account or AdSense-identity tactics to get around YouTube enforcement. Where a
+  prompt relied on one of these, the skill keeps the useful technique and says what replaced it.
 - Prompts that named outside tools are mapped to the capabilities this program actually has, or
   reported as not implemented.
 

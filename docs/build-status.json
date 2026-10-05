@@ -237,7 +237,7 @@
           "id": "S01",
           "title": "Skills Engine: reviewed operating knowledge used at runtime",
           "status": "done",
-          "evidence": "249 builtin skills seeded as drafts from the two owner documents (38 + 51) and the editing-brain research (160); a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 15 Skills tests; full suite 153/153 on Node 24.18.1. Nothing is injected until a human approves that exact revision."
+          "evidence": "313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision."
         },
         {
           "id": "P06",

@@ -159,6 +159,10 @@ function validateSkill(input) {
     source: text(input.source, 'Source note', 3, 600),
     priority: integer(input.priority ?? 0, 0, 100, 'Priority'),
   };
+  // A pin-only skill (a channel or niche profile) never applies by default; it reaches a brief only
+  // where the owner pins it, usually to one family. Absent means false, so older payload hashes hold.
+  need(input.pinOnly === undefined || typeof input.pinOnly === 'boolean', 'Pin-only must be true or false.');
+  if (input.pinOnly) skill.pinOnly = true;
   need(skill.steps.length + skill.do.length + skill.avoid.length + skill.checks.length > 0,
     'A skill needs at least one step, do rule, avoid rule or check so a room can act on it.');
   return skill;
@@ -244,9 +248,81 @@ function loudnessIssues(measured) {
   }
   return issues;
 }
+// Mastery bundle: narration runs 150-170 words a minute at documentary pace; 155 is the default.
+function wordsForMinutes(minutes, wordsPerMinute = 155) {
+  need(Number.isFinite(minutes) && minutes >= 0 && minutes <= 1440, 'Duration must be 0-1440 minutes.');
+  need(Number.isFinite(wordsPerMinute) && wordsPerMinute >= 90 && wordsPerMinute <= 220, 'Words per minute must be 90-220.');
+  return Math.round(minutes * wordsPerMinute);
+}
+// An outline's sections must add up to their chapter and the chapters to the target, exactly.
+// Shape: {target, chapters: [{title, words, sections: [{title, words}]}]} or {target, sections: [...]}.
+function wordAllocationIssues(outline) {
+  object(outline, 'Outline');
+  integer(outline.target, 1, 500000, 'Target word count');
+  const count = (item, label) => { integer(item?.words, 1, 500000, `${label} word count`); return item.words; };
+  const sum = (items, label) => items.reduce((total, item, index) => total + count(item, `${label} ${index + 1}`), 0);
+  const issues = [];
+  if (Array.isArray(outline.chapters)) {
+    need(outline.chapters.length >= 1 && outline.chapters.length <= 200, 'An outline needs 1-200 chapters.');
+    outline.chapters.forEach((chapter, index) => {
+      const own = count(chapter, `Chapter ${index + 1}`);
+      if (Array.isArray(chapter.sections) && chapter.sections.length) {
+        const inner = sum(chapter.sections, `Chapter ${index + 1} section`);
+        if (inner !== own) issues.push(`Chapter ${index + 1} sections add up to ${inner} words, not the chapter's ${own}.`);
+      }
+    });
+    const total = sum(outline.chapters, 'Chapter');
+    if (total !== outline.target) issues.push(`Chapters add up to ${total} words, not the target ${outline.target}.`);
+  } else {
+    need(Array.isArray(outline.sections) && outline.sections.length >= 1 && outline.sections.length <= 400, 'An outline needs chapters or 1-400 sections.');
+    const total = sum(outline.sections, 'Section');
+    if (total !== outline.target) issues.push(`Sections add up to ${total} words, not the target ${outline.target}.`);
+  }
+  return issues;
+}
+// Per-style paragraph tiers from the mastery bundle. A null count means "ask the owner first".
+const PARAGRAPH_IMAGE_TIERS = Object.freeze({
+  standard: Object.freeze([{upTo: 100, count: 3}, {upTo: Infinity, count: 6}]),
+  'oil-sketch': Object.freeze([{upTo: 99, count: 3}, {upTo: 200, count: 5}, {upTo: Infinity, count: 15}]),
+  renaissance: Object.freeze([{upTo: 99, count: 5}, {upTo: 200, count: null}, {upTo: Infinity, count: 15}]),
+});
+function paragraphImageCount(wordTotal, style = 'standard') {
+  integer(wordTotal, 0, 100000, 'Word count');
+  need(Object.hasOwn(PARAGRAPH_IMAGE_TIERS, style), `Choose a paragraph tier style: ${Object.keys(PARAGRAPH_IMAGE_TIERS).join(', ')}.`);
+  if (wordTotal === 0) return 0;
+  return PARAGRAPH_IMAGE_TIERS[style].find(tier => wordTotal <= tier.upTo).count;
+}
+// Zero-decision assembly: every image holds narration length / image count seconds.
+function imageIntervalSeconds(narrationSeconds, imagesTotal) {
+  need(Number.isFinite(narrationSeconds) && narrationSeconds > 0 && narrationSeconds <= 86400, 'Narration length must be above 0 and at most 86400 seconds.');
+  integer(imagesTotal, 1, 20000, 'Image count');
+  return Math.round(narrationSeconds / imagesTotal * 1000) / 1000;
+}
+// Inauthentic-content defence: titles must not all wear one structure. Flags an opening (first two
+// words) used more than twice in a row, or by more than a quarter of a list of eight or more.
+function titleVariationIssues(titles) {
+  const list = (Array.isArray(titles) ? titles : []).map(item => text(item, 'Title', 1, 400));
+  need(list.length >= 1 && list.length <= 1000, 'Give 1-1000 titles.');
+  const opening = title => (title.toLowerCase().match(/[\p{L}\p{N}']+/gu) || []).slice(0, 2).join(' ');
+  const issues = [], counts = new Map();
+  let run = 1;
+  list.forEach((title, index) => {
+    const key = opening(title);
+    counts.set(key, (counts.get(key) || 0) + 1);
+    run = index && key === opening(list[index - 1]) ? run + 1 : 1;
+    if (run === 3) issues.push(`Three titles in a row open with "${key}"; vary the opening.`);
+  });
+  if (list.length >= 8) {
+    for (const [key, used] of counts) {
+      if (used / list.length > 0.25) issues.push(`"${key}" opens ${used} of ${list.length} titles; keep any one opening to a quarter or less.`);
+    }
+  }
+  return issues;
+}
 const RULES = Object.freeze({
   imageCount, beatCount, textDwellSeconds, captionIssues, titleIssues, bannedPhraseIssues,
   placeholderIssues, sentenceLengthIssues, loudnessIssues, words,
+  wordsForMinutes, wordAllocationIssues, paragraphImageCount, imageIntervalSeconds, titleVariationIssues,
   limits: Object.freeze({caption: CAPTION_LIMITS, title: TITLE_LIMITS, loudness: LOUDNESS_TARGET, bannedPhrases: BANNED_PHRASES}),
 });
 
@@ -255,6 +331,7 @@ const RULES = Object.freeze({
 const PACK_FILES = Object.freeze([
   {file: 'skills/precision-os.json', label: 'Precision AI Operating System'},
   {file: 'skills/prompt-library.json', label: 'YT Empire Builders Prompt Library'},
+  {file: 'skills/mastery-bundle.json', label: 'CB YT AI Mastery Prompts Bundle'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -614,7 +691,7 @@ class SkillsEngine {
       if (blocked.has(row.skill_id)) continue;
       const skill = JSON.parse(row.payload);
       const pinned = pins.has(row.skill_id);
-      if (!pinned && !skill.tasks.includes(taskKey)) continue;
+      if (!pinned && (skill.pinOnly || !skill.tasks.includes(taskKey))) continue;
       selected.push({revisionId: row.id, revision: row.revision, origin: row.origin, pinned, pinPosition: pinned ? pins.get(row.skill_id) : 0, skill});
     }
     selected.sort((left, right) =>
