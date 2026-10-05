@@ -333,13 +333,17 @@ class Store {
       const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
       // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
       const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
+      // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
-      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,guidanceAnalysisId:guidance?.analysisId||null,promptInput};
-      const type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}`;
+      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
+      const type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
       const jobId=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,type,JSON.stringify(scope),at,at);
+      if(skillBrief)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
       this.event(`Queued Hermes ${f.primaryLocale} script candidate: ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);
     });
   }
@@ -357,11 +361,13 @@ class Store {
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Hermes connector before retrying.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Hermes needs permitted evidence notes for factual script generation.');
       const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
-      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,promptInput};
+      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
+      if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
       this.db.prepare("UPDATE jobs SET status='retried',updated_at=? WHERE id=?").run(at,previous.id);
       this.event(`Deliberately retried Hermes ${f.primaryLocale} script candidate (attempt ${attempts}/3): ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
     });
@@ -418,6 +424,9 @@ class Store {
       this.db.prepare("INSERT INTO script_candidates(id,job_id,content_id,family_id,content_revision,family_revision,connector_id,connector_revision,language,locale,prompt_version,status,payload,quality,usage,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(id,jobId,c.id,f.id,c.revision,f.revision,scope.connectorId,scope.connectorRevision,channelLanguage(f.primaryLocale),f.primaryLocale,scope.promptVersion,candidateStatus,JSON.stringify(result.candidate),JSON.stringify(quality),JSON.stringify(usage),at);
       this.db.prepare("UPDATE llm_usage SET status='settled',prompt_tokens=?,completion_tokens=?,total_tokens=?,updated_at=? WHERE job_id=?").run(prompt,completion,total,at,jobId);
       this.db.prepare('UPDATE jobs SET status=?,result=?,error=?,updated_at=? WHERE id=?').run(jobStatus,JSON.stringify({candidateId:id,usage,quality}),quality.passed?null:quality.issues.join(' '),at,jobId);
+      // Skills Engine: the quality gate's own finding becomes a lesson candidate for human review.
+      this.skillRuntime?.settleUsage?.(jobId,jobStatus);
+      if(!quality.passed)this.skillRuntime?.capture({familyId:f.id,skillId:'script.spoken-standard',taskKey:'script.candidate',source:'script-quality-gate',sourceRef:jobId,finding:`The script quality gate blocked a candidate: ${quality.issues.join(' ')}`,evidence:[`script candidate ${id}`,`hermes job ${jobId}`],proposal:{kind:'add-check',value:quality.issues[0]}});
       this.event(`${quality.passed?'Hermes prepared':'Hermes returned a quality-blocked'} ${f.primaryLocale} script candidate for review: ${c.title}`);return this.scriptCandidate(id);
     });
   }
@@ -437,12 +446,16 @@ class Store {
       requireValue(new Set(selected.map(item=>item.id)).size===selected.length,'Choose each evidence record once.');
       selected.sort((left,right)=>left.id.localeCompare(right.id));
       const snapshot=selected.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}));
-      const evidenceHash=createHash('sha256').update(JSON.stringify([family.revision,...snapshot.map(item=>[item.recordId,item.revision])])).digest('hex');
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate,sources:snapshot};
-      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,family.tokenBudget.researchJobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit.');
-      const scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:family.tokenBudget.researchJobLimit,evidence:snapshot.map(item=>({id:item.recordId,revision:item.revision})),promptInput};
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      // The approved skill set is part of the prompt, so it is part of the deduplication key.
+      const evidenceHash=createHash('sha256').update(JSON.stringify([family.revision,...snapshot.map(item=>[item.recordId,item.revision]),...(skillBrief?.revisionIds||[])])).digest('hex');
+      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,family.tokenBudget.researchJobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit, or reduce the approved skills bound to research briefs.');
+      const scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:family.tokenBudget.researchJobLimit,evidence:snapshot.map(item=>({id:item.recordId,revision:item.revision})),skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const existing=this.db.prepare('SELECT * FROM research_jobs WHERE family_id=? AND brief_date=? AND connector_id=? AND connector_revision=? AND prompt_version=1 AND evidence_hash=?').get(family.id,briefDate,input.connectorId,input.connectorRevision,evidenceHash);if(existing)return existing;
-      const id=randomUUID(),at=now();this.db.prepare("INSERT INTO research_jobs(id,family_id,family_revision,brief_date,connector_id,connector_revision,prompt_version,evidence_hash,status,input,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,'queued',?,?,?)").run(id,family.id,family.revision,briefDate,input.connectorId,input.connectorRevision,evidenceHash,JSON.stringify(scope),at,at);this.event(`Queued daily research brief for ${family.name}: ${briefDate}`);return this.db.prepare('SELECT * FROM research_jobs WHERE id=?').get(id);
+      const id=randomUUID(),at=now();this.db.prepare("INSERT INTO research_jobs(id,family_id,family_revision,brief_date,connector_id,connector_revision,prompt_version,evidence_hash,status,input,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,'queued',?,?,?)").run(id,family.id,family.revision,briefDate,input.connectorId,input.connectorRevision,evidenceHash,JSON.stringify(scope),at,at);
+      if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:family.id,room:'research',taskKey:'research.brief',brief:skillBrief});
+      this.event(`Queued daily research brief for ${family.name}: ${briefDate}`);return this.db.prepare('SELECT * FROM research_jobs WHERE id=?').get(id);
     });
   }
   retryResearchBrief(jobId,input){
@@ -458,9 +471,11 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&typeof input.connectorRevision==='number','Choose the current tested Hermes connector.');
       const sources=oldScope.evidence.map(reference=>{const current=this.researchEvidence(reference.id);requireValue(current.revision===reference.revision,'Research evidence changed. Queue a fresh daily brief instead.',409);requireValue(current.familyId===family.id&&!current.archived&&current.permission==='permitted'&&current.analysisMode==='brief_synthesis_permitted','Research evidence is no longer eligible for synthesis.',409);requireValue(current.expiresAt>=previous.brief_date,'Research evidence expired for this brief date. Queue a fresh daily brief with current evidence.',409);return current;});
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate:previous.brief_date,sources:sources.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}))};
-      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,family.tokenBudget.researchJobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit.');
-      const id=randomUUID(),at=now(),attempts=paidAttempt?previous.attempts+1:previous.attempts,evidenceHash=`${previous.evidence_hash}:retry:${id}`,scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:family.tokenBudget.researchJobLimit,evidence:oldScope.evidence,promptInput};
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,family.tokenBudget.researchJobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit, or reduce the approved skills bound to research briefs.');
+      const id=randomUUID(),at=now(),attempts=paidAttempt?previous.attempts+1:previous.attempts,evidenceHash=`${previous.evidence_hash}:retry:${id}`,scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:family.tokenBudget.researchJobLimit,evidence:oldScope.evidence,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       this.db.prepare("INSERT INTO research_jobs(id,family_id,family_revision,brief_date,connector_id,connector_revision,prompt_version,evidence_hash,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,?,?,1,?,'queued',?,?,?,?)").run(id,family.id,family.revision,previous.brief_date,input.connectorId,input.connectorRevision,evidenceHash,JSON.stringify(scope),attempts,at,at);
+      if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:family.id,room:'research',taskKey:'research.brief',brief:skillBrief});
       this.db.prepare("UPDATE research_jobs SET status='retried',updated_at=? WHERE id=?").run(at,previous.id);this.event(`Deliberately requeued daily research brief for ${family.name}: attempt ${attempts} of 3.`);return this.db.prepare('SELECT * FROM research_jobs WHERE id=?').get(id);
     });
   }

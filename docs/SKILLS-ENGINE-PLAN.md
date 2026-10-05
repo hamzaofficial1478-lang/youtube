@@ -1,6 +1,6 @@
 # Skills Engine — design plan and source coverage map
 
-Status: **planned, not built** (2026-10-05). Research is complete; no engine code exists yet. This file is the build brief for the next session.
+Status: **built** in 0.11.0 (2026-10-05). This file remains the build brief and the source coverage map; `docs/SKILLS-ENGINE.md` records what was actually built, including the two places the implementation deliberately differs from this plan (reviews are stored on the revision row as the Style Library already does, and default task bindings are derived from the approved revision rather than stored as rows). Step 7 below, the P06 Editing Room, is the next milestone.
 
 ## 1. What the owner asked for (2026-10-05)
 

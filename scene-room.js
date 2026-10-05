@@ -637,6 +637,16 @@ class SceneRoom {
         review = {...review, confirmations: {coverageReviewed: true, directionReviewed: true}};
       }
       this.db.prepare('UPDATE scene_manifests SET review=? WHERE id=?').run(JSON.stringify(review), id);
+      // Skills Engine: a rejection with the reviewer's own words becomes a lesson candidate.
+      if (review.decision === 'rejected') {
+        this.store.skillRuntime?.capture({
+          familyId: row.family_id, skillId: 'scene.visual-serves-narration', taskKey: 'scene.plan',
+          source: 'scene-plan-review', sourceRef: row.id,
+          finding: `A scene plan was rejected at review: ${notes}`,
+          evidence: [`scene manifest ${row.id} r${row.revision}`, `reviewer ${reviewer}`],
+          proposal: {kind: 'add-avoid', value: notes.slice(0, 1200)},
+        });
+      }
       if (review.decision === 'approved') this.endApprovals(row.content_id, 'superseded', `Scene plan revision ${row.revision} was approved; approve the visuals again.`, row.id);
       this.store.event(`${review.decision === 'approved' ? 'Approved' : 'Rejected'} scene plan r${row.revision} for content ${row.content_id} (${reviewer})`);
       return this.publicManifest(this.manifestRow(id), {detail: true});

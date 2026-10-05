@@ -1,7 +1,7 @@
 {
-  "version": "0.10.0",
+  "version": "0.11.0",
   "updated": "2026-10-05",
-  "nextAction": "Project moved to Claude Code on the owner's PC (read docs/HANDOFF.md). Next build milestone: the Skills Engine (docs/SKILLS-ENGINE-PLAN.md), then the P06 Editing Room on top of it. Owner actions still pending: install a full FFmpeg build, run readiness, pin it, render the first assembly proxy from real visuals and record the style-proof verdict.",
+  "nextAction": "Review and approve the skill drafts you want in use (Skills page), then build the P06 Editing Room on the approved editing, motion and timeline skills (docs/SKILLS-ENGINE-PLAN.md section 10.7). Until a skill is approved it changes nothing. Owner actions still pending: run the FFmpeg readiness check, pin the build, render the first assembly proxy from real visuals and record the style-proof verdict.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -234,6 +234,12 @@
           "evidence": "Version 0.10 (2026-10-04): FFmpeg readiness (versions, binary SHA-256, filter/encoder inventory, byte-identical fixture), owner-pinned binaries re-checked before every render, deterministic 360p assembly proxy of the approved board on the approved narration (frame-snapped shots, Ken Burns stills, held/trimmed clips, cut via concat or crossfade/dip via frame-exact xfade), QC (duration, frame, audio, black, frozen), contact sheet, immutable render manifest with commands and logs, cancellation, restart recovery and a human style-proof verdict. 5 render checks with real FFmpeg; full suite 138 tests, 136 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Documentary Montage proven with fixture media; the owner's first proof on real visuals and his Windows FFmpeg build is pending."
         },
         {
+          "id": "S01",
+          "title": "Skills Engine: reviewed operating knowledge used at runtime",
+          "status": "done",
+          "evidence": "249 builtin skills seeded as drafts from the two owner documents (38 + 51) and the editing-brain research (160); a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 15 Skills tests; full suite 153/153 on Node 24.18.1. Nothing is injected until a human approves that exact revision."
+        },
+        {
           "id": "P06",
           "title": "Editing Room and deterministic timeline",
           "status": "planned",
@@ -359,5 +365,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Assembly proxy & style proof"
+  "milestone": "Skills Engine"
 }

@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/app.js" defer></script></head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
@@ -13,6 +13,7 @@
       <a href="#niches" data-view="niches"><span>✦</span> Niche Factory</a>
       <a href="#studio" data-view="studio"><span>✎</span> Content studio</a>
       <a href="#production" data-view="production"><span>◆</span> Production panel</a>
+      <a href="#skills" data-view="skills"><span>✦</span> Skills</a>
       <a href="#connections" data-view="connections"><span>⌘</span> Connections</a>
       <a href="#progress" data-view="progress"><span>☷</span> Build progress</a>
     </nav>
@@ -125,6 +126,9 @@
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-profile-dialog">Cancel</button><button type="submit" class="button primary">Save voice profile</button></div>
     </form>
+  </dialog>
+  <dialog id="skill-dialog" class="wide-dialog" aria-labelledby="skill-dialog-heading">
+    <form id="skill-form"><div class="dialog-heading"><div><p class="eyebrow" id="skill-dialog-eyebrow">SKILL</p><h2 id="skill-dialog-heading">Skill</h2></div><button type="button" class="icon-button" data-close="skill-dialog" aria-label="Close skill dialog">&times;</button></div><div class="form-grid" id="skill-fields"></div><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="skill-dialog">Cancel</button><button type="submit" class="button primary" id="skill-dialog-submit">Save</button></div></form>
   </dialog>
   <dialog id="voice-approval-dialog" aria-labelledby="voice-approval-heading">
     <form id="voice-approval-form"><div class="dialog-heading"><div><p class="eyebrow">HUMAN LISTENING GATE</p><h2 id="voice-approval-heading">Approve narration</h2></div><button type="button" class="icon-button" data-close="voice-approval-dialog" aria-label="Close approval dialog">×</button></div><input type="hidden" name="auditionId"><div class="form-grid"><label>Approver name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Comparison notes<textarea name="comparisonNotes" required minlength="20" maxlength="2000" rows="4" placeholder="What you compared and why this take wins."></textarea></label><label class="checkbox-label full"><input name="intelligibilityConfirmed" type="checkbox" required><span>I listened to the complete narration and confirmed every word is intelligible, correctly pronounced and suitable for the intended audience.</span></label></div><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-approval-dialog">Cancel</button><button type="submit" class="button primary">Approve exact narration</button></div></form>

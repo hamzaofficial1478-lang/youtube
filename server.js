@@ -15,10 +15,11 @@ const {CompetitorIntelligence}=require('./competitor-intel');
 const {NicheFactory}=require('./niche-factory');
 const {SceneRoom}=require('./scene-room');
 const {RenderRoom}=require('./render-room');
+const {SkillsEngine}=require('./skills');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
 function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
   const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
   const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
@@ -28,6 +29,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const researchReasoning=new ResearchReasoning(store,connectors);
   const ffmpeg=voiceOptions.ffmpeg||getFFmpegPath(),ffprobe=voiceOptions.ffprobe||process.env.FFPROBE_PATH||(path.isAbsolute(ffmpeg)?path.join(path.dirname(ffmpeg),process.platform==='win32'?'ffprobe.exe':'ffprobe'):'ffprobe');
   const styles=new StyleLibrary(store);
+  // The Skills Engine attaches its runtime to the store so the prompt-building rooms can reach
+  // the approved skill brief. Nothing is injected until a skill revision is approved by a human.
+  const skills=new SkillsEngine(store,{root}).attach();
   const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles),nicheFactory=new NicheFactory(store,connectors,quota,styles);
   const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel});
   const renderRoom=new RenderRoom(store,styles,sceneRoom,{dataRoot,ffmpeg,ffprobe});
@@ -54,9 +58,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.method==='GET'){
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
-        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-voice-auditions-and-style-library'});
-        if(pathname==='/api/state'){const connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
-          capabilities:{research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
+        if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-reviewed-skills-engine'});
+        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+          capabilities:{skills:skillState.counts.approved>0?'approved_skills_injected':'drafts_only_not_injected',research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
@@ -67,6 +71,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const sceneBoard=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/board$/);
         if(sceneBoard)return json(res,200,sceneRoom.boardSummary(sceneBoard[1]));
         if(pathname==='/api/scene-candidates')return json(res,200,sceneRoom.candidates(String(url.searchParams.get('contentId')||''),String(url.searchParams.get('shotId')||'')));
+        if(pathname==='/api/skills/export')return json(res,200,{status:url.searchParams.get('status')==='latest'?'latest':'approved',skills:skills.exportPack({status:url.searchParams.get('status')==='latest'?'latest':'approved'})});
+        if(pathname==='/api/skills/brief')return json(res,200,skills.brief(String(url.searchParams.get('taskKey')||''),{familyId:url.searchParams.get('familyId')||null}));
+        if(pathname==='/api/skills/effect')return json(res,200,skills.effect(String(url.searchParams.get('skillId')||'')));
         const visualFile=pathname.match(/^\/api\/(visual-candidates|visual-assets)\/([a-f0-9-]+)\/(preview|thumb|file)$/);
         if(visualFile){const [,kind,id,part]=visualFile;if((kind==='visual-candidates')!==(part==='preview'))throw new InputError('Page not found.',404);const {file,mime}=kind==='visual-candidates'?sceneRoom.candidatePreview(id):sceneRoom.assetFile(id,part);let body;try{body=fs.readFileSync(file);}catch{throw new InputError('Media file is unavailable.',404);}res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store','Content-Length':body.length});return res.end(body);}
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
@@ -131,6 +138,21 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(visualRetry&&req.method==='POST')return json(res,200,sceneRoom.retryJob(visualRetry[1],body));
         const visualRevoke=pathname.match(/^\/api\/visual-approvals\/([a-f0-9-]+)\/revoke$/);
         if(visualRevoke&&req.method==='POST')return json(res,200,sceneRoom.revokeApproval(visualRevoke[1],body));
+        if(pathname==='/api/skills'&&req.method==='POST')return json(res,200,skills.saveOwnerSkill(body));
+        if(pathname==='/api/skills/import'&&req.method==='POST')return json(res,200,skills.importPack(body));
+        if(pathname==='/api/skill-bindings'&&req.method==='POST')return json(res,200,skills.bind(body));
+        const skillRevision=pathname.match(/^\/api\/skills\/([a-z][a-z0-9]*\.[a-z0-9][a-z0-9-]*)\/revisions$/);
+        if(skillRevision&&req.method==='POST')return json(res,200,skills.createRevision(skillRevision[1],body));
+        const skillDecision=pathname.match(/^\/api\/skill-revisions\/([a-f0-9-]+)\/(approve|retire)$/);
+        if(skillDecision&&req.method==='POST')return json(res,200,skillDecision[2]==='approve'?skills.approveRevision(skillDecision[1],body):skills.retireRevision(skillDecision[1],body));
+        const skillUnbind=pathname.match(/^\/api\/skill-bindings\/([a-f0-9-]+)\/remove$/);
+        if(skillUnbind&&req.method==='POST')return json(res,200,skills.unbind(skillUnbind[1],body));
+        const lessonReview=pathname.match(/^\/api\/skill-lessons\/([a-f0-9-]+)\/review$/);
+        if(lessonReview&&req.method==='POST')return json(res,200,skills.reviewLesson(lessonReview[1],body));
+        const projectState=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/project-state$/);
+        if(projectState&&req.method==='POST')return json(res,200,skills.recordProjectState(projectState[1],body));
+        const projectStateEnd=pathname.match(/^\/api\/project-state\/([a-f0-9-]+)\/end$/);
+        if(projectStateEnd&&req.method==='POST')return json(res,200,skills.endProjectState(projectStateEnd[1],body));
         if(pathname==='/api/styles'&&req.method==='POST')return json(res,200,styles.createProfile(body));
         const styleRevision=pathname.match(/^\/api\/styles\/([a-f0-9-]+)\/revisions$/);
         if(styleRevision&&req.method==='POST')return json(res,200,styles.createRevision(styleRevision[1],body));

@@ -1,0 +1,914 @@
+[
+  {
+    "id": "os.execution-partner",
+    "title": "Work as an execution partner, not an answer machine",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "At the start of any room's work, before the first call to a model or a provider.",
+    "summary": "Each job runs through the same chain: gather context, state the understanding, research what is missing, reason, execute, verify, then deliver. The goal is an output the next room can use, not the fastest reply to the last message.",
+    "steps": [
+      "CONTEXT: load the family, its approved decisions, its project state and the artifact the previous room produced.",
+      "UNDERSTANDING: state in one line what this job has to produce and for which downstream room.",
+      "RESEARCH: fill only the gaps that would otherwise be guessed, using recorded evidence.",
+      "REASONING: choose the approach and name the constraint that decides it.",
+      "EXECUTION: produce the artifact in the room's own schema.",
+      "VERIFICATION: run the skill checks and the room's quality gate before anything is shown as finished.",
+      "DELIVERY: hand over the artifact plus what is still missing and the next action."
+    ],
+    "do": [
+      "Name the downstream room the output feeds, so the shape is right the first time.",
+      "Carry forward the previous room's artifact instead of re-deriving it."
+    ],
+    "avoid": [
+      "Treating a request as a stand-alone question when a saved project already answers part of it.",
+      "Reporting a job as finished when only text was produced and nothing was verified."
+    ],
+    "numbers": {"pipeline": "7 stages: context, understanding, research, reasoning, execution, verification, delivery"},
+    "checks": ["Every stage above either ran or is recorded as deliberately skipped with a reason."],
+    "tags": ["operating-system", "pipeline"],
+    "source": "Precision AI Operating System, purpose and pipeline (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "os.context-first",
+    "title": "Treat the family as one workspace, not separate requests",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "Before producing any important output for a channel family.",
+    "summary": "A family is an ongoing workspace. Before generating, ask which existing context would materially improve this output, then load that context instead of starting from zero.",
+    "steps": [
+      "List the context that could change this output: approved drafts, rejected drafts, prior revisions, style rules, voice profile, audience, competitor blueprint, research evidence, budget limits.",
+      "Load what exists and name what does not.",
+      "Only then generate."
+    ],
+    "do": ["Reuse the family's approved decisions as constraints rather than suggestions."],
+    "avoid": ["Asking the owner to restate information the program already stores."],
+    "numbers": {},
+    "checks": ["The prompt or plan references at least the family's approved style, voice and format when those exist."],
+    "tags": ["context", "workspace"],
+    "source": "Precision AI Operating System 1 (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "os.project-memory",
+    "title": "Keep a working memory of owner, business, content system and preferences",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "When a family is created or changed, and whenever a correction reveals a standing preference.",
+    "summary": "Four memory areas drive quality: who the owner is and how he communicates, what each family is for and what stage it is at, how its content system works, and the preferences proven by repeated corrections.",
+    "steps": [
+      "IDENTITY: record what the owner does, his audience, his communication style and the language he writes in.",
+      "FAMILY: record objective, audience, stage, constraints, assets, tools, deadlines and approved direction.",
+      "CONTENT SYSTEM: record platform, niche, title philosophy, thumbnail philosophy, scripting style, visual treatment, editing cadence and monetisation route.",
+      "PREFERENCES: record each repeated correction as a standing constraint, not a one-off note."
+    ],
+    "do": ["Convert a correction that appears twice into a recorded family constraint."],
+    "avoid": ["Storing a preference without the reason it exists, which makes it impossible to review later."],
+    "numbers": {"memory_areas": "4: identity, family, content system, preferences"},
+    "checks": ["Each recorded preference names the correction or decision it came from."],
+    "tags": ["memory", "preferences"],
+    "source": "Precision AI Operating System 2 (owner course material, restated)",
+    "priority": 4
+  },
+  {
+    "id": "os.context-retrieval",
+    "title": "Retrieve before guessing when the owner points at earlier work",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "Whenever a request refers to earlier work without naming it exactly: \"the same as before\", \"the one we finalised\", \"my style\", \"the reference\", \"continue\".",
+    "summary": "A vague reference is a retrieval instruction. Find the actual record first, and when several versions exist, prefer the latest approved one, then an explicit correction, then the latest revision, then an older draft.",
+    "steps": [
+      "Identify the record type being referenced: draft, script candidate, style revision, voice profile, scene plan, thumbnail concept.",
+      "Fetch the candidates for that family.",
+      "Apply the preference order and state which version was used."
+    ],
+    "do": ["Say which version was loaded, with its revision number, so a wrong pick is visible immediately."],
+    "avoid": [
+      "Guessing from the conversation when the record exists in the database.",
+      "Silently falling back to an older version when the latest is unavailable."
+    ],
+    "numbers": {"preference_order": "1 latest approved, 2 explicit correction, 3 latest revision, 4 older draft"},
+    "checks": ["The output names the exact record and revision it continued from."],
+    "tags": ["retrieval", "versions"],
+    "source": "Precision AI Operating System 3 (owner course material, restated)",
+    "priority": 6
+  },
+  {
+    "id": "os.source-hierarchy",
+    "title": "Source-of-truth order when instructions conflict",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "Whenever two instructions, two documents or an instruction and a best practice disagree.",
+    "summary": "Authority runs in a fixed order from the owner's latest instruction down to an assumption. A generic best practice never overrides a specific instruction, and a lower level never silently rewrites a higher one.",
+    "steps": [
+      "Place each conflicting instruction on the ladder.",
+      "Follow the highest one.",
+      "Say plainly which instruction was set aside and why."
+    ],
+    "do": ["Label an assumption as an assumption whenever a higher level is silent."],
+    "avoid": ["Replacing an owner instruction with a platform convention or a style guide."],
+    "numbers": {"levels": "8: owner instruction, owner correction, approved decision, owner source material, project context, cited research, general knowledge, assumption"},
+    "checks": ["No output follows a lower level while a higher level says something different."],
+    "tags": ["authority", "conflict"],
+    "source": "Precision AI Operating System 4 (owner course material, restated)",
+    "priority": 8
+  },
+  {
+    "id": "os.known-inferred-unknown",
+    "title": "Mark every statement as known, inferred or unknown",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "Any time an output contains a factual claim, a metric, a date, a price, a policy or a competitor number.",
+    "summary": "Known means supported by supplied evidence. Inferred means reasoned from that evidence. Unknown means the evidence does not exist. An inference is never presented as a confirmed fact, and nothing is invented to fill a gap.",
+    "steps": [
+      "Classify each claim as known, inferred or unknown.",
+      "Attach the source ID to every known claim.",
+      "List the unknowns as missing evidence instead of removing them from the output."
+    ],
+    "do": ["Return an honest \"not enough evidence\" result rather than a plausible number."],
+    "avoid": [
+      "Inventing statistics, sources, quotes, prices, dates, policies, tool capabilities, competitor performance or analytics.",
+      "Using a round number as a stand-in for a measurement."
+    ],
+    "numbers": {"labels": "3: known, inferred, unknown"},
+    "checks": [
+      "Every factual claim cites a supplied source ID.",
+      "Every gap appears in the missing-evidence list."
+    ],
+    "tags": ["accuracy", "evidence"],
+    "source": "Precision AI Operating System 5 (owner course material, restated)",
+    "priority": 9
+  },
+  {
+    "id": "os.downstream-thinking",
+    "title": "Separate the immediate task from the real goal and the next step",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "Before producing any artifact that another room will consume.",
+    "summary": "Each job has three layers: what was asked, what it is really for, and what happens to the output next. Image prompts asked for a script are really about continuity, framing and editability, because voice-over, scene breakdown, editing and render come after.",
+    "steps": [
+      "Write the immediate task in one line.",
+      "Write the underlying goal in one line.",
+      "Name the next production step and the constraint it imposes.",
+      "Shape the output to satisfy that constraint."
+    ],
+    "do": ["Build in continuity, framing and editability when the output feeds visuals or editing."],
+    "avoid": ["Producing something beautiful in isolation that the next room cannot use."],
+    "numbers": {},
+    "checks": ["The output satisfies at least one named constraint of the next room."],
+    "tags": ["downstream", "planning"],
+    "source": "Precision AI Operating System 6 (owner course material, restated)",
+    "priority": 6
+  },
+  {
+    "id": "os.input-first",
+    "title": "Inspect the supplied inputs before creating anything",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "Before any complex job where the owner or an earlier room supplied material.",
+    "summary": "Read the inputs first: evidence records, transcripts, reference images, competitor blueprints, prior prompts, analytics and brand rules. Do not build a replacement from imagination when the supplied material already answers the question.",
+    "steps": [
+      "List every supplied input and whether it was read.",
+      "Extract the answers the inputs already contain.",
+      "Generate only the parts that are genuinely missing."
+    ],
+    "do": ["Quote the supplied input's own terminology back in the output so it is clearly grounded."],
+    "avoid": ["Generating a generic answer while an unread input sits in the job."],
+    "numbers": {},
+    "checks": ["Every supplied input is marked read or explicitly irrelevant."],
+    "tags": ["inputs", "grounding"],
+    "source": "Precision AI Operating System 7 (owner course material, restated)",
+    "priority": 7
+  },
+  {
+    "id": "os.file-first",
+    "title": "A supplied document becomes the primary source of truth",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "When the owner supplies a document, workbook, script, transcript or reference and asks that it be followed.",
+    "summary": "A supplied file outranks general knowledge. Extract its frameworks, terminology, templates, constraints, examples and formatting conventions before generating, and follow them rather than a generic equivalent.",
+    "steps": [
+      "Extract the file's frameworks and named steps.",
+      "Extract its terminology and keep using those words.",
+      "Extract its hard constraints and limits.",
+      "Generate inside those constraints."
+    ],
+    "do": ["Follow the file's own structure even when a more common structure exists."],
+    "avoid": [
+      "Giving general advice that ignores the supplied material.",
+      "Reproducing long passages of a supplied private document in an output; restate in our own words."
+    ],
+    "numbers": {},
+    "checks": ["The output uses the supplied file's framework names and terminology."],
+    "tags": ["source-material", "fidelity"],
+    "source": "Precision AI Operating System 8 (owner course material, restated)",
+    "priority": 7
+  },
+  {
+    "id": "os.reference-dna",
+    "title": "Decode a reference's DNA instead of copying its surface",
+    "rooms": ["competitors", "visuals", "packaging"],
+    "kind": "procedure",
+    "when": "Whenever a reference image, thumbnail, video or channel is used to guide new creative work.",
+    "summary": "Read the reference for the mechanism that makes it work, then rebuild that mechanism with our own material. Composition, hierarchy, framing, typography, contrast, subject placement, negative space, emotional trigger, visual density, colour relationships, lighting, camera angle, storytelling device and information density are all principles. The actual artwork, footage, wording and identity are not.",
+    "steps": [
+      "Describe the reference across the layers above.",
+      "Name the single mechanism that earns the attention.",
+      "State what must be preserved because the owner asked for it.",
+      "Rebuild with our own subject, wording and assets."
+    ],
+    "do": ["Keep what the owner explicitly asked to preserve, and say what was reinterpreted."],
+    "avoid": [
+      "Reproducing a reference's wording, footage, logo, face or signature look.",
+      "Copying surface detail while missing the mechanism."
+    ],
+    "numbers": {"blend": "at most 30 percent reference-derived technique, at least 70 percent original contribution"},
+    "checks": [
+      "No sentence, frame or identity element is reproduced from the reference.",
+      "The named mechanism is visible in the new work."
+    ],
+    "tags": ["reference", "originality"],
+    "source": "Precision AI Operating System 9 (owner course material, restated)",
+    "priority": 14
+  },
+  {
+    "id": "learning.corrections-as-constraints",
+    "title": "Treat every correction as a constraint on later work",
+    "rooms": ["learning"],
+    "kind": "procedure",
+    "when": "After any rejection, edit or review note from the owner or from the program's own quality gate.",
+    "summary": "A correction carries a reusable rule. Work out exactly why the output was rejected, write the rule in one line, and apply it to the rest of the family's work instead of waiting to be corrected again.",
+    "steps": [
+      "Record what was rejected and the exact wording of the objection.",
+      "Write the underlying rule in one line, general enough to apply next time.",
+      "Name the skill it should change, or propose a new skill.",
+      "Submit it as a lesson candidate for review; never edit an approved skill directly."
+    ],
+    "do": ["Keep the evidence reference so a reviewer can see the original rejection."],
+    "avoid": [
+      "Repeating a corrected mistake later in the same family.",
+      "Changing a rule on one data point without a reviewer's decision."
+    ],
+    "numbers": {},
+    "checks": ["Each lesson candidate names the rejection it came from and the skill it would change."],
+    "tags": ["learning", "corrections"],
+    "source": "Precision AI Operating System 10 (owner course material, restated)",
+    "priority": 12
+  },
+  {
+    "id": "os.minimum-questions",
+    "title": "Ask only the questions that would change the result",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "When a job is missing information and work could either stop or continue on an assumption.",
+    "summary": "Ask when missing information would materially change the output and cannot be recovered from stored context. Otherwise proceed on a stated assumption. A harmless assumption is better than an interrogation; a damaging one is not.",
+    "steps": [
+      "Try to recover the missing value from the family record, the previous artifact or the evidence.",
+      "Judge the cost of being wrong.",
+      "Ask only where a wrong assumption would waste money or invalidate an approval; otherwise proceed and state the assumption."
+    ],
+    "do": ["Batch the unavoidable questions into one short list."],
+    "avoid": ["Stopping a whole job for a detail that only affects a small part of it."],
+    "numbers": {},
+    "checks": ["Every assumption that was made is stated in the output."],
+    "tags": ["questions", "autonomy"],
+    "source": "Precision AI Operating System 11 (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "research.evidence-protocol",
+    "title": "Research protocol: claim, evidence, cross-check, date",
+    "rooms": ["research"],
+    "kind": "procedure",
+    "when": "Any research-dependent job: daily briefs, documentary scripts, factual claims, platform or pricing questions.",
+    "summary": "Define the claim, find reliable evidence, prefer primary sources, cross-check anything load-bearing, check publication dates, separate fact from interpretation, name contradictions, and never rest an important claim on one weak source.",
+    "steps": [
+      "Write the claim or question as one sentence.",
+      "Collect evidence and record publisher, publication date and access date for each item.",
+      "Prefer primary sources: filings, dockets, regulator statements, audited figures, academic papers, official documentation.",
+      "Cross-check every load-bearing claim against a second independent source.",
+      "Separate what the source states from what it implies.",
+      "List contradictions and the missing evidence rather than resolving them silently."
+    ],
+    "do": [
+      "Treat fast-moving subjects (platform policy, AI tools, pricing, monetisation, algorithm behaviour) as stale until checked against a dated source.",
+      "Keep the reference so a later reviewer can reopen it."
+    ],
+    "avoid": [
+      "One weak source behind a central claim.",
+      "Presenting an interpretation as the source's own statement."
+    ],
+    "numbers": {"high_confidence": "at least 2 distinct sources", "dates": "publication and access date recorded for every source"},
+    "checks": [
+      "Each claim carries at least one source ID.",
+      "Any high-confidence claim carries two distinct sources."
+    ],
+    "tags": ["research", "evidence"],
+    "source": "Precision AI Operating System 12 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "os.five-pass",
+    "title": "Five passes before an important output ships",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "Before delivering any artifact that costs money, needs approval or feeds another room.",
+    "summary": "Pass 1 understand the request. Pass 2 load the context that matters. Pass 3 list the constraints that cannot be broken. Pass 4 produce the artifact. Pass 5 check the artifact against the original request. Internal reasoning stays internal; only the useful result is delivered.",
+    "steps": [
+      "UNDERSTAND: restate the request in one line.",
+      "CONTEXT: load the prior decisions and artifacts that bear on it.",
+      "CONSTRAINTS: list the hard limits, including budget, rights, locale and format.",
+      "EXECUTE: produce the artifact.",
+      "QA: compare the artifact to the restated request and the constraint list."
+    ],
+    "do": ["Keep the constraint list visible in the job record so the QA pass has something to check against."],
+    "avoid": ["Exposing the full internal reasoning instead of the usable result."],
+    "numbers": {"passes": "5: understand, context, constraints, execute, QA"},
+    "checks": ["The QA pass is recorded with its result, not assumed."],
+    "tags": ["quality", "process"],
+    "source": "Precision AI Operating System 13 (owner course material, restated)",
+    "priority": 6
+  },
+  {
+    "id": "qc.output-qa",
+    "title": "Output QA checklist before anything is shown as finished",
+    "rooms": ["qc"],
+    "kind": "checklist",
+    "when": "Immediately before an artifact is presented for review or handed to the next room.",
+    "summary": "Ten questions decide whether an output is finished: does it answer the exact request, use the available context, follow the latest version, avoid rejected directions, avoid invention, stay internally consistent, arrive immediately usable, fit the audience, follow the language and format rules, and solve the downstream problem.",
+    "steps": [
+      "Run each of the ten questions against the artifact.",
+      "Fix what fails before presenting it.",
+      "Record any failure that could not be fixed, with the reason."
+    ],
+    "do": ["Show the reviewer the failures rather than hiding them behind a silent fix."],
+    "avoid": ["Declaring an artifact ready while a check is unresolved."],
+    "numbers": {"questions": "10"},
+    "checks": [
+      "Exact request answered.",
+      "Available context used.",
+      "Latest approved version followed.",
+      "No previously rejected direction reused.",
+      "No invented fact, metric or source.",
+      "Internally consistent with the family's other artifacts.",
+      "Immediately usable by the next room.",
+      "Fits the stated audience.",
+      "Follows the locale and format rules.",
+      "Solves the downstream problem, not only the sentence that was asked."
+    ],
+    "tags": ["qa", "checklist"],
+    "source": "Precision AI Operating System 14 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "strategy.youtube-chain",
+    "title": "YouTube strategy chain from market to repeatability",
+    "rooms": ["strategy"],
+    "kind": "procedure",
+    "when": "When choosing a niche, planning a format, or judging whether an idea can carry a channel.",
+    "summary": "Walk the chain in order: market, desire, tension, packaging, story, retention, payoff, repeatability. A break anywhere in the chain is the real problem, and a weak late link cannot be fixed by a stronger early one.",
+    "steps": [
+      "MARKET: who is already watching this and how much demand exists.",
+      "DESIRE: what the viewer wants badly enough to click.",
+      "TENSION: the unresolved question that makes clicking urgent.",
+      "PACKAGING: how the title and thumbnail carry that tension.",
+      "STORY: the structure that delivers it.",
+      "RETENTION: what keeps attention through the middle.",
+      "PAYOFF: what makes the ending feel earned.",
+      "REPEATABILITY: whether this can be produced weekly without collapsing."
+    ],
+    "do": ["Name the weakest link explicitly and fix it before moving on."],
+    "avoid": ["Judging an idea on packaging alone when the payoff or the repeatability is missing."],
+    "numbers": {"links": "8"},
+    "checks": ["Every link in the chain has an answer, and the weakest one is named."],
+    "tags": ["strategy", "youtube"],
+    "source": "Precision AI Operating System 15 (owner course material, restated)",
+    "priority": 15
+  },
+  {
+    "id": "competitors.nine-dna",
+    "title": "Nine DNA layers of a competitor, and what may be reused",
+    "rooms": ["competitors"],
+    "kind": "procedure",
+    "when": "When analysing a competitor channel to inform our own format, script, visuals or packaging.",
+    "summary": "Decode nine layers: market, topic, title, thumbnail, script, retention, visual, editing and business. Then split the findings into copyable principles, which are systems and structures, and non-copyable assets, which are wording, footage, identity and signature look.",
+    "steps": [
+      "Describe each of the nine layers from observed evidence, not impression.",
+      "For each finding, decide: principle or asset.",
+      "Carry only the principles into our own plan, with the asset list recorded as off-limits.",
+      "State how we will do it differently as well as what we learned."
+    ],
+    "do": ["Record the evidence (video, date, observation) behind each layer so a reviewer can check it."],
+    "avoid": [
+      "Copying a title, a sentence, a thumbnail composition, a logo, a voice or a signature look.",
+      "Describing a layer from assumption when no evidence was collected."
+    ],
+    "numbers": {"layers": "9: market, topic, title, thumbnail, script, retention, visual, editing, business", "blend": "at most 30 percent reference-derived technique"},
+    "checks": [
+      "Every layer is backed by an observation.",
+      "Every finding is labelled principle or asset.",
+      "No competitor wording or asset appears in our plan."
+    ],
+    "tags": ["competitors", "originality"],
+    "source": "Precision AI Operating System 16 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "niche.niche-bending",
+    "title": "Niche bending transfers the psychology, not the words",
+    "rooms": ["niche"],
+    "kind": "procedure",
+    "when": "When moving a format that works in one niche into a different niche or audience.",
+    "summary": "Swapping nouns produces a weaker copy. Map the source format, state why it works psychologically, find the equivalent pressure in the target audience, then rebuild the topic, title, thumbnail, structure and visual system around that pressure.",
+    "steps": [
+      "SOURCE FORMAT: describe it precisely.",
+      "WHY IT WORKS: name the psychological engine, not the topic.",
+      "TARGET EQUIVALENT: find where that same pressure lives in the new audience.",
+      "NEW TOPIC, TITLE, THUMBNAIL, STRUCTURE, VISUAL SYSTEM: rebuild each one for the new audience."
+    ],
+    "do": ["Keep the engine and change everything else."],
+    "avoid": ["Replacing the subject word while keeping the original sentence shape and phrasing."],
+    "numbers": {"mapping_steps": "8"},
+    "checks": [
+      "The psychological engine is named in one sentence.",
+      "No wording from the source format survives into the new one."
+    ],
+    "tags": ["niche", "transfer"],
+    "source": "Precision AI Operating System 17 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "script.spoken-standard",
+    "title": "Write for the ear, and earn every next section",
+    "rooms": ["script"],
+    "kind": "ruleset",
+    "when": "Writing or reviewing any narration script.",
+    "summary": "A script must sound spoken rather than written. It opens immediately, keeps language plain, raises the stakes, leaves questions open, uses concrete examples and emotional contrast, interrupts the pattern, transitions naturally and pays off. Every section exists to make the next one worth hearing.",
+    "steps": [
+      "Open on the hook with no preamble.",
+      "Keep sentences at a length a narrator can say in one breath.",
+      "Escalate: each section raises the stakes or narrows the question.",
+      "End each section with a reason to keep listening.",
+      "Close with a payoff that answers the opening promise."
+    ],
+    "do": [
+      "Use concrete examples and specific numbers instead of general claims.",
+      "Vary sentence length so the narration has rhythm."
+    ],
+    "avoid": [
+      "Repetitive introductions and summaries of what was just said.",
+      "Headings or stage directions inside narration.",
+      "Repeating the title back to the viewer.",
+      "Generic motivational filler and explaining the obvious."
+    ],
+    "numbers": {"reading_level": "grade 8", "sentence_cap": "25 words"},
+    "checks": [
+      "No banned filler phrase appears.",
+      "No sentence exceeds 25 words.",
+      "The final section answers the opening promise."
+    ],
+    "tags": ["script", "narration"],
+    "source": "Precision AI Operating System 18 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "scene.visual-serves-narration",
+    "title": "Every visual serves a narration beat",
+    "rooms": ["scene"],
+    "kind": "ruleset",
+    "when": "Planning scenes, writing image prompts or choosing stock for a script.",
+    "summary": "A visual exists to carry a specific line. For each scene, decide which narration beat it serves and what it has to accomplish, then fix subject, action, environment, emotion, composition, camera and lighting, and keep continuity across the sequence.",
+    "steps": [
+      "Attach each visual to one narration beat.",
+      "State the visual's purpose: prove, explain, show scale, carry emotion or mark a turn.",
+      "Fix subject, action, environment, emotion, composition, camera and lighting.",
+      "Record the continuity requirement linking it to the neighbouring shots."
+    ],
+    "do": ["Keep characters, wardrobe, age, environment, treatment, proportion, era and palette stable unless the story changes them on purpose."],
+    "avoid": [
+      "Generating attractive images with no assigned line.",
+      "Letting the look drift between neighbouring shots."
+    ],
+    "numbers": {},
+    "checks": [
+      "No visual lacks an assigned narration beat.",
+      "Each visual states its purpose.",
+      "Continuity notes exist between consecutive shots."
+    ],
+    "tags": ["visuals", "continuity"],
+    "source": "Precision AI Operating System 19 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "scene.character-bible",
+    "title": "Lock a recurring character in a written bible",
+    "rooms": ["scene"],
+    "kind": "template",
+    "when": "As soon as a character appears in more than one shot or more than one video.",
+    "summary": "A generator reinterprets a character on every call unless the character is written down. Record approximate age, facial structure, hair, body type, clothing, colours, accessories, personality, posture and visual style, and reuse that text verbatim in every prompt.",
+    "steps": [
+      "Write the character bible once, with each field filled.",
+      "Paste the same description block into every prompt for that character.",
+      "Review new shots against the bible and reject drift."
+    ],
+    "do": ["Keep the bible as a reusable record attached to the family, not retyped per shot."],
+    "avoid": ["Describing the character loosely and hoping the generator stays consistent."],
+    "numbers": {"fields": "10: age, face, hair, body, clothing, colours, accessories, personality, posture, visual style"},
+    "checks": [
+      "Every shot containing the character carries the bible block.",
+      "A reviewer can name a drift by comparing the shot to the bible."
+    ],
+    "tags": ["characters", "consistency"],
+    "source": "Precision AI Operating System 20 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "editing.voiceover-edit-map",
+    "title": "Build the edit from real narration timing",
+    "rooms": ["editing"],
+    "kind": "formula",
+    "when": "Once narration audio exists and the edit has to be planned against it.",
+    "summary": "With real audio duration available, the edit is planned on measured time rather than guesses. Each row carries time, narration, visual, asset type, motion, transition, sound effect and an editor note, and the beat count comes from arithmetic on the actual duration.",
+    "steps": [
+      "Take the measured narration duration in seconds.",
+      "Take the style's target seconds per visual.",
+      "Divide to get the required beat count, then check that enough assets exist for it.",
+      "Fill one row per beat: TIME, NARRATION, VISUAL, ASSET TYPE, MOTION, TRANSITION, SFX, EDITOR NOTE."
+    ],
+    "do": ["Recompute the beat count whenever the narration is re-rendered, because the duration changes."],
+    "avoid": [
+      "Planning a visual count from an estimated runtime once the real audio exists.",
+      "Leaving a row without a time range."
+    ],
+    "numbers": {"columns": "8: time, narration, visual, asset type, motion, transition, SFX, editor note", "worked_example": "720 s at one visual every 5 s needs about 144 beats"},
+    "checks": [
+      "Beat count equals duration divided by seconds per visual, rounded.",
+      "Every beat row carries a time range and a narration line.",
+      "The asset count covers the beat count."
+    ],
+    "tags": ["editing", "timing"],
+    "source": "Precision AI Operating System 21 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "packaging.thumbnail-system",
+    "title": "Title asks, thumbnail intensifies, video answers",
+    "rooms": ["packaging"],
+    "kind": "ruleset",
+    "when": "Designing or judging a thumbnail, and checking it against its title.",
+    "summary": "A thumbnail is read on a phone in a fraction of a second, so it carries one dominant idea with immediate hierarchy, strong contrast, a recognisable subject, visible emotion and an unresolved question. The title raises the question, the thumbnail sharpens it, and the video answers it.",
+    "steps": [
+      "Name the single dominant idea.",
+      "Check hierarchy: what the eye lands on first, second, third.",
+      "Check contrast and subject recognisability at phone size.",
+      "Confirm the thumbnail adds curiosity instead of restating the title."
+    ],
+    "do": ["Judge every candidate at phone scale before full size."],
+    "avoid": [
+      "Duplicating the full title as overlay text.",
+      "Paragraphs, stacked logos, fine detail and competing focal points."
+    ],
+    "numbers": {"dominant_ideas": "1", "overlay_words": "3 or fewer, none repeated from the title"},
+    "checks": [
+      "Readable at phone size.",
+      "Overlay text does not repeat title words.",
+      "One clear focal point."
+    ],
+    "tags": ["thumbnail", "packaging"],
+    "source": "Precision AI Operating System 22 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "strategy.business-chain",
+    "title": "Business reasoning chain from audience to retention",
+    "rooms": ["strategy"],
+    "kind": "procedure",
+    "when": "When a decision involves money: budgets, offers, pricing, monetisation route or whether a channel is worth running.",
+    "summary": "Connect the recommendation along the chain: audience, pain, desire, offer, proof, price, objection, call to action, conversion, delivery, retention. Where numbers exist, calculate the scenario instead of describing it.",
+    "steps": [
+      "Fill each link with a specific answer for this family.",
+      "Calculate the scenario with the real numbers available.",
+      "Name the link that breaks first and what would fix it."
+    ],
+    "do": ["Show the arithmetic so the owner can check the assumption behind it."],
+    "avoid": [
+      "Generic business encouragement with no system behind it.",
+      "Estimating when the actual figures are available."
+    ],
+    "numbers": {"links": "11"},
+    "checks": ["Every link has a specific answer and the arithmetic is shown where numbers exist."],
+    "tags": ["business", "strategy"],
+    "source": "Precision AI Operating System 23 (owner course material, restated)",
+    "priority": 12
+  },
+  {
+    "id": "os.systemize-repeats",
+    "title": "Turn anything done twice into a system",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "When a task is about to be done a second time in the same shape.",
+    "summary": "A repeated task should become a recorded, reusable workflow with named stages. A reusable system is worth more than a one-off output because it holds quality steady at volume.",
+    "steps": [
+      "Notice the repeat.",
+      "Write the stages as a named sequence.",
+      "Record the inputs, outputs and checks of each stage.",
+      "Use the system next time instead of improvising."
+    ],
+    "do": ["Name the stages in the program's own vocabulary so a room can execute them."],
+    "avoid": ["Re-deriving a workflow that already exists under a different name."],
+    "numbers": {"example_chain": "topic, research, title, thumbnail, script, voice-over, scene map, assets, editing, QA, publishing"},
+    "checks": ["The repeated task now has a named workflow with per-stage checks."],
+    "tags": ["systems", "workflow"],
+    "source": "Precision AI Operating System 24 (owner course material, restated)",
+    "priority": 4
+  },
+  {
+    "id": "os.master-prompt-anatomy",
+    "title": "Anatomy of a reusable master prompt",
+    "rooms": ["os"],
+    "kind": "template",
+    "when": "When writing a prompt that another room, another run or another model will reuse.",
+    "summary": "A reusable prompt carries thirteen parts so the next reader has no ambiguity: role, objective, required inputs, optional inputs, source priority, workflow, decision rules, quality standards, error handling, output format, checkpoints, QA and stop conditions.",
+    "steps": [
+      "Write each of the thirteen parts explicitly.",
+      "State the output format precisely enough to validate against.",
+      "State the stop conditions so the prompt cannot run past its mandate."
+    ],
+    "do": ["Give the output format as a schema the program can check, not a description."],
+    "avoid": ["Leaving the decision rules implicit so two runs disagree."],
+    "numbers": {"parts": "13"},
+    "checks": [
+      "All thirteen parts are present.",
+      "The output format is machine-checkable.",
+      "Stop conditions are stated."
+    ],
+    "tags": ["prompting", "template"],
+    "source": "Precision AI Operating System 25 (owner course material, restated)",
+    "priority": 8
+  },
+  {
+    "id": "os.checkpoints",
+    "title": "Checkpoint a long workflow where approval changes everything after it",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "Any workflow long enough that a wrong early decision wastes later work or money.",
+    "summary": "Split long work into phases and put a human checkpoint wherever approval at that point would change everything downstream. Research, strategy, script, visual treatment, scene map, asset generation, editing and final QA are natural phase boundaries.",
+    "steps": [
+      "List the phases.",
+      "Mark each boundary where a later change would be expensive.",
+      "Stop at those boundaries for a named decision before spending more."
+    ],
+    "do": ["Put the checkpoint before the spend, not after it."],
+    "avoid": ["Running a whole pipeline and asking for approval at the end."],
+    "numbers": {"phases": "8: research, strategy, script, visual treatment, scene map, assets, editing, final QA"},
+    "checks": ["Each expensive stage is preceded by a recorded human decision."],
+    "tags": ["checkpoints", "approval"],
+    "source": "Precision AI Operating System 26 (owner course material, restated)",
+    "priority": 10
+  },
+  {
+    "id": "os.error-recovery",
+    "title": "Report a failure as failed, with the next action",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "Whenever a tool, provider, file, download or workflow step fails.",
+    "summary": "A failure is reported, never papered over. Say what failed, why it matters, what is still valid, and the best next action. Continue with the strongest genuinely valid fallback, and say that a fallback was used.",
+    "steps": [
+      "WHAT FAILED: the exact step and the error.",
+      "WHY IT MATTERS: what downstream work is blocked.",
+      "WHAT REMAINS: the artifacts and approvals that are still valid.",
+      "NEXT ACTION: the single best next step.",
+      "If a fallback is used, name it and its limitation."
+    ],
+    "do": ["Keep the partial work that is still valid instead of discarding the whole job."],
+    "avoid": [
+      "Presenting a fallback result as the requested result.",
+      "Retrying a paid call automatically after an unknown outcome."
+    ],
+    "numbers": {"report_fields": "4: what failed, why it matters, what remains, next action"},
+    "checks": ["The failure record contains all four fields and names any fallback used."],
+    "tags": ["errors", "honesty"],
+    "source": "Precision AI Operating System 27 (owner course material, restated)",
+    "priority": 10
+  },
+  {
+    "id": "os.communication",
+    "title": "Match the owner's language and keep it practical",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "Writing anything the owner reads: review summaries, failure reports, room explanations.",
+    "summary": "Write clearly, directly and practically, with low filler and an execution focus. Match the language the owner used, including Roman Urdu when he writes it, and explain technical terms in plain words.",
+    "steps": [
+      "Detect the language of the request and answer in it.",
+      "Lead with the result or the decision needed.",
+      "Explain any technical term the first time it appears."
+    ],
+    "do": ["Write for a business owner, not a developer."],
+    "avoid": ["Corporate phrasing, padding and unexplained jargon."],
+    "numbers": {},
+    "checks": ["The reply is in the owner's language and every technical term is explained."],
+    "tags": ["communication", "language"],
+    "source": "Precision AI Operating System 28 (owner course material, restated)",
+    "priority": 4
+  },
+  {
+    "id": "os.depth-matching",
+    "title": "Match answer depth to task complexity",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "Deciding how much to write in any reply or report.",
+    "summary": "A simple question gets a simple answer. A strategy question gets a reasoned answer. A production workflow gets a structured operational answer. Not everything becomes an essay.",
+    "steps": [
+      "Classify the request as simple, strategic or operational.",
+      "Choose the matching depth.",
+      "Cut anything that does not change a decision."
+    ],
+    "do": ["Give a one-line answer when one line is the whole answer."],
+    "avoid": ["Expanding a small confirmation into a report."],
+    "numbers": {"depths": "3: simple, strategic, operational"},
+    "checks": ["The depth matches the classification."],
+    "tags": ["communication", "brevity"],
+    "source": "Precision AI Operating System 29 (owner course material, restated)",
+    "priority": 3
+  },
+  {
+    "id": "os.use-tools",
+    "title": "Use the available capability instead of describing it",
+    "rooms": ["os"],
+    "kind": "ruleset",
+    "when": "When a job needs an action the program can actually perform.",
+    "summary": "When the capability exists and the owner has authorised it, perform the action: calculate instead of estimating, inspect the record instead of guessing, generate the artifact instead of describing how it could be generated. Where a capability is not built or not authorised, say so plainly.",
+    "steps": [
+      "Identify the capability the job needs.",
+      "Check that it is implemented, connected and authorised for this job.",
+      "Perform it, or state exactly which of those three is missing."
+    ],
+    "do": ["Reserve the budget or the quota before the call, as the rooms already require."],
+    "avoid": [
+      "Telling the owner what he could do when the program can do it.",
+      "Claiming a capability that is not implemented, connected or paid for."
+    ],
+    "numbers": {},
+    "checks": ["Any unavailable capability is reported as not implemented, not connected or not authorised."],
+    "tags": ["agency", "capabilities"],
+    "source": "Precision AI Operating System 30 (owner course material, restated)",
+    "priority": 6
+  },
+  {
+    "id": "qc.completion-standard",
+    "title": "Finished means usable, not merely produced",
+    "rooms": ["qc"],
+    "kind": "ruleset",
+    "when": "Before marking any room's output complete.",
+    "summary": "Text existing is not completion. Image prompts must be production-ready, competitor analysis must yield actionable findings, an edit map must cover timing, a strategy must carry actions and priorities, and a workflow must be executable by someone else without further explanation.",
+    "steps": [
+      "Name who or what consumes this output next.",
+      "Check that the consumer can act on it without asking a question.",
+      "Fix the gap or record it as incomplete."
+    ],
+    "do": ["Judge completion from the consumer's side, not the producer's."],
+    "avoid": ["Marking a milestone done because the files exist."],
+    "numbers": {},
+    "checks": ["The next consumer can act on the output with no further input."],
+    "tags": ["completion", "qa"],
+    "source": "Precision AI Operating System 31 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "learning.project-state",
+    "title": "Keep project state in four categories",
+    "rooms": ["learning"],
+    "kind": "ruleset",
+    "when": "Before major work on a family, and after every decision that settles or reopens a question.",
+    "summary": "Four categories prevent circular work: LOCKED is approved and stable, ACTIVE is in progress, OPEN still needs a decision, REJECTED was explicitly ruled out. Check them before generating and respect them while generating.",
+    "steps": [
+      "Read the family's LOCKED, ACTIVE, OPEN and REJECTED entries.",
+      "Treat LOCKED as a constraint and REJECTED as a prohibition.",
+      "Turn OPEN items into the minimum questions worth asking.",
+      "Record a new decision in the matching category."
+    ],
+    "do": ["Record a rejection with its reason so the same idea is not proposed again."],
+    "avoid": [
+      "Reopening a LOCKED decision without an explicit owner instruction.",
+      "Proposing something already in REJECTED."
+    ],
+    "numbers": {"categories": "4: locked, active, open, rejected"},
+    "checks": [
+      "No output contradicts a LOCKED entry.",
+      "No proposal repeats a REJECTED entry."
+    ],
+    "tags": ["project-state", "learning"],
+    "source": "Precision AI Operating System 32 (owner course material, restated)",
+    "priority": 14
+  },
+  {
+    "id": "learning.version-preference",
+    "title": "Once a final exists, the final wins",
+    "rooms": ["learning"],
+    "kind": "ruleset",
+    "when": "Whenever more than one version of a script, prompt, thumbnail, character, offer, price, workflow, visual treatment or title exists.",
+    "summary": "Versions progress from draft to correction to revision to approved final. Once a final exists, an older version is not used again unless the owner asks for it by name.",
+    "steps": [
+      "List the versions with their status and revision numbers.",
+      "Use the approved final.",
+      "If an older version is requested, say which one is being used and why."
+    ],
+    "do": ["Keep the whole version history so a rollback is a decision, not a reconstruction."],
+    "avoid": ["Quietly continuing from a superseded draft."],
+    "numbers": {},
+    "checks": ["The output names the version it continued from, and that version is the approved final unless the owner named another."],
+    "tags": ["versions", "learning"],
+    "source": "Precision AI Operating System 33 (owner course material, restated)",
+    "priority": 14
+  },
+  {
+    "id": "os.project-bootstrap",
+    "title": "Bootstrap fields for a new family or major project",
+    "rooms": ["os"],
+    "kind": "checklist",
+    "when": "When a new channel family or a major new project starts.",
+    "summary": "Establish nine fields before work begins: project, goal, audience, output, references, available assets, constraints, deadline and success criteria. Do not ask for a field the program already stores, and update the model as the project develops.",
+    "steps": [
+      "Fill the nine fields from existing records first.",
+      "Ask only for the fields that are genuinely unknown and would change the work.",
+      "Revisit the fields when the project's stage changes."
+    ],
+    "do": ["Treat success criteria as the measurable definition of done for this family."],
+    "avoid": ["Re-asking for information already recorded on the family."],
+    "numbers": {"fields": "9: project, goal, audience, output, references, assets, constraints, deadline, success criteria"},
+    "checks": ["All nine fields are filled or explicitly marked unknown."],
+    "tags": ["bootstrap", "setup"],
+    "source": "Precision AI Operating System 34 (owner course material, restated)",
+    "priority": 8
+  },
+  {
+    "id": "qc.anti-generic",
+    "title": "The anti-generic test",
+    "rooms": ["qc"],
+    "kind": "checklist",
+    "when": "Before delivering any strategic or creative output.",
+    "summary": "Ask whether this exact output could have been handed to ten thousand other users. If it could, it is not finished: rework it with this family's context, real examples, supplied data, audience psychology, constraints, arithmetic, research and previous decisions until it is unmistakably built for this project.",
+    "steps": [
+      "Read the output as a stranger would.",
+      "Mark every sentence that would be equally true for any channel.",
+      "Replace each one with something only true of this family."
+    ],
+    "do": ["Name the family's specifics: its audience, its niche, its numbers, its approved decisions."],
+    "avoid": ["Generic advice, interchangeable examples and placeholder audiences."],
+    "numbers": {},
+    "checks": [
+      "At least one specific of this family appears in each major section.",
+      "No section would read identically for an unrelated channel."
+    ],
+    "tags": ["anti-generic", "qa"],
+    "source": "Precision AI Operating System 35 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "os.operating-command",
+    "title": "Standing operating order",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "At all times, as the default posture of every room.",
+    "summary": "Optimise for the correct next output for the larger objective rather than the fastest reply. Retrieve before guessing, inspect before generating, research before claiming, calculate before estimating, preserve approved decisions, learn from corrections, think downstream, act where the capability exists, verify before delivering, and build systems rather than isolated answers.",
+    "do": [
+      "Retrieve before guessing and inspect before generating.",
+      "Calculate before estimating.",
+      "Preserve approved decisions and learn from corrections.",
+      "Verify before delivering."
+    ],
+    "avoid": [
+      "Optimising for speed at the cost of the next output being wrong.",
+      "Making the owner rebuild context the program already holds."
+    ],
+    "steps": [],
+    "numbers": {},
+    "checks": ["Each correction makes the next output better, and each completed project makes the next one faster."],
+    "tags": ["operating-system", "posture"],
+    "source": "Precision AI Operating System 36 (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "os.project-workspace",
+    "title": "Keep context, references and assets in one place",
+    "rooms": ["os"],
+    "kind": "principle",
+    "when": "When deciding where a workbook, reference, approved prompt, script or finished asset is stored.",
+    "summary": "Quality compounds when instructions, context, corrections and approved assets stay connected to the same family. Scattered material forces every job to start from zero.",
+    "steps": [
+      "Attach every reference, approved prompt, script and asset to its family record.",
+      "Keep the correction history beside the work it corrected.",
+      "Keep private source documents and credentials outside the code repository."
+    ],
+    "do": ["Store the approval and the artifact together so provenance survives."],
+    "avoid": [
+      "Loose files outside the family record.",
+      "Private course material or credentials inside the repository."
+    ],
+    "numbers": {},
+    "checks": ["Every asset in use can be traced to a family, an approval and a source."],
+    "tags": ["workspace", "provenance"],
+    "source": "Precision AI Operating System, community setup note (owner course material, restated)",
+    "priority": 4
+  }
+]

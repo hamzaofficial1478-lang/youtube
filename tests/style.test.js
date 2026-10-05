@@ -202,11 +202,10 @@ test('retiring an assigned revision or changing the family format blocks the han
 
 test('HTTP style routes require the local token, validate input and return the library in state', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-style-'));
-  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   const protector = {transform: (operation, input) => Buffer.from([...input].reverse())};
   const {server} = createApp({dataFile: path.join(dir, 'workspace.sqlite'), worker: false, protector, voiceOptions: {ffmpeg: 'missing-ffmpeg-for-test', ffprobe: 'missing-ffprobe-for-test'}});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => server.close(resolve)));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
   assert.equal(state.styles.profiles.length, 5);

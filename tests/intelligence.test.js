@@ -377,10 +377,9 @@ test('Niche evaluations: a failed hard filter blocks approval; duplicate or copi
 
 test('HTTP routes for intelligence require the local token and expose state', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-intel-'));
-  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   const {server} = createApp({dataFile: path.join(dir, 'workspace.sqlite'), worker: false, protector, providerFetch: fakeNetwork().fetch, voiceOptions: {ffmpeg: 'missing-ffmpeg', ffprobe: 'missing-ffprobe'}});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
   assert.deepEqual(Object.keys(state.intelligence), ['competitors', 'niches']);

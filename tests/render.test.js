@@ -182,10 +182,9 @@ test('a changed FFmpeg binary, cancellation and restarts never render silently',
 
 test('HTTP routes serve render state, need the local token and stream video ranges', {skip}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-http-'));
-  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   const {server} = createApp({dataFile: path.join(dir, 'workspace.sqlite'), worker: false, protector: {transform: (op, input) => Buffer.from([...input].reverse())}, voiceOptions: {ffmpeg: 'ffmpeg', ffprobe: 'ffprobe'}});
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
   assert.ok(state.renders);

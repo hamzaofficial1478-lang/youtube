@@ -51,3 +51,37 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .render-player{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px;align-items:start;margin-top:12px}.render-player video{width:100%;max-height:520px;background:#0e1411;border-radius:10px;display:block}.render-facts{min-width:0}.render-facts .style-facts div{grid-template-columns:90px minmax(0,1fr)}.mono-wrap{font-family:ui-monospace,monospace;font-size:10px;overflow-wrap:anywhere}
 .contact-sheet{display:block;max-width:100%;border-radius:10px;border:1px solid #e3e8df;background:#0e1411}.render-log{white-space:pre-wrap;font-size:10px;background:#f4f6f2;border-radius:8px;padding:8px;max-height:220px;overflow:auto}
 @media(max-width:1100px){.render-player{grid-template-columns:1fr}}
+
+/* Skills Engine page */
+.skill-tally{justify-content:flex-start;margin:0 0 14px}
+.skill-tabs{flex-wrap:wrap;align-items:center;gap:10px}
+.skill-tabs .row-end{display:flex;align-items:center;gap:8px;margin-left:auto}
+.skill-filters{flex-wrap:wrap;align-items:end;gap:12px}
+.skill-filters>div{flex:1 1 170px;min-width:0}
+.skill-filters select,.skill-filters input{width:100%;min-width:0;margin-top:7px}
+.skill-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:12px;align-items:start}
+.skill-card.open{grid-column:1/-1}
+.skill-grid .production-card-head{flex-wrap:wrap;align-items:flex-start;gap:10px}
+.skill-grid .production-card-head>div:first-child{min-width:0;flex:1 1 220px}
+.skill-grid .row-end{flex-wrap:wrap;flex-shrink:1}
+.skill-card h2{overflow-wrap:anywhere}
+.skill-card h3{margin:16px 0 6px;font-size:12px;letter-spacing:1.1px;text-transform:uppercase;color:#74847a}
+.skill-card .style-facts{margin-top:14px}
+.skill-when{margin:10px 0 6px;color:#51665a;font-size:12px;font-style:italic}
+.skill-id{display:inline-block;margin-top:5px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:10px;color:#6c7d72;overflow-wrap:anywhere}
+.skill-rules{margin:0;padding-left:18px;line-height:1.7}
+.skill-rules li{margin:3px 0;overflow-wrap:anywhere}
+.skill-table{width:100%;border-collapse:collapse;font-size:11px}
+.skill-table th,.skill-table td{padding:8px 10px;border-bottom:1px solid #edf0eb;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+.skill-table th{font-size:9px;letter-spacing:.9px;text-transform:uppercase;color:#74847a}
+.skill-table code{font-size:10px}
+@media(max-width:1100px){.skill-grid{grid-template-columns:1fr}}
+@media(max-width:740px){
+  /* .row-end does not shrink by default, which would push the page wider than the screen. */
+  .skill-tabs,.skill-filters{flex-direction:column;align-items:stretch}
+  .skill-tabs .row-end,.skill-grid .row-end{flex-wrap:wrap;flex-shrink:1;margin-left:0}
+  .skill-grid .production-card-head{flex-wrap:wrap;align-items:flex-start;gap:8px}
+  .skill-grid{grid-template-columns:1fr}
+  .skill-tally{gap:6px}
+  .skill-table{display:block;overflow-x:auto}
+}

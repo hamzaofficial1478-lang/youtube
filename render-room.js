@@ -334,6 +334,16 @@ class RenderRoom {
         review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: result.qcPassed ? null : true}};
       }
       this.db.prepare('UPDATE render_jobs SET review=?, updated_at=? WHERE id=?').run(JSON.stringify(review), now(), id);
+      // Skills Engine: a "needs changes" style proof becomes a lesson candidate for human review.
+      if (review.decision === 'changes_requested') {
+        this.store.skillRuntime?.capture({
+          familyId: row.family_id, skillId: 'qc.completion-standard', taskKey: 'editing.review',
+          source: 'style-proof-review', sourceRef: row.id,
+          finding: `A style proof was returned for changes: ${review.notes}`,
+          evidence: [`render job ${row.id}`, `reviewer ${reviewer}`],
+          proposal: {kind: 'add-check', value: review.notes.slice(0, 1200)},
+        });
+      }
       this.store.event(`Style proof for render ${id.slice(0, 8)}: ${review.decision} by ${reviewer}`);
       return this.publicJob(this.row(id));
     });
