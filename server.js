@@ -15,11 +15,12 @@ const {CompetitorIntelligence}=require('./competitor-intel');
 const {NicheFactory}=require('./niche-factory');
 const {SceneRoom}=require('./scene-room');
 const {RenderRoom}=require('./render-room');
+const {EditingRoom}=require('./editing-room');
 const {SkillsEngine}=require('./skills');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
 function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
   const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
   const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
@@ -35,6 +36,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles),nicheFactory=new NicheFactory(store,connectors,quota,styles);
   const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel});
   const renderRoom=new RenderRoom(store,styles,sceneRoom,{dataRoot,ffmpeg,ffprobe});
+  const editingRoom=new EditingRoom(store,styles,sceneRoom,renderRoom,{ffmpeg});
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;
   const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
@@ -59,7 +61,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
         if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-reviewed-skills-engine'});
-        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),editing:editingRoom.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
           capabilities:{skills:skillState.counts.approved>0?'approved_skills_injected':'drafts_only_not_injected',research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
@@ -118,6 +120,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(evaluationAction&&req.method==='POST'){const [,id,kind]=evaluationAction;return json(res,200,kind==='retry'?nicheFactory.retryEvaluation(id,body):kind==='review'?nicheFactory.review(id,body):nicheFactory.linkFamily(id,body));}
         if(pathname==='/api/render-readiness'&&req.method==='POST')return json(res,200,await renderRoom.checkReadiness(body));
         if(pathname==='/api/render-pins'&&req.method==='POST')return json(res,200,renderRoom.pin(body));
+        const editCreate=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/edits$/);
+        if(editCreate&&req.method==='POST')return json(res,200,await editingRoom.generate(editCreate[1],body));
+        const editAction=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(ops|undo)$/);
+        if(editAction&&req.method==='POST')return json(res,200,editAction[2]==='ops'?editingRoom.applyOps(editAction[1],body):editingRoom.undo(editAction[1],body));
         const renderQueue=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/renders$/);
         if(renderQueue&&req.method==='POST')return json(res,200,renderRoom.queueRender(renderQueue[1],body));
         const renderAction=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(cancel|retry|review)$/);
@@ -197,7 +203,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   server.requestTimeout=15000;server.headersTimeout=10000;
   server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,styles,quota,competitorIntel,nicheFactory,sceneRoom,renderRoom,connectors,reasoning,researchReasoning,voiceRuntime,voiceReady};
+  return {server,store,styles,quota,competitorIntel,nicheFactory,sceneRoom,renderRoom,editingRoom,connectors,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);

@@ -16,14 +16,14 @@ function editingRoomView(family) {
   const renders = state.renders, contents = renders.contents.filter(item => item.familyId === family.id);
   const readiness = renders.readiness, pin = renders.pin;
   const engineReady = !!(readiness?.passed && pin && renders.pinMatchesLatest);
-  const hero = `<section class="voice-hero"><div><span class="stage-kicker">ROOM 05 · EDITING · ASSEMBLY PREVIEW</span><h2>Editing Room</h2><p>The approved visuals are laid on the approved narration in the family style and rendered as a low-resolution proxy by your pinned FFmpeg build. Watch it, check the technical QC and record the style-proof verdict. The editable timeline arrives in the next milestone.</p></div><div class="voice-health"><span class="health-light ${engineReady ? 'ready' : ''}"></span><strong>${engineReady ? 'Render engine pinned' : 'Setup required'}</strong><small>${engineReady ? `FFmpeg ${esc(pin.version)} · ${esc(pin.ffmpegSha256.slice(0, 12))}` : readiness ? (readiness.passed ? 'Pin the checked build' : 'Readiness check failed') : 'Run the FFmpeg readiness check'}</small></div></section>`;
+  const hero = `<section class="voice-hero"><div><span class="stage-kicker">ROOM 05 · EDITING</span><h2>Editing Room</h2><p>The editing brain turns the approved visuals and narration into an edit: cuts on the spoken pauses, varied holds, purposeful camera moves, structural transitions and motion graphics where the script needs them, each with its reason. The critic flags boring, lazy or amateur choices. Change anything, render the edit with your pinned FFmpeg and record the style-proof verdict.</p></div><div class="voice-health"><span class="health-light ${engineReady ? 'ready' : ''}"></span><strong>${engineReady ? 'Render engine pinned' : 'Setup required'}</strong><small>${engineReady ? `FFmpeg ${esc(pin.version)} · ${esc(pin.ffmpegSha256.slice(0, 12))}` : readiness ? (readiness.passed ? 'Pin the checked build' : 'Readiness check failed') : 'Run the FFmpeg readiness check'}</small></div></section>`;
   const engine = renderEngineCard(renders);
   if (!contents.length) return `${hero}<div class="scene-cards">${engine}</div><div class="production-empty"><span class="empty-icon">▶</span><h2>No approved script yet</h2><p>Approve a script, its narration and its visual board first. The assembly preview starts from the Room 04 handoff.</p></div>`;
   if (!contents.some(item => item.contentId === renderContentId)) renderContentId = contents[0].contentId;
   const content = contents.find(item => item.contentId === renderContentId);
   const picker = contents.length > 1 ? `<div class="production-toolbar scene-toolbar"><div><label for="render-content">Approved script</label><select id="render-content">${contents.map(item => `<option value="${item.contentId}" ${item.contentId === content.contentId ? 'selected' : ''}>${esc(item.title)} · v${item.contentRevision}</option>`).join('')}</select></div></div>` : '';
   const latest = content.renders[0];
-  return `${hero}${picker}<div class="scene-cards">${engine}${renderInputsCard(content, engineReady)}</div>${latest ? renderDetail(content, latest) : '<section class="production-card"><div class="production-empty compact"><h3>No proxy yet</h3><p>When the inputs and the render engine are ready, render the first assembly preview. It runs on this computer and costs nothing.</p></div></section>'}${content.renders.length > 1 ? renderHistory(content) : ''}`;
+  return `${hero}${picker}<div class="scene-cards">${engine}${renderInputsCard(content, engineReady)}</div>${editCard(content, engineReady)}${latest ? renderDetail(content, latest) : '<section class="production-card"><div class="production-empty compact"><h3>No render yet</h3><p>When the inputs and the render engine are ready, render the edit (or a plain assembly). It runs on this computer and costs nothing.</p></div></section>'}${content.renders.length > 1 ? renderHistory(content) : ''}`;
 }
 
 function renderEngineCard(renders) {
@@ -43,11 +43,11 @@ function renderInputsCard(content, engineReady) {
     ${row(inputs.narrationSeconds !== null, 'Approved narration', inputs.narrationSeconds !== null ? `${renderClock(inputs.narrationSeconds)} · sets the video length` : 'Approve a narration in the Voice Room.')}
     ${row(!!style && style.adapter === 'ffmpeg-montage', style ? `${esc(style.name)}` : 'Family style', style ? `${esc(style.adapter)} · ${esc(style.transition)} · ${style.fps} fps` : 'Assign a style in Room 03.')}
     ${inputs.blockers.length ? `<p class="inline-warning">${esc(inputs.blockers.join(' '))}</p>` : ''}
-    <div class="card-actions">${inputs.ready && engineReady && !active ? action('Render proxy', 'render-start', content.contentId, 'primary') : ''}${!engineReady && inputs.ready ? '<span class="muted">Check and pin FFmpeg first.</span>' : ''}</div></section>`;
+    <div class="card-actions">${inputs.ready && engineReady && !active ? action('Render plain assembly', 'render-start', content.contentId, 'secondary') : ''}${!engineReady && inputs.ready ? '<span class="muted">Check and pin FFmpeg first.</span>' : ''}</div></section>`;
 }
 function renderDetail(content, job) {
   const result = job.result, progress = job.progress;
-  const head = `<div class="production-card-head"><div><span class="micro-label">ASSEMBLY PROXY · ${esc(date(job.createdAt))}</span><h2>${esc(job.scope.styleName)} r${job.scope.styleRevision} · ${job.scope.shots} shots · ${renderClock(job.scope.narrationSeconds)}</h2></div><div class="row-end">${renderBadge(job.status)}${!job.current && job.status === 'completed' ? badge('Out of date', 'gray') : ''}${job.review ? badge(job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested', job.review.decision === 'passed' ? 'green' : 'orange') : ''}</div></div>`;
+  const head = `<div class="production-card-head"><div><span class="micro-label">${job.scope.edit ? `EDIT r${job.scope.edit.revision} RENDER` : 'ASSEMBLY PROXY'} · ${esc(date(job.createdAt))}</span><h2>${esc(job.scope.styleName)} r${job.scope.styleRevision} · ${job.scope.shots} shots · ${renderClock(job.scope.narrationSeconds)}</h2></div><div class="row-end">${renderBadge(job.status)}${!job.current && job.status === 'completed' ? badge('Out of date', 'gray') : ''}${job.review ? badge(job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested', job.review.decision === 'passed' ? 'green' : 'orange') : ''}</div></div>`;
   if (['queued', 'running'].includes(job.status)) {
     const pct = progress?.total ? Math.round(progress.done / progress.total * 100) : 0;
     return `<section class="production-card">${head}<div class="cap-row"><div><strong>${esc(progress?.stage || 'Waiting for the render worker')}</strong><small>Step ${progress?.done || 0} of ${progress?.total || '—'} · attempt ${job.attempts}/3</small></div><div class="cap-meter">${intelMeter(pct, 100, false)}</div></div><div class="card-actions">${action('Cancel', 'render-cancel', job.id, 'text-button danger')}</div></section>`;
@@ -93,7 +93,8 @@ function renderAction(command, id, button) {
       <label class="checkbox-label"><input type="checkbox" name="watchedFully">I watched the whole proxy with sound.</label>
       <label class="checkbox-label"><input type="checkbox" name="styleMatches">Motion, pacing and transitions match ${esc(job.scope.styleName)}.</label>
       <label class="checkbox-label"><input type="checkbox" name="syncReviewed">The visuals stay in step with the narration.</label>
-      ${job.result.qcPassed ? '' : '<label class="checkbox-label"><input type="checkbox" name="qcAccepted">I accept the technical QC findings shown for this proxy.</label>'}`, 'Record verdict', {id});
+      ${job.result.qcPassed ? '' : '<label class="checkbox-label"><input type="checkbox" name="qcAccepted">I accept the technical QC findings shown for this proxy.</label>'}
+      ${job.scope.edit?.criticals ? `<label class="checkbox-label"><input type="checkbox" name="critiqueAccepted">I accept the editor's ${job.scope.edit.criticals} critical finding${job.scope.edit.criticals === 1 ? '' : 's'} for edit r${job.scope.edit.revision}.</label>` : ''}`, 'Record verdict', {id});
   }
   return toast('Unknown action.', true);
 }
@@ -107,7 +108,7 @@ document.getElementById('render-form').addEventListener('submit', event => {
     if (kind === 'check') { const report = await api('/api/render-readiness', {requestedBy: person}); message = report.passed ? `FFmpeg ${report.ffmpeg.version} passed every check.` : `The check found ${report.issues.length} issue(s).`; return; }
     if (kind === 'pin') { await api('/api/render-pins', {readinessId: data.readinessId, pinnedBy: person, reason: value('reason')}); message = 'Build pinned for rendering.'; return; }
     if (kind === 'start') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = 'Proxy render queued.'; return; }
-    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), qcAccepted: checked('qcAccepted')}}); return; }
+    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
     throw new Error('Unknown form.');
   }, () => message);
 });

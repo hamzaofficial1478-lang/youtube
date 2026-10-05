@@ -1,0 +1,139 @@
+# Editing Room (P06, v0.12.0)
+
+Room 05 in the Production panel. The **editing brain** turns the approved visual board (Room 04), the
+approved narration (Voice Room) and the family style (Room 03) into an **edit**. Every cut, hold, camera
+move, transition and graphic comes with a written reason. A **critic** then reviews the edit the way a
+senior editor would. You can change any decision, redo one scene, undo, and render the edit with your
+pinned FFmpeg build. Your style-proof verdict on the rendered edit is its approval.
+
+Everything here runs on your computer and costs nothing. No model or provider is called.
+
+## 1. Where the brain comes from
+
+The owner asked (2026-10-05) for the editing repositories to be analysed for their core brain,
+features, workflow and strategy, not mined for hints, and for the Editing Room to think like a
+professional editor and motion designer. That analysis is in `docs/research/editing-brain/`:
+
+- **OpenMontage**: how an editor decides and how a reviewer critiques.
+- **palmier-pro, capcut-cli, lossless-cut**: the timeline model, operations, receipts and FFmpeg recipes.
+- **flick, hand-drawn canvas**: motion graphics and 2D animation.
+
+It became 160 skills on the Skills page. `editing-brain.js` is that research turned into code: each
+rule names the skill it restates, and the page shows whether you have approved that skill.
+
+| What the brain decides | How | Skill |
+|---|---|---|
+| Where cuts land | The narration's pauses are measured with FFmpeg `silencedetect`, and each sentence start moves onto its real pause. A cut inside a scene snaps to a sentence break within 0.6 s, as long as neither shot gets too short. | `editing.visual-on-the-word` |
+| How long each shot holds | A breathing pattern (long, medium, short, short, very long) inside each scene. Hero shots (first of an evidence or turn scene, the last shot) are weighted 1.35x. The first shot respects the style's hook limit. Three near-equal holds in a row are broken up. | `doc.montage-beat-math`, `editing.change-cadence` |
+| Long stills | A still held past the style's longest shot is split into a wide view and a detail punch-in. | `editing.still-image-motion` |
+| Camera moves | Push in (closer look, heroes and the opening), pull out (context, scene openings, the close), pans, detail punch-ins. Eased (smoothstep), never linear. Neighbouring stills never move the same way. Amplitude follows the style's motion intensity and the scene's register. A static still longer than the style's frozen-picture limit gets a gentle push. | `editing.still-image-motion`, `motion.easing-curves` |
+| Clips | Skips a stock clip's settling start. A clip shorter than its hold is slowed to at most 80% speed; anything shorter is flagged instead of frozen. | `editing.trim-to-the-moment` |
+| Transitions | Hard cuts by default. A crossfade into a turn or the wrap-up, and a dip to black before the close in videos over a minute. At most one soft transition per 45 s, never two in a row, never out of the hook. Only types the style allows. | `editing.transition-grammar` |
+| Ending | A fade-out on the last image, never a freeze. | `editing.cut-justification-and-endings` |
+| Motion graphics | Plan on-screen text is shown for its reading time. At a **turn** scene it becomes a **title card** built to your title-card prompt: fade in rising, hold `max(1.2, 0.35 + words/3.2)`, fade out, one accent word (`*word*` marks it). Numbers become **stat reveals**, quotations **quote cards**, and dates **date stamps**. These are proposals; only graphics you accept are rendered. One graphic at a time, and proposals stop at about a third of the runtime. | `motion.graphic-type-selector`, `motion.title-cards-canvas`, `motion.stat-reveal`, `motion.quote-card`, `editing.text-dwell-formula` |
+| Retention markers | Hook complete by 0:30, first payoff, a re-hook at each turn. | `editing.retention-curve-defense` |
+
+## 2. The critic
+
+Findings use the reviewer's ladder: **critical** must be fixed or explicitly accepted at the verdict,
+a **suggestion** improves the edit, a **polish** item is minor. Each finding names its fix and its
+skill, and some have a one-click **Apply this fix**.
+
+- **Critical:**
+  - a clip that would freeze on its last frame;
+  - a static still longer than the style's frozen-picture limit;
+  - the same visual twice back to back;
+  - a slideshow risk of 4 or more.
+- **Suggestion:**
+  - the first shot is slower than the hook limit;
+  - the video opens on a still although the opening scene has motion (the one-click fix moves the clip first);
+  - nothing changes for longer than the style allows;
+  - three equal holds in a row;
+  - five stills in a row;
+  - too many soft transitions or transition types;
+  - no change of treatment for 30 s;
+  - no first payoff before 2:00, or no re-hook in a video over 4 minutes (route: the script);
+  - a graphic too short to read.
+- **Slideshow risk** (lower is better: under 2 strong, under 3 acceptable, under 4 revise, 4 or more fail) averages six dimensions:
+  - repeated camera moves;
+  - too little moving footage;
+  - monotone holds;
+  - text over-reliance;
+  - no hero shot;
+  - long unchanged stretches.
+
+## 3. Changing the edit
+
+Every change makes a new **immutable revision**: a SQLite trigger refuses updates and deletes. A change
+sent against an older revision is refused ("This edit changed (now rN)"), so two tabs can never
+overwrite each other. Changes are checked in full before anything is saved; a refused change creates
+no revision.
+
+| Change | Rule |
+|---|---|
+| Hold | Moves the cut after the clip; the next clip absorbs the difference. Both keep at least 0.5 s. The last clip always ends with the narration. |
+| Camera move | Stills only. |
+| Start point | Clips only, and enough of the clip must remain to fill the hold. |
+| Transition | Cut, crossfade or dip to black, if the style allows it, and no longer than half of either neighbouring clip. |
+| Order within a scene | The pictures move; the cuts stay on the sentence breaks. |
+| Hero | Marks a shot as a hero. |
+| Graphic | Accept, reject, edit the text (one accent word for title cards) or change how long it stays. |
+| **Redo scene** | Single-scene repair: the brain makes a different take of that one scene (a new breathing offset and a different route through the camera moves). Everything else, including your graphics decisions, stays exactly as it was. |
+| **Undo** | A new revision that restores the one before. |
+
+An edit belongs to the exact board, narration, script and style it was made from. If any of them
+changes, the edit shows **Out of date**: it can no longer be changed or rendered, and you draft a new one.
+
+## 4. Learning from your corrections
+
+When you make the same kind of change (for example turning a crossfade into a cut) in **two different
+edits** of one family, the program raises a **lesson** on the Skills page against the skill that rule
+came from. A lesson is a proposal; approving it writes a draft skill revision that still needs your
+approval. Nothing changes silently.
+
+## 5. Rendering an edit
+
+**Render this edit** queues the newest revision with the same gates as the assembly preview:
+
+- the readiness check;
+- the pinned FFmpeg build;
+- checksums on every file.
+
+The render then runs these steps:
+
+1. One segment per clip, with its own hold, eased camera move, start point and speed.
+2. Every segment is converted to one colour profile (BT.709, TV range). Without this, JPEG stills
+   (full range) and stock clips (TV range) changed format mid-stream, FFmpeg rebuilt its filter graph,
+   and a crossfade lost a whole chunk. The fault was found in a browser check and a regression test
+   now covers it.
+3. Runs of hard cuts are joined losslessly. The few soft transitions use `xfade`.
+4. Graphics are drawn as one ASS layer through libass. Five eased steps make each entrance; the
+   accent word is drawn in the style's accent colour.
+5. A fade-out ends the video.
+
+The usual QC runs on the real file: duration, frame, audio, black frames and frozen picture. A title
+card's dark panel and the fade-out are **planned** dark moments and do not fail the black-frame check.
+The render manifest records the edit revision, the graphics file's SHA-256 and every command.
+
+The same edit and the same build give a byte-identical file.
+
+Graphics need the FFmpeg `ass` filter, so **run the readiness check again** after updating to 0.12.
+The required filter list now also includes `settb`, `setparams`, `fade` and `silencedetect`. A full
+build such as Gyan.FFmpeg has all of them.
+
+**Fonts.** The ASS layer asks for the style's fonts by name. A font that is not installed on this PC
+falls back to a system font. Install the style's fonts for the exact look.
+
+## 6. Not built yet (honest list)
+
+- Canvas/Chrome-rendered motion templates (charts, maps, hand-drawn reveals, stick-figure animation).
+  The research and skills exist (`motion.*`); the renderer comes next. Today's graphics are text-based
+  templates drawn with libass.
+- Music, sound effects and ducking (P08), and captions (P07).
+- AI video, maps and diagrams as visual sources (adapters not built).
+- Analysing a stock clip's motion to find its best moment (today it skips the opening second).
+- An optional Hermes-written creative critique on top of the deterministic one.
+- Exact word timing: cuts follow measured pauses between sentences, not individual words. Caption
+  alignment (P07) will add word timing.
+- Live verification on your own media. Automated and browser checks used generated test media and
+  real FFmpeg 8.1.2 on this PC.

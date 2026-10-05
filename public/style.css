@@ -87,3 +87,16 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
   .skill-tally{gap:6px}
   .skill-table{display:block;overflow-x:auto}
 }
+/* P06 Editing Room */
+.edit-strip{margin:14px 0 6px}.edit-strip svg{display:block;width:100%;height:auto;background:#f7f9f5;border:1px solid #e3e8df;border-radius:10px}
+.edit-clip{cursor:pointer;stroke:#fff;stroke-width:1}.edit-clip.still{fill:#bcd3c2}.edit-clip.video{fill:#4f7e63}.edit-clip.hero{stroke:#c9862f;stroke-width:3}.edit-clip:hover{opacity:.8}
+.edit-join{fill:#c9862f}.edit-graphic{cursor:pointer}.edit-graphic.accepted{fill:#2f6b4f}.edit-graphic.proposed{fill:#e0a463}.edit-graphic.rejected{fill:#d7ddd5}
+.edit-scene{stroke:#9fb3a6;stroke-width:1;stroke-dasharray:3 3}.edit-marker{fill:#a36b42}
+.edit-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:10px;color:#6f7d72;align-items:center}.edit-legend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;background:#bcd3c2}
+.edit-legend .video::before{background:#4f7e63}.edit-legend .hero::before{background:#fff;border:2px solid #c9862f}.edit-legend .graphic::before{background:#2f6b4f;height:5px}.edit-legend .marker::before{background:#a36b42;border-radius:50%;width:7px;height:7px}
+.edit-facts{margin-top:12px}.edit-facts div{grid-template-columns:96px minmax(0,1fr)}.edit-actions{flex-wrap:wrap}
+.edit-findings{display:grid;gap:8px;margin-top:8px}.edit-finding{display:grid;grid-template-columns:minmax(0,190px) minmax(0,1fr) auto;gap:10px;align-items:start;padding:10px 12px;border:1px solid #e6ebe3;border-radius:10px;background:#fbfcf9;font-size:12px}
+.edit-finding p{margin:0;line-height:1.5}.edit-finding.critical{border-color:#efc9a8;background:#fff8f1}.edit-finding>div{display:flex;flex-wrap:wrap;gap:4px}
+.edit-table{overflow-x:auto;margin-top:8px}.edit-table table{width:100%;border-collapse:collapse;font-size:11px}.edit-table th,.edit-table td{text-align:left;padding:6px 8px;border-bottom:1px solid #edf0eb;vertical-align:top}.edit-table td:nth-child(5){min-width:260px;color:#5f6f66}
+.edit-scenes{flex-wrap:wrap;gap:4px 12px}.edit-graphic-row .card-actions{margin-top:4px}
+@media(max-width:740px){.edit-finding{grid-template-columns:1fr}.edit-card .production-card-head{flex-wrap:wrap;align-items:flex-start}.edit-card .row-end{flex-wrap:wrap;flex-shrink:1}.edit-facts div{grid-template-columns:1fr}}

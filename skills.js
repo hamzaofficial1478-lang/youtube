@@ -856,6 +856,8 @@ class SkillsEngine {
     this.store.skillRuntime = {
       brief: (taskKey, familyId) => this.promptBrief(taskKey, {familyId}),
       recordUsage: args => this.recordUsage(args),
+      // The approved skills that apply to a task, for rooms that follow skills in code rather than in a prompt.
+      approved: (taskKey, familyId) => this.select(taskKey, {familyId}).map(item => ({id: item.skill.id, revisionId: item.revisionId})),
       settleUsage: (jobId, outcome) => { try { this.settleUsage(jobId, outcome); } catch { /* an outcome label is bookkeeping; it must not fail a job */ } },
       // Capture is best-effort bookkeeping around a real review decision: a malformed candidate
       // must never roll back the review that produced it.

@@ -4,7 +4,7 @@
 // FFmpeg build, runs technical QC, keeps an immutable manifest and asks a human for the style-proof verdict.
 const fs = require('node:fs');
 const path = require('node:path');
-const {randomUUID} = require('node:crypto');
+const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const R = require('./render');
 const VS = require('./visual-sources');
@@ -118,10 +118,11 @@ class RenderRoom {
     const scope = JSON.parse(row.scope), result = row.result ? JSON.parse(row.result) : null;
     const content = (() => { try { return this.store.content(row.content_id); } catch { return null; } })();
     const visual = this.scenes.handoff(row.content_id);
-    const current = !!(visual.ready && visual.approvalId === row.visual_approval_id && content && content.revision === scope.contentRevision);
+    const current = !!(visual.ready && visual.approvalId === row.visual_approval_id && content && content.revision === scope.contentRevision && (!scope.edit || this.editing?.isLatest(scope.edit.revisionId)));
     return {id: row.id, familyId: row.family_id, contentId: row.content_id, visualApprovalId: row.visual_approval_id, preset: row.preset, status: row.status, attempts: row.attempts,
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
-      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg},
+      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg,
+        edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, criticals: scope.edit.criticals, verdict: scope.edit.critiqueVerdict, graphics: scope.edit.timeline.graphics.filter(item => item.status === 'accepted').length} : null},
       result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
   }
   queueRender(contentId, input) {
@@ -131,6 +132,12 @@ class RenderRoom {
       const content = this.store.content(contentId), inputs = this.inputs(content);
       requireValue(inputs.ready, inputs.blockers[0], 409);
       requireValue(input.visualApprovalId === inputs.visual.approvalId, 'The visual approval changed. Reload before rendering.', 409);
+      // P06: an edit revision from the Editing Room renders its own cuts, moves, transitions and graphics.
+      let edit = null;
+      if (input.editRevisionId !== undefined && input.editRevisionId !== null) {
+        requireValue(this.editing, 'The Editing Room is not available.', 503);
+        edit = this.editing.renderScope(text(input.editRevisionId, 'Edit revision', 8, 80), content);
+      }
       const readiness = this.latestReadiness();
       requireValue(readiness?.passed, 'Run the FFmpeg readiness check first.', 409);
       const pin = this.activePin();
@@ -148,11 +155,11 @@ class RenderRoom {
         contentRevision: content.revision, manifestId: inputs.manifestRow.id, manifestRevision: inputs.manifestRow.revision, manifestHash: inputs.manifestRow.payload_hash,
         narration: {approvalId: inputs.voice.approvalId, relativePath: inputs.voice.artifact.relativePath, sha256: inputs.voice.artifact.sha256, durationSeconds: inputs.voice.analysis.durationSeconds},
         style: {revisionId: revision.id, revision: revision.revision, name: inputs.spec.name, specHash: revision.spec_hash, spec: inputs.spec},
-        ffmpeg: {version: pin.version, sha256: pin.ffmpegSha256, pinId: pin.id}, rendererVersion: R.RENDERER_VERSION, format: inputs.family.format, shots,
+        ffmpeg: {version: pin.version, sha256: pin.ffmpegSha256, pinId: pin.id}, rendererVersion: R.RENDERER_VERSION, format: inputs.family.format, shots, edit,
       };
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'proxy','queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, inputs.visual.approvalId, JSON.stringify(scope), by, at, at);
-      this.store.event(`Queued proxy render for "${content.title}" (${shots.length} shots)`);
+      this.store.event(edit ? `Queued edit r${edit.revision} render for "${content.title}" (${edit.timeline.clips.length} clips)` : `Queued proxy render for "${content.title}" (${shots.length} shots)`);
       return this.publicJob(this.row(id));
     });
   }
@@ -213,10 +220,10 @@ class RenderRoom {
     this.current = {id: job.id, handle: null, cancelledBy: null};
     const work = path.join(this.renderDir, '.work', job.id), finalDir = path.join(this.renderDir, job.family_id, job.content_id, job.id);
     const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
-    const exec = async (label, command, args, timeout) => {
+    const exec = async (label, command, args, timeout, cwd) => {
       if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
       try {
-        const out = await R.run(command, args, {timeout, onSpawn: handle => { this.current.handle = handle; }});
+        const out = await R.run(command, args, {timeout, cwd, onSpawn: handle => { this.current.handle = handle; }});
         logs.push({step: label, ok: true, stderr: R.tail(out.stderr)});
         return out;
       } catch (error) {
@@ -238,16 +245,32 @@ class RenderRoom {
         return {...shot, file};
       });
       const out = path.join(work, 'proxy.mp4');
-      const plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out});
-      // 2. One segment per shot, frame-exact.
+      let plan;
+      if (scope.edit) {
+        const files = {};
+        for (const [clipId, entry] of Object.entries(scope.edit.files)) {
+          const file = this.localFile(entry.relativePath);
+          requireValue(fs.existsSync(file) && R.fileSha256(file) === entry.sha256, 'An approved visual file used by this edit is missing or changed.', 409);
+          files[clipId] = file;
+        }
+        if (scope.edit.graphicsAss) fs.writeFileSync(path.join(work, 'graphics.ass'), scope.edit.graphicsAss);
+        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss});
+      } else {
+        plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out});
+      }
+      // 2. One segment per shot or clip, frame-exact.
       for (const segment of plan.segments) {
         this.progress(job.id, `rendering ${segment.label}`, segment.index + 1, total);
         await exec(`segment ${segment.label}`, job.paths.ffmpeg, segment.args, Math.max(60000, (segment.frames + segment.extraFrames) * 400));
       }
-      // 3. Assemble with the narration.
+      // 3. Assemble with the narration (an edit first joins its runs of hard cuts losslessly).
       this.progress(job.id, 'assembling with narration', plan.segments.length + 1, total);
+      for (const chunk of plan.chunks || []) {
+        fs.writeFileSync(chunk.listFile, chunk.list);
+        await exec(`join ${chunk.file}`, job.paths.ffmpeg, chunk.args, Math.max(60000, chunk.frames * 20), work);
+      }
       if (plan.final.mode === 'concat') fs.writeFileSync(plan.final.listFile, plan.final.list);
-      await exec('assemble', job.paths.ffmpeg, plan.final.args, Math.max(120000, plan.totalFrames * 200));
+      await exec('assemble', job.paths.ffmpeg, plan.final.args, Math.max(120000, plan.totalFrames * 200), plan.final.mode === 'edit' ? work : undefined);
       // 4. Technical QC on the real file.
       this.progress(job.id, 'checking the proxy', plan.segments.length + 2, total);
       const probe = await VS.probeMedia(out, job.paths.ffprobe);
@@ -256,13 +279,21 @@ class RenderRoom {
       const spec = scope.style.spec, qc = spec.qc;
       const scan = await exec('blackdetect and freezedetect', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-i', out, '-vf', `blackdetect=d=0.1:pix_th=0.10,freezedetect=n=0.003:d=${qc.maxFrozenSeconds}`, '-an', '-f', 'null', '-'], Math.max(120000, plan.totalFrames * 100));
       const found = R.detections(scan.stderr);
-      const shotAt = seconds => scope.shots.find((shot, index) => seconds >= shot.startSeconds - 0.001 && (index === scope.shots.length - 1 || seconds < scope.shots[index + 1].startSeconds))?.label || '—';
+      const shotAt = scope.edit
+        ? seconds => plan.segments.find((segment, index) => seconds >= segment.startFrame / plan.preset.fps - 0.001 && (index === plan.segments.length - 1 || seconds < plan.segments[index + 1].startFrame / plan.preset.fps))?.label || '—'
+        : seconds => scope.shots.find((shot, index) => seconds >= shot.startSeconds - 0.001 && (index === scope.shots.length - 1 || seconds < scope.shots[index + 1].startSeconds))?.label || '—';
+      // Planned dark moments are not defects: title cards sit on a dark panel and the edit fades out at the end.
+      const planned = scope.edit ? [
+        ...scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && item.template === 'title-card').map(item => [item.start / scope.edit.timeline.fps, (item.start + item.frames) / scope.edit.timeline.fps]),
+        ...(plan.fadeFrames ? [[(plan.totalFrames - plan.fadeFrames) / plan.preset.fps, plan.totalFrames / plan.preset.fps + 1]] : []),
+      ] : [];
+      const plannedDark = span => planned.some(([from, to]) => span.start >= from - 0.15 && span.end <= to + 0.15);
       const expected = plan.totalFrames / plan.preset.fps, tolerance = 1 / plan.preset.fps + 0.15;
       const checks = [
         {name: 'duration', passed: Math.abs(probe.durationSeconds - expected) <= tolerance && Math.abs(probe.durationSeconds - scope.narration.durationSeconds) <= tolerance + 0.05, detail: `${probe.durationSeconds.toFixed(2)} s video for ${scope.narration.durationSeconds.toFixed(2)} s narration`},
         {name: 'frame', passed: probe.width === plan.preset.width && probe.height === plan.preset.height && Math.abs((probe.frameRate || 0) - plan.preset.fps) < 0.01, detail: `${probe.width}×${probe.height} at ${probe.frameRate} fps`},
         {name: 'narration audio', passed: !!audio && audio.codec_name === 'aac', detail: audio ? `${audio.codec_name} ${audio.sample_rate} Hz` : 'no audio stream'},
-        {name: 'black frames', passed: found.black.every(span => span.duration <= qc.maxBlackSeconds), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : 'none'},
+        {name: 'black frames', passed: found.black.every(span => span.duration <= qc.maxBlackSeconds || plannedDark(span)), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)}${plannedDark(span) ? ', planned' : ''})`).join('; ') : 'none'},
         {name: 'frozen picture', passed: !found.frozen.length, detail: found.frozen.length ? found.frozen.map(span => `${span.duration === null ? 'until the end' : `${span.duration.toFixed(1)} s`} from ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : `no hold longer than ${qc.maxFrozenSeconds} s`},
       ];
       // 5. Contact sheet for review.
@@ -281,9 +312,10 @@ class RenderRoom {
       const relative = file => path.relative(this.dataRoot, file).replaceAll('\\', '/');
       const scrub = args => args.map(arg => String(arg).replaceAll(work, '<work>').replaceAll(this.dataRoot, '<data>'));
       const manifest = {
-        renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg},
-        shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, assetId: segment.assetId, sha256: scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
-        commands: [...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), {step: 'assemble', args: scrub(plan.final.args)}],
+        renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg,
+          edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null} : null},
+        shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, clipId: segment.clipId || null, assetId: segment.assetId, sha256: scope.edit ? scope.edit.files[segment.clipId].sha256 : scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
+        commands: [...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), ...(plan.chunks || []).map(chunk => ({step: `join ${chunk.file}`, args: scrub(chunk.args)})), {step: 'assemble', args: scrub(plan.final.args)}],
         output: {sha256: R.fileSha256(video), sizeBytes: fs.statSync(video).size, probe}, qc: checks, detections: found, logs,
       };
       const manifestFile = path.join(finalDir, 'render-manifest.json');
@@ -331,7 +363,9 @@ class RenderRoom {
         requireValue(confirmations.styleMatches === true, 'Confirm that motion, pacing and transitions match the assigned style.');
         requireValue(confirmations.syncReviewed === true, 'Confirm that the visuals stay in step with the narration.');
         if (!result.qcPassed) requireValue(confirmations.qcAccepted === true, 'Accept the technical QC findings or fix them first.');
-        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: result.qcPassed ? null : true}};
+        const scope = JSON.parse(row.scope), criticals = scope.edit?.criticals || 0;
+        if (criticals) requireValue(confirmations.critiqueAccepted === true, `Accept the editor's ${criticals} critical finding${criticals === 1 ? '' : 's'} or fix them in the edit first.`);
+        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: result.qcPassed ? null : true, critiqueAccepted: criticals ? true : null}};
       }
       this.db.prepare('UPDATE render_jobs SET review=?, updated_at=? WHERE id=?').run(JSON.stringify(review), now(), id);
       // Skills Engine: a "needs changes" style proof becomes a lesson candidate for human review.

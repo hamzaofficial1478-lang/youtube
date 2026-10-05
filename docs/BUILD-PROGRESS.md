@@ -4,11 +4,11 @@ Last updated: 2026-10-04. Current application: 0.10.0, local planning, configura
 
 ## Resume here
 
-**2026-10-05: the project moved to Claude Code on the owner's PC. Read HANDOFF.md first.** The Skills Engine is built as of 0.11 (SKILLS-ENGINE.md; brief in SKILLS-ENGINE-PLAN.md; research in research/). **All 313 builtin skills are drafts: nothing changes how a room works until the owner approves that exact revision on the Skills page.** Channel and niche profiles are pin-only: they reach a family only after the owner pins them there. The next milestone is the P06 Editing Room, built on the approved editing, motion and timeline skills.
+**2026-10-05: the project moved to Claude Code on the owner's PC. Read HANDOFF.md first.** The Skills Engine is built as of 0.11 (SKILLS-ENGINE.md; brief in SKILLS-ENGINE-PLAN.md; research in research/). **All 313 builtin skills are drafts: nothing changes how a room works until the owner approves that exact revision on the Skills page.** Channel and niche profiles are pin-only: they reach a family only after the owner pins them there. **The P06 Editing Room is built as of 0.12 (EDITING-ROOM.md)**: the editing brain drafts an edit with a reason for every decision, the critic reviews it, the owner changes, repairs or undoes it, and the edit renders through the pinned FFmpeg. After updating, run the FFmpeg readiness check again (graphics need the `ass` filter). Next: P06b, the canvas renderer for charts, maps and hand-drawn 2D animation; then P07 Captions and P08 Audio.
 
 Read this file, build-status.json, REPOSITORIES.md, STYLE-ROOM.md, COMPETITOR-INTELLIGENCE.md, NICHE-FACTORY.md, SCENE-ROOM.md, RENDER-PROOF.md, SKILLS-ENGINE.md and ../README.md. This docs folder contains YouTube_Automation_Program_Blueprint.pdf. Follow AGENTS.md: deliver verified changes into the owner's local program folder (Desktop\YT\youtube) and push to GitHub only when the owner asks. Follow the blueprint sequence: one dependable primary-language loop, then optional localization into each family's configured additional locales, then controlled portfolio growth. Do not interpret this release as a finished automation product, a hosted app or a public recommendation system.
 
-The restricted `youtube-control-room` Hermes profile powers quality-gated script candidates and permission-gated daily topic briefs. Room 03 (Style Library & Assignment) is live as of 0.7. R05 Competitor Intelligence and R06 Niche Factory are built as of 0.8 and verified with fake providers; live verification needs the owner's NexLev, YouTube and Hermes keys. Room 04 Scene & Visual is built as of 0.9 and verified with fake providers; live verification needs Pexels, Pixabay and OpenAI keys. P05 (FFmpeg readiness, pinned build, deterministic proxy and style-proof review) is built as of 0.10 and verified with real FFmpeg on fixture media. The Skills Engine is built as of 0.11 and seeds 313 reviewable skill drafts (0.11.1 added the CB YT AI Mastery bundle); its briefs reach the Hermes script and research prompts only after a named approval. The next milestone is P06: the revisioned editing timeline with single-scene repair, starting from the assembly. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint.
+The restricted `youtube-control-room` Hermes profile powers quality-gated script candidates and permission-gated daily topic briefs. Room 03 (Style Library & Assignment) is live as of 0.7. R05 Competitor Intelligence and R06 Niche Factory are built as of 0.8 and verified with fake providers; live verification needs the owner's NexLev, YouTube and Hermes keys. Room 04 Scene & Visual is built as of 0.9 and verified with fake providers; live verification needs Pexels, Pixabay and OpenAI keys. P05 (FFmpeg readiness, pinned build, deterministic proxy and style-proof review) is built as of 0.10 and verified with real FFmpeg on fixture media. The Skills Engine is built as of 0.11 and seeds 313 reviewable skill drafts (0.11.1 added the CB YT AI Mastery bundle); its briefs reach the Hermes script and research prompts only after a named approval. P06 (the editing brain, critic and revisioned edit with single-scene repair and edit renders) is built as of 0.12. The next milestones are P06b (canvas motion graphics) and P07 Captions. Per-channel OAuth authorization and identity isolation remain later milestones. There is no publication endpoint.
 
 ## Owner decisions (2026-10-04)
 
@@ -32,7 +32,7 @@ These delivery steps group the tracked milestones into one dependency order. Com
 4a. [x] Competitor Intelligence (R05) and Niche Factory (R06), added by the owner on 2026-10-04 and built the same day (live provider verification pending keys).
 5. [x] Real scenes and licensed visual assets bound to narration and style revisions, completed 2026-10-04 (live provider verification pending keys).
 6. [x] FFmpeg readiness, deterministic proxy rendering and one sandboxed style proof, completed 2026-10-04 with fixture media (the owner's first proof on real visuals is pending).
-7. [ ] Revisioned editing timeline and single-scene repair.
+7. [x] Revisioned editing timeline and single-scene repair, completed 2026-10-05 as the Editing Room with the editing brain and critic (canvas motion templates follow as P06b).
 8. [ ] Production captions and visible-text QC.
 9. [ ] Licensed music, sound effects and audio-mix QC.
 10. [ ] Complete audiovisual Review & QC evidence.
@@ -52,7 +52,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Current milestone: FFmpeg readiness and assembly proxy (P05) v0.10 is complete. Acceptance: readiness records versions, checksums, filters, encoders and a byte-identical fixture; renders run only with the pinned binaries and only from current approved inputs whose checksums still match; the proxy is frame-exact against the narration for cut, crossfade and dip-to-black; QC covers duration, frame, audio, black and frozen pictures; results and manifests are immutable; a human records the style-proof verdict. Previous milestone: Scene & Visual Room (P04) v0.9 is complete with fake-provider verification. Acceptance: a plan needs an approved script, an approved narration and a ready style handoff; every revision is immutable with stable scene and shot IDs; stock searches stay within hourly caps and a 24-hour cache; downloads come only from provider media hosts with size, type, checksum and ffprobe checks; AI images are admitted against a monthly budget and never retried silently; a named human approves the plan and the full board with rights and AI-disclosure decisions; any later change ends the approval. Previous milestone: Competitor Intelligence (R05) and Niche Factory (R06) v0.8 are complete with fake-provider verification. Acceptance: no outside request without an explicit owner action, reserved data caps and token budgets, no automatic retries, YouTube data about other channels display-only and purged after 30 days, blueprints blocked unless they pass the 30/70 rule and copy guard, niche scores computed in code with hard filters winning, and every effect (script guidance, narrator prefill, style draft, new family) behind a named human review. Previous milestone: Style Library & Assignment Room v0.7 is complete. Acceptance: five launch styles exist as reviewable drafts; no draft can be assigned; every revision is immutable; a family default must be approved and format-compatible; overrides need explicit acknowledgement; fallbacks are manual-only; retiring or revoking blocks the handoff instead of switching styles. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 16 / 34 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 17 / 35 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -87,7 +87,8 @@ A sourced primary-language master becomes a real, reviewable video.
 - [x] **P04 Scene & Visual Room with rights provenance** (done) - Version 0.9 (2026-10-04): Scene & Visual Room with rule-based and Hermes scene plans (stable scene/shot IDs, word-share timing from the approved narration, style-bound checks, immutable revisions, single-scene repair), versioned capability registry, Pexels/Pixabay search with hourly caps and 24-hour cache, licensed downloads restricted to provider media hosts with checksum and ffprobe evidence, OpenAI image generation with monthly budget admission, deliberate retries, visual approval with rights and AI-disclosure decisions, snapshot handoff and invalidation. 9 scene checks with real FFmpeg on generated media and fake providers; full suite 133 tests, 131 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. AI video, generated graphics and maps have no adapter yet; live provider verification pending owner keys.
 - [x] **P05 FFmpeg readiness, proxy renderer and first style proof** (done) - Version 0.10 (2026-10-04): FFmpeg readiness (versions, binary SHA-256, filter/encoder inventory, byte-identical fixture), owner-pinned binaries re-checked before every render, deterministic 360p assembly proxy of the approved board on the approved narration (frame-snapped shots, Ken Burns stills, held/trimmed clips, cut via concat or crossfade/dip via frame-exact xfade), QC (duration, frame, audio, black, frozen), contact sheet, immutable render manifest with commands and logs, cancellation, restart recovery and a human style-proof verdict. 5 render checks with real FFmpeg; full suite 138 tests, 136 passed, 2 Windows-only skipped; desktop and 390 x 844 browser flows passed. Documentary Montage proven with fixture media; the owner's first proof on real visuals and his Windows FFmpeg build is pending.
 - [x] **S01 Skills Engine: reviewed operating knowledge used at runtime** (done) - 313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision.
-- [ ] **P06 Editing Room and deterministic timeline** (planned) - Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass.
+- [x] **P06 Editing Room: editing brain, critic and revisioned edit** (done) - Version 0.12 (2026-10-05): a deterministic editing brain (editing-brain.js) drafts the edit from the approved board, the narration pauses measured with FFmpeg silencedetect and the family style: sentence-snapped cuts, breathing holds with heroes and the hook limit, eased camera moves that never repeat on neighbours, long-still punch-ins, clip trims and safe slow-downs, structural transitions within a budget, a fade-out ending, retention markers and proposed motion graphics (stat, quote, date, plan text, the owner's title card at turns). A critic scores slideshow risk and files critical/suggestion/polish findings with fixes and skill IDs. Immutable revisions, optimistic concurrency, undo, single-scene repair, owner-correction lessons, and an edit render through the pinned FFmpeg with an ASS graphics layer, uniform BT.709 segments, planned-dark QC and a byte-identical re-render. 8 editing tests; full suite 162/162; desktop and 390 x 844 browser flows passed.
+- [ ] **P06b Canvas motion-graphics and 2D animation renderer** (planned) - Render the motion.* templates that libass cannot draw (chart builds, map routes, diagram builds, hand-drawn reveals, stick-figure scenes) as deterministic Canvas2D frames in Edge over the DevTools Protocol, sandboxed, with stills-first QC and per-scene caching; then let the brain propose them where the script needs them.
 - [ ] **P07 Captions & Localization Room** (planned) - Align editable SRT/WebVTT to selected narration, enforce locale-aware reading/timing/safe-area checks, and keep visible text separate from later language editions.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (planned) - Track asset licenses and attribution, store ducking/fades as timeline data, and test loudness, peaks, clipping, silence and channel layout.
 - [ ] **P09 Review & QC Room with video intelligence** (planned) - Completely decode proxies/finals; create timestamped contact sheets and aligned transcript/captions; flag black/frozen frames, A/V drift, clipping, unsafe text, stale assets and abrupt cuts.
@@ -181,7 +182,62 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Validation record
 
-### Current release 0.11.1 - CB YT AI Mastery bundle and pin-only skills
+### Current release 0.12.0 - Editing Room (P06)
+
+- Owner mandate (2026-10-05): the Editing Room must think like a professional editor and motion designer, built from a deep analysis of the editing repositories. The analysis lives in `docs/research/editing-brain/` (OpenMontage's editor and reviewer brain, the palmier/capcut/lossless-cut timeline rules, flick and hand-drawn motion design, 160 skills). This release turns it into code.
+- Added `editing-brain.js`, pure and deterministic:
+  - measured sentence timing (FFmpeg `silencedetect` pauses);
+  - sentence-snapped cuts;
+  - breathing holds with hero weighting and the hook limit, no three equal holds;
+  - long stills split into a wide hold and a detail punch-in;
+  - eased camera moves chosen by role and never repeated on neighbours;
+  - clip trims and safe slow-downs;
+  - structural transitions within a budget;
+  - a fade-out ending and retention markers;
+  - proposed motion graphics (stat reveal, quote card, date stamp, plan text, and the owner's title card at turn scenes with one accent word).
+- Every decision carries a reason and the skill ID it restates. The critic files critical, suggestion and polish findings with fixes (some one-click) and a six-dimension slideshow-risk score.
+- Added `editing-room.js`:
+  - immutable edit revisions (SQLite triggers) tied to the exact board, narration, script and style;
+  - optimistic concurrency and full validation before anything is saved;
+  - undo as a new revision and single-scene repair that keeps every other decision;
+  - a cached pause analysis;
+  - approved editing skills recorded with each edit in the Skills usage log;
+  - a lesson candidate when the owner makes the same correction in two different edits of a family (a proposal only).
+- Rendering: `render.planTimeline` renders an edit revision.
+  - One segment per clip, lossless joins for runs of hard cuts, `xfade` for soft transitions, one ASS graphics layer through libass (eased entrances, accent colour) and the fade-out.
+  - Title cards and the fade-out count as planned dark moments in QC. The manifest records the edit revision and the graphics SHA-256. The verdict asks the owner to accept any remaining critical findings.
+  - `REQUIRED_FILTERS` now include `settb`, `setparams`, `fade`, `ass` and `silencedetect`, so run the readiness check again.
+- Fixed while browser-testing: every render segment is now converted to one colour profile (BT.709, TV range, explicit tags).
+  - Mixed full-range JPEG stills and TV-range clips changed format mid-stream; FFmpeg rebuilt the filter graph and a crossfade dropped a 16.8 s chunk. A 40 s edit rendered as 23.9 s, and the duration QC caught it.
+  - A regression test fails without the fix and passes with it.
+  - The plain assembly proxy benefits too: stills and clips no longer carry different brightness ranges.
+- Fixed in the page: the clip dialog showed holds rounded to 0.1 s and submitted them as changes. Only fields the owner actually changes become operations now.
+- UI: Room 05 shows an **Edit decisions** card:
+  - an SVG timeline strip (stills, clips, heroes, soft transitions, graphics, markers; click to change);
+  - facts, the critique with one-click fixes, and motion graphics to accept, reject or edit;
+  - every cut and its reason, plus per-scene **Redo** buttons;
+  - undo, history, **Render this edit** and **Draft a fresh edit**.
+  - The plain assembly render remains available.
+- Verification on the owner's PC, Node 24.18.1 and FFmpeg 8.1.2: `npm run check` passed and the full suite passed **162/162** with zero failures, skips or cancellations. That includes 8 new editing tests:
+  - pause alignment;
+  - a frame-exact, deterministic auto edit;
+  - the critic;
+  - owner operations and scene repair;
+  - the ASS layer and render plan;
+  - the full room with a real FFmpeg render (pause-aligned, graphics, byte-identical re-render, verdict with accepted criticals, out-of-date handling);
+  - the override lesson;
+  - HTTP routes.
+- Browser (scratch database, real FFmpeg): Room 05 at 1440 px and at an exact 390 x 844 showed no page overflow. Only the existing room rail and the decisions table scroll inside themselves.
+- Clicked through in the in-app browser:
+  - Apply this fix (r2);
+  - accept a graphic (r3);
+  - the clip dialog (r4, one change);
+  - undo (r5);
+  - a graphic saved unchanged ("Nothing changed");
+  - Render this edit: 40.00 s for 40.00 s of narration, every QC check passed, the title card was recognised as planned.
+- Not verified: no real stock or AI media, no human narration (test tones with pauses), no Hermes call (the brain does not use one). Canvas motion templates (charts, maps, hand-drawn, stick figure) are P06b. Music, SFX and ducking are P08, captions P07. Fonts not installed on the PC fall back to a system font.
+
+### Release 0.11.1 - CB YT AI Mastery bundle and pin-only skills
 
 - Read the owner's CB YT AI Mastery Prompts Bundle in full (475 pages, private, outside the repository) and restated it as `skills/mastery-bundle.json`: 64 skills in our own words covering exact-length outlining and section-by-section expansion, contrast framing, invisible hooks, owner-angle questions, audience reports, niche signals and niche blending, competitor growth forensics and editing-pattern decoding, image and keyword craft, screenplay breakdowns, the zero-decision assembly package, format rotation, an authenticity guardrail, stall response, metadata, music briefs and 16 niche profiles. Notes, coverage changes and every excluded tactic are in `docs/research/mastery-bundle-analysis.md`.
 - Excluded on purpose: invented authority, ethnicity- or immigration-based title formulas, religion outrage titles, AI video of real people, realistic fake CCTV, film clips and downloads as visuals, franchise retellings, delete-and-re-upload, and device/IP/account/AdSense-identity tactics for getting around YouTube enforcement. Where a prompt depended on one of these, the skill keeps the technique and states the replacement.

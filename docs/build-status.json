@@ -241,9 +241,15 @@
         },
         {
           "id": "P06",
-          "title": "Editing Room and deterministic timeline",
+          "title": "Editing Room: editing brain, critic and revisioned edit",
+          "status": "done",
+          "evidence": "Version 0.12 (2026-10-05): a deterministic editing brain (editing-brain.js) drafts the edit from the approved board, the narration pauses measured with FFmpeg silencedetect and the family style: sentence-snapped cuts, breathing holds with heroes and the hook limit, eased camera moves that never repeat on neighbours, long-still punch-ins, clip trims and safe slow-downs, structural transitions within a budget, a fade-out ending, retention markers and proposed motion graphics (stat, quote, date, plan text, the owner's title card at turns). A critic scores slideshow risk and files critical/suggestion/polish findings with fixes and skill IDs. Immutable revisions, optimistic concurrency, undo, single-scene repair, owner-correction lessons, and an edit render through the pinned FFmpeg with an ASS graphics layer, uniform BT.709 segments, planned-dark QC and a byte-identical re-render. 8 editing tests; full suite 162/162; desktop and 390 x 844 browser flows passed."
+        },
+        {
+          "id": "P06b",
+          "title": "Canvas motion-graphics and 2D animation renderer",
           "status": "planned",
-          "remaining": "Build revisioned video/audio/text tracks with atomic edits, backups, optimistic concurrency, low-resolution preview and single-scene repair. Evaluate a pinned capcut-cli adapter only after compatibility fixtures pass."
+          "remaining": "Render the motion.* templates that libass cannot draw (chart builds, map routes, diagram builds, hand-drawn reveals, stick-figure scenes) as deterministic Canvas2D frames in Edge over the DevTools Protocol, sandboxed, with stills-first QC and per-scene caching; then let the brain propose them where the script needs them."
         },
         {
           "id": "P07",
@@ -365,5 +371,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Skills Engine"
+  "milestone": "Editing Room"
 }

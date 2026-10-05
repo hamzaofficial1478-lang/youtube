@@ -50,6 +50,10 @@ Renders run on your computer one at a time. You can cancel a queued or running r
 
 **Record style-proof verdict** asks you to confirm that you watched the whole proxy with sound, that motion, pacing and transitions match the style, and that the visuals stay in step with the narration. QC findings must be accepted explicitly. "Needs changes" requires a note. A render becomes **out of date** as soon as the visual board, the narration or the script changes, and an out-of-date render cannot pass.
 
+## Edit renders (0.12)
+
+The Editing Room renders an edit revision through the same pipeline: one segment per clip with its own hold, eased camera move, start point and speed; lossless joins for runs of hard cuts; `xfade` for soft transitions; one ASS graphics layer through libass; a fade-out ending. Every segment is converted to one colour profile (BT.709, TV range) so joined chunks never change format mid-stream. Title cards and the fade-out are planned dark moments in the black-frame check. See EDITING-ROOM.md. The readiness check now also requires `settb`, `setparams`, `fade`, `ass` and `silencedetect`.
+
 ## Where files are kept
 
 `data/renders/<family>/<script>/<render>/` holds `proxy.mp4`, `contact-sheet.jpg` and `render-manifest.json`. Working files are deleted after each render. Like the rest of `data/`, these stay on your computer and out of GitHub.

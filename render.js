@@ -14,7 +14,7 @@ const RENDERER_VERSION = 'ffmpeg-montage/1.0.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
-const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile'];
+const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect'];
 const REQUIRED_ENCODERS = ['libx264', 'aac'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
@@ -132,7 +132,7 @@ async function inspectFFmpeg({ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', workDir}) 
 
 // ---------------------------------------------------------------- proxy plan
 function encodeVideo(preset, fps) {
-  return ['-c:v', 'libx264', '-preset', preset.x264, '-crf', String(preset.crf), '-pix_fmt', 'yuv420p', '-g', String(fps * 2), '-r', String(fps), '-fflags', '+bitexact', '-flags:v', '+bitexact', '-map_metadata', '-1', '-video_track_timescale', String(fps * 1000)];
+  return ['-c:v', 'libx264', '-preset', preset.x264, '-crf', String(preset.crf), '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-g', String(fps * 2), '-r', String(fps), '-fflags', '+bitexact', '-flags:v', '+bitexact', '-map_metadata', '-1', '-video_track_timescale', String(fps * 1000)];
 }
 // Camera moves the FFmpeg montage adapter can draw; amplitude follows the style's motion intensity.
 function zoompanFor(move, index, frames, intensity) {
@@ -167,11 +167,11 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     if (shot.mediaType === 'image') {
       motion = zoompanFor(shot.motion, index, count, spec.motion.intensity);
       const big = `${size.width * 2}:${size.height * 2}`;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `scale=${big}:force_original_aspect_ratio=increase,crop=${big},zoompan=z='${motion.z}':x='${motion.x}':y='${motion.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${motion.z}':x='${motion.x}':y='${motion.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     } else {
       motion = {kind: 'clip'};
       const hold = Math.max(0, count / fps - (shot.clipSeconds || 0)) + 1;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase,crop=${size.width}:${size.height},setsar=1,tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     }
     return {index, shotId: shot.shotId, label: shot.label, assetId: shot.assetId, mediaType: shot.mediaType, startFrame: boundaries[index], frames: frames[index], extraFrames: extra, motion: motion.kind, file, args};
   });
@@ -195,6 +195,86 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
   return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {style: transition, applied: fade || 'cut', frames: transitionFrames}, totalFrames, segments, final};
 }
 
+// ---------------------------------------------------------------- edit render (P06)
+// Eased camera moves for the Editing Room: smoothstep progress, so a move starts and lands gently.
+function easedZoompan(move, frames) {
+  const last = Math.max(1, frames - 1), amount = move?.amount || 0;
+  const eased = `((on/${last})*(on/${last})*(3-2*(on/${last})))`;
+  const centre = {x: 'iw/2-(iw/zoom/2)', y: 'ih/2-(ih/zoom/2)'};
+  switch (move?.kind) {
+    case 'push-in': return {z: `1+${amount}*${eased}`, ...centre};
+    case 'pull-out': return {z: `${round(1 + amount, 4)}-${amount}*${eased}`, ...centre};
+    case 'pan-right': return {z: String(round(1 + amount, 4)), x: `(iw-iw/zoom)*${eased}`, y: centre.y};
+    case 'pan-left': return {z: String(round(1 + amount, 4)), x: `(iw-iw/zoom)*(1-${eased})`, y: centre.y};
+    case 'push-detail': return {z: `1+${amount}*${eased}`, x: centre.x, y: '(ih-ih/zoom)*0.38'};
+    default: return {z: '1', ...centre};
+  }
+}
+// Plans an edit render: one segment per clip, lossless joins for runs of hard cuts, xfade for the few
+// structural transitions, then the graphics layer (ASS through libass) and the fade-out ending.
+// Every boundary is snapped from the edit's frame grid to the preset's, so picture and narration stay locked.
+function planTimeline({timeline, files, narration, format, preset = PRESETS.proxy, workDir, outFile, graphics = null}) {
+  const size = preset[format] || preset['long-form'], fps = Math.min(timeline.fps, preset.maxFps);
+  const scale = frame => Math.round(frame * fps / timeline.fps);
+  const totalFrames = scale(timeline.totalFrames);
+  const clips = timeline.clips;
+  const starts = clips.map(clip => scale(clip.start));
+  starts.push(totalFrames);
+  const frames = clips.map((clip, index) => starts[index + 1] - starts[index]);
+  requireValue(frames.every(count => count >= 1), 'A clip is shorter than one frame at this frame rate.', 409);
+  const joins = timeline.joins.map((join, index) => {
+    if (join.type === 'cut') return {type: 'cut', frames: 0};
+    const most = Math.floor(Math.min(frames[index], frames[index + 1]) / 2);
+    const count = Math.max(2, Math.min(scale(join.frames), most));
+    return most >= 2 ? {type: join.type, frames: count} : {type: 'cut', frames: 0};
+  });
+  const segments = clips.map((clip, index) => {
+    const extra = index < clips.length - 1 ? joins[index].frames : 0, count = frames[index] + extra;
+    const file = path.join(workDir, `seg-${String(index + 1).padStart(4, '0')}.mp4`), source = files[clip.id];
+    requireValue(source, `${clip.label}: no approved file for this clip.`, 409);
+    let args, motion;
+    if (clip.mediaType === 'image') {
+      const zp = easedZoompan(clip.move, count);
+      motion = clip.move?.kind || 'static';
+      const big = `${size.width * 2}:${size.height * 2}`;
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', source, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${zp.z}':x='${zp.x}':y='${zp.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+    } else {
+      motion = clip.speed < 1 ? `clip at ${Math.round(clip.speed * 100)}%` : 'clip';
+      const available = Math.max(0, ((clip.clipSeconds || count / fps) - (clip.inSeconds || 0)) / (clip.speed || 1));
+      const hold = Math.max(0, count / fps - available) + 1;
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', ...(clip.inSeconds ? ['-ss', String(clip.inSeconds)] : []), '-i', source, '-vf', `setpts=(PTS-STARTPTS)/${clip.speed || 1},fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+    }
+    return {index, clipId: clip.id, shotId: clip.shotId, label: clip.label, assetId: clip.assetId, mediaType: clip.mediaType, startFrame: starts[index], frames: frames[index], extraFrames: extra, motion, file, args};
+  });
+  // Runs of hard cuts become chunks joined losslessly with the concat demuxer.
+  const chunks = [];
+  segments.forEach((segment, index) => {
+    if (!index || joins[index - 1].type !== 'cut') chunks.push({members: [], join: index ? joins[index - 1] : null});
+    chunks[chunks.length - 1].members.push(segment);
+  });
+  chunks.forEach((chunk, index) => {
+    chunk.file = `chunk-${String(index + 1).padStart(3, '0')}.mp4`;
+    chunk.frames = chunk.members.reduce((sum, item) => sum + item.frames + item.extraFrames, 0);
+    chunk.listFile = path.join(workDir, `chunk-${String(index + 1).padStart(3, '0')}.txt`);
+    chunk.list = chunk.members.map(item => `file '${path.basename(item.file)}'`).join('\n') + '\n';
+    chunk.args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', path.basename(chunk.listFile), '-c', 'copy', '-fflags', '+bitexact', '-map_metadata', '-1', '-y', chunk.file];
+  });
+  const parts = chunks.map((chunk, index) => `[${index}:v]settb=AVTB,setpts=PTS-STARTPTS[c${index}]`);
+  let label = 'c0', length = chunks[0].frames;
+  for (let k = 1; k < chunks.length; k++) {
+    const join = chunks[k].join, fade = join.type === 'dip-to-black' ? 'fadeblack' : 'fade';
+    parts.push(`[${label}][c${k}]xfade=transition=${fade}:duration=${round(join.frames / fps, 6)}:offset=${round((length - join.frames) / fps, 6)}[x${k}]`);
+    length += chunks[k].frames - join.frames;
+    label = `x${k}`;
+  }
+  const fadeFrames = Math.min(scale(timeline.ending?.fadeOutFrames || 0), Math.floor(frames[frames.length - 1] / 2));
+  const tailFilters = [...(graphics ? ['ass=graphics.ass'] : []), ...(fadeFrames ? [`fade=t=out:st=${round((totalFrames - fadeFrames) / fps, 6)}:d=${round(fadeFrames / fps, 6)}`] : []), 'format=yuv420p'];
+  parts.push(`[${label}]${tailFilters.join(',')}[vout]`);
+  const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
+  const final = {mode: 'edit', graphics: !!graphics, args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...chunks.flatMap(chunk => ['-i', chunk.file]), '-i', narration.file, '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${chunks.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
+  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames};
+}
+
 // Parses blackdetect/freezedetect output into spans.
 function detections(stderr) {
   const black = [...stderr.matchAll(/black_start:([\d.]+)\s+black_end:([\d.]+)\s+black_duration:([\d.]+)/g)].map(match => ({start: Number(match[1]), end: Number(match[2]), duration: Number(match[3])}));
@@ -204,4 +284,4 @@ function detections(stderr) {
   return {black, frozen};
 }
 
-module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, zoompanFor, encodeVideo, detections, tail, object, text, person, requireValue, now, round};
+module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, tail, object, text, person, requireValue, now, round};
