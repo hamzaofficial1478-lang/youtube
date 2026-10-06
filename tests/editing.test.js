@@ -240,7 +240,7 @@ function setup(t, {seconds = 36} = {}) {
   const editing = new EditingRoom(store, styles, scenes, renders, {ffmpeg: 'ffmpeg'});
   return {dataRoot, store, skills, styles, scenes, renders, editing, family, content, estimated};
 }
-async function approvedBoard({dataRoot, store, scenes, content}) {
+async function approvedBoard({dataRoot, store, scenes, content, twoShotClip = false}) {
   let {manifest} = scenes.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
   const third = manifest.plan.scenes[2];
   manifest = scenes.editManifest(manifest.id, {op: 'update-scene', sceneId: third.id, purpose: 'turn', onScreenText: 'The *mark* mattered', createdBy: 'Owner', expectedRevision: manifest.revision});
@@ -249,7 +249,8 @@ async function approvedBoard({dataRoot, store, scenes, content}) {
   fs.mkdirSync(media, {recursive: true});
   ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1080x1920', '-frames:v', '1', '-y', path.join(media, 'still.jpg')]);
   ffmpeg(['-f', 'lavfi', '-i', 'smptebars=size=1080x1920', '-frames:v', '1', '-y', path.join(media, 'still2.jpg')]);
-  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1080x1920:rate=30', '-t', '12', '-c:v', 'mpeg4', '-q:v', '10', '-y', path.join(media, 'clip.mp4')]);
+  if (twoShotClip) ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1080x1920:rate=30:duration=4', '-f', 'lavfi', '-i', 'mandelbrot=size=1080x1920:rate=30', '-filter_complex', '[1:v]trim=duration=8,setpts=PTS-STARTPTS,format=yuv420p[b];[0:v]format=yuv420p[a];[a][b]concat=n=2:v=1:a=0', '-c:v', 'mpeg4', '-q:v', '10', '-y', path.join(media, 'clip.mp4')]);
+  else ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1080x1920:rate=30', '-t', '12', '-c:v', 'mpeg4', '-q:v', '10', '-y', path.join(media, 'clip.mp4')]);
   const shots = manifest.plan.scenes.flatMap(scene => scene.shots);
   for (const [index, shot] of shots.entries()) {
     const kind = index % 3 === 1 ? 'clip' : 'still', name = kind === 'clip' ? 'clip.mp4' : index % 2 ? 'still2.jpg' : 'still.jpg', id = randomUUID();
@@ -349,6 +350,7 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(result.qc.find(item => item.name === 'duration').passed, true, JSON.stringify(result.qc));
   assert.equal(result.video.probe.frames ?? Math.round(result.video.probe.durationSeconds * 30), Math.round(36 * 30), 'every frame of the narration is in the render');
   assert.equal(result.qc.find(item => item.name === 'black frames').passed, true, 'the title card and the fade-out are planned, not defects');
+  assert.equal(result.qc.find(item => item.name === 'unplanned cuts').passed, true, JSON.stringify(result.qc));
   const manifest = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
   assert.equal(manifest.inputs.edit.revisionId, r5.id);
   const burned = JSON.parse(renders.row(queued.id).scope).edit.graphicsAss;
@@ -378,6 +380,48 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(editing.state().contents.find(item => item.contentId === content.id).current, false);
   assert.throws(() => editing.applyOps(latest.id, {editedBy: 'Owner', ops: [{type: 'set-hero', clipId: still.id, hero: false}]}), /Approve the visuals|changed after this edit/);
   assert.equal(family.id, store.family(family.id).id);
+});
+
+// A stock clip that hides its own cut (claude-video scene detection): measured once, avoided by the brain,
+// flagged by the critic when the owner forces the window across it, and caught in the render itself.
+test('hidden cuts inside stock clips are measured, avoided, flagged and caught in the render', {skip}, async t => {
+  const env = setup(t);
+  const {editing, renders, store, content} = env;
+  const {approval} = await approvedBoard({...env, twoShotClip: true});
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  assert.equal(report.passed, true, JSON.stringify(report.issues));
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the hidden-cut check.'});
+  const r1 = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const videos = r1.timeline.clips.filter(clip => clip.mediaType === 'video');
+  assert.ok(videos.length >= 1);
+  for (const clip of videos) {
+    assert.deepEqual(clip.sourceCuts, [4], 'the 4 s cut inside the stock clip was measured');
+    const span = clip.frames / r1.timeline.fps * clip.speed;
+    assert.ok(clip.inSeconds >= 4 || clip.inSeconds + span <= 4, `${clip.label} plays ${clip.inSeconds}-${clip.inSeconds + span} s, across the hidden cut`);
+  }
+  assert.ok(videos.some(clip => /changes shot at 4\.00 s/.test(clip.trimReason)), 'the decision says why the in-point moved');
+  assert.equal(r1.findings.some(item => item.code === 'hidden-cut'), false);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM media_analyses').get().n, 1, 'one file, measured once');
+  // The owner forces a window across the cut: the critic names it and offers the clean in-point.
+  const target = videos[0], hold = target.frames / r1.timeline.fps;
+  const r2 = editing.applyOps(r1.id, {editedBy: 'Owner', ops: [{type: 'set-in', clipId: target.id, seconds: Math.max(0, Math.round((4 - hold / 2) * 100) / 100)}]});
+  const flagged = r2.findings.find(item => item.code === 'hidden-cut' && item.clipId === target.id);
+  assert.ok(flagged, 'the critic flags the hidden cut');
+  assert.equal(flagged.op.type, 'set-in');
+  assert.ok(flagged.op.seconds >= 4);
+  // The render of the forced edit measures the cut where the edit planned none.
+  renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r2.id});
+  const done = await renders.processNext();
+  assert.equal(done?.status, 'completed');
+  const qc = JSON.parse(renders.row(done.id).result).qc.find(item => item.name === 'unplanned cuts');
+  assert.equal(qc.passed, false, 'the render check catches the hidden cut');
+  assert.match(qc.detail, new RegExp(target.label));
+  // Applying the critic's fix gives a clean render again.
+  const r3 = editing.applyOps(r2.id, {editedBy: 'Owner', ops: [flagged.op]});
+  assert.equal(r3.findings.some(item => item.code === 'hidden-cut'), false);
+  renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r3.id});
+  const clean = await renders.processNext();
+  assert.equal(JSON.parse(renders.row(clean.id).result).qc.find(item => item.name === 'unplanned cuts').passed, true);
 });
 
 test('repeated owner corrections in two edits of a family raise one lesson, never a silent change', {skip}, async t => {
@@ -543,4 +587,14 @@ test('an edit with an animated timeline renders through the local browser and FF
   const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r2.id});
   await renders.processNext();
   assert.equal(JSON.parse(renders.row(again.id).result).video.sha256, result.video.sha256, 'same edit, same browser and build: byte-identical');
+});
+
+test('a stock clip window stays inside one shot when the clip hides a cut', () => {
+  // 12 s clip with cuts at 4 s and 6 s; a 3 s window from the in-point 2 s crosses the 4 s cut.
+  const moved = B.cleanWindow(12, 3, [4, 6], 2);
+  assert.equal(moved.moved, true);
+  assert.equal(moved.cut, 4);
+  assert.ok(moved.inSeconds >= 6 && moved.inSeconds + 3 <= 12, 'the longest single shot (6-12 s) is used');
+  assert.deepEqual(B.cleanWindow(12, 3, [8], 1), {inSeconds: 1, moved: false}, 'a clean default window stays');
+  assert.deepEqual(B.cleanWindow(5, 4, [2.5], 0.5), {inSeconds: 0.5, moved: false}, 'no shot is long enough: the critic will name the cut');
 });

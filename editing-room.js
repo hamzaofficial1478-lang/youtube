@@ -15,6 +15,7 @@ const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputEr
 const now = () => new Date().toISOString();
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 const ANALYSIS_VERSION = 'silencedetect -35dB 0.18s v1';
+const CUTS_VERSION = `scene>${R.SCENE_CUT_THRESHOLD} v1`;
 const OVERRIDE_SKILL = {'set-transition': 'editing.transition-grammar', 'set-move': 'editing.still-image-motion', 'set-hold': 'editing.change-cadence', 'set-graphic': 'motion.graphic-type-selector', reorder: 'editing.opening-hook-construction'};
 const OVERRIDE_REPEAT = 2;
 
@@ -48,6 +49,7 @@ class EditingRoom {
       CREATE TRIGGER IF NOT EXISTS edit_revisions_immutable BEFORE UPDATE ON edit_revisions BEGIN SELECT RAISE(ABORT, 'Edit revisions are immutable; make a new revision instead.'); END;
       CREATE TRIGGER IF NOT EXISTS edit_revisions_keep BEFORE DELETE ON edit_revisions BEGIN SELECT RAISE(ABORT, 'Edit revisions are kept for history and cannot be deleted.'); END;
       CREATE TABLE IF NOT EXISTS edit_analyses(id TEXT PRIMARY KEY, narration_sha256 TEXT NOT NULL, version TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(narration_sha256, version));
+      CREATE TABLE IF NOT EXISTS media_analyses(sha256 TEXT NOT NULL, version TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(sha256, version));
     `);
   }
 
@@ -96,10 +98,33 @@ class EditingRoom {
     if (result.measured) this.db.prepare('INSERT OR IGNORE INTO edit_analyses(id,narration_sha256,version,payload,created_at) VALUES(?,?,?,?,?)').run(randomUUID(), sha, ANALYSIS_VERSION, JSON.stringify(result), now());
     return result;
   }
+  // Cuts hidden inside each approved stock video clip, measured once per file (assets are immutable, so the
+  // SHA-256 is the cache key). Without FFmpeg the clips are used unmeasured, as before.
+  async measureCuts(inputs) {
+    const pin = this.renders.pinCheck();
+    const ffmpeg = pin.ok ? pin.paths.ffmpeg : R.resolveExecutable(this.ffmpeg);
+    if (!ffmpeg) return;
+    for (const asset of Object.values(inputs.assets).filter(item => item.mediaType === 'video')) {
+      if (this.db.prepare('SELECT 1 FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION)) continue;
+      const file = this.renders.localFile(asset.relativePath);
+      requireValue(fs.existsSync(file) && R.fileSha256(file) === asset.sha256, 'An approved visual file is missing or changed.', 409);
+      try {
+        const cuts = await R.sceneCuts(ffmpeg, file);
+        this.db.prepare('INSERT OR IGNORE INTO media_analyses(sha256,version,payload,created_at) VALUES(?,?,?,?)').run(asset.sha256, CUTS_VERSION, JSON.stringify({cuts}), now());
+      } catch { /* unmeasured: the brain keeps its default window */ }
+    }
+  }
+  cachedCuts(asset) {
+    const row = asset.mediaType === 'video' ? this.db.prepare('SELECT payload FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION) : null;
+    return row ? JSON.parse(row.payload).cuts : undefined;
+  }
   brainInput(inputs, analysis, variants = {}) {
     const narrationSeconds = inputs.scope.narration.durationSeconds;
     const alignment = B.alignSentences(inputs.payload.sentences, analysis.pauses, narrationSeconds);
-    const assets = Object.fromEntries(Object.entries(inputs.assets).map(([shotId, asset]) => [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds}]));
+    const assets = Object.fromEntries(Object.entries(inputs.assets).map(([shotId, asset]) => {
+      const cuts = this.cachedCuts(asset);
+      return [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds, ...(cuts ? {cuts} : {})}];
+    }));
     return {
       alignment,
       edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale,
@@ -150,6 +175,7 @@ class EditingRoom {
     this.busy.add(contentId);
     try {
       const analysis = await this.pauses(inputs);
+      await this.measureCuts(inputs);
       const {alignment, edit} = this.brainInput(inputs, analysis);
       const payload = B.autoEdit(edit);
       const skills = this.skillsInForce(inputs.family.id);

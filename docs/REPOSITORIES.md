@@ -144,6 +144,12 @@ Rather than presenting untested upstream features as ready, the first release re
 - No code copied. Restated as 17 draft skills in `skills/hyperframes.json`; applied in our own code as smooth easing in the canvas templates, the caption rail, caption grouping and the caption keep-out band.
 - Not used: the HTML/GSAP renderer, its CLI and plugin, the Web Audio effect graph. P08 will rebuild the voiceover carve with FFmpeg filters.
 
+### bradautomates/claude-video (0.14.1)
+
+- Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.
+- No code copied. Its scene-change detection idea is rebuilt in `render.js` (`sceneCuts`), used by the editing brain to keep stock clips inside one shot and by the render QC check `unplanned cuts`. Its evidence and engine rules are restated as 5 draft skills in `skills/claude-video.json`.
+- Not used: yt-dlp downloading and browser cookies, the Gemini engine, WhisperX/Groq/OpenAI transcription. Details in `research/claude-video.md`.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).

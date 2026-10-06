@@ -14,7 +14,7 @@ const RENDERER_VERSION = 'ffmpeg-montage/1.0.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
-const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay'];
+const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo'];
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
@@ -291,4 +291,14 @@ function detections(stderr) {
   return {black, frozen};
 }
 
-module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, tail, object, text, person, requireValue, now, round};
+// Hard cuts inside a video: frames whose FFmpeg scene score passes the threshold, with their times
+// (the scene detection of bradautomates/claude-video, used here to find stock clips that hide their own cuts
+// and to check a render for cuts the edit did not plan). 0.3 keeps fast camera moves from counting as cuts.
+const SCENE_CUT_THRESHOLD = 0.3;
+const sceneCutTimes = stderr => [...String(stderr).matchAll(/pts_time:\s*(-?[\d.]+)/g)].map(match => round(Number(match[1]), 3)).filter(value => Number.isFinite(value) && value > 0);
+async function sceneCuts(ffmpeg, file, {threshold = SCENE_CUT_THRESHOLD, timeout = 180000} = {}) {
+  const out = await run(ffmpeg, ['-hide_banner', '-nostdin', '-i', file, '-an', '-vf', `select='gt(scene,${threshold})',showinfo`, '-f', 'null', '-'], {timeout});
+  return sceneCutTimes(out.stderr);
+}
+
+module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, tail, object, text, person, requireValue, now, round};

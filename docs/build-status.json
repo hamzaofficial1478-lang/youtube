@@ -1,5 +1,5 @@
 {
-  "version": "0.14.0",
+  "version": "0.14.1",
   "updated": "2026-10-06",
   "nextAction": "Review and approve the skill drafts you want in use (Skills page; 344 drafts including the new youtube-agent-skill and HyperFrames packs). Add a writing voice to each family. Draft a fresh edit for each approved script to get its caption track, chapters and Shorts candidates. Next build: P08 Audio Room (music sourcing decision needed from the owner), then map routes and stick-figure animation. Owner actions still pending: run the FFmpeg readiness check, pin the build, render the first edit from real visuals and record the style-proof verdict.",
   "repositories": [
@@ -122,6 +122,14 @@
       "license": "MIT",
       "status": "Selected tools ported; hook formula list vendored",
       "usage": "hooks.json (21 hook formulas) is vendored unchanged under vendor/youtube-agent-skill with its MIT licence. hookscore.py, title.py, chapters.py, swipe.py and retention.py are ported to craft.js and checked against the Python originals on the same inputs. The yt-* skills are restated as 14 draft skills (skills/youtube-agent.json). Nothing publishes; every output is advice or a draft for the owner."
+    },
+    {
+      "name": "claude-video",
+      "url": "https://github.com/bradautomates/claude-video",
+      "revision": "03ceb42f7fa2c4439aca01752118044baabffb8f",
+      "license": "MIT",
+      "status": "Method restated, no code copied",
+      "usage": "The /watch skill (video evidence for an AI) was read in full. Its scene-change detection is rebuilt in render.js and used to keep stock clips inside one shot and to check renders for unplanned cuts; its evidence and engine rules are 5 draft skills. Downloading, Gemini and Whisper transcription are not used."
     }
   ],
   "phases": [
@@ -259,7 +267,7 @@
           "id": "P06",
           "title": "Editing Room: editing brain, critic and revisioned edit",
           "status": "done",
-          "evidence": "Version 0.12 (2026-10-05): a deterministic editing brain (editing-brain.js) drafts the edit from the approved board, the narration pauses measured with FFmpeg silencedetect and the family style: sentence-snapped cuts, breathing holds with heroes and the hook limit, eased camera moves that never repeat on neighbours, long-still punch-ins, clip trims and safe slow-downs, structural transitions within a budget, a fade-out ending, retention markers and proposed motion graphics (stat, quote, date, plan text, the owner's title card at turns). A critic scores slideshow risk and files critical/suggestion/polish findings with fixes and skill IDs. Immutable revisions, optimistic concurrency, undo, single-scene repair, owner-correction lessons, and an edit render through the pinned FFmpeg with an ASS graphics layer, uniform BT.709 segments, planned-dark QC and a byte-identical re-render. 8 editing tests; full suite 162/162; desktop and 390 x 844 browser flows passed."
+          "evidence": "Version 0.12 (2026-10-05): a deterministic editing brain (editing-brain.js) drafts the edit from the approved board, the narration pauses measured with FFmpeg silencedetect and the family style: sentence-snapped cuts, breathing holds with heroes and the hook limit, eased camera moves that never repeat on neighbours, long-still punch-ins, clip trims and safe slow-downs, structural transitions within a budget, a fade-out ending, retention markers and proposed motion graphics (stat, quote, date, plan text, the owner's title card at turns). A critic scores slideshow risk and files critical/suggestion/polish findings with fixes and skill IDs. Immutable revisions, optimistic concurrency, undo, single-scene repair, owner-correction lessons, and an edit render through the pinned FFmpeg with an ASS graphics layer, uniform BT.709 segments, planned-dark QC and a byte-identical re-render. 8 editing tests; full suite 162/162; desktop and 390 x 844 browser flows passed. 0.14.1: stock clips are measured for hidden cuts and kept inside one shot; the critic flags hidden cuts and edit renders check for unplanned cuts (claude-video scene detection)."
         },
         {
           "id": "P06b",

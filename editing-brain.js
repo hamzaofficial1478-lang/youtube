@@ -88,6 +88,26 @@ function alignSentences(sentences, pauses, narrationSeconds) {
   return {sentences: aligned, matched, boundaries: Math.max(0, aligned.length - 1), method: matched ? 'pause-aligned' : 'word-share'};
 }
 
+// ---------------------------------------------------------------- stock clip windows
+
+// The first measured source cut strictly inside the window [from, from + span] (seconds), or undefined.
+const cutInside = (cuts, from, span) => (cuts || []).find(cut => cut > from + 0.04 && cut < from + span - 0.04);
+// Keeps a clip's window inside one shot: the preferred in-point when its window is clean, otherwise the
+// longest single shot that fits, entered a little after its start. With no shot long enough, the preferred
+// window stays and the critic names the hidden cut.
+function cleanWindow(length, span, cuts, preferred) {
+  const hidden = cutInside(cuts, preferred, span);
+  if (hidden === undefined) return {inSeconds: preferred, moved: false};
+  const edges = [0, ...cuts.filter(cut => cut > 0.04 && cut < length - 0.04), length];
+  let best = null;
+  for (let k = 0; k + 1 < edges.length; k++) {
+    const room = edges[k + 1] - edges[k];
+    if (room >= span + 0.08 && (!best || room > best.room)) best = {from: edges[k], room};
+  }
+  if (!best) return {inSeconds: preferred, moved: false};
+  return {inSeconds: round(best.from + 0.04 + Math.min(0.5, (best.room - span - 0.08) * 0.25), 2), moved: true, cut: hidden};
+}
+
 // ---------------------------------------------------------------- allocation
 
 // Splits `total` frames across weights, keeping each part inside [lo, hi] where possible, summing exactly.
@@ -409,7 +429,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
       else reason = cuts[k - 1].snapped ? 'Cut lands on the sentence break, so the picture changes as the new line begins.' : 'Cut placed by the breathing pattern (long, medium, short, short, very long).';
       if (hero) reason += ' Hero shot: held longer.';
       clips.push({id: `cl_${shot.id}`, shotId: shot.id, sceneId: scene.id, assetId: asset.assetId, label: shot.label, mediaType: asset.mediaType, start: edges[k], frames: lengths[k],
-        clipSeconds: asset.clipSeconds ?? null, inSeconds: 0, speed: 1, move: null, hero, part: null, reason, skill: cuts[k - 1]?.snapped ? SKILL.onTheWord : SKILL.rhythm, planned: shot.motion, plannedSource: shot.source, register: scene.register, purpose: scene.purpose, variant: scene.variant});
+        clipSeconds: asset.clipSeconds ?? null, inSeconds: 0, speed: 1, move: null, hero, part: null, reason, ...(Array.isArray(asset.cuts) ? {sourceCuts: asset.cuts} : {}), skill: cuts[k - 1]?.snapped ? SKILL.onTheWord : SKILL.rhythm, planned: shot.motion, plannedSource: shot.source, register: scene.register, purpose: scene.purpose, variant: scene.variant});
     });
   }
   // Break runs of three near-equal holds by rolling an unsnapped cut (skill editing.change-cadence).
@@ -448,6 +468,12 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
         if (speed >= 0.8) { clip.speed = speed; clip.trimReason = `Slowed to ${Math.round(speed * 100)}% so the clip fills its hold without freezing.`; }
         else { clip.speed = 1; clip.trimReason = `The clip is ${length.toFixed(1)} s for a ${hold.toFixed(1)} s hold; its last frame would freeze.`; clip.freezeSeconds = round(hold - length, 2); }
       } else clip.trimReason = 'Uses the clip from its first frame.';
+      // Stock clips often hide their own cuts; keep the window inside one continuous shot.
+      if (clip.sourceCuts?.length) {
+        const pick = cleanWindow(length, hold * clip.speed, clip.sourceCuts, clip.inSeconds);
+        if (pick.moved) clip.trimReason = `The stock clip changes shot at ${pick.cut.toFixed(2)} s, so the edit uses ${pick.inSeconds.toFixed(2)}-${(pick.inSeconds + hold * clip.speed).toFixed(2)} s: one continuous shot, no hidden cut.`;
+        clip.inSeconds = pick.inSeconds;
+      }
       clip.skillTrim = SKILL.trim;
       previousMove = 'video';
       return;
@@ -573,6 +599,15 @@ function critique(timeline, spec) {
   for (const clip of clips) {
     if (clip.freezeSeconds) findings.push(finding('critical', 'clip-freeze', `${clip.label} ends ${clip.freezeSeconds.toFixed(1)} s early and would freeze on its last frame.`, 'Choose a longer clip for this shot in Room 04, or shorten its hold.', {clipId: clip.id, at: clip.start, skill: SKILL.trim}));
     if (clip.mediaType === 'image' && clip.move?.kind === 'static' && secs(clip.frames) > spec.qc.maxFrozenSeconds) findings.push(finding('critical', 'static-too-long', `${clip.label} is a static still for ${secs(clip.frames).toFixed(1)} s; the QC treats more than ${spec.qc.maxFrozenSeconds} s as a frozen picture.`, 'Give it a camera move or split the hold.', {clipId: clip.id, at: clip.start, op: {type: 'set-move', clipId: clip.id, kind: 'push-in'}, skill: SKILL.stills}));
+  }
+  for (const clip of clips) {
+    if (clip.mediaType !== 'video' || !clip.sourceCuts?.length) continue;
+    const span = clip.frames / fps * clip.speed, cut = cutInside(clip.sourceCuts, clip.inSeconds, span);
+    if (cut === undefined) continue;
+    const pick = cleanWindow(clip.clipSeconds || span, span, clip.sourceCuts, clip.inSeconds);
+    findings.push(finding('suggestion', 'hidden-cut', `${clip.label}: the stock clip changes to a different shot at ${cut.toFixed(2)} s, inside the part this edit uses; it will look like a glitch.`,
+      pick.moved ? `Start the clip at ${pick.inSeconds.toFixed(2)} s, inside one shot.` : 'Shorten the hold, or choose another clip for this shot in Room 04.',
+      {clipId: clip.id, at: clip.start, ...(pick.moved ? {op: {type: 'set-in', clipId: clip.id, seconds: pick.inSeconds}} : {}), skill: SKILL.trim}));
   }
   const limit = spec.pacing.maxStaticHoldSeconds || 8;
   if (secs(longestUnchanged) > Math.max(limit, 8)) findings.push(finding('suggestion', 'long-unchanged', `Nothing changes on screen for ${secs(longestUnchanged).toFixed(1)} s from ${clock(longestAt / fps)}.`, 'Add a shot or a graphic in that stretch, or split the hold.', {at: longestAt, skill: SKILL.breathing}));
@@ -883,6 +918,6 @@ const timelineHash = timeline => createHash('sha256').update(JSON.stringify(time
 module.exports = {
   SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, CANVAS_TEMPLATES, OP_TYPES, SKILL, CAPTION_CLEARS,
   canvasData, canvasMinimumSeconds, parseValue, parseYear, finishFor,
-  pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, applyOp, spliceScene, validateTimeline,
+  pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, applyOp, spliceScene, validateTimeline, cleanWindow,
   graphicsAss, timelineHash, shortHash, graphicDwellSeconds,
 };

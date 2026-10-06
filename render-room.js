@@ -320,6 +320,21 @@ class RenderRoom {
         ...(plan.fadeFrames ? [[(plan.totalFrames - plan.fadeFrames) / plan.preset.fps, plan.totalFrames / plan.preset.fps + 1]] : []),
       ] : [];
       const plannedDark = span => planned.some(([from, to]) => span.start >= from - 0.15 && span.end <= to + 0.15);
+      // Cuts the edit did not plan, measured in the render itself: a stock clip's hidden cut that slipped
+      // through, or a broken join. Planned changes are every clip boundary (with its soft transition), every
+      // accepted graphic entering or leaving, and the fade-out.
+      let cutCheck = null;
+      if (scope.edit) {
+        const tl = scope.edit.timeline, sec = frames => frames / tl.fps;
+        const windows = [
+          ...tl.clips.slice(1).map((clip, k) => { const soft = tl.joins[k].type === 'cut' ? 0 : sec(tl.joins[k].frames); return [sec(clip.start) - soft - 0.12, sec(clip.start) + soft + 0.12]; }),
+          ...tl.graphics.filter(item => item.status === 'accepted').flatMap(item => [[sec(item.start) - 0.12, sec(item.start) + 0.7], [sec(item.start + item.frames) - 0.7, sec(item.start + item.frames) + 0.12]]),
+          ...(plan.fadeFrames ? [[(plan.totalFrames - plan.fadeFrames) / plan.preset.fps - 0.12, plan.totalFrames / plan.preset.fps + 1]] : []),
+        ];
+        const measured = R.sceneCutTimes((await exec('scene cuts', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-i', out, '-an', '-vf', `select='gt(scene,${R.SCENE_CUT_THRESHOLD})',showinfo`, '-f', 'null', '-'], Math.max(120000, plan.totalFrames * 100))).stderr);
+        const unplanned = measured.filter(time => !windows.some(([from, to]) => time >= from && time <= to));
+        cutCheck = {name: 'unplanned cuts', passed: !unplanned.length, detail: unplanned.length ? unplanned.map(time => `${time.toFixed(2)} s (${shotAt(time)})`).join('; ') : `none: ${measured.length} measured cut${measured.length === 1 ? '' : 's'}, all where the edit planned a change`};
+      }
       const expected = plan.totalFrames / plan.preset.fps, tolerance = 1 / plan.preset.fps + 0.15;
       const checks = [
         {name: 'duration', passed: Math.abs(probe.durationSeconds - expected) <= tolerance && Math.abs(probe.durationSeconds - scope.narration.durationSeconds) <= tolerance + 0.05, detail: `${probe.durationSeconds.toFixed(2)} s video for ${scope.narration.durationSeconds.toFixed(2)} s narration`},
@@ -327,6 +342,7 @@ class RenderRoom {
         {name: 'narration audio', passed: !!audio && audio.codec_name === 'aac', detail: audio ? `${audio.codec_name} ${audio.sample_rate} Hz` : 'no audio stream'},
         {name: 'black frames', passed: found.black.every(span => span.duration <= qc.maxBlackSeconds || plannedDark(span)), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)}${plannedDark(span) ? ', planned' : ''})`).join('; ') : 'none'},
         {name: 'frozen picture', passed: !found.frozen.length, detail: found.frozen.length ? found.frozen.map(span => `${span.duration === null ? 'until the end' : `${span.duration.toFixed(1)} s`} from ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : `no hold longer than ${qc.maxFrozenSeconds} s`},
+        ...(cutCheck ? [cutCheck] : []),
       ];
       // 5. Contact sheet for review.
       this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);

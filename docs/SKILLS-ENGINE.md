@@ -1,4 +1,4 @@
-# Skills Engine (v0.14.0)
+# Skills Engine (v0.14.1)
 
 The Skills Engine is the program's reusable operating knowledge: what to do, what to avoid, and the
 exact numbers each room applies. It was built from `docs/SKILLS-ENGINE-PLAN.md`; this file records
@@ -15,7 +15,7 @@ never deleted, so what was in force on any given day stays reconstructible.
 
 ## 2. What is in the library
 
-344 builtin skills, all written in our own words:
+349 builtin skills, all written in our own words:
 
 | Pack | Skills | Source |
 |---|---|---|
@@ -23,6 +23,7 @@ never deleted, so what was in force on any given day stays reconstructible.
 | `skills/prompt-library.json` | 51 | YT Empire Builders Reusable Prompt Library, library rules plus 44 prompts |
 | `skills/mastery-bundle.json` | 64 | CB YT AI Mastery Prompts Bundle (475 pages, read in full; notes in `docs/research/mastery-bundle-analysis.md`) |
 | `skills/youtube-agent.json` | 14 | youtube-agent-skill (MIT): hook scoring and formulas, the first 15 seconds, writing voice, title/thumbnail pairing, chapters, Shorts, retention, outliers, comments, weekly plan, audit (0.14) |
+| `skills/claude-video.json` | 5 | claude-video (MIT): watch before a verdict, frame budgets, narration cue frames, clean stock-clip windows, no silent engine switch (0.14.1) |
 | `skills/hyperframes.json` | 17 | HyperFrames (Apache-2.0): value-first story spine, explainer structures, hook strategies, clarity techniques, beat arc, spoken numbers, motion doctrine, seams, caption rail and grouping, keep-out band, voiceover carve, mix by symptom (0.14) |
 | `docs/research/editing-brain/om-creative.json` | 49 | How a professional editor decides |
 | `docs/research/editing-brain/om-meta.json` | 41 | Orchestration, reviewer rubric, the lesson loop |

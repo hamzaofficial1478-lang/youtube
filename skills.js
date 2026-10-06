@@ -334,6 +334,7 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/mastery-bundle.json', label: 'CB YT AI Mastery Prompts Bundle'},
   {file: 'skills/youtube-agent.json', label: 'youtube-agent-skill (MIT): hooks, packaging, chapters, Shorts, retention'},
   {file: 'skills/hyperframes.json', label: 'HyperFrames (Apache-2.0): story, motion, captions and mix doctrine'},
+  {file: 'skills/claude-video.json', label: 'claude-video (MIT): video evidence, frame budgets, clean stock windows, engine discipline'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},

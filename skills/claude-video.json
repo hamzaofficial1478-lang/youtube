@@ -1,0 +1,81 @@
+[
+  {
+    "id": "review.watch-before-verdict",
+    "title": "Watch the real output before judging it: frames at real times plus the words",
+    "rooms": ["qc", "editing"],
+    "tasks": ["qc.review", "editing.review"],
+    "kind": "procedure",
+    "when": "Whenever an edit, a render or any video is reviewed, by the owner, the critic or an AI reviewer.",
+    "summary": "A verdict on a video must come from looking at it. Turn the video into evidence first: frames taken at the moments the picture actually changes, each with its real timestamp, read together with the timestamped narration or captions. Say what the evidence could not show; words alone can never establish what is on screen.",
+    "steps": [
+      "Collect frames at scene changes; for a nearly static video, sample evenly instead.",
+      "Drop near-identical neighbours so every distinct moment appears once.",
+      "Read the frames in order with the narration lines that play over them.",
+      "Answer with timestamps, and name any part with partial or missing evidence."
+    ],
+    "avoid": ["Judging visuals from the script or the transcript alone.", "Reporting a timestamp that was not actually seen."],
+    "checks": ["Every visual claim in the review cites a frame time."],
+    "tags": ["review", "evidence", "qc"],
+    "source": "bradautomates/claude-video skills/watch SKILL.md and watch.py (MIT, 03ceb42), restated",
+    "priority": 45
+  },
+  {
+    "id": "review.frame-budget",
+    "title": "Spend the frame budget by duration, denser when zooming in",
+    "rooms": ["qc", "competitors"],
+    "tasks": ["qc.review", "editing.review", "competitors.scan"],
+    "kind": "formula",
+    "when": "When choosing how many frames to look at for a video review.",
+    "summary": "Image cost grows with frame count, so budget frames by duration: short videos stay dense, long ones capped. Scene changes are the first choice; a clip with fewer than eight changes is effectively static and gets even sampling. A focused stretch gets a denser budget because the reviewer is zooming in. Long videos reviewed whole are sparse: review them section by section.",
+    "numbers": {"full_video_targets": {"up_to_30s": "12-30 frames (about one a second)", "up_to_60s": 40, "up_to_3min": 60, "up_to_10min": 80, "longer": 100}, "focused_targets": {"up_to_5s": "6 a second, at least 10", "up_to_15s": "4 a second, at least 30", "up_to_30s": 60, "up_to_60s": 80, "longer": 100}, "max_uniform_fps": 2, "static_below_scene_changes": 8, "scene_threshold_for_sampling": 0.2, "near_duplicate_mean_rgb_difference": 2.0, "near_duplicate_thumbnail_px": 16},
+    "do": ["Keep the first and last candidate when thinning frames to the budget."],
+    "avoid": ["Reviewing a video over ten minutes in one pass at a 100-frame cap and calling it complete."],
+    "checks": ["The review states how many frames it saw and from which range."],
+    "tags": ["review", "frames", "budget"],
+    "source": "bradautomates/claude-video skills/watch/scripts/frames.py auto_fps and auto_fps_focus (MIT, 03ceb42), restated",
+    "priority": 30
+  },
+  {
+    "id": "review.narration-cue-frames",
+    "title": "Pin frames where the narration names something the viewer should see",
+    "rooms": ["qc", "editing", "visuals"],
+    "tasks": ["qc.review", "editing.review", "visuals.prompt"],
+    "kind": "procedure",
+    "when": "After reading a narration or transcript, before judging whether the visuals support it.",
+    "summary": "Read the words first, then look exactly where they point. Every line that names a number, a place, a person, an object or says 'look' or 'notice' is a cue: take a frame at that moment and check the picture shows what the line says. These cue frames are reserved before the general sampling budget is spent.",
+    "steps": ["Mark the narration's concrete cues with their times.", "Take one frame at each cue.", "Check each frame against its line; record matches and misses with timestamps."],
+    "checks": ["Each concrete narration claim has a frame that shows it, or a recorded miss."],
+    "tags": ["review", "visual-proof", "narration"],
+    "source": "bradautomates/claude-video SKILL.md transcript cues and frames.py extract_at_timestamps (MIT, 03ceb42), restated",
+    "priority": 35
+  },
+  {
+    "id": "editing.stock-clip-clean-window",
+    "title": "Use one continuous shot from a stock clip; never cross its hidden cut",
+    "rooms": ["editing", "visuals"],
+    "tasks": ["editing.plan", "editing.review", "visuals.stock-query"],
+    "kind": "ruleset",
+    "when": "Whenever a stock video clip is placed in the edit or its in-point or hold changes.",
+    "summary": "Many stock clips contain their own cuts. A window that crosses one shows two different shots inside what should be one, which reads as a glitch. Measure the clip's cuts (FFmpeg scene score above 0.3, which ignores fast camera moves), keep the preferred window when it is clean, otherwise use the longest single shot that fits the hold, entered a little after its start. When no shot is long enough, shorten the hold or choose another clip.",
+    "numbers": {"scene_cut_threshold": 0.3, "edge_margin_seconds": 0.04, "entry_after_shot_start_seconds": "up to 0.5"},
+    "checks": ["No clip window contains a measured source cut.", "The render shows no cut the edit did not plan."],
+    "tags": ["stock-footage", "trim", "qc"],
+    "source": "Scene detection from bradautomates/claude-video frames.py (MIT, 03ceb42); implemented in editing-brain.js cleanWindow and the render check 'unplanned cuts'",
+    "priority": 55
+  },
+  {
+    "id": "os.no-silent-engine-switch",
+    "title": "Never switch a provider or engine silently; say which one produced the result",
+    "rooms": ["os", "general"],
+    "tasks": ["script.candidate", "research.brief", "qc.review", "competitors.blueprint"],
+    "kind": "principle",
+    "when": "Whenever more than one AI provider, model or engine could do a job, and whenever one fails.",
+    "summary": "The owner chose the engine for a reason (cost, privacy, quality), so a failure is reported with its category (key, quota, rejected, network, response) and the owner decides whether to rerun elsewhere. Every result names the engine and model that produced it. Keys are kept private: only whether a key is present is ever shown, and keys travel in request headers, never in logs, URLs or reports.",
+    "do": ["Report the failure category and offer the alternative explicitly.", "Label every AI result with its provider and model."],
+    "avoid": ["Falling back to another paid provider without the owner's choice.", "Printing, logging or echoing a key."],
+    "checks": ["Every stored AI result records its provider and model."],
+    "tags": ["providers", "reliability", "privacy"],
+    "source": "bradautomates/claude-video engine rules (no silent fallback, key presence only) in SKILL.md and setup.py (MIT, 03ceb42), restated",
+    "priority": 50
+  }
+]

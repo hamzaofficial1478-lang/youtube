@@ -189,3 +189,15 @@ Verified on this PC with Microsoft Edge 154 and FFmpeg 8.1.2:
   alignment (P07) will add word timing.
 - Live verification on your own media. Automated and browser checks used generated test media and
   real FFmpeg 8.1.2 on this PC.
+
+## Stock clips with hidden cuts (0.14.1)
+
+Many stock clips contain their own cuts. Before drafting an edit, the room measures every approved video
+clip once with FFmpeg's scene score (above 0.3, so fast camera moves do not count) and caches the result
+by the file's SHA-256 (`media_analyses`). The brain's `cleanWindow` keeps each clip's window inside one
+continuous shot: the preferred in-point when its window is clean, otherwise the longest single shot that
+fits, and the trim reason says so. The critic's `hidden-cut` finding flags a window that still crosses a
+cut (for example after an owner in-point change) and offers the clean in-point as a one-click fix. Edit
+renders gain the QC check **unplanned cuts**: the finished video is measured and any cut that is not a clip
+boundary, a soft transition, a graphic entering or leaving, or the fade-out fails the check (the owner must
+accept it before approving). Source idea: bradautomates/claude-video (`research/claude-video.md`).
