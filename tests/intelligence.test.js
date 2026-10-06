@@ -191,6 +191,16 @@ test('competitor scan collects NexLev data, keeps YouTube data display-only and 
   assert.ok(purged.youtubePurgedAt);
   assert.deepEqual(purged.result.channels[0].youtube, {purged: true});
   assert.equal(purged.result.channels[0].nexlev.videos.length, 6, 'NexLev data is kept');
+  // Display-only craft view: multiples over the channel median of recent uploads, never over YouTube data.
+  const shown = intel.state().families[family.id].scans[0].result.channels[0];
+  assert.equal(shown.craft.enough, true);
+  assert.ok(shown.craft.median > 0);
+  const views = first.nexlev.videos.map(video => video.views).sort((a, b) => a - b);
+  assert.equal(shown.craft.median, Math.round((views[2] + views[3]) / 2), 'the median comes from recent uploads only');
+  const top = first.nexlev.videos.reduce((best, video) => (video.views > best.views ? video : best));
+  assert.equal(shown.craft.videos.find(item => item.videoId === top.videoId).multiple, Math.round(top.views / ((views[2] + views[3]) / 2) * 100) / 100);
+  assert.ok(shown.craft.videos.every(item => 'formula' in item));
+  assert.equal(shown.youtube.purged, true, 'YouTube data stays purged in the craft view');
   assert.equal(intel.purgeExpiredYouTubeData(new Date(Date.now() + 40 * 86400000)), 0);
   assert.ok(store.state().events.some(item => /Competitor scan completed/.test(item.message)));
 });

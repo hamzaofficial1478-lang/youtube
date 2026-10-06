@@ -10,7 +10,8 @@
     inCubic: x => x ** 3,
     inOutCubic: x => (x < 0.5 ? 4 * x ** 3 : 1 - (-2 * x + 2) ** 3 / 2),
     inOutSine: x => -(Math.cos(Math.PI * x) - 1) / 2,
-    outBack: x => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2; },
+    // Long-tail settle, no overshoot (HyperFrames motion doctrine: smooth beats bouncy; power3.out).
+    outQuart: x => 1 - (1 - x) ** 4,
     outExpo: x => (x >= 1 ? 1 : 1 - 2 ** (-10 * x)),
   };
   const clamp01 = x => Math.max(0, Math.min(1, x));
@@ -105,7 +106,7 @@
       title(t, d.title);
       const items = d.items, n = items.length, values = items.map(item => item.value);
       const lo = Math.min(0, ...values), hi = Math.max(...values) * 1.1 || 1;
-      const left = M + 40, right = W - M - 40, top = M + (P.vertical ? 360 : 250), bottom = H - M - (P.vertical ? 260 : 90);
+      const left = M + 40, right = W - M - 40, top = M + (P.vertical ? 360 : 250), bottom = H - M - (P.vertical ? 260 : 110);
       const xs = items.map((item, k) => left + (right - left) * (n === 1 ? 0.5 : k / (n - 1)));
       const ys = values.map(value => bottom - (bottom - top) * (value - lo) / (hi - lo));
       line(left, bottom, right, bottom, {color: alpha(P.palette.ink, 0.5), width: 3, progress: ease.outCubic(phase(t, 0, 0.4)), seed: 3});
@@ -125,7 +126,7 @@
       items.forEach((item, k) => {
         text(item.label, xs[k], bottom + (P.vertical ? 70 : 56), {size: P.vertical ? 38 : 32, color: alpha(P.palette.ink, 0.8), align: 'center', opacity: phase(t, 0.2, 0.4)});
         if (!reached.includes(k)) return;
-        const pop = ease.outBack(phase(t, 0.4 + k * 0.05, 0.3));
+        const pop = ease.outQuart(phase(t, 0.4 + k * 0.05, 0.3));
         ctx.save(); ctx.fillStyle = k === peak ? P.palette.accent : P.palette.ink; ctx.beginPath(); ctx.arc(xs[k], ys[k], 11 * pop, 0, Math.PI * 2); ctx.fill(); ctx.restore();
         if (k === 0 || k === n - 1 || k === peak) text(formatValue(item, 1), xs[k], ys[k] - 32, {size: P.vertical ? 44 : 40, color: k === peak ? P.palette.accent : P.palette.ink, align: 'center', weight: 700, opacity: pop});
       });
@@ -140,7 +141,7 @@
       line(left - 40, axis, right + 40, axis, {color: alpha(P.palette.ink, 0.55), width: 4, progress: ease.outCubic(phase(t, 0, 0.8)), seed: 11});
       const gap = Math.min(1.1, Math.max(0.35, (P.duration - 2.2) / n));
       items.forEach((item, k) => {
-        const start = 0.8 + k * gap, pop = ease.outBack(phase(t, start, 0.3)), rise = ease.outCubic(phase(t, start + 0.1, 0.4));
+        const start = 0.8 + k * gap, pop = ease.outQuart(phase(t, start, 0.3)), rise = ease.outCubic(phase(t, start + 0.1, 0.4));
         if (pop <= 0) return;
         const current = t < 0.8 + (k + 1) * gap && t >= start;
         ctx.save(); ctx.fillStyle = current || k === n - 1 ? P.palette.accent : P.palette.ink; ctx.beginPath(); ctx.arc(xs[k], axis, 14 * pop, 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -152,7 +153,8 @@
     list(t, d) {
       title(t, d.title);
       const items = d.items, n = items.length, top = M + (P.vertical ? 360 : 250);
-      const gap = Math.min(0.7, Math.max(0.3, (P.duration - 1.6) / n)), row = Math.min(P.vertical ? 190 : 140, (H - M - top) / n);
+      // Horizontal content stays above the caption band (bottom 17%, skill captions.keep-out-band).
+      const gap = Math.min(0.7, Math.max(0.3, (P.duration - 1.6) / n)), row = Math.min(P.vertical ? 190 : 140, ((P.vertical ? H - M : H * 0.83 - 20) - top) / n);
       items.forEach((item, k) => {
         const start = 0.5 + k * gap, p = ease.outCubic(phase(t, start, 0.35));
         if (p <= 0) return;
@@ -182,7 +184,7 @@
       const step = Math.min(1.1, Math.max(0.45, (P.duration - 1.8) / n));
       const pos = k => (vertical ? {x: (W - width) / 2, y: top + k * (height + 70)} : {x: M + k * (width + 90), y: H / 2 - height / 2 + 40});
       items.forEach((item, k) => {
-        const start = 0.4 + k * step, pop = ease.outBack(phase(t, start, 0.3));
+        const start = 0.4 + k * step, pop = ease.outQuart(phase(t, start, 0.3));
         if (pop <= 0) return;
         const {x, y} = pos(k), current = t >= start && t < start + step && k < n - 1;
         ctx.save(); ctx.globalAlpha = clamp01(pop); ctx.translate(x + width / 2, y + height / 2); ctx.scale(0.86 + 0.14 * pop, 0.86 + 0.14 * pop); ctx.translate(-(x + width / 2), -(y + height / 2));

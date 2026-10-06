@@ -45,17 +45,28 @@ class MotionRenderer {
       '--disable-background-networking', '--disable-component-update', '--disable-gpu', '--host-resolver-rules=MAP * ~NOTFOUND',
       'about:blank',
     ], {stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true});
-    let stderr = '';
-    const endpoint = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new InputError('The browser did not start in time.', 504)), this.timeoutMs);
-      this.child.on('error', () => { clearTimeout(timer); reject(new InputError('The browser could not be started.', 503)); });
-      this.child.stderr.on('data', chunk => {
-        stderr += chunk;
-        const match = stderr.match(/DevTools listening on (ws:\/\/\S+)/);
-        if (match) { clearTimeout(timer); resolve(match[1]); }
-      });
-    });
-    const port = new URL(endpoint).port;
+    let stderr = '', failed = false;
+    this.child.stderr.on('data', chunk => { stderr += chunk; });
+    this.child.on('error', () => { failed = true; });
+    // Edge can hand the launch to a relaunched process, so the launcher's stderr may stay silent and the
+    // launcher may exit at once. Chromium also writes the port to DevToolsActivePort in the profile, which
+    // is the reliable source; the stderr line is the fallback.
+    const deadline = Date.now() + this.timeoutMs;
+    let port = null;
+    while (!port) {
+      if (failed) throw new InputError('The browser could not be started.', 503);
+      try {
+        const [line, browserPath] = fs.readFileSync(path.join(this.profile, 'DevToolsActivePort'), 'utf8').split(/\r?\n/);
+        if (/^\d+$/.test(line)) { port = line; this.browserPath = browserPath; }
+      } catch { /* not written yet */ }
+      const match = !port && stderr.match(/DevTools listening on ws:\/\/[^:/]+:(\d+)(\/\S+)/);
+      if (match) { port = match[1]; this.browserPath = match[2]; }
+      if (!port) {
+        if (Date.now() > deadline) throw new InputError('The browser did not start in time.', 504);
+        await sleep(100);
+      }
+    }
+    this.port = port;
     let pageSocket = null;
     for (let attempt = 0; attempt < 50 && !pageSocket; attempt++) {
       try { pageSocket = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(item => item.type === 'page')?.webSocketDebuggerUrl || null; } catch { /* still starting */ }
@@ -120,12 +131,26 @@ class MotionRenderer {
   }
   async close() {
     try { this.socket?.close(); } catch { /* already closed */ }
+    // Close the browser itself over its own DevTools endpoint: the process we spawned may only have been a
+    // launcher, and killing it would leave the real headless browser running.
+    if (this.port && this.browserPath) {
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 3000);
+        try {
+          const browser = new WebSocket(`ws://127.0.0.1:${this.port}${this.browserPath}`);
+          browser.onopen = () => browser.send(JSON.stringify({id: 1, method: 'Browser.close'}));
+          browser.onclose = browser.onerror = () => { clearTimeout(timer); resolve(); };
+        } catch { clearTimeout(timer); resolve(); }
+      });
+      this.port = null;
+    }
     if (this.child && this.child.exitCode === null) {
       this.child.kill();
       await new Promise(resolve => { const timer = setTimeout(resolve, 3000); this.child.once('exit', () => { clearTimeout(timer); resolve(); }); });
     }
-    for (let attempt = 0; attempt < 5 && this.profile; attempt++) {
-      try { fs.rmSync(this.profile, {recursive: true, force: true}); break; } catch { await sleep(200); }
+    // The browser releases its profile a moment after it exits.
+    for (let attempt = 0; attempt < 20 && this.profile; attempt++) {
+      try { fs.rmSync(this.profile, {recursive: true, force: true}); break; } catch { await sleep(250); }
     }
   }
 }

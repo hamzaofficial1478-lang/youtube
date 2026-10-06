@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## hyperframes-and-youtube-agent-skill.md (2026-10-06)
+
+The deep read of heygen-com/hyperframes and Jakeschincariol/youtube-agent-skill: what was read, what became code (`craft.js`, the captions in `captions.js`, the smooth easing in the canvas templates), what became skills (`skills/hyperframes.json`, `skills/youtube-agent.json`), and what was left out and why.
+
 ## The owner's two "main brain" documents
 
 The owner attached two documents on 2026-10-05 and asked that every skill in them be extracted into the Skills Engine without skipping anything:

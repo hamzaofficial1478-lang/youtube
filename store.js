@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/youtube-metadata-validator');
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount}=require('./hermes');
+const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
 
 class InputError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -73,12 +74,36 @@ function familyInput(input) {
     timezone, budgetCents, cadence: integer(input.cadence, 1, 14, 'Original videos per week'),
     format: choice(input.format, ['long-form', 'shorts'], 'format'),
     competitors: competitorList(input.competitors),
+    writingVoice: writingVoiceInput(input.writingVoice),
     tokenBudget:{
       monthlyLimit:integer(input.monthlyTokenLimit??100000,0,10000000,'Monthly token limit'),
       scriptJobLimit:integer(input.scriptTokenLimit??6000,1000,8000,'Script job token limit'),
       researchJobLimit:integer(input.researchTokenLimit??4000,1000,8000,'Research job token limit')
     },
   };
+}
+
+// The channel's writing voice (youtube-agent-skill voice.md): who one video talks to, words the channel
+// never says, its own phrases, claims it refuses and format notes. Hermes receives it; never-words are enforced.
+function writingVoiceInput(value) {
+  if (value === undefined || value === null) return null;
+  object(value);
+  const lines = (items, label, maxItems, maxLength) => {
+    requireValue(items === undefined || Array.isArray(items), `${label} must be a list.`);
+    const list = (items || []).map(item => text(item, label, 1, maxLength));
+    requireValue(list.length <= maxItems, `Add at most ${maxItems} entries to ${label.toLowerCase()}.`);
+    const seen = new Set();
+    return list.filter(item => !seen.has(item.toLocaleLowerCase()) && seen.add(item.toLocaleLowerCase()));
+  };
+  const voice = {audiencePerson: text(value.audiencePerson || '', 'Audience person', 0, 400), neverWords: lines(value.neverWords, 'Words the channel never uses', 40, 40),
+    ownPhrases: lines(value.ownPhrases, 'Own phrases', 20, 80), refusedClaims: lines(value.refusedClaims, 'Refused claims', 20, 200), formatNotes: text(value.formatNotes || '', 'Format notes', 0, 600)};
+  return voice.audiencePerson || voice.neverWords.length || voice.ownPhrases.length || voice.refusedClaims.length || voice.formatNotes ? voice : null;
+}
+// Advice shown beside a draft. Nothing here blocks approval; the review gate stays reviewIssues.
+function contentCraft(content, family) {
+  const locale = family.primaryLocale;
+  return {hook: content.hook ? scoreHook(content.hook, {locale}) : null, title: lintPackaging({title: content.title, locale}),
+    neverWords: neverWordsUsed([content.title, content.hook, content.script].join(' \n '), family.writingVoice)};
 }
 
 function contentInput(input) {
@@ -218,9 +243,9 @@ class Store {
   close() { this.db.close(); }
   transaction(fn) { this.db.exec('BEGIN IMMEDIATE'); try { const result=fn();this.db.exec('COMMIT');return result; } catch(error) { this.db.exec('ROLLBACK');throw error; } }
   event(message) { this.db.prepare('INSERT INTO events(created_at,message) VALUES(?,?)').run(now(),message); }
-  hydrateFamily(f){const legacyChannels=Array.isArray(f.channels)&&f.channels.length?f.channels:[{language:'en',locale:f.englishLocale||'en-US',connection:'not_connected'},{language:'es',locale:f.spanishLocale||'es-419',connection:'not_connected'},{language:'it',locale:'it-IT',connection:'not_connected'}],locales=Array.isArray(f.locales)&&f.locales.length?f.locales:legacyChannels.map(channel=>channel.locale),channels=locales.map(locale=>{const previous=legacyChannels.find(channel=>channel.locale===locale);return {language:channelLanguage(locale),locale,connection:previous?.connection||'not_connected'};});return {...f,competitors:Array.isArray(f.competitors)?f.competitors:[],locales,primaryLocale:f.primaryLocale||locales[0],channels,tokenBudget:f.tokenBudget||{monthlyLimit:0,scriptJobLimit:6000,researchJobLimit:4000}};}
+  hydrateFamily(f){const legacyChannels=Array.isArray(f.channels)&&f.channels.length?f.channels:[{language:'en',locale:f.englishLocale||'en-US',connection:'not_connected'},{language:'es',locale:f.spanishLocale||'es-419',connection:'not_connected'},{language:'it',locale:'it-IT',connection:'not_connected'}],locales=Array.isArray(f.locales)&&f.locales.length?f.locales:legacyChannels.map(channel=>channel.locale),channels=locales.map(locale=>{const previous=legacyChannels.find(channel=>channel.locale===locale);return {language:channelLanguage(locale),locale,connection:previous?.connection||'not_connected'};});return {...f,writingVoice:f.writingVoice||null,competitors:Array.isArray(f.competitors)?f.competitors:[],locales,primaryLocale:f.primaryLocale||locales[0],channels,tokenBudget:f.tokenBudget||{monthlyLimit:0,scriptJobLimit:6000,researchJobLimit:4000}};}
   families() { return this.db.prepare('SELECT payload FROM families ORDER BY rowid DESC').all().map(r=>this.hydrateFamily(JSON.parse(r.payload))); }
-  contents() { return this.db.prepare('SELECT payload FROM content ORDER BY rowid DESC').all().map(r=>{const c=JSON.parse(r.payload),family=this.family(c.familyId);return {...c,reviewIssues:reviewIssues(c,family.format,family.primaryLocale)};}); }
+  contents() { return this.db.prepare('SELECT payload FROM content ORDER BY rowid DESC').all().map(r=>{const c=JSON.parse(r.payload),family=this.family(c.familyId);return {...c,reviewIssues:reviewIssues(c,family.format,family.primaryLocale),craft:contentCraft(c,family)};}); }
   family(id) { const r=this.db.prepare('SELECT payload FROM families WHERE id=?').get(id);requireValue(r,'Family not found.',404);return this.hydrateFamily(JSON.parse(r.payload)); }
   content(id) { const r=this.db.prepare('SELECT payload FROM content WHERE id=?').get(id);requireValue(r,'Draft not found.',404);return JSON.parse(r.payload); }
   version(record, expected) { requireValue(Number.isSafeInteger(expected) && expected === record.revision, 'This item changed in another tab. Reload before saving.',409); }
@@ -330,14 +355,14 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Hermes connector.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Hermes connector before generating.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Hermes needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
       // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
       const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
       // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:f.tokenBudget.scriptJobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
       const type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
@@ -360,11 +385,11 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Hermes connector.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Hermes connector before retrying.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Hermes needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:2,tokenLimit:f.tokenBudget.scriptJobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:f.tokenBudget.scriptJobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`hermes_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
       if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
@@ -420,7 +445,7 @@ class Store {
         this.db.prepare('UPDATE llm_usage SET status=?,prompt_tokens=?,completion_tokens=?,total_tokens=?,updated_at=? WHERE job_id=?').run(status==='usage_unknown'?'unknown':status,Number.isSafeInteger(prompt)?prompt:null,Number.isSafeInteger(completion)?completion:null,validTotal?total:null,at,jobId);
         this.db.prepare('UPDATE jobs SET status=?,error=?,updated_at=? WHERE id=?').run(status,message,at,jobId);return null;
       }
-      const quality=result.quality||assessScriptQuality(result.candidate,f.format,f.primaryLocale),candidateStatus=quality.passed?'available':'quality_failed',jobStatus=quality.passed?'completed':'quality_failed',id=randomUUID();
+      const quality=result.quality||assessScriptQuality(result.candidate,f.format,f.primaryLocale,f.writingVoice),candidateStatus=quality.passed?'available':'quality_failed',jobStatus=quality.passed?'completed':'quality_failed',id=randomUUID();
       this.db.prepare("INSERT INTO script_candidates(id,job_id,content_id,family_id,content_revision,family_revision,connector_id,connector_revision,language,locale,prompt_version,status,payload,quality,usage,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(id,jobId,c.id,f.id,c.revision,f.revision,scope.connectorId,scope.connectorRevision,channelLanguage(f.primaryLocale),f.primaryLocale,scope.promptVersion,candidateStatus,JSON.stringify(result.candidate),JSON.stringify(quality),JSON.stringify(usage),at);
       this.db.prepare("UPDATE llm_usage SET status='settled',prompt_tokens=?,completion_tokens=?,total_tokens=?,updated_at=? WHERE job_id=?").run(prompt,completion,total,at,jobId);
       this.db.prepare('UPDATE jobs SET status=?,result=?,error=?,updated_at=? WHERE id=?').run(jobStatus,JSON.stringify({candidateId:id,usage,quality}),quality.passed?null:quality.issues.join(' '),at,jobId);
@@ -433,7 +458,7 @@ class Store {
   failHermesScriptJob(jobId,message='Hermes generation failed. Review the connector and retry deliberately.',{usageUnknown=false}={}) {
     return this.transaction(()=>{const at=now();this.db.prepare("UPDATE jobs SET status=?,error=?,updated_at=? WHERE id=? AND status='running'").run(usageUnknown?'interrupted':'failed',message,at,jobId);this.db.prepare(`UPDATE llm_usage SET status=?,reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END,updated_at=? WHERE job_id=?`).run(usageUnknown?'unknown':'released',usageUnknown?1:0,at,jobId);});
   }
-  scriptCandidate(id){const row=this.db.prepare('SELECT * FROM script_candidates WHERE id=?').get(id);requireValue(row,'Script candidate not found.',404);const payload=JSON.parse(row.payload),family=this.family(row.family_id),quality=assessScriptQuality(payload,family.format,row.locale),job=this.db.prepare('SELECT status FROM jobs WHERE id=?').get(row.job_id),status=quality.passed&&row.locale===family.primaryLocale&&row.status==='available'&&job?.status==='completed'?'available':'quality_failed';return {id:row.id,jobId:row.job_id,contentId:row.content_id,familyId:row.family_id,contentRevision:row.content_revision,familyRevision:row.family_revision,connectorId:row.connector_id,connectorRevision:row.connector_revision,language:row.language,locale:row.locale,promptVersion:row.prompt_version,status,payload,quality,usage:JSON.parse(row.usage),createdAt:row.created_at};}
+  scriptCandidate(id){const row=this.db.prepare('SELECT * FROM script_candidates WHERE id=?').get(id);requireValue(row,'Script candidate not found.',404);const payload=JSON.parse(row.payload),family=this.family(row.family_id),quality=assessScriptQuality(payload,family.format,row.locale,family.writingVoice),job=this.db.prepare('SELECT status FROM jobs WHERE id=?').get(row.job_id),status=quality.passed&&row.locale===family.primaryLocale&&row.status==='available'&&job?.status==='completed'?'available':'quality_failed';return {id:row.id,jobId:row.job_id,contentId:row.content_id,familyId:row.family_id,contentRevision:row.content_revision,familyRevision:row.family_revision,connectorId:row.connector_id,connectorRevision:row.connector_revision,language:row.language,locale:row.locale,promptVersion:row.prompt_version,status,payload,quality,usage:JSON.parse(row.usage),createdAt:row.created_at};}
   scriptCandidates(){return this.db.prepare('SELECT id FROM script_candidates ORDER BY created_at DESC,rowid DESC').all().map(row=>this.scriptCandidate(row.id));}
   queueResearchBrief(familyId,input){
     object(input);return this.transaction(()=>{

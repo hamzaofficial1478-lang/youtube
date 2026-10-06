@@ -28,8 +28,43 @@ function editCard(content, engineReady) {
   const facts = `<dl class="style-facts edit-facts"><div><dt>Clips</dt><dd>${stats.clips} · average ${stats.averageShotSeconds} s · ${stats.cutsPerMinute} cuts/min</dd></div><div><dt>Footage</dt><dd>${Math.round(stats.videoShare * 100)}% moving clips · ${Math.round(stats.stillShare * 100)}% stills with camera moves</dd></div><div><dt>Transitions</dt><dd>${esc(stats.transitionTypes.join(', '))} · ${stats.softTransitions} soft</dd></div><div><dt>Longest hold</dt><dd>${Number(stats.longestUnchangedSeconds).toFixed(1)} s without a change</dd></div><div><dt>Graphics</dt><dd>${stats.graphicsAccepted} on screen · ${stats.graphicsProposed} proposed</dd></div><div><dt>Timing</dt><dd>${timing}</dd></div></dl>`;
   const actions = `<div class="card-actions edit-actions">${!stale && engineReady && !active ? action('Render this edit', 'tl-render', edit.id, 'primary') : ''}${!stale && edit.revision > 1 ? action('Undo last change', 'tl-undo', edit.id, 'secondary') : ''}${action(stale ? 'Draft a new edit' : 'Draft a fresh edit', 'tl-generate', content.contentId, stale ? 'primary' : 'secondary')}${!engineReady ? '<span class="muted">Check and pin FFmpeg to render.</span>' : ''}</div>`;
   return `<section class="production-card edit-card">${head}${stale ? `<p class="inline-warning">${esc(room.staleReason || 'The inputs changed.')}</p>` : ''}${editStrip(tl)}${facts}${actions}
-    ${editFindings(edit, stale)}${editGraphics(tl, stale)}${editClips(tl, stale)}${editHistory(room)}</section>`;
+    ${editFindings(edit, stale)}${editGraphics(tl, stale)}${editCaptions(edit, stale)}${editClips(tl, stale)}${editCraft(room)}${editHistory(room)}</section>`;
 }
+// Captions (P07): the rail the render burns in, and the SRT file for YouTube's own player.
+function captionLine(group) {
+  let index = 0;
+  return group.lines.map(line => line.split(' ').map(word => { const out = index === group.emphasis ? `<mark>${esc(word)}</mark>` : esc(word); index++; return out; }).join(' ')).join(' <span class="muted">/</span> ');
+}
+function editCaptions(edit, stale) {
+  const captions = edit.timeline.captions;
+  if (!captions) return '<h3 class="intel-subhead">Captions</h3><p class="hint">This edit was drafted before captions existed. Draft a fresh edit to add them.</p>';
+  const vertical = edit.timeline.format === 'shorts', groups = captions.groups;
+  const toggle = stale ? '' : captions.enabled ? action('Switch captions off', 'tl-captions', 'off', 'secondary') : action('Switch captions on', 'tl-captions', 'on', 'primary');
+  return `<h3 class="intel-subhead">Captions · ${captions.enabled ? 'burned into the render' : 'off'} · ${groups.length} captions</h3>
+    <p class="hint">${esc(captions.note)} ${vertical ? 'On this vertical video the captions sit above the Shorts buttons and step aside while a full-screen graphic shows its own text.' : 'They sit in the bottom band; graphics stay above it.'} At most one word per caption is lifted in the accent colour: figures and words like "never" or "only", and never in two captions in a row.</p>
+    <div class="card-actions">${toggle}<a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.srt" download>Download SRT for YouTube</a></div>
+    <details class="scene-history"><summary>Read the captions (${groups.length})</summary><div class="history-list caption-list">${groups.map(group => `<div class="history-row"><span class="muted">${renderClock(group.start)}</span><span>${captionLine(group)}</span></div>`).join('')}</div></details>`;
+}
+
+// YouTube craft drafts (youtube-agent-skill): chapters, Shorts spans and the retention reader. Nothing here publishes.
+const CRAFT_BAND = {strong: 'green', workable: 'orange', weak: 'gray'};
+function editCraft(room) {
+  const craft = room.craft;
+  if (!craft) return '';
+  const {chapters, shorts} = craft;
+  const chapterBlock = chapters ? `<details class="scene-history craft-chapters"><summary>YouTube chapters · draft · ${chapters.valid ? `${chapters.chapters.length} chapters, valid` : 'not valid yet'}</summary>${chapters.problems.length ? `<ul class="craft-issues">${chapters.problems.map(problem => `<li>✕ ${esc(problem)}</li>`).join('')}</ul>` : ''}${chapters.chapters.length ? `<pre>${esc(chapters.text)}</pre><p class="hint">Boundaries come from the narration's pauses, the change of topic words across them and the board's scenes. The titles are topic words: rewrite each one before pasting it under the video. YouTube needs 0:00 first, at least 3 chapters and 10 seconds each.</p>` : ''}</details>` : '';
+  const shortBlock = shorts?.applicable ? `<details class="scene-history"><summary>Shorts inside this video · ${shorts.candidates.length} candidate${shorts.candidates.length === 1 ? '' : 's'}</summary>${shorts.candidates.length ? `<div class="craft-shorts">${shorts.candidates.map((item, index) => `<div class="craft-short"><div class="card-top"><b>${index + 1}. ${renderClock(item.start)}–${renderClock(item.end)} · ${item.seconds} s</b>${badge(`Opening line ${item.hook.verdict} · ${item.hook.band}`, CRAFT_BAND[item.hook.band] || 'gray')}</div><p>“${esc(item.firstLine)}”</p><p class="hint">Turn: “${esc(item.turnLine)}”${item.lastLine !== item.turnLine ? `<br>Ends: “${esc(item.lastLine)}”` : ' (it also ends the Short)'}</p><p class="hint">${esc(item.why.join(' '))}</p></div>`).join('')}</div><ul class="hint">${shorts.writing.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : '<p class="hint">No 20-55 second span opens on a complete thought, turns and ends on a line.</p>'}</details>` : shorts ? `<p class="hint">${esc(shorts.reason)}</p>` : '';
+  const retention = `<details class="scene-history"><summary>Read a YouTube retention export</summary><p class="hint">Once this video is live: YouTube Studio → Analytics → the video → Engagement → Audience retention → download as CSV, then paste it here. You get the hook leak, the cliffs (with what the narration said at each) and the slide, ending in one fix.</p><textarea id="retention-${esc(room.contentId)}" rows="4" maxlength="200000" aria-label="Retention CSV" placeholder="Video position (%),Absolute audience retention (%)"></textarea><div class="card-actions">${action('Read the export', 'tl-retention', room.contentId, 'secondary')}</div><div id="retention-out-${esc(room.contentId)}" aria-live="polite"></div></details>`;
+  return `<h3 class="intel-subhead">YouTube craft · drafts for you, never published</h3>${chapterBlock}${shortBlock}${retention}`;
+}
+function retentionView(result) {
+  const where = cliff => (cliff.atSeconds !== null ? renderClock(cliff.atSeconds) : `position ${cliff.from}`);
+  return `<div class="craft"><div class="card-top"><strong>Hook leak ${result.hookLeak}% · ${esc(result.verdict)}</strong>${badge(`${result.points} points · ${result.start}% → ${result.end}%`, 'gray')}</div>
+    <p><b>One fix:</b> ${esc(result.fix)}</p>
+    ${result.cliffs.length ? `<ul class="craft-issues">${result.cliffs.map(cliff => `<li>−${cliff.lost}% at ${where(cliff)}${cliff.said ? ` · “${esc(cliff.said)}”` : ''}</li>`).join('')}</ul>` : '<p class="hint">No drop steeper than 0.8%: the loss is all slide, not moments.</p>'}
+    <p class="hint">Slide ${result.slide}% per ${result.axis === 'percent' ? 'percent of the video' : 'second'} across the middle. A steady slide is pacing: cut the middle rather than rewriting it.</p></div>`;
+}
+
 
 // SVG strip: clips (stills light, clips dark, heroes outlined), soft transitions, graphics, retention markers.
 function editStrip(tl) {
@@ -99,11 +134,17 @@ async function editSend(edit, ops, note) {
 function editAction(command, id, button) {
   const {content, edit} = editContext();
   if (command === 'tl-generate') return editDialog('generate', 'Draft the edit', 'EDITING BRAIN · LOCAL · NO COST', `<p class="hint">Measures the pauses in the approved narration, then cuts, times and moves every shot with a reason, proposes graphics and runs the critic. ${edit ? 'Your earlier edit stays in the history; this makes a new revision from scratch.' : ''}</p><div class="form-grid">${renderNameField()}</div>`, 'Draft the edit', {contentId: id, visualApprovalId: content.inputs.visualApprovalId});
+  if (command === 'tl-retention') {
+    const out = document.getElementById(`retention-out-${id}`), csv = document.getElementById(`retention-${id}`)?.value || '';
+    if (button) button.disabled = true;
+    return api(`/api/content/${id}/retention`, {csv}).then(result => { out.innerHTML = retentionView(result); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
+  }
   if (!edit) return toast('Draft an edit first.', true);
   const tl = edit.timeline;
   const run = (ops, message) => { if (button) button.disabled = true; return editSend(edit, ops).then(refresh).then(() => toast(message)).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); };
   if (command === 'tl-graphic-accept') return run([{type: 'set-graphic', graphicId: id, status: 'accepted'}], 'Graphic accepted.');
   if (command === 'tl-graphic-reject') return run([{type: 'set-graphic', graphicId: id, status: 'rejected'}], 'Graphic rejected.');
+  if (command === 'tl-captions') return run([{type: 'set-captions', enabled: id === 'on'}], id === 'on' ? 'Captions switched on.' : 'Captions switched off.');
   if (command === 'tl-fix') { const finding = edit.findings[Number(id)]; return finding?.op ? run([finding.op], 'Fix applied.') : toast('That finding has no automatic fix.', true); }
   if (command === 'tl-regen') { const scene = tl.scenes.find(item => item.id === id); return run([{type: 'regenerate-scene', sceneId: id}], `${scene?.label || 'Scene'} redone.`); }
   if (command === 'tl-undo') { if (button) button.disabled = true; return api(`/api/edit-revisions/${id}/undo`, {editedBy: renderPerson() || 'Owner'}).then(refresh).then(() => toast('Last change undone.')).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }

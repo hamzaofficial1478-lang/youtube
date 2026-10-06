@@ -15,6 +15,7 @@ const {RenderRoom} = require('../render-room');
 const {EditingRoom} = require('../editing-room');
 const {SkillsEngine} = require('../skills');
 const B = require('../editing-brain');
+const Cap = require('../captions');
 const R = require('../render');
 const {createApp} = require('../server');
 
@@ -176,9 +177,13 @@ test('graphics become one ASS layer: eased entrances, the title-card accent, acc
   assert.match(ass, /PlayResX: 1920/);
   assert.match(ass, /The hidden \{\\c&H27A2C9&\}cause\{\\c&HE6EEF2&\}/, 'one accent word in the style accent colour');
   assert.equal((ass.match(/,Card,/g) || []).length, 7, 'title card: five eased entrance steps, a hold and a fade');
-  assert.doesNotMatch(ass, /60%/, 'proposed graphics are not drawn until accepted');
+  const graphicLines = ass.split('\n').filter(line => line.startsWith('Dialogue:') && !line.includes(',Caption,'));
+  assert.doesNotMatch(graphicLines.join('\n'), /60%/, 'proposed graphics are not drawn until accepted');
+  assert.match(ass, /Dialogue: 5,[^\n]*,Caption,[^\n]*\{\\c&H27A2C9&\}60%/, 'the caption rail carries the narration and lifts the figure in the accent colour');
   const none = structuredClone(edit);
   none.graphics.forEach(item => { item.status = 'rejected'; });
+  assert.ok(B.graphicsAss(none, SPEC).split('\n').filter(line => line.startsWith('Dialogue:')).every(line => line.includes(',Caption,')), 'with every graphic rejected only captions remain');
+  none.captions.enabled = false;
   assert.equal(B.graphicsAss(none, SPEC), null);
   // Render plan: runs of hard cuts become chunks; the crossfade offset keeps the narration length.
   const files = Object.fromEntries(edit.clips.map(clip => [clip.id, `${clip.id}.src`]));
@@ -283,6 +288,26 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   const stat = r1.timeline.graphics.find(item => item.template === 'stat');
   assert.equal(stat.lines[0], '60%');
   assert.throws(() => store.db.prepare('UPDATE edit_revisions SET note=? WHERE id=?').run('x', r1.id), /immutable/);
+  // Captions (P07): every narrated word once, on the measured pauses, with an SRT sidecar for YouTube.
+  assert.equal(r1.timeline.captions.enabled, true);
+  assert.deepEqual(Cap.lintCaptions(r1.timeline.captions, {sentences: editing.inputs(store.content(content.id)).payload.sentences}).filter(item => item.severity === 'critical'), []);
+  assert.ok(r1.timeline.captions.groups.every(group => group.words.length <= 4), 'a Shorts family gets short captions');
+  const srt = editing.captionsSrt(r1.id);
+  assert.match(srt.text, /^1\n00:00:0\d,\d{3} --> /);
+  assert.match(srt.filename, /^The-first-promise-r1\.srt$/);
+  // YouTube craft: sentence cues follow the measured pauses; chapters and Shorts spans only exist for long-form.
+  const room = editing.state().contents.find(item => item.contentId === content.id);
+  assert.deepEqual(room.craft, {chapters: null, shorts: null}, 'a Shorts family gets no chapters or Shorts-inside-Shorts');
+  const cues = editing.cues(editing.inputs(store.content(content.id)));
+  assert.equal(cues[0].start, 0);
+  assert.ok(cues.slice(1).some(cue => cue.gap > 0.3), 'measured pauses become chapter-boundary evidence');
+  const csv = ['Video position (%),Absolute audience retention (%)', ...Array.from({length: 11}, (_, i) => `${i * 10},${100 - i * 2 - (i >= 6 ? 15 : 0)}`)].join('\n');
+  const retention = editing.retention(content.id, {csv});
+  const cliff = retention.cliffs[0];
+  assert.equal(cliff.from, 50);
+  assert.equal(cliff.atSeconds, 18, 'percent positions map onto the 36 s narration');
+  assert.ok(cliff.said && cues.some(cue => cue.start <= 22 && cue.end >= 14 && cliff.said.includes(cue.text.slice(0, 20))), 'each cliff names what the narration said there');
+  assert.throws(() => editing.retention(content.id, {csv: 'position,retention\n1,2\n3,4'}), /at least 8 data points/);
 
   // Owner edits with conflict protection; undo restores the earlier edit exactly.
   const still = r1.timeline.clips.find(clip => clip.mediaType === 'image');
@@ -326,6 +351,9 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(result.qc.find(item => item.name === 'black frames').passed, true, 'the title card and the fade-out are planned, not defects');
   const manifest = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
   assert.equal(manifest.inputs.edit.revisionId, r5.id);
+  const burned = JSON.parse(renders.row(queued.id).scope).edit.graphicsAss;
+  assert.match(burned, /,Caption,/, 'the render burned the caption rail in');
+  assert.equal(manifest.inputs.edit.graphicsSha256, createHash('sha256').update(burned).digest('hex'), 'the manifest records the exact subtitle layer, captions included');
   assert.match(manifest.inputs.edit.graphicsSha256, /^[a-f0-9]{64}$/);
   assert.ok(manifest.commands.some(command => command.step.startsWith('join chunk-')));
   assert.ok(manifest.commands.every(command => !command.args.join(' ').includes(dataRoot)), 'command plans do not leak local paths');
@@ -438,7 +466,7 @@ test('animated graphics come only from the script, validate line by line and fol
   const accepted = B.applyOp(timeline, {type: 'set-graphic', graphicId: chart.id, status: 'accepted', title: 'From clay to coin'}, {spec: SPEC}).timeline;
   assert.equal(accepted.graphics.find(item => item.id === chart.id).title, 'From clay to coin');
   assert.throws(() => B.applyOp(timeline, {type: 'set-graphic', graphicId: chart.id, lines: ['1347 = only one']}, {spec: SPEC}), /3-7 lines/);
-  assert.equal(B.graphicsAss(accepted, SPEC), null, 'canvas graphics are not drawn by libass');
+  assert.equal(B.graphicsAss({...accepted, captions: {...accepted.captions, enabled: false}}, SPEC), null, 'canvas graphics are not drawn by libass');
   assert.equal(B.critique(accepted, SPEC).stats.graphicsAccepted, 1);
   // Adding a graphic: validated, accepted at once, never overlapping another.
   const added = B.applyOp(accepted, {type: 'add-graphic', template: 'flow', startSeconds: 12, seconds: 4, title: 'How it spread', lines: ['A port', 'A ship', 'A city']}, {spec: SPEC}).timeline;
@@ -464,12 +492,16 @@ test('the canvas renderer draws identical frames every time, at the requested si
   assert.match(report.sha256, /^[a-f0-9]{64}$/);
   const graphic = {template: 'flow', data: B.canvasData('flow', 'How a promise became money', ['A debt', 'A mark', 'A token', 'Money']), palette: {bg: '#0E0E0E', ink: '#F2EEE6', accent: '#C9A227'}, fonts: {heading: 'Georgia', body: 'Arial', hand: 'Segoe Print'}, finish: 'hand-drawn', width: 320, height: 180, fps: 10, duration: 2};
   const renderer = await new MotionRenderer().start();
+  const {port, profile} = renderer;
   let first, second;
   try {
     first = await renderer.render({...graphic, outDir: path.join(dir, 'a')});
     second = await renderer.render({...graphic, outDir: path.join(dir, 'b')});
     await assert.rejects(renderer.frame({...graphic, template: 'no-such-template', t: 0}), /Motion template error/);
   } finally { await renderer.close(); }
+  // Regression: Edge may relaunch itself, so killing the spawned launcher once left headless browsers running.
+  await assert.rejects(fetch(`http://127.0.0.1:${port}/json/version`), 'the browser itself is closed, not only the launcher');
+  assert.equal(fs.existsSync(profile), false, 'the throwaway profile is removed');
   assert.equal(first.frames, 20);
   assert.equal(first.sha256, second.sha256, 'same graphic, same pixels');
   const png = fs.readFileSync(path.join(dir, 'a', 'f00019.png'));

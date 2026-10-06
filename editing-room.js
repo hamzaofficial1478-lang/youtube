@@ -8,6 +8,8 @@ const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const B = require('./editing-brain');
 const R = require('./render');
+const C = require('./craft');
+const Cap = require('./captions');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -69,7 +71,7 @@ class EditingRoom {
       narration: {approvalId: base.voice.approvalId, sha256: base.voice.artifact.sha256, relativePath: base.voice.artifact.relativePath, durationSeconds: base.voice.analysis.durationSeconds},
       style: {revisionId: styleRow.id, revision: styleRow.revision, specHash: styleRow.spec_hash, name: base.spec.name}, format: base.family.format,
     };
-    return {...base, payload, snapshot, assets, files, scope, scopeHash: hash(scope)};
+    return {...base, payload, snapshot, assets, files, scope, scopeHash: hash(scope), script: content.script};
   }
 
   // ------------------------------------------------------------ narration analysis (local, cached)
@@ -100,7 +102,7 @@ class EditingRoom {
     const assets = Object.fromEntries(Object.entries(inputs.assets).map(([shotId, asset]) => [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds}]));
     return {
       alignment,
-      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants,
+      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale,
         scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source}))}))},
     };
   }
@@ -282,6 +284,45 @@ class EditingRoom {
     return !!row && this.latestRow(row.timeline_id).id === revisionId && this.currentFor(this.timelineRow(row.timeline_id)).current;
   }
 
+  // ------------------------------------------------------------ YouTube craft (youtube-agent-skill)
+  // Sentence cues on the narration clock, pause-aligned like the edit itself. gap is the measured pause
+  // before a sentence; sceneStart marks the board's sections. Chapters, Shorts and retention read these.
+  cues(inputs) {
+    const analysis = this.cachedPauses(inputs);
+    const {sentences} = B.alignSentences(inputs.payload.sentences, analysis.pauses || [], inputs.scope.narration.durationSeconds);
+    const sceneStarts = new Set(inputs.payload.scenes.map(scene => scene.sentenceStart));
+    // The writer's own paragraph breaks are the clearest section evidence in an approved script.
+    const squash = value => String(value).replace(/\s+/g, ' ').trim();
+    const paragraphs = String(inputs.script || '').split(/\n\s*\n/).map(squash).filter(Boolean).map(text => text.slice(0, 40));
+    return sentences.map((sentence, index) => {
+      const pause = index ? (analysis.pauses || []).find(span => span.start <= sentence.startSeconds + 0.1 && span.end >= sentence.startSeconds - 0.1) : null;
+      return {n: sentence.n, start: sentence.startSeconds, end: Math.round((sentence.startSeconds + sentence.durationSeconds) * 100) / 100, text: sentence.text, gap: pause ? pause.end - pause.start : 0,
+        sceneStart: index > 0 && sceneStarts.has(sentence.n), paragraphStart: index > 0 && paragraphs.some(start => squash(sentence.text).startsWith(start.slice(0, Math.min(40, squash(sentence.text).length))))};
+    });
+  }
+  // Draft chapters for a long video and Shorts spans inside it. Drafts for the owner, never published.
+  craft(inputs) {
+    const cues = this.cues(inputs), locale = inputs.family.primaryLocale;
+    return {chapters: inputs.scope.format === 'long-form' ? C.chapterize(cues) : null, shorts: inputs.scope.format === 'long-form' ? C.findShorts(cues, {locale}) : null};
+  }
+  // The SRT sidecar of one edit revision's captions (every group; platform players draw it themselves).
+  captionsSrt(revisionId) {
+    const row = this.revisionRow(revisionId), {timeline} = this.timelinePayload(row);
+    requireValue(timeline.captions, 'This edit was drafted before captions existed. Draft a fresh edit to get captions.', 404);
+    const content = this.store.content(this.timelineRow(row.timeline_id).content_id);
+    return {text: Cap.srt(timeline.captions), filename: `${content.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'captions'}-r${row.revision}.srt`};
+  }
+  // Reads a YouTube Studio audience-retention CSV against this script's narration.
+  retention(contentId, input) {
+    object(input);
+    const csv = text(input.csv, 'Retention CSV', 20, 200000);
+    const inputs = this.inputs(this.store.content(contentId));
+    requireValue(inputs.ready, inputs.blockers?.[0] || 'This script has no approved narration yet.', 409);
+    const result = C.analyseRetention(csv, {durationSeconds: inputs.scope.narration.durationSeconds, cues: this.cues(inputs)});
+    requireValue(result.ok, result.reason, 422);
+    return result;
+  }
+
   // ------------------------------------------------------------ views
   publicRevision(row, {detail = false} = {}) {
     const timelineRow = this.timelineRow(row.timeline_id), latest = this.latestRow(timelineRow.id);
@@ -304,7 +345,7 @@ class EditingRoom {
         if (!timeline) return {contentId: content.id, familyId: content.familyId, title: content.title, edit: null, history: []};
         const latest = this.latestRow(timeline.id), status = this.currentFor(timeline);
         return {contentId: content.id, familyId: content.familyId, title: content.title, current: status.current, staleReason: status.current ? null : status.reason,
-          edit: this.publicRevision(latest, {detail: true}),
+          edit: this.publicRevision(latest, {detail: true}), craft: status.current ? this.craft(status.inputs) : null,
           history: this.db.prepare('SELECT * FROM edit_revisions WHERE timeline_id=? ORDER BY revision DESC LIMIT 30').all(timeline.id).map(row => this.publicRevision(row))};
       }),
     };

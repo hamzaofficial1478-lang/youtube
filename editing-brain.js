@@ -8,6 +8,7 @@
 // brain, the palmier/capcut/lossless-cut timeline rules, flick and hand-drawn motion design). Every rule
 // names the skill it comes from, so the Skills page shows which approved skills the edit followed.
 const {createHash} = require('node:crypto');
+const Cap = require('./captions');
 
 const SCHEMA = 'ytprod.edit/1';
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -40,6 +41,9 @@ const TRANSITIONS = Object.freeze(['cut', 'crossfade', 'dip-to-black']);
 // Text templates are drawn by libass (graphicsAss); canvas templates by motion.js in a headless browser.
 const CANVAS_TEMPLATES = Object.freeze(['bar-chart', 'line-chart', 'timeline', 'list', 'comparison', 'flow']);
 const GRAPHIC_TEMPLATES = Object.freeze(['scene-text', 'title-card', 'stat', 'date', 'quote', ...CANVAS_TEMPLATES]);
+// On a vertical frame these full-screen graphics carry their own text where the caption rail sits, so the
+// rail clears while they hold (skill captions.keep-out-band); horizontal graphics stay above the band.
+const CAPTION_CLEARS = Object.freeze(['title-card', 'quote', ...CANVAS_TEMPLATES]);
 const GRAPHIC_PRIORITY = Object.freeze({'scene-text': 0, 'title-card': 0, timeline: 1, 'bar-chart': 1, 'line-chart': 1, list: 1, comparison: 1, flow: 1, quote: 1, stat: 2, date: 3});
 // Which skill each rule restates. Findings and decisions cite these IDs.
 const SKILL = Object.freeze({
@@ -348,7 +352,7 @@ function sceneJoin(previous, next, budget, spec, fps) {
 }
 
 // The auto edit. `variants` (sceneId -> n) lets single-scene repair produce a different take of one scene.
-function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}}) {
+function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en'}) {
   const totalFrames = Math.max(1, Math.round(narrationSeconds * fps));
   const {pacing} = spec;
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
@@ -494,6 +498,8 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     clips: clips.map(({planned, plannedSource, register, purpose, variant, ...clip}) => clip),
     joins, graphics, markers,
     ending: {fadeOutFrames: Math.min(Math.round(0.6 * fps), Math.floor(clips[clips.length - 1].frames / 2)), reason: 'The video fades out on its last image instead of freezing.', skill: SKILL.endings},
+    // Captions follow the narration, not the clips: owner changes to cuts and graphics never move them.
+    captions: Cap.buildCaptions({sentences, pauses, narrationSeconds, format, locale}),
   };
   validateTimeline(timeline);
   return timeline;
@@ -523,6 +529,7 @@ function validateTimeline(timeline) {
     expected = clip.start + clip.frames;
   });
   if (expected !== timeline.totalFrames) problems.push(`The clips cover ${expected} frames; the narration needs ${timeline.totalFrames}.`);
+  if (timeline.captions) problems.push(...Cap.validateCaptions(timeline.captions, timeline.narrationSeconds));
   if (timeline.joins.length !== timeline.clips.length - 1) problems.push('Every pair of neighbouring clips needs exactly one join.');
   timeline.joins.forEach((join, index) => {
     if (!TRANSITIONS.includes(join.type)) problems.push(`Join ${index + 1} uses an unknown transition.`);
@@ -601,6 +608,19 @@ function critique(timeline, spec) {
     const text = graphic.lines.join(' '), need = CANVAS_TEMPLATES.includes(graphic.template) ? canvasMinimumSeconds(graphic.template, graphic.lines.length) : graphicDwellSeconds(text);
     if (secs(graphic.frames) + 0.05 < need * 0.85) findings.push(finding('suggestion', 'graphic-short', `The ${graphic.template} "${text.slice(0, 40)}" is on screen ${secs(graphic.frames).toFixed(1)} s; it needs about ${need.toFixed(1)} s to read.`, 'Lengthen it or cut words.', {graphicId: graphic.id, at: graphic.start, skill: SKILL.dwell}));
   }
+  // Captions (skills editing.caption-spec, timeline.caption-qc-rules, captions.keep-out-band).
+  if (timeline.captions && !timeline.captions.enabled) findings.push(finding('suggestion', 'captions-off', 'Captions are switched off. Most viewers start a video muted, and captions keep them through the opening.', 'Switch the captions back on.', {op: {type: 'set-captions', enabled: true}, skill: Cap.SKILL.spec}));
+  if (timeline.captions?.enabled) {
+    const issues = Cap.lintCaptions(timeline.captions);
+    for (const issue of issues.filter(item => item.severity === 'critical')) findings.push(finding('critical', issue.kind, issue.message, 'Draft a fresh edit so the captions are rebuilt from the narration.', {skill: Cap.SKILL.qc}));
+    const fast = issues.filter(item => item.kind === 'caption-too-fast');
+    if (fast.length) findings.push(finding('nitpick', 'captions-fast', `${fast.length} caption${fast.length === 1 ? '' : 's'} pass${fast.length === 1 ? 'es' : ''} faster than 20 characters a second (${fast.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'This follows the narration pace; a slower voice pace or fewer words in that phrase fixes it.', {skill: Cap.SKILL.qc}));
+    const windows = Cap.clearWindows(timeline, CAPTION_CLEARS);
+    if (windows.length) {
+      const share = Cap.visibleGroups(timeline.captions, windows).length / Math.max(1, timeline.captions.groups.length);
+      if (share < 0.75) findings.push(finding('suggestion', 'captions-cleared', `Full-screen graphics clear the captions for ${Math.round((1 - share) * 100)}% of the narration on this vertical video.`, 'Reject or shorten some full-screen graphics so the words stay readable on mute.', {skill: Cap.SKILL.keepOut}));
+    }
+  }
   const proposed = timeline.graphics.filter(graphic => graphic.status === 'proposed');
   if (proposed.length) findings.push(finding('nitpick', 'graphics-pending', `${proposed.length} proposed graphic${proposed.length === 1 ? '' : 's'} waiting for your decision; only accepted graphics are rendered.`, 'Accept or reject each proposed graphic.', {skill: SKILL.graphics}));
 
@@ -634,7 +654,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -742,6 +762,12 @@ function applyOp(source, op, {spec} = {}) {
     members.forEach((entry, k) => { timeline.clips[entry.k] = ordered[k]; });
     clip.reason = `Moved to position ${op.toIndex + 1} in its scene by the owner.`;
     receipt.changed.push(...ordered.map(item => item.id));
+  } else if (op.type === 'set-captions') {
+    if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
+    if (typeof op.enabled !== 'boolean') throw opError('Captions must be switched on or off.');
+    if (timeline.captions.enabled === op.enabled) throw opError(`Captions are already ${op.enabled ? 'on' : 'off'}.`);
+    timeline.captions.enabled = op.enabled;
+    receipt.changed.push('captions');
   }
   validateTimeline(timeline);
   return {timeline, receipt};
@@ -798,6 +824,7 @@ function easedEvents({layer, style, start, inSeconds, holdSeconds, outSeconds, x
 // Builds the ASS script for every accepted graphic. Script coordinates are 1920x1080 (or 1080x1920 for
 // Shorts); libass scales them to the render size, so the proxy and the final render share one layout.
 function graphicsAss(timeline, spec) {
+  const captions = Cap.assParts(timeline, spec, CAPTION_CLEARS);
   const vertical = timeline.format === 'shorts';
   const W = vertical ? 1080 : 1920, H = vertical ? 1920 : 1080, M = vertical ? 96 : 144;
   const palette = spec.palette || {}, type = spec.typography || {};
@@ -840,19 +867,21 @@ function graphicsAss(timeline, spec) {
       events.push(...easedEvents({layer: 1, style: 'Quote', start, inSeconds: inS, holdSeconds: hold, outSeconds: outS, x: W / 2, y: H / 2, rise: 20, body: `“${lines.join(' ')}”`}));
     } else {
       const inS = 0.35, outS = 0.25, hold = Math.max(0.1, total - inS - outS);
-      events.push(...easedEvents({layer: 1, style: 'Text', start, inSeconds: inS, holdSeconds: hold, outSeconds: outS, x: M, y: Math.round(H * (vertical ? 0.7 : 0.8)), rise: 16, body: lines.join('\\N')}));
+      events.push(...easedEvents({layer: 1, style: 'Text', start, inSeconds: inS, holdSeconds: hold, outSeconds: outS, x: M, y: Math.round(H * (vertical ? 0.3 : 0.8)), rise: 16, body: lines.join('\\N')}));
     }
   }
+  // Captions ride on the top layer, above every graphic and canvas overlay.
+  events.push(...captions.events);
   if (!events.length) return null;
   return ['[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'WrapStyle: 0', 'ScaledBorderAndShadow: yes', '',
-    '[V4+ Styles]', 'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding', ...styles, '',
+    '[V4+ Styles]', 'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding', ...styles, ...captions.styles, '',
     '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text', ...events, ''].join('\n');
 }
 
 const timelineHash = timeline => createHash('sha256').update(JSON.stringify(timeline)).digest('hex');
 
 module.exports = {
-  SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, CANVAS_TEMPLATES, OP_TYPES, SKILL,
+  SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, CANVAS_TEMPLATES, OP_TYPES, SKILL, CAPTION_CLEARS,
   canvasData, canvasMinimumSeconds, parseValue, parseYear, finishFor,
   pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, applyOp, spliceScene, validateTimeline,
   graphicsAss, timelineHash, shortHash, graphicDwellSeconds,

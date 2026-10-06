@@ -129,6 +129,21 @@ Rather than presenting untested upstream features as ready, the first release re
 - Quota: NexLev documents a monthly API request quota per plan (published figures at review time: 200 requests/month on Pro and 5,000/month on the n8n API plan). Treat every call as metered: reserve quota before calling, cache results with retrieval dates, no automatic retries.
 - Boundary: NexLev revenue/RPM and audience figures are third-party estimates, not owner analytics; label them as estimates and never present them as facts. Transcripts are research input for learning structure and pacing; never reuse wording. Review NexLev's terms before enabling the adapter.
 
+### Jakeschincariol/youtube-agent-skill (0.14)
+
+- Source: <https://github.com/Jakeschincariol/youtube-agent-skill>, reviewed at `a2feb2104981a375ffd4f87ee04f4f5344ac43c6` (2026-09-16). License: MIT (copy kept at `vendor/youtube-agent-skill/LICENSE`).
+- Copied unchanged: `skills/yt-script/hooks.json` → `vendor/youtube-agent-skill/hooks.json` (21 hook formulas with their match patterns), loaded by `craft.js`.
+- Ported, not copied: `hookscore.py`, `title.py`, `chapters.py`, `swipe.py` and `retention.py` were rewritten in `craft.js`. Tests check the hook scorer and the title linter return the Python originals' numbers on the same inputs. Our changes: chapters add scene and paragraph-break evidence and skip the first and last three sentences; the outlier median comes from recent uploads only; retention cliffs are mapped to our narration; the Shorts rules of `yt-shorts/SKILL.md` became an executable finder.
+- Restated: the eleven `yt-*` skills and `templates/voice.md` as 14 draft skills in `skills/youtube-agent.json`; the voice profile became the family writing voice.
+- Not used: `deadair.py`, any transcript or comment fetching, anything that publishes. The plugin itself is not installed.
+
+### heygen-com/hyperframes (0.14)
+
+- Source: <https://github.com/heygen-com/hyperframes>, reviewed at `6308727b85726433e6a1e148b608d8cb11085114` (2026-10-06). License: Apache-2.0.
+- Read: the faceless-explainer, hyperframes-creative, hyperframes-core, embedded-captions and hyperframes-audio skills and `packages/core/src/audioCarve.ts` (`carveProfile`). Details in `research/hyperframes-and-youtube-agent-skill.md`.
+- No code copied. Restated as 17 draft skills in `skills/hyperframes.json`; applied in our own code as smooth easing in the canvas templates, the caption rail, caption grouping and the caption keep-out band.
+- Not used: the HTML/GSAP renderer, its CLI and plugin, the Web Audio effect graph. P08 will rebuild the voiceover carve with FFmpeg filters.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).

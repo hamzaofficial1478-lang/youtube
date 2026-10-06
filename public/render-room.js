@@ -10,7 +10,7 @@ function renderBusy() { const renders = state?.renders; return !!renders && (ren
 function renderPerson() { try { return localStorage.getItem('control-room-person') || ''; } catch { return ''; } }
 function renderRemember(name) { try { if (name) localStorage.setItem('control-room-person', name); } catch { /* optional */ } }
 const renderNameField = (label = 'Your name') => `<label>${label}<input name="person" required minlength="2" maxlength="80" autocomplete="name" value="${esc(renderPerson())}"></label>`;
-const renderClock = seconds => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, '0')}`;
+const renderClock = seconds => { const t = Math.round(seconds); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 
 function editingRoomView(family) {
   const renders = state.renders, contents = renders.contents.filter(item => item.familyId === family.id);

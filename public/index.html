@@ -46,6 +46,15 @@
         <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="8000" step="1" value="6000"></label>
         <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="8000" step="1" value="4000"></label>
       </div>
+      <details class="writing-voice"><summary>Writing voice <span class="hint">Optional. Hermes writes in it; words the channel never uses block a script candidate.</span></summary>
+        <div class="form-grid">
+          <label class="full">Who one video talks to <span class="hint">One person, named properly, not "viewers".</span><textarea name="wvAudience" maxlength="400" rows="2" placeholder="e.g. A first-time home baker whose loaves come out dense and who has watched ten recipe videos already."></textarea></label>
+          <label>Words the channel never uses <span class="hint">One per line or comma-separated (40 max).</span><textarea name="wvNever" rows="3" maxlength="2000" placeholder="unlock&#10;game-changer&#10;let's dive in"></textarea></label>
+          <label>The channel's own phrases <span class="hint">One per line (20 max).</span><textarea name="wvOwn" rows="3" maxlength="2000"></textarea></label>
+          <label class="full">Claims the channel will not make <span class="hint">One per line: numbers it cannot show, results that are not its own.</span><textarea name="wvRefused" rows="2" maxlength="4200"></textarea></label>
+          <label class="full">Format notes <span class="hint">How a video opens, intro or none, tone.</span><textarea name="wvFormat" rows="2" maxlength="600"></textarea></label>
+        </div>
+      </details>
       <p class="note">The first locale is the primary master. Add only the optional language channels this family actually needs. YouTube account connections will be added later.</p>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="family-dialog">Cancel</button><button type="submit" class="button primary">Save family</button></div>

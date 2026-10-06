@@ -17,6 +17,7 @@ const {SceneRoom}=require('./scene-room');
 const {RenderRoom}=require('./render-room');
 const {EditingRoom}=require('./editing-room');
 const {SkillsEngine}=require('./skills');
+const craft=require('./craft');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
@@ -70,6 +71,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(voiceAudio){const audition=store.voiceAudition(voiceAudio[1]),integrity=store.verifyVoiceArtifact(audition);if(!integrity.ok)throw new InputError(integrity.reason||'Voice artifact file is unavailable.',404);const {filename,stat}=integrity,range=req.headers.range;if(range){const match=range.match(/^bytes=(\d+)-(\d*)$/);if(!match)throw new InputError('Invalid audio byte range.',416);const start=Number(match[1]),end=match[2]?Number(match[2]):stat.size-1;if(!(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>=start&&end<stat.size))throw new InputError('Audio byte range is outside the artifact.',416);res.writeHead(206,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${stat.size}`,'Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(filename,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Length':stat.size,'Cache-Control':'no-store'});return fs.createReadStream(filename).pipe(res);}
         const renderFile=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(video|sheet|manifest)$/);
         if(renderFile){const {file,mime,size}=renderRoom.file(renderFile[1],renderFile[2]);const range=req.headers.range;if(renderFile[2]==='video'&&range){const match=range.match(/^bytes=(\d*)-(\d*)$/);if(!match||(!match[1]&&!match[2]))throw new InputError('Invalid video byte range.',416);let start=match[1]?Number(match[1]):Math.max(0,size-Number(match[2])),end=match[1]&&match[2]?Math.min(Number(match[2]),size-1):size-1;if(!(start>=0&&start<=end&&end<size))throw new InputError('Video byte range is outside the file.',416);res.writeHead(206,{'Content-Type':mime,'Content-Range':`bytes ${start}-${end}/${size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(file,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Accept-Ranges':renderFile[2]==='video'?'bytes':'none','Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
+        const captionFile=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/captions\.srt$/);
+        if(captionFile){const {text,filename}=editingRoom.captionsSrt(captionFile[1]);res.writeHead(200,{'Content-Type':'application/x-subrip; charset=utf-8','Content-Disposition':`attachment; filename="captions.srt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
         const sceneBoard=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/board$/);
         if(sceneBoard)return json(res,200,sceneRoom.boardSummary(sceneBoard[1]));
         if(pathname==='/api/scene-candidates')return json(res,200,sceneRoom.candidates(String(url.searchParams.get('contentId')||''),String(url.searchParams.get('shotId')||'')));
@@ -122,6 +125,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/render-pins'&&req.method==='POST')return json(res,200,renderRoom.pin(body));
         const editCreate=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/edits$/);
         if(editCreate&&req.method==='POST')return json(res,200,await editingRoom.generate(editCreate[1],body));
+        const retentionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/retention$/);
+        if(retentionRoute&&req.method==='POST')return json(res,200,editingRoom.retention(retentionRoute[1],body));
+        if(pathname==='/api/craft/check'&&req.method==='POST'){const locale=typeof body.locale==='string'?body.locale.slice(0,35):'en',field=(value,max)=>typeof value==='string'?value.slice(0,max):'';return json(res,200,{hook:craft.scoreHook(field(body.hook,1000),{locale}),packaging:craft.lintPackaging({title:field(body.title,300),thumbnailText:field(body.thumbnailText,200),locale})});}
         const editAction=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(ops|undo)$/);
         if(editAction&&req.method==='POST')return json(res,200,editAction[2]==='ops'?editingRoom.applyOps(editAction[1],body):editingRoom.undo(editAction[1],body));
         const renderQueue=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/renders$/);

@@ -10,6 +10,7 @@ const {
   NexLevClient, YouTubePublicClient, normVideo, normChannel, transcriptText, transcriptSummary, firstArray,
   median, copiedPhrases, connectorCurrent, connectorReference,
 } = require('./intel-sources');
+const {outlierMultiples} = require('./craft');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -813,7 +814,16 @@ class CompetitorIntelligence {
           let detailed = false;
           return this.db.prepare('SELECT * FROM competitor_scans WHERE family_id=? ORDER BY created_at DESC, rowid DESC LIMIT 10').all(family.id).map(row => {
             const scan = this.publicScan(row);
-            if (scan.result && !detailed) { detailed = true; return scan; }
+            if (scan.result && !detailed) {
+              detailed = true;
+              // Display-only: each NexLev video as a multiple of its channel's median and the hook formula its title uses.
+              scan.result.channels = scan.result.channels.map(channel => {
+                if (!channel.nexlev) return channel;
+                const videos = [...new Map([...(channel.nexlev.outliers || []), ...(channel.nexlev.videos || [])].map(video => [video.videoId, video])).values()];
+                return {...channel, craft: outlierMultiples(videos, {baseline: channel.nexlev.videos || []})};
+              });
+              return scan;
+            }
             if (scan.result) scan.result = {retrievedAt: scan.result.retrievedAt, usage: scan.result.usage, channels: scan.result.channels.map(channel => ({ref: channel.ref, competitorKey: channel.competitorKey, status: channel.status, errors: channel.errors}))};
             return scan;
           });
