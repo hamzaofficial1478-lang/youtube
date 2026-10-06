@@ -1,4 +1,4 @@
-# Editing Room (P06, v0.12.0)
+# Editing Room (P06 and P06b, v0.13.0)
 
 Room 05 in the Production panel. The **editing brain** turns the approved visual board (Room 04), the
 approved narration (Voice Room) and the family style (Room 03) into an **edit**. Every cut, hold, camera
@@ -124,11 +124,63 @@ build such as Gyan.FFmpeg has all of them.
 **Fonts.** The ASS layer asks for the style's fonts by name. A font that is not installed on this PC
 falls back to a system font. Install the style's fonts for the exact look.
 
-## 6. Not built yet (honest list)
+## 6. Animated graphics (P06b, v0.13)
 
-- Canvas/Chrome-rendered motion templates (charts, maps, hand-drawn reveals, stick-figure animation).
-  The research and skills exist (`motion.*`); the renderer comes next. Today's graphics are text-based
-  templates drawn with libass.
+Six animated templates are drawn frame by frame in a canvas in your locally installed browser. Microsoft
+Edge comes with Windows; Google Chrome also works, or set `MOTION_BROWSER`. No npm package or download is
+needed, and nothing leaves your PC.
+
+| Graphic | Proposed when the script says | Data, one entry per line | Skill |
+|---|---|---|---|
+| Bar chart | three or more numbers in the same unit ("salt 18%, grain 34%, tokens 60%") | `label = value` | `motion.chart-build` |
+| Line chart | three or more numbers, each with a year ("by 1900 80%, by 1970 60%") | `label = value` | `motion.chart-build` |
+| Timeline | three or more different years in one scene | `year = event` (BC/AD allowed) | `motion.timeline-build` |
+| List build | "three reasons: a, b and c", or sentences starting First / Second / Third | one item per line | `motion.list-build` |
+| Comparison | "X versus Y" | two lines, `Name: detail` | `motion.comparison-split` |
+| Process diagram | a chain such as "A leads to B, which turns into C" | one step per line | `motion.diagram-build` |
+
+- **Proposals only.** The data always comes from the script; the brain never invents a number, and every
+  proposal tells you to check it.
+- **Your own graphics.** Use **+ Add a graphic** to add one where the brain proposed nothing (text or
+  animated). Each line is validated:
+  - a chart needs one unit;
+  - a timeline needs real years;
+  - a comparison has exactly two sides.
+- **One graphic at a time.** A new graphic may not overlap an accepted one.
+- **How they move:**
+  - bars grow while their numbers count up;
+  - a line draws itself by arc length;
+  - timeline events pop in order, on a proportional scale;
+  - list items arrive one by one;
+  - comparison sides enter left then right;
+  - diagram steps pop and their arrows draw.
+
+  All use the family palette and fonts, fade in and fade out over 0.3 s, and lay a full-frame panel over
+  the footage while on screen.
+- **Finish.** Documentary styles get a clean finish. Sketch and hand-drawn styles get a hand-drawn finish:
+  wobbly double strokes from a seeded generator, a handwriting font and paper grain.
+- **Deterministic.** The templates (`motion-templates.js`) never use randomness, clocks or timers. Every
+  frame is a pure function of time, so the same edit gives the same frames.
+- **Safe browser use.** `motion.js` starts the browser headless with a throwaway profile, networking
+  blocked (`--host-resolver-rules`) and no extensions. It injects only our own template script into a
+  blank page and takes pixels from the canvas.
+- **How they render.** Frames are packed into a lossless RGBA clip and laid over the edit at their start
+  time, under the text layer. Their dark panel counts as a planned dark moment in the QC, and the render
+  manifest records the browser version and a hash of every graphic's frames.
+- **Readiness.** The readiness check in Room 05 now also checks the browser: it must be found and must
+  draw the same frame twice with identical pixels. An edit with accepted animated graphics will not
+  render until that check passes. FFmpeg must also have the `overlay` filter and the `png` encoder (a full
+  build has both).
+
+Verified on this PC with Microsoft Edge 154 and FFmpeg 8.1.2:
+- identical frames on every run;
+- a Shorts edit with an animated timeline renders frame-exact and byte-identical twice;
+- a bar chart added from the page renders with every QC check passing.
+
+## 7. Not built yet (honest list)
+
+- Map routes (they need public-domain map data and an adapter) and stick-figure animation (it needs the
+  sketch renderer of the Stickman style). Hand-drawn reveals of authored drawings are not built either.
 - Music, sound effects and ducking (P08), and captions (P07).
 - AI video, maps and diagrams as visual sources (adapters not built).
 - Analysing a stock clip's motion to find its best moment (today it skips the opening second).

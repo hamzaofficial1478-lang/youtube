@@ -52,7 +52,7 @@ Renders run on your computer one at a time. You can cancel a queued or running r
 
 ## Edit renders (0.12)
 
-The Editing Room renders an edit revision through the same pipeline: one segment per clip with its own hold, eased camera move, start point and speed; lossless joins for runs of hard cuts; `xfade` for soft transitions; one ASS graphics layer through libass; a fade-out ending. Every segment is converted to one colour profile (BT.709, TV range) so joined chunks never change format mid-stream. Title cards and the fade-out are planned dark moments in the black-frame check. See EDITING-ROOM.md. The readiness check now also requires `settb`, `setparams`, `fade`, `ass` and `silencedetect`.
+The Editing Room renders an edit revision through the same pipeline: one segment per clip with its own hold, eased camera move, start point and speed; lossless joins for runs of hard cuts; `xfade` for soft transitions; one ASS graphics layer through libass; a fade-out ending. Every segment is converted to one colour profile (BT.709, TV range) so joined chunks never change format mid-stream. Title cards and the fade-out are planned dark moments in the black-frame check. See EDITING-ROOM.md. The readiness check now also requires `settb`, `setparams`, `fade`, `ass`, `silencedetect` and `overlay` and the `png` encoder. Since 0.13 it also checks the local browser used for animated graphics (Microsoft Edge or Google Chrome): found, version recorded and the same frame drawn twice with identical pixels. The FFmpeg verdict does not depend on it; only edits with animated graphics need it.
 
 ## Where files are kept
 

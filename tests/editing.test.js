@@ -393,3 +393,122 @@ test('HTTP edit routes need the local token and expose the room in state', async
   assert.equal((await send(`/api/edit-revisions/${id}/ops`, {editedBy: 'Owner', ops: [{type: 'set-hero'}]})).status, 404);
   assert.equal((await send(`/api/edit-revisions/${id}/undo`, {editedBy: 'Owner'})).status, 404);
 });
+
+// ---------------------------------------------------------------- P06b animated (canvas) graphics
+
+const {MotionRenderer, inspectBrowser, findBrowser} = require('../motion');
+const noBrowser = findBrowser() ? false : 'No Chromium browser (Edge or Chrome) on this machine';
+const FILLER = 'This is a calm filler line about the distant past and its people.';
+function proposalsFor(texts, spec = SPEC) {
+  const all = [...texts, FILLER, FILLER, FILLER, FILLER, FILLER];
+  let t = 0;
+  const sentences = all.map((text, index) => { const words = text.split(' ').length; const item = {n: index + 1, text, words, startSeconds: t, durationSeconds: Math.max(2.5, words * 0.45)}; t += item.durationSeconds; return item; });
+  const shot = id => ({id, label: id.toUpperCase(), motion: 'ken-burns', source: 'stock-image'});
+  const scenes = [{id: 's1', label: 'S01', purpose: 'explain', onScreenText: '', sentenceStart: 1, sentenceEnd: texts.length, shots: [shot('a'), shot('b')]}, {id: 's2', label: 'S02', purpose: 'close', onScreenText: '', sentenceStart: texts.length + 1, sentenceEnd: all.length, shots: [shot('c'), shot('d'), shot('e')]}];
+  const assets = Object.fromEntries('abcde'.split('').map(id => [id, {assetId: id, mediaType: 'image'}]));
+  return B.autoEdit({fps: 30, narrationSeconds: t, sentences, scenes, assets, spec});
+}
+
+test('animated graphics come only from the script, validate line by line and follow the style finish', () => {
+  // Data parsing: labels, values, one unit per chart, years before Christ, two-sided comparisons.
+  assert.deepEqual(B.canvasData('bar-chart', 'Trades', ['Salt = 18%', 'Grain = 34%', 'Tokens = 60%']).items.map(item => [item.label, item.value, item.suffix]), [['Salt', 18, '%'], ['Grain', 34, '%'], ['Tokens', 60, '%']]);
+  assert.deepEqual(B.canvasData('bar-chart', '', ['A = $1,200.50', 'B = $3', 'C = $40']).items[0], {label: 'A', value: 1200.5, prefix: '$', suffix: '', decimals: 2});
+  assert.throws(() => B.canvasData('bar-chart', '', ['Salt = 18%', 'Grain = 34 people', 'Tokens = 60%']), /same unit/);
+  assert.throws(() => B.canvasData('bar-chart', '', ['Salt 18%', 'a = 1', 'b = 2']), /label = value/);
+  assert.throws(() => B.canvasData('timeline', '', ['1347 = a', '1351 = b']), /3-7 lines/);
+  assert.deepEqual(B.canvasData('timeline', '', ['3200 BC = Tokens', '600 BC = Coins', '1024 = Paper']).items.map(item => [item.year, item.display]), [[-3200, '3200 BC'], [-600, '600 BC'], [1024, '1024']]);
+  assert.deepEqual(B.canvasData('comparison', '', ['Clay token: kept by a temple', 'Coin']).items, [{label: 'Clay token', detail: 'kept by a temple'}, {label: 'Coin', detail: ''}]);
+  // Proposals, one detector at a time.
+  const lines = (texts, template) => proposalsFor(texts).graphics.find(item => item.template === template)?.lines;
+  assert.deepEqual(lines(['Salt made up 18% of trades, grain 34% and tokens 60%.'], 'bar-chart'), ['Salt = 18%', 'grain = 34%', 'tokens = 60%']);
+  assert.deepEqual(lines(['By 1900 cash was 80% of payments, by 1970 it was 60% and by 2020 just 20%.'], 'line-chart'), ['1900 = 80%', '1970 = 60%', '2020 = 20%']);
+  assert.deepEqual(lines(['In 3200 BC clay tokens recorded debts.', 'By 600 BC stamped coins appeared in Lydia.', 'In 1024 China printed the first paper money.'], 'timeline').map(line => line.split(' = ')[0]), ['3200 BC', '600 BC', '1024']);
+  assert.deepEqual(lines(['There are three reasons it worked: trust, records and portability.'], 'list'), ['trust', 'records', 'portability']);
+  assert.equal(lines(['First, anyone could check the mark.', 'Second, temples kept the records safe.', 'Third, a token could travel between villages.'], 'list').length, 3);
+  assert.deepEqual(lines(['Clay tokens versus metal coins tell the story.'], 'comparison'), ['Clay tokens', 'metal coins']);
+  assert.deepEqual(lines(['A debt leads to a mark, which turns into a token that becomes money.'], 'flow'), ['A debt', 'a mark', 'a token', 'money']);
+  const timeline = proposalsFor(['In 3200 BC clay tokens recorded debts.', 'By 600 BC stamped coins appeared in Lydia.', 'In 1024 China printed the first paper money.']);
+  assert.ok(!timeline.graphics.some(item => item.template === 'date'), 'a timeline replaces the single date stamps of its scene');
+  const chart = timeline.graphics.find(item => item.template === 'timeline');
+  assert.deepEqual([chart.status, chart.renderer, chart.finish, chart.origin], ['proposed', 'canvas', 'clean', 'brain']);
+  assert.match(chart.reason, /Check each event/);
+  assert.equal(proposalsFor(['In 3200 BC clay tokens recorded debts.', 'By 600 BC stamped coins appeared in Lydia.', 'In 1024 China printed the first paper money.'], {...SPEC, renderer: {adapter: 'ffmpeg-sketch'}}).graphics.find(item => item.template === 'timeline').finish, 'hand-drawn');
+  assert.equal(proposalsFor(['Salt made up 18% of trades, salt 34% and salt 60%.']).graphics.some(item => item.template === 'bar-chart'), false, 'repeated labels are not a chart');
+  // Owner edits of a canvas graphic are validated; text graphics stay on the ASS layer only.
+  const accepted = B.applyOp(timeline, {type: 'set-graphic', graphicId: chart.id, status: 'accepted', title: 'From clay to coin'}, {spec: SPEC}).timeline;
+  assert.equal(accepted.graphics.find(item => item.id === chart.id).title, 'From clay to coin');
+  assert.throws(() => B.applyOp(timeline, {type: 'set-graphic', graphicId: chart.id, lines: ['1347 = only one']}, {spec: SPEC}), /3-7 lines/);
+  assert.equal(B.graphicsAss(accepted, SPEC), null, 'canvas graphics are not drawn by libass');
+  assert.equal(B.critique(accepted, SPEC).stats.graphicsAccepted, 1);
+  // Adding a graphic: validated, accepted at once, never overlapping another.
+  const added = B.applyOp(accepted, {type: 'add-graphic', template: 'flow', startSeconds: 12, seconds: 4, title: 'How it spread', lines: ['A port', 'A ship', 'A city']}, {spec: SPEC}).timeline;
+  const flow = added.graphics.find(item => item.origin === 'owner');
+  assert.deepEqual([flow.id, flow.status, flow.renderer, flow.start, flow.frames], ['gr_owner_1', 'accepted', 'canvas', 360, 120]);
+  assert.throws(() => B.applyOp(added, {type: 'add-graphic', template: 'quote', startSeconds: 13, seconds: 2, lines: ['A clash']}, {spec: SPEC}), /overlap the flow/);
+  assert.throws(() => B.applyOp(added, {type: 'add-graphic', template: 'map', startSeconds: 25, seconds: 2, lines: ['x']}, {spec: SPEC}), /Choose a graphic/);
+  assert.throws(() => B.applyOp(added, {type: 'add-graphic', template: 'list', startSeconds: 25, seconds: 2, lines: ['only one']}, {spec: SPEC}), /3-6 lines/);
+  // Render plan: canvas clips are inputs after the narration and are overlaid at their start time.
+  const files = Object.fromEntries(added.clips.map(clip => [clip.id, `${clip.id}.src`]));
+  const plan = R.planTimeline({timeline: added, files, narration: {file: 'n.wav', durationSeconds: added.narrationSeconds}, format: 'long-form', workDir: '/w', outFile: '/w/o.mp4', overlays: [{file: 'graphic-1.mov', start: 360, frames: 120}]});
+  const args = plan.final.args.join(' ');
+  assert.match(args, /-i n\.wav -i graphic-1\.mov/);
+  assert.match(args, /setpts=PTS-STARTPTS\+12\/TB,format=rgba\[g0\];\[[a-z0-9]+\]\[g0\]overlay=x=0:y=0:eof_action=pass:enable='between\(t,12,16\)'/);
+  assert.equal(plan.overlays, 1);
+});
+
+test('the canvas renderer draws identical frames every time, at the requested size', {skip: noBrowser}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const report = await inspectBrowser();
+  assert.equal(report.passed, true, JSON.stringify(report.issues));
+  assert.match(report.sha256, /^[a-f0-9]{64}$/);
+  const graphic = {template: 'flow', data: B.canvasData('flow', 'How a promise became money', ['A debt', 'A mark', 'A token', 'Money']), palette: {bg: '#0E0E0E', ink: '#F2EEE6', accent: '#C9A227'}, fonts: {heading: 'Georgia', body: 'Arial', hand: 'Segoe Print'}, finish: 'hand-drawn', width: 320, height: 180, fps: 10, duration: 2};
+  const renderer = await new MotionRenderer().start();
+  let first, second;
+  try {
+    first = await renderer.render({...graphic, outDir: path.join(dir, 'a')});
+    second = await renderer.render({...graphic, outDir: path.join(dir, 'b')});
+    await assert.rejects(renderer.frame({...graphic, template: 'no-such-template', t: 0}), /Motion template error/);
+  } finally { await renderer.close(); }
+  assert.equal(first.frames, 20);
+  assert.equal(first.sha256, second.sha256, 'same graphic, same pixels');
+  const png = fs.readFileSync(path.join(dir, 'a', 'f00019.png'));
+  assert.deepEqual([png.readUInt32BE(16), png.readUInt32BE(20)], [320, 180]);
+  assert.notEqual(fs.readFileSync(path.join(dir, 'a', 'f00000.png')).equals(png), true, 'the graphic animates');
+});
+
+test('an edit with an animated timeline renders through the local browser and FFmpeg, identically twice', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 30});
+  const {editing, renders, content, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  const r1 = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const fps = r1.timeline.fps, startSeconds = 6;
+  const clashing = r1.timeline.graphics.filter(item => item.status === 'accepted' && item.start / fps < startSeconds + 5 && (item.start + item.frames) / fps > startSeconds);
+  const r2 = editing.applyOps(r1.id, {editedBy: 'Owner', ops: [
+    ...clashing.map(item => ({type: 'set-graphic', graphicId: item.id, status: 'rejected'})),
+    {type: 'add-graphic', template: 'timeline', startSeconds, seconds: 5, title: 'From clay to coin', lines: ['3200 BC = Clay tokens', '600 BC = First coins', '1024 = Paper money']},
+  ]});
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  assert.equal(report.passed, true, JSON.stringify(report.issues));
+  assert.equal(report.motion.passed, true, JSON.stringify(report.motion.issues));
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the animated graphics.'});
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r2.id});
+  const done = await renders.processNext();
+  assert.equal(done?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.equal(result.qc.find(item => item.name === 'duration').passed, true, JSON.stringify(result.qc));
+  assert.equal(result.qc.find(item => item.name === 'black frames').passed, true, JSON.stringify(result.qc));
+  const manifest = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
+  assert.equal(manifest.inputs.edit.canvas.graphics.length, 1);
+  assert.equal(manifest.inputs.edit.canvas.graphics[0].template, 'timeline');
+  assert.match(manifest.inputs.edit.canvas.graphics[0].framesSha256, /^[a-f0-9]{64}$/);
+  assert.ok(manifest.commands.every(command => !command.args.join(' ').includes(dataRoot)), 'command plans do not leak local paths');
+  // A frame inside the timeline window shows the graphic's dark panel, not the bright test footage.
+  const video = path.join(dataRoot, result.video.relativePath), still = path.join(dataRoot, 'panel.png');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String(startSeconds + 4), '-i', video, '-frames:v', '1', '-vf', 'scale=1:1:flags=area,format=gray', '-f', 'rawvideo', '-y', still]);
+  const luma = fs.readFileSync(still)[0];
+  assert.ok(luma < 70, `the timeline panel is on screen (average luma ${luma})`);
+  const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r2.id});
+  await renders.processNext();
+  assert.equal(JSON.parse(renders.row(again.id).result).video.sha256, result.video.sha256, 'same edit, same browser and build: byte-identical');
+});

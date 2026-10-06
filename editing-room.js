@@ -267,6 +267,12 @@ class EditingRoom {
       const readiness = this.renders.latestReadiness();
       requireValue(readiness?.filters?.ass === true, 'Graphics need the FFmpeg "ass" filter. Run the readiness check again (Room 05) and pin the build.', 409);
     }
+    const canvas = payload.graphics.filter(item => item.status === 'accepted' && B.CANVAS_TEMPLATES.includes(item.template));
+    if (canvas.length) {
+      const readiness = this.renders.latestReadiness();
+      requireValue(readiness?.motion?.passed === true, 'Charts, timelines, lists, comparisons and diagrams are drawn in a local browser. Run the readiness check again (Room 05); it must find Microsoft Edge or Google Chrome.', 409);
+      for (const graphic of canvas) { try { B.canvasData(graphic.template, graphic.title, graphic.lines); } catch (error) { throw new InputError(`${graphic.template} at ${(graphic.start / payload.fps).toFixed(1)} s: ${error.message}`, 409); } }
+    }
     const files = Object.fromEntries(payload.clips.map(clip => [clip.id, {relativePath: state.inputs.assets[clip.shotId].relativePath, sha256: state.inputs.assets[clip.shotId].sha256}]));
     return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
   }

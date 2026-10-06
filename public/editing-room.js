@@ -7,7 +7,9 @@
 const EDIT_SEVERITY = {critical: ['Critical', 'orange'], suggestion: ['Suggestion', 'gray'], nitpick: ['Polish', 'gray']};
 const EDIT_VERDICT = {strong: 'green', acceptable: 'green', revise: 'orange', fail: 'orange'};
 const EDIT_MOVE_NAMES = {'push-in': 'Push in', 'pull-out': 'Pull out', 'pan-right': 'Pan right', 'pan-left': 'Pan left', 'push-detail': 'Detail punch-in', static: 'Static'};
-const EDIT_TEMPLATE_NAMES = {'scene-text': 'On-screen text', 'title-card': 'Title card', stat: 'Stat reveal', date: 'Date stamp', quote: 'Quote card'};
+const EDIT_TEMPLATE_NAMES = {'scene-text': 'On-screen text', 'title-card': 'Title card', stat: 'Stat reveal', date: 'Date stamp', quote: 'Quote card', 'bar-chart': 'Bar chart', 'line-chart': 'Line chart', timeline: 'Timeline', list: 'List build', comparison: 'Comparison', flow: 'Process diagram'};
+// How each animated (canvas) graphic keeps its data: one entry per line.
+const EDIT_CANVAS_FORMAT = {'bar-chart': 'One bar per line: label = value (3-9 bars, one unit), e.g. Grain = 34%', 'line-chart': 'One point per line: label = value (3-12 points), e.g. 1970 = 60%', timeline: 'One event per line: year = event (3-7), e.g. 600 BC = First stamped coins', list: 'One item per line (3-6 items)', comparison: 'Two lines, one per side: Name: short detail', flow: 'One step per line, in order (3-6 steps)'};
 const editSeconds = (frames, fps) => (frames / fps).toFixed(1);
 function editFor(contentId) { return (state.editing?.contents || []).find(item => item.contentId === contentId) || null; }
 const editSkill = item => item.skill ? `<span class="chip ${item.skillApproved ? 'green' : 'gray'}" title="${item.skillApproved ? 'You approved this skill' : 'This skill is still a draft on the Skills page'}">${esc(item.skill)}</span>` : '<span class="chip gray">your choice</span>';
@@ -50,9 +52,10 @@ function editFindings(edit, stale) {
 }
 
 function editGraphics(tl, stale) {
-  if (!tl.graphics.length) return '<h3 class="intel-subhead">Motion graphics</h3><p class="muted">The narration has no number, date, quote or chapter text that needs a graphic.</p>';
+  const add = stale ? '' : `<div class="card-actions">${action('+ Add a graphic', 'tl-graphic-add', '', 'secondary')}</div>`;
+  if (!tl.graphics.length) return `<h3 class="intel-subhead">Motion graphics</h3><p class="muted">The narration has no number, date, quote, list or chapter text that needs a graphic.</p>${add}`;
   const statusBadge = status => badge(status === 'accepted' ? 'On screen' : status === 'rejected' ? 'Rejected' : 'Proposed', status === 'accepted' ? 'green' : status === 'rejected' ? 'gray' : 'orange');
-  return `<h3 class="intel-subhead">Motion graphics · only accepted graphics are rendered</h3><div class="history-list">${tl.graphics.map(item => `<div class="history-row edit-graphic-row"><span class="job-dot ${item.status === 'accepted' ? 'completed' : ''}"></span><div><strong>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${renderClock(item.start / tl.fps)} · ${editSeconds(item.frames, tl.fps)} s ${statusBadge(item.status)} ${editSkill(item)}</strong><small>“${esc(item.lines.join(' / '))}”${item.accent ? ` · accent: ${esc(item.accent)}${item.accentSource ? ` (${esc(item.accentSource)})` : ''}` : ''}<br>${esc(item.reason)}</small>${stale ? '' : `<div class="card-actions">${item.status !== 'accepted' ? action('Accept', 'tl-graphic-accept', item.id, 'text-button') : ''}${item.status !== 'rejected' ? action('Reject', 'tl-graphic-reject', item.id, 'text-button danger') : ''}${action('Edit', 'tl-graphic', item.id, 'text-button')}</div>`}</div></div>`).join('')}</div>`;
+  return `<h3 class="intel-subhead">Motion graphics · only accepted graphics are rendered</h3><div class="history-list">${tl.graphics.map(item => `<div class="history-row edit-graphic-row"><span class="job-dot ${item.status === 'accepted' ? 'completed' : ''}"></span><div><strong>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${renderClock(item.start / tl.fps)} · ${editSeconds(item.frames, tl.fps)} s ${statusBadge(item.status)} ${editSkill(item)}</strong><small>“${esc(item.lines.join(' / '))}”${item.accent ? ` · accent: ${esc(item.accent)}${item.accentSource ? ` (${esc(item.accentSource)})` : ''}` : ''}<br>${esc(item.reason)}</small>${stale ? '' : `<div class="card-actions">${item.status !== 'accepted' ? action('Accept', 'tl-graphic-accept', item.id, 'text-button') : ''}${item.status !== 'rejected' ? action('Reject', 'tl-graphic-reject', item.id, 'text-button danger') : ''}${action('Edit', 'tl-graphic', item.id, 'text-button')}</div>`}</div></div>`).join('')}</div>${add}`;
 }
 
 function editClips(tl, stale) {
@@ -121,10 +124,20 @@ function editAction(command, id, button) {
       </div><label class="checkbox-label"><input type="checkbox" name="hero" ${clip.hero ? 'checked' : ''}>Hero shot (the brain holds heroes longer when it redoes the scene).</label>`;
     return editDialog('clip', `Change ${clip.label}`, 'OWNER EDIT · NEW REVISION', body, 'Save change', {clipId: clip.id, revisionId: edit.id});
   }
+  if (command === 'tl-graphic-add') {
+    const options = Object.entries(EDIT_TEMPLATE_NAMES).map(([key, label]) => `<option value="${key}">${esc(label)}${Object.hasOwn(EDIT_CANVAS_FORMAT, key) ? ' (animated)' : ''}</option>`).join('');
+    const body = `<p class="hint">Add a graphic the brain did not propose. It goes on screen at once and may not overlap another graphic. Animated graphics are drawn in your local browser at render time.</p><div class="form-grid">
+      <label>Graphic<select name="template">${options}</select></label><label>Starts at (seconds)<input name="start" type="number" step="0.01" min="0" max="${(tl.totalFrames / tl.fps).toFixed(2)}" value="0.00" required></label>
+      <label>On screen (seconds)<input name="seconds" type="number" step="0.01" min="0.8" value="5.00" required></label><label>Accent word (title cards)<input name="accent" maxlength="30"></label>
+      <label class="full">Title (animated graphics, optional)<input name="title" maxlength="80"></label>
+      <label class="full">Text or data<textarea name="lines" rows="6" maxlength="1500" required></textarea><span class="hint">${Object.entries(EDIT_CANVAS_FORMAT).map(([key, format]) => `${esc(EDIT_TEMPLATE_NAMES[key])}: ${esc(format)}`).join('<br>')}<br>Text graphics: 1-3 lines.</span></label></div>`;
+    return editDialog('graphic-add', 'Add a graphic', 'OWNER EDIT · NEW REVISION', body, 'Add graphic', {revisionId: edit.id});
+  }
   if (command === 'tl-graphic') {
     const item = tl.graphics.find(graphic => graphic.id === id);
     if (!item) return toast('That graphic is no longer in this edit.', true);
-    const body = `<p class="hint">${esc(item.reason)}</p><div class="form-grid"><label class="full">Text (one line per row, at most 3)<textarea name="lines" rows="3" maxlength="400">${esc(item.lines.join('\n'))}</textarea></label>
+    const canvas = Object.hasOwn(EDIT_CANVAS_FORMAT, item.template);
+    const body = `<p class="hint">${esc(item.reason)}</p><div class="form-grid">${canvas ? `<label class="full">Title (optional)<input name="title" maxlength="80" value="${esc(item.title || '')}"></label>` : ''}<label class="full">${canvas ? 'Data' : 'Text (one line per row, at most 3)'}<textarea name="lines" rows="${canvas ? 7 : 3}" maxlength="1500">${esc(item.lines.join('\n'))}</textarea>${canvas ? `<span class="hint">${esc(EDIT_CANVAS_FORMAT[item.template])}. Every number must come from the script or a cited source.</span>` : ''}</label>
       ${item.template === 'title-card' ? `<label>Accent word<input name="accent" maxlength="30" value="${esc(item.accent || '')}"><span class="hint">Exactly one word is drawn in the accent colour.</span></label>` : ''}
       <label>On screen (seconds)<input name="seconds" type="number" step="0.01" min="0.8" value="${(item.frames / tl.fps).toFixed(2)}"></label>
       <label>Status<select name="status">${['accepted', 'proposed', 'rejected'].map(status => `<option value="${status}" ${item.status === status ? 'selected' : ''}>${status === 'accepted' ? 'On screen' : status === 'proposed' ? 'Proposed' : 'Rejected'}</option>`).join('')}</select></label></div>`;
@@ -157,11 +170,14 @@ document.getElementById('edit-form').addEventListener('submit', event => {
       }
       if (form.elements.position) { const members = tl.clips.filter(item => item.sceneId === clip.sceneId), to = Number(value('position')); if (members[to]?.id !== clip.id) ops.push({type: 'reorder', sceneId: clip.sceneId, clipId: clip.id, toIndex: to}); }
       if (form.elements.hero.checked !== !!clip.hero) ops.push({type: 'set-hero', clipId: clip.id, hero: form.elements.hero.checked});
+    } else if (kind === 'graphic-add') {
+      ops.push({type: 'add-graphic', template: value('template'), startSeconds: Number(value('start')), seconds: Number(value('seconds')), title: value('title'), accent: value('accent') || undefined, lines: value('lines').split('\n').map(line => line.trim()).filter(Boolean)});
     } else if (kind === 'graphic') {
       const item = tl.graphics.find(graphic => graphic.id === data.graphicId);
       const lines = value('lines').split('\n').map(line => line.trim()).filter(Boolean);
       const op = {type: 'set-graphic', graphicId: item.id};
       if (lines.join('\n') !== item.lines.join('\n') || (form.elements.accent && value('accent') !== (item.accent || ''))) { op.lines = lines; if (form.elements.accent && value('accent')) op.accent = value('accent'); }
+      if (form.elements.title && value('title') !== (item.title || '')) op.title = value('title');
       if (form.elements.seconds.value !== form.elements.seconds.defaultValue) op.seconds = Number(value('seconds'));
       if (value('status') !== item.status) op.status = value('status');
       if (Object.keys(op).length > 2) ops.push(op);

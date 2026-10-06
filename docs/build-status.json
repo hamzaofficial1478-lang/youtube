@@ -247,9 +247,9 @@
         },
         {
           "id": "P06b",
-          "title": "Canvas motion-graphics and 2D animation renderer",
-          "status": "planned",
-          "remaining": "Render the motion.* templates that libass cannot draw (chart builds, map routes, diagram builds, hand-drawn reveals, stick-figure scenes) as deterministic Canvas2D frames in Edge over the DevTools Protocol, sandboxed, with stills-first QC and per-scene caching; then let the brain propose them where the script needs them."
+          "title": "Animated graphics: canvas charts, timelines, lists, comparisons and diagrams",
+          "status": "done",
+          "evidence": "Version 0.13 (2026-10-06): six deterministic Canvas2D templates (bar and line charts, timeline, list build, comparison, process diagram) with clean or hand-drawn finish, drawn in the local Microsoft Edge/Chrome over the DevTools Protocol (no npm packages, networking blocked) and overlaid on the edit as lossless RGBA clips. The editing brain proposes them only from the script's own data; owners edit the data line by line or add graphics. Browser readiness probe; manifest records browser and frame hashes. Full suite 165/165; a Shorts edit with an animated timeline renders byte-identically twice; a bar chart added from the page passed QC. Map routes and stick-figure animation remain."
         },
         {
           "id": "P07",

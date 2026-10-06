@@ -37,8 +37,10 @@ const MOVE_REASONS = Object.freeze({
   static: 'planned as a static hold',
 });
 const TRANSITIONS = Object.freeze(['cut', 'crossfade', 'dip-to-black']);
-const GRAPHIC_TEMPLATES = Object.freeze(['scene-text', 'title-card', 'stat', 'date', 'quote']);
-const GRAPHIC_PRIORITY = Object.freeze({'scene-text': 0, 'title-card': 0, quote: 1, stat: 2, date: 3});
+// Text templates are drawn by libass (graphicsAss); canvas templates by motion.js in a headless browser.
+const CANVAS_TEMPLATES = Object.freeze(['bar-chart', 'line-chart', 'timeline', 'list', 'comparison', 'flow']);
+const GRAPHIC_TEMPLATES = Object.freeze(['scene-text', 'title-card', 'stat', 'date', 'quote', ...CANVAS_TEMPLATES]);
+const GRAPHIC_PRIORITY = Object.freeze({'scene-text': 0, 'title-card': 0, timeline: 1, 'bar-chart': 1, 'line-chart': 1, list: 1, comparison: 1, flow: 1, quote: 1, stat: 2, date: 3});
 // Which skill each rule restates. Findings and decisions cite these IDs.
 const SKILL = Object.freeze({
   rhythm: 'doc.montage-beat-math', breathing: 'editing.change-cadence', onTheWord: 'editing.visual-on-the-word',
@@ -47,6 +49,7 @@ const SKILL = Object.freeze({
   retention: 'editing.retention-curve-defense', adjacency: 'editing.adjacent-diversity', slideshow: 'review.slideshow-risk-score',
   tells: 'review.boring-lazy-amateur-tells', graphics: 'motion.graphic-type-selector', stat: 'motion.stat-reveal',
   quote: 'motion.quote-card', titleCard: 'motion.title-cards-canvas', dwell: 'editing.text-dwell-formula',
+  chart: 'motion.chart-build', timeline: 'motion.timeline-build', list: 'motion.list-build', comparison: 'motion.comparison-split', diagram: 'motion.diagram-build',
   endings: 'editing.cut-justification-and-endings',
 });
 
@@ -150,10 +153,131 @@ function accentOf(textValue) {
   return {text: plain, accent: pick.replace(/[^\p{L}\p{N}'-]/gu, ''), accentSource: 'last content word'};
 }
 
+// ---------------------------------------------------------------- canvas graphic data
+// Canvas graphics keep their content as plain lines the owner can edit: "label = value" for charts,
+// "year = event" for timelines, one item per line for lists and flows, two sides for a comparison.
+function parseValue(textValue) {
+  const match = String(textValue).trim().match(/^([$£€])?\s*(-?\d[\d,]*(?:\.\d+)?)\s*(.{0,24})$/);
+  if (!match) return null;
+  const digits = match[2].replace(/,/g, '');
+  return {value: Number(digits), prefix: match[1] || '', suffix: match[3].trim(), decimals: (digits.split('.')[1] || '').length};
+}
+function parseYear(textValue) {
+  const match = String(textValue).trim().match(/^(\d{1,5})\s*(BCE|BC|CE|AD)?$/i);
+  if (!match) return null;
+  const year = Number(match[1]);
+  return {year: /^BC/i.test(match[2] || '') ? -year : year, display: match[2] ? `${match[1]} ${match[2].toUpperCase()}` : match[1]};
+}
+const CANVAS_LIMITS = Object.freeze({'bar-chart': [3, 9], 'line-chart': [3, 12], timeline: [3, 7], list: [3, 6], comparison: [2, 2], flow: [3, 6]});
+// Turns a canvas graphic's lines into the structured data the template draws. Throws on anything invalid.
+function canvasData(template, title, lines) {
+  const [min, max] = CANVAS_LIMITS[template] || [];
+  if (!min) throw opError('Unknown canvas template.');
+  if (!Array.isArray(lines) || lines.length < min || lines.length > max) throw opError(`A ${template} needs ${min === max ? min : `${min}-${max}`} lines.`);
+  const pair = line => { const at = line.indexOf('='); if (at < 1) throw opError(`Write "${line}" as "label = value".`); return [line.slice(0, at).trim(), line.slice(at + 1).trim()]; };
+  let items;
+  if (template === 'bar-chart' || template === 'line-chart') {
+    items = lines.map(line => { const [label, raw] = pair(line), value = parseValue(raw); if (!label || !value || !Number.isFinite(value.value)) throw opError(`"${line}" needs a label and a number, like "Grain = 34%".`); return {label: label.slice(0, 40), ...value}; });
+    if (new Set(items.map(item => item.suffix)).size > 1) throw opError('Every value in one chart needs the same unit.');
+  } else if (template === 'timeline') {
+    items = lines.map(line => { const [rawYear, label] = pair(line), year = parseYear(rawYear); if (!year || !label) throw opError(`"${line}" needs a year and an event, like "1347 = The ship docks".`); return {...year, label: label.slice(0, 60)}; });
+  } else if (template === 'comparison') {
+    items = lines.map(line => { const at = line.indexOf(':'); return at > 0 ? {label: line.slice(0, at).trim().slice(0, 40), detail: line.slice(at + 1).trim().slice(0, 90)} : {label: line.trim().slice(0, 40), detail: ''}; });
+  } else items = lines.map(line => ({label: String(line).trim().slice(0, 70)}));
+  return {title: String(title || '').trim().slice(0, 80), items};
+}
+// Minimum time on screen for a canvas graphic: build time plus a hold the viewer can read.
+function canvasMinimumSeconds(template, count) {
+  return {'bar-chart': 4 + 0.15 * count, 'line-chart': 4.2, timeline: 2.2 + 0.6 * count, list: 1.6 + 0.6 * count, comparison: 3.5, flow: 1.8 + 0.6 * count}[template] || 3;
+}
+const finishFor = spec => (['canvas-frames', 'ffmpeg-sketch'].includes(spec?.renderer?.adapter) || /hand|caveat|marker|print|sketch/i.test(spec?.typography?.headingFont || '') ? 'hand-drawn' : 'clean');
+
+const LIST_INTRO = /\b(?:three|four|five|six|[3-6])\s+(?:reasons|ways|things|steps|signs|rules|lessons|mistakes|habits|questions|ideas|parts|stages)\b[^:]{0,40}:\s*(.+)$/i;
+const ORDINAL = /^(?:first|second|third|fourth|fifth|sixth|finally)\b[,:]?\s*/i;
+const VERSUS = /((?:[\p{L}\p{N}'-]+\s+){0,2}[\p{L}\p{N}'-]+)\s+(?:versus|vs\.?)\s+((?:[\p{L}\p{N}'-]+\s+){0,2}[\p{L}\p{N}'-]+)/iu;
+const CHAIN = /\s+(?:leads? to|led to|causes?|caused|turns? into|turned into|becomes?|became|creates?|created)\s+/i;
+const shorten = (textValue, words) => String(textValue).replace(/^[\s,;:]*(?:which|that|and|then|this|it)\s+/i, '').replace(/[,;]?\s*\b(?:which|that|and|then|so)\s*$/i, '').replace(/[.!?,;:]+$/, '').split(/\s+/).filter(Boolean).slice(0, words).join(' ');
+// The thing a number belongs to usually comes just before it ("grain 34%", "Salt made up 18%").
+const LABEL_SKIP = new Set([...STOP, 'was', 'were', 'is', 'are', 'made', 'up', 'just', 'about', 'only', 'had', 'has', 'have', 'reached', 'fell', 'rose', 'grew', 'dropped', 'nearly', 'almost', 'over', 'under', 'around', 'roughly', 'some', 'cost', 'costs', 'paid', 'took', 'while']);
+function labelBefore(sentence, index) {
+  const words = sentence.slice(0, index).split(/[,;:.!?()]/).pop().split(/\s+/).map(word => word.replace(/[^\p{L}\p{N}'-]/gu, '')).filter(Boolean).slice(-6);
+  let end = words.length - 1;
+  while (end >= 0 && LABEL_SKIP.has(words[end].toLowerCase())) end--;
+  if (end < 0 || /^\d/.test(words[end])) return '';
+  const start = end > 0 && !LABEL_SKIP.has(words[end - 1].toLowerCase()) && !/^\d/.test(words[end - 1]) ? end - 1 : end;
+  return words.slice(start, end + 1).join(' ').slice(0, 40);
+}
+// Scene-level canvas proposals: data comes only from the script itself; the owner checks it before accepting.
+function proposeCanvas(scene, span, fps, finish) {
+  const out = [], at = value => Math.round(value * fps), sceneEnd = scene.endFrame;
+  const fit = (startSeconds, seconds) => { const start = at(startSeconds + 0.25), frames = Math.min(Math.round(seconds * fps), sceneEnd - start); return frames >= Math.round(3 * fps) ? {start, frames} : null; };
+  const base = (template, extra) => ({id: `gr_${scene.id}_${template}`, template, sceneId: scene.id, origin: 'brain', status: 'proposed', renderer: 'canvas', finish, accent: null, ...extra});
+  // Charts: three or more numbers with the same unit (a line chart when each comes with a year).
+  const numbers = [];
+  for (const sentence of span) for (const match of sentence.text.matchAll(new RegExp(STAT_PATTERN.source, 'gi'))) {
+    const value = parseValue(match[0].replace(/\s?(percent|per cent)\b/i, '%'));
+    if (!value || /^\d{4}$/.test(match[0].trim())) continue;
+    const year = sentence.text.slice(Math.max(0, match.index - 40), match.index).match(/\b(1[0-9]{3}|20[0-9]{2})\b(?!.*\b(1[0-9]{3}|20[0-9]{2})\b)/);
+    numbers.push({...value, label: year ? year[1] : labelBefore(sentence.text, match.index) || labelAfter(sentence.text, match.index, match[0].length), year: year ? year[1] : null, sentence});
+  }
+  const unit = numbers.length >= 3 ? numbers[0].suffix.toLowerCase() : null;
+  const same = unit === null ? [] : numbers.filter(item => item.suffix.toLowerCase() === unit);
+  if (same.length >= 3 && same.every(item => item.label) && new Set(same.map(item => item.label.toLowerCase())).size === same.length) {
+    const lineChart = same.every(item => item.year);
+    const lines = same.slice(0, lineChart ? 12 : 9).map(item => `${item.label} = ${item.prefix}${item.value}${item.suffix ? (item.suffix.length < 3 ? '' : ' ') + item.suffix : ''}`);
+    const slot = fit(same[0].sentence.startSeconds, 5.5);
+    if (slot) out.push(base(lineChart ? 'line-chart' : 'bar-chart', {...slot, title: '', lines, sentence: same[0].sentence.n, reason: `The scene gives ${same.length} numbers in the same unit: a ${lineChart ? 'line' : 'bar'} chart builds them on screen. The values come from the script; check them and add a title before accepting.`, skill: SKILL.chart}));
+  }
+  // Timeline: three or more distinct years in the scene.
+  const years = [];
+  for (const sentence of span) for (const match of sentence.text.matchAll(new RegExp(YEAR_PATTERN.source, 'g'))) {
+    const display = match[3] || `${match[1]} ${match[2].toUpperCase()}`;
+    if (!years.some(item => item.display === display)) years.push({display, label: (labelAfter(sentence.text, match.index, match[0].length) || shorten(sentence.text, 5)).replace(/(?:\s+(?:in|of|the|a|an|to|for|by|at|on|and|was|were))+$/i, ''), sentence});
+  }
+  if (years.length >= 3 && !out.some(item => item.template === 'line-chart')) {
+    const lines = years.slice(0, 7).map(item => `${item.display} = ${item.label}`);
+    const slot = fit(years[0].sentence.startSeconds, clamp(2.2 + 0.7 * lines.length + 1.2, 4, 7));
+    if (slot) out.push(base('timeline', {...slot, title: '', lines, sentence: years[0].sentence.n, reason: `The scene names ${years.length} dates: a timeline shows how they relate. Check each event label before accepting.`, skill: SKILL.timeline}));
+  }
+  // List: "three reasons: a, b and c", or sentences that start First / Second / Third.
+  let listItems = null, listSentence = null;
+  for (const sentence of span) {
+    const match = sentence.text.match(LIST_INTRO);
+    if (match) { const items = match[1].split(/,\s*(?:and\s+)?|\s+and\s+/i).map(item => shorten(item, 7)).filter(Boolean); if (items.length >= 3 && items.length <= 6) { listItems = items; listSentence = sentence; break; } }
+  }
+  if (!listItems) {
+    const ordinals = span.filter(sentence => ORDINAL.test(sentence.text));
+    if (ordinals.length >= 3) { listItems = ordinals.slice(0, 6).map(sentence => shorten(sentence.text.replace(ORDINAL, ''), 8)); listSentence = ordinals[0]; }
+  }
+  if (listItems) {
+    const slot = fit(listSentence.startSeconds, clamp(1.6 + 0.7 * listItems.length + 1, 3.5, 6));
+    if (slot) out.push(base('list', {...slot, title: '', lines: listItems, sentence: listSentence.n, reason: `The narration lists ${listItems.length} points: a list build shows each one as it is spoken.`, skill: SKILL.list}));
+  }
+  // Comparison: "X versus Y".
+  for (const sentence of span) {
+    const match = sentence.text.match(VERSUS);
+    if (!match) continue;
+    const slot = fit(sentence.startSeconds, 4.5);
+    const side = value => shorten(value, 4).replace(/\s+(?:tells?|shows?|is|are|was|were|has|have|had|can|could|will|would|does|did|makes?|explains?|reveals?|mean|means|changed?)$/i, '');
+    if (slot) out.push(base('comparison', {...slot, title: '', lines: [side(match[1]), side(match[2])], sentence: sentence.n, reason: 'The narration sets two things against each other: a comparison split shows both sides on the same scale.', skill: SKILL.comparison}));
+    break;
+  }
+  // Flow: "A leads to B, which turns into C".
+  for (const sentence of span) {
+    const parts = sentence.text.split(CHAIN);
+    if (parts.length < 3) continue;
+    const nodes = parts.slice(0, 6).map((part, index) => (index === 0 ? shorten(part.split(/\s+/).slice(-5).join(' '), 5) : shorten(part, 5))).filter(Boolean);
+    const slot = nodes.length >= 3 ? fit(sentence.startSeconds, clamp(1.8 + 0.8 * nodes.length + 1, 4, 7)) : null;
+    if (slot) out.push(base('flow', {...slot, title: '', lines: nodes, sentence: sentence.n, reason: `The narration describes a chain of ${nodes.length} steps: a diagram builds it step by step.`, skill: SKILL.diagram}));
+    break;
+  }
+  return out;
+}
+
 // Proposes motion graphics where the narration says something footage cannot show (skill
 // motion.graphic-type-selector): numbers, dates, quotations, and chapter cards at a turn.
-function proposeGraphics({scenes, sentences, fps, totalFrames}) {
-  const graphics = [];
+function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
+  const graphics = [], finish = finishFor(spec);
   const at = value => clamp(Math.round(value * fps), 0, totalFrames - 1);
   for (const scene of scenes) {
     const span = sentences.slice(scene.sentenceStart - 1, scene.sentenceEnd);
@@ -167,6 +291,9 @@ function proposeGraphics({scenes, sentences, fps, totalFrames}) {
         lines: [plain], accent: turn ? accent : null, accentSource: turn ? accentSource : null, sentence: scene.sentenceStart, sceneId: scene.id, origin: 'plan', status: 'accepted',
         reason: turn ? `The plan's on-screen text at a turn becomes a chapter title card (owner title-card rules: fade in rising, hold by word count, one accent word).` : 'On-screen text from the approved scene plan, held for its reading time.', skill: turn ? SKILL.titleCard : SKILL.dwell});
     }
+    const canvas = proposeCanvas(scene, span, fps, finish);
+    graphics.push(...canvas);
+    const timelineScene = canvas.some(item => item.template === 'timeline');
     for (const sentence of span) {
       const start = at(sentence.startSeconds + 0.25), room = Math.round(sentence.durationSeconds * fps);
       if (room < Math.round(1.6 * fps)) continue;
@@ -184,7 +311,7 @@ function proposeGraphics({scenes, sentences, fps, totalFrames}) {
           reason: `"${value}" is a number the viewer should see as well as hear: a stat reveal holds it on screen.`, skill: SKILL.stat});
         continue;
       }
-      const year = sentence.text.match(YEAR_PATTERN);
+      const year = timelineScene ? null : sentence.text.match(YEAR_PATTERN);
       if (year) {
         const value = year[3] || `${year[1]} ${year[2].toUpperCase()}`;
         graphics.push({id: `gr_d${sentence.n}`, template: 'date', start, frames: Math.min(room, Math.round(3 * fps)), lines: [value], accent: value, sentence: sentence.n, sceneId: scene.id, origin: 'brain', status: 'proposed',
@@ -359,7 +486,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     joins.push(join);
   }
   const scenesOut = sceneRows.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, register: scene.register, startFrame: scene.startFrame, endFrame: scene.endFrame, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, variant: scene.variant}));
-  const graphics = proposeGraphics({scenes: sceneRows, sentences, fps, totalFrames});
+  const graphics = proposeGraphics({scenes: sceneRows, sentences, fps, totalFrames, spec});
   const markers = retentionMarkers(sceneRows, fps, totalFrames);
   const timeline = {
     schema: SCHEMA, fps, format, totalFrames, narrationSeconds: round(narrationSeconds),
@@ -471,7 +598,7 @@ function critique(timeline, spec) {
   if (timeline.narrationSeconds > 240 && !timeline.markers.some(marker => marker.kind === 're-hook')) findings.push(finding('suggestion', 'no-rehook', 'The video runs past 4 minutes without a turn scene to re-hook the viewer.', 'Add a turn ("but the stranger part is still ahead") around 2:00 and every 3-4 minutes.', {skill: SKILL.retention, route: 'script'}));
   // Graphics (skills motion.graphic-type-selector, editing.text-dwell-formula).
   for (const graphic of accepted) {
-    const text = graphic.lines.join(' '), need = graphicDwellSeconds(text);
+    const text = graphic.lines.join(' '), need = CANVAS_TEMPLATES.includes(graphic.template) ? canvasMinimumSeconds(graphic.template, graphic.lines.length) : graphicDwellSeconds(text);
     if (secs(graphic.frames) + 0.05 < need * 0.85) findings.push(finding('suggestion', 'graphic-short', `The ${graphic.template} "${text.slice(0, 40)}" is on screen ${secs(graphic.frames).toFixed(1)} s; it needs about ${need.toFixed(1)} s to read.`, 'Lengthen it or cut words.', {graphicId: graphic.id, at: graphic.start, skill: SKILL.dwell}));
   }
   const proposed = timeline.graphics.filter(graphic => graphic.status === 'proposed');
@@ -507,7 +634,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'reorder']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -563,8 +690,14 @@ function applyOp(source, op, {spec} = {}) {
     const graphic = timeline.graphics.find(item => item.id === op.graphicId);
     if (!graphic) throw opError('That graphic is not in this edit.');
     if (op.status !== undefined) { if (!['accepted', 'rejected', 'proposed'].includes(op.status)) throw opError('A graphic is accepted, rejected or proposed.'); graphic.status = op.status; }
+    const canvas = CANVAS_TEMPLATES.includes(graphic.template);
+    if (op.title !== undefined) {
+      if (!canvas) throw opError('Only charts, timelines, lists, comparisons and diagrams have a title.');
+      graphic.title = String(op.title).replace(/[\x00-\x1F]/g, ' ').trim().slice(0, 80);
+    }
     if (op.lines !== undefined) {
-      if (!Array.isArray(op.lines) || op.lines.length < 1 || op.lines.length > 3) throw opError('A graphic has 1-3 lines.');
+      const most = canvas ? 12 : 3;
+      if (!Array.isArray(op.lines) || op.lines.length < 1 || op.lines.length > most) throw opError(`This graphic has 1-${most} lines.`);
       graphic.lines = op.lines.map(line => { const value = String(line).replace(/[{}\\]/g, '').replace(/\s+/g, ' ').trim(); if (!value || value.length > 120) throw opError('Each graphic line needs 1-120 characters.'); return value; });
       if (graphic.template === 'title-card') { const {accent, accentSource} = accentOf(graphic.lines.join(' ')); graphic.accent = op.accent ? String(op.accent).slice(0, 30) : accent; graphic.accentSource = op.accent ? 'owner' : accentSource; graphic.lines = graphic.lines.map(line => line.replace(/\*/g, '')); }
     }
@@ -573,6 +706,27 @@ function applyOp(source, op, {spec} = {}) {
       if (frames < Math.round(0.8 * fps) || graphic.start + frames > timeline.totalFrames) throw opError('A graphic stays at least 0.8 s and ends inside the video.');
       graphic.frames = frames;
     }
+    if (canvas) canvasData(graphic.template, graphic.title, graphic.lines);
+    receipt.changed.push(graphic.id);
+  } else if (op.type === 'add-graphic') {
+    // The owner adds a graphic the brain did not propose. It is accepted at once and may not overlap another.
+    if (!GRAPHIC_TEMPLATES.includes(op.template)) throw opError(`Choose a graphic: ${GRAPHIC_TEMPLATES.join(', ')}.`);
+    const start = clipFrames(op.startSeconds), frames = clipFrames(op.seconds);
+    if (start < 0 || frames < Math.round(0.8 * fps) || start + frames > timeline.totalFrames) throw opError('The graphic must start inside the video, stay at least 0.8 s and end before the video ends.');
+    const canvas = CANVAS_TEMPLATES.includes(op.template), most = canvas ? 12 : 3;
+    if (!Array.isArray(op.lines) || op.lines.length < 1 || op.lines.length > most) throw opError(`This graphic has 1-${most} lines.`);
+    const lines = op.lines.map(line => { const value = String(line).replace(/[{}\\]/g, '').replace(/\s+/g, ' ').trim(); if (!value || value.length > 120) throw opError('Each graphic line needs 1-120 characters.'); return value; });
+    const title = canvas ? String(op.title || '').replace(/[\x00-\x1F]/g, ' ').trim().slice(0, 80) : '';
+    if (canvas) canvasData(op.template, title, lines);
+    const clash = timeline.graphics.find(item => item.status === 'accepted' && start < item.start + item.frames && item.start < start + frames);
+    if (clash) throw opError(`It would overlap the ${clash.template} at ${(clash.start / fps).toFixed(1)} s; one graphic is on screen at a time.`);
+    const number = timeline.graphics.filter(item => item.origin === 'owner').length + 1;
+    const accent = op.template === 'title-card' ? accentOf(op.accent ? `${lines.join(' ')} *${op.accent}*` : lines.join(' ')) : null;
+    const graphic = {id: `gr_owner_${number}`, template: op.template, start, frames, title, lines: lines.map(line => line.replace(/\*/g, '')), accent: accent ? accent.accent : null, accentSource: accent ? (op.accent ? 'owner' : accent.accentSource) : null,
+      sceneId: (timeline.clips.find(clip => start >= clip.start && start < clip.start + clip.frames) || timeline.clips[0]).sceneId, origin: 'owner', status: 'accepted', renderer: canvas ? 'canvas' : 'ass', finish: canvas ? finishFor(spec) : undefined,
+      reason: 'Added by the owner.', skill: null};
+    timeline.graphics.push(graphic);
+    timeline.graphics.sort((a, b) => a.start - b.start);
     receipt.changed.push(graphic.id);
   } else if (op.type === 'reorder') {
     const index = findClip(timeline, op.clipId), clip = timeline.clips[index];
@@ -662,7 +816,7 @@ function graphicsAss(timeline, spec) {
   ];
   const events = [];
   const fps = timeline.fps;
-  for (const graphic of timeline.graphics.filter(item => item.status === 'accepted')) {
+  for (const graphic of timeline.graphics.filter(item => item.status === 'accepted' && !CANVAS_TEMPLATES.includes(item.template))) {
     const start = graphic.start / fps, total = graphic.frames / fps;
     const lines = graphic.lines.map(assText);
     if (graphic.template === 'title-card') {
@@ -698,7 +852,8 @@ function graphicsAss(timeline, spec) {
 const timelineHash = timeline => createHash('sha256').update(JSON.stringify(timeline)).digest('hex');
 
 module.exports = {
-  SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, OP_TYPES, SKILL,
+  SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, CANVAS_TEMPLATES, OP_TYPES, SKILL,
+  canvasData, canvasMinimumSeconds, parseValue, parseYear, finishFor,
   pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, applyOp, spliceScene, validateTimeline,
   graphicsAss, timelineHash, shortHash, graphicDwellSeconds,
 };

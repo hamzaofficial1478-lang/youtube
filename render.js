@@ -14,8 +14,8 @@ const RENDERER_VERSION = 'ffmpeg-montage/1.0.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
-const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect'];
-const REQUIRED_ENCODERS = ['libx264', 'aac'];
+const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay'];
+const REQUIRED_ENCODERS = ['libx264', 'aac', 'png'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
 };
@@ -213,7 +213,7 @@ function easedZoompan(move, frames) {
 // Plans an edit render: one segment per clip, lossless joins for runs of hard cuts, xfade for the few
 // structural transitions, then the graphics layer (ASS through libass) and the fade-out ending.
 // Every boundary is snapped from the edit's frame grid to the preset's, so picture and narration stay locked.
-function planTimeline({timeline, files, narration, format, preset = PRESETS.proxy, workDir, outFile, graphics = null}) {
+function planTimeline({timeline, files, narration, format, preset = PRESETS.proxy, workDir, outFile, graphics = null, overlays = []}) {
   const size = preset[format] || preset['long-form'], fps = Math.min(timeline.fps, preset.maxFps);
   const scale = frame => Math.round(frame * fps / timeline.fps);
   const totalFrames = scale(timeline.totalFrames);
@@ -267,12 +267,19 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
     length += chunks[k].frames - join.frames;
     label = `x${k}`;
   }
+  // Canvas graphics (rendered by motion.js to RGBA clips) are laid over the picture at their start time.
+  overlays.forEach((overlay, k) => {
+    const input = chunks.length + 1 + k, start = round(scale(overlay.start) / fps, 6), end = round((scale(overlay.start) + overlay.frames) / fps, 6);
+    parts.push(`[${input}:v]setpts=PTS-STARTPTS+${start}/TB,format=rgba[g${k}]`);
+    parts.push(`[${label}][g${k}]overlay=x=0:y=0:eof_action=pass:enable='between(t,${start},${end})'[o${k}]`);
+    label = `o${k}`;
+  });
   const fadeFrames = Math.min(scale(timeline.ending?.fadeOutFrames || 0), Math.floor(frames[frames.length - 1] / 2));
   const tailFilters = [...(graphics ? ['ass=graphics.ass'] : []), ...(fadeFrames ? [`fade=t=out:st=${round((totalFrames - fadeFrames) / fps, 6)}:d=${round(fadeFrames / fps, 6)}`] : []), 'format=yuv420p'];
   parts.push(`[${label}]${tailFilters.join(',')}[vout]`);
   const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
-  const final = {mode: 'edit', graphics: !!graphics, args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...chunks.flatMap(chunk => ['-i', chunk.file]), '-i', narration.file, '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${chunks.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
-  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames};
+  const final = {mode: 'edit', graphics: !!graphics, args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...chunks.flatMap(chunk => ['-i', chunk.file]), '-i', narration.file, ...overlays.flatMap(overlay => ['-i', overlay.file]), '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${chunks.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
+  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames, overlays: overlays.length};
 }
 
 // Parses blackdetect/freezedetect output into spans.

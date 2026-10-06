@@ -7,13 +7,16 @@ const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const R = require('./render');
+const B = require('./editing-brain');
+const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
 const VS = require('./visual-sources');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
 
 class RenderRoom {
-  constructor(store, styles, sceneRoom, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe'} = {}) {
+  constructor(store, styles, sceneRoom, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', browser = findBrowser()} = {}) {
+    this.browser = browser;
     this.store = store;
     this.db = store.db;
     this.styles = styles;
@@ -60,6 +63,8 @@ class RenderRoom {
     this.checking = true;
     try {
       const report = await R.inspectFFmpeg({ffmpeg: this.ffmpeg, ffprobe: this.ffprobe, workDir: path.join(this.renderDir, '.work', `readiness-${randomUUID()}`)});
+      // The canvas graphics renderer is checked too; it is optional and does not change the FFmpeg verdict.
+      report.motion = await inspectBrowser({browser: this.browser});
       const id = randomUUID();
       this.store.transaction(() => {
         this.db.prepare('INSERT INTO render_readiness(id,payload,passed,created_by,created_at) VALUES(?,?,?,?,?)').run(id, JSON.stringify(report), report.passed ? 1 : 0, by, now());
@@ -245,7 +250,7 @@ class RenderRoom {
         return {...shot, file};
       });
       const out = path.join(work, 'proxy.mp4');
-      let plan;
+      let plan, motionInfo = null;
       if (scope.edit) {
         const files = {};
         for (const [clipId, entry] of Object.entries(scope.edit.files)) {
@@ -254,7 +259,34 @@ class RenderRoom {
           files[clipId] = file;
         }
         if (scope.edit.graphicsAss) fs.writeFileSync(path.join(work, 'graphics.ass'), scope.edit.graphicsAss);
-        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss});
+        // Canvas graphics: drawn frame by frame in the local browser, then packed into lossless RGBA clips.
+        const canvasGraphics = scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && B.CANVAS_TEMPLATES.includes(item.template));
+        const overlays = [];
+        if (canvasGraphics.length) {
+          const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], fps = Math.min(scope.edit.timeline.fps, R.PRESETS.proxy.maxFps);
+          const spec = scope.style.spec, renderer = new MotionRenderer({browser: this.browser});
+          this.current.handle = {kill: () => { renderer.close(); }};
+          try {
+            await renderer.start();
+            for (const [k, graphic] of canvasGraphics.entries()) {
+              if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
+              this.progress(job.id, `drawing ${graphic.template} ${k + 1} of ${canvasGraphics.length}`, 0, total);
+              const frames = Math.max(1, Math.round(graphic.frames * fps / scope.edit.timeline.fps)), dir = path.join(work, `graphic-${k + 1}`);
+              const drawn = await renderer.render({template: graphic.template, data: B.canvasData(graphic.template, graphic.title, graphic.lines), finish: graphic.finish || 'clean', vertical: scope.format === 'shorts',
+                palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
+                width: size.width, height: size.height, fps, duration: frames / fps, outDir: dir});
+              const clip = `graphic-${k + 1}.mov`;
+              await exec(`pack ${graphic.template}`, job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(`graphic-${k + 1}`, 'f%05d.png'), '-c:v', 'png', '-pix_fmt', 'rgba', '-fflags', '+bitexact', '-map_metadata', '-1', '-y', clip], Math.max(60000, frames * 200), work);
+              fs.rmSync(dir, {recursive: true, force: true});
+              overlays.push({file: clip, start: graphic.start, frames, graphicId: graphic.id, template: graphic.template, framesSha256: drawn.sha256});
+            }
+            motionInfo = {browser: renderer.version, path: path.basename(this.browser), graphics: overlays.map(item => ({graphicId: item.graphicId, template: item.template, frames: item.frames, framesSha256: item.framesSha256}))};
+          } finally {
+            await renderer.close();
+            this.current.handle = null;
+          }
+        }
+        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss, overlays});
       } else {
         plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out});
       }
@@ -284,7 +316,7 @@ class RenderRoom {
         : seconds => scope.shots.find((shot, index) => seconds >= shot.startSeconds - 0.001 && (index === scope.shots.length - 1 || seconds < scope.shots[index + 1].startSeconds))?.label || '—';
       // Planned dark moments are not defects: title cards sit on a dark panel and the edit fades out at the end.
       const planned = scope.edit ? [
-        ...scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && item.template === 'title-card').map(item => [item.start / scope.edit.timeline.fps, (item.start + item.frames) / scope.edit.timeline.fps]),
+        ...scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && (item.template === 'title-card' || B.CANVAS_TEMPLATES.includes(item.template))).map(item => [item.start / scope.edit.timeline.fps, (item.start + item.frames) / scope.edit.timeline.fps]),
         ...(plan.fadeFrames ? [[(plan.totalFrames - plan.fadeFrames) / plan.preset.fps, plan.totalFrames / plan.preset.fps + 1]] : []),
       ] : [];
       const plannedDark = span => planned.some(([from, to]) => span.start >= from - 0.15 && span.end <= to + 0.15);
@@ -313,7 +345,7 @@ class RenderRoom {
       const scrub = args => args.map(arg => String(arg).replaceAll(work, '<work>').replaceAll(this.dataRoot, '<data>'));
       const manifest = {
         renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg,
-          edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null} : null},
+          edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null, canvas: motionInfo} : null},
         shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, clipId: segment.clipId || null, assetId: segment.assetId, sha256: scope.edit ? scope.edit.files[segment.clipId].sha256 : scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
         commands: [...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), ...(plan.chunks || []).map(chunk => ({step: `join ${chunk.file}`, args: scrub(chunk.args)})), {step: 'assemble', args: scrub(plan.final.args)}],
         output: {sha256: R.fileSha256(video), sizeBytes: fs.statSync(video).size, probe}, qc: checks, detections: found, logs,
@@ -333,7 +365,7 @@ class RenderRoom {
       });
       return this.publicJob(this.row(job.id));
     } catch (error) {
-      const cancelled = !!error.cancelled;
+      const cancelled = !!error.cancelled || !!this.current.cancelledBy;
       const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : 'The render failed.';
       this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
       fs.rmSync(finalDir, {recursive: true, force: true});
