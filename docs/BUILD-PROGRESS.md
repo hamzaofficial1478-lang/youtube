@@ -151,7 +151,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
   - `tests/sketch.test.js` (3);
   - a drawn-scene test in `tests/scene.test.js`: rules sketches, a Claude bad prop named, owner redraw, a real drawing by the program, no redraw of an unchanged shot, renderer not blocking;
   - caption contrast and the no-overlay/stat-label checks in `tests/captions.test.js`.
-  - `npm run check` passed; `npm test` **211/211 passed, 0 skipped**.
+  - `npm run check` passed; `npm test` **211/211 passed, 0 skipped** (210 s; one earlier run took 42 min only because the demo was drawing and rendering at the same time).
 - **Not tested**: ElevenLabs narration with drawn scenes, Shorts (vertical) drawn scenes beyond layout scaling, Hand-drawn Canvas and Motion Graphics end to end (same engine, different finish). No GitHub push.
 
 ### 2026-10-08 — Room 09 Packaging (0.18.0)
