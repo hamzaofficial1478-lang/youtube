@@ -1,11 +1,13 @@
 'use strict';
 // R05 - Competitor Intelligence.
-// Scans each family's competitor channels, asks the tool-free Hermes profile for a
+// Scans each family's competitor channels, asks Claude for a
 // reviewable blueprint (at most 30% adopted patterns, at least 70% original), and only
 // after human approval turns it into a style draft, narrator direction and script guidance.
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
-const {HERMES_ORIGIN, HermesClient, HermesError, boundedJson, messageTokenUpperBound} = require('./hermes');
+const {AiError, messageTokenUpperBound} = require('./writer');
+const {Ai} = require('./ai');
+
 const {
   NexLevClient, YouTubePublicClient, normVideo, normChannel, transcriptText, transcriptSummary, firstArray,
   median, copiedPhrases, connectorCurrent, connectorReference,
@@ -21,7 +23,7 @@ const AREAS = ['script', 'voice', 'editing', 'visuals', 'packaging'];
 // Owner picks per competitor link: what to learn from that channel. Each trait feeds one blueprint area and one room.
 const TRAITS = {
   voice: {label: 'Voice-over', area: 'voice', route: 'Voice Room narrator draft'},
-  narration: {label: 'Narration', area: 'script', route: 'Hermes script guidance'},
+  narration: {label: 'Narration', area: 'script', route: 'Claude script guidance'},
   editing: {label: 'Editing', area: 'editing', route: 'New style draft'},
   thumbnails: {label: 'Thumbnails', area: 'packaging', route: 'Packaging brief'},
   visuals: {label: 'Visuals', area: 'visuals', route: 'Scene planner guidance'},
@@ -57,98 +59,98 @@ function integer(value, min, max, label) {
 const person = (value, label = 'Your name') => text(value, label, 2, 80);
 const competitorKey = item => `${item.kind}:${item.value.toLowerCase()}`;
 
-// ---------------------------------------------------------------- Hermes output validation
-function hermesText(value, label, min, max) {
-  if (typeof value !== 'string' || value.trim().length < min || value.length > max || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) throw new HermesError(`Hermes returned an invalid ${label}.`);
+// ---------------------------------------------------------------- Claude output validation
+function aiText(value, label, min, max) {
+  if (typeof value !== 'string' || value.trim().length < min || value.length > max || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) throw new AiError(`Claude returned an invalid ${label}.`);
   return value.trim();
 }
-function hermesStrings(value, label, min, max, itemMax = 300) {
-  if (!Array.isArray(value) || value.length < min || value.length > max) throw new HermesError(`Hermes returned an invalid ${label} list.`);
-  return value.map(item => hermesText(item, label, 2, itemMax));
+function aiStrings(value, label, min, max, itemMax = 300) {
+  if (!Array.isArray(value) || value.length < min || value.length > max) throw new AiError(`Claude returned an invalid ${label} list.`);
+  return value.map(item => aiText(item, label, 2, itemMax));
 }
 function strict(value, keys, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) throw new HermesError(`Hermes returned an unexpected ${label} shape.`);
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) throw new AiError(`Claude returned an unexpected ${label} shape.`);
   return value;
 }
 function refList(value, refs, label) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 6) throw new HermesError(`Hermes returned invalid evidence for ${label}.`);
+  if (!Array.isArray(value) || value.length < 1 || value.length > 6) throw new AiError(`Claude returned invalid evidence for ${label}.`);
   const unique = [...new Set(value)];
-  if (unique.some(ref => typeof ref !== 'string' || !refs.has(ref))) throw new HermesError(`Hermes cited evidence that was not supplied (${label}).`);
+  if (unique.some(ref => typeof ref !== 'string' || !refs.has(ref))) throw new AiError(`Claude cited evidence that was not supplied (${label}).`);
   return unique;
 }
 function adjustmentValue(setting, value) {
   const type = ADJUSTABLE[setting];
-  if (!type) throw new HermesError(`Hermes proposed an unsupported style setting: ${String(setting).slice(0, 60)}.`);
-  if (type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) throw new HermesError(`Hermes proposed a non-numeric value for ${setting}.`);
-  if (type === 'string' && (typeof value !== 'string' || value.length < 1 || value.length > 40)) throw new HermesError(`Hermes proposed an invalid value for ${setting}.`);
-  if (type === 'boolean' && typeof value !== 'boolean') throw new HermesError(`Hermes proposed an invalid value for ${setting}.`);
-  if (type === 'strings') return hermesStrings(value, setting, 1, 6, 40);
+  if (!type) throw new AiError(`Claude proposed an unsupported style setting: ${String(setting).slice(0, 60)}.`);
+  if (type === 'number' && (typeof value !== 'number' || !Number.isFinite(value))) throw new AiError(`Claude proposed a non-numeric value for ${setting}.`);
+  if (type === 'string' && (typeof value !== 'string' || value.length < 1 || value.length > 40)) throw new AiError(`Claude proposed an invalid value for ${setting}.`);
+  if (type === 'boolean' && typeof value !== 'boolean') throw new AiError(`Claude proposed an invalid value for ${setting}.`);
+  if (type === 'strings') return aiStrings(value, setting, 1, 6, 40);
   return value;
 }
 
 function validateBlueprint(value, {refs, channelRefs, styleKeys, blend = null}) {
   strict(value, ['summary', 'channels', 'script', 'voice', 'editing', 'visuals', 'packaging', 'adopt', 'original', 'avoid', 'opportunities', 'confidence', 'uncertainties'], 'blueprint');
-  if (!Array.isArray(value.channels) || value.channels.length < 1 || value.channels.length > 10) throw new HermesError('Hermes returned an invalid channel list.');
+  if (!Array.isArray(value.channels) || value.channels.length < 1 || value.channels.length > 10) throw new AiError('Claude returned an invalid channel list.');
   const channels = value.channels.map(item => {
     strict(item, ['ref', 'positioning', 'strengths', 'gaps'], 'channel');
-    if (!channelRefs.has(item.ref)) throw new HermesError('Hermes described a channel that was not supplied.');
-    return {ref: item.ref, positioning: hermesText(item.positioning, 'positioning', 10, 600), strengths: hermesStrings(item.strengths, 'strength', 0, 6), gaps: hermesStrings(item.gaps, 'gap', 0, 6)};
+    if (!channelRefs.has(item.ref)) throw new AiError('Claude described a channel that was not supplied.');
+    return {ref: item.ref, positioning: aiText(item.positioning, 'positioning', 10, 600), strengths: aiStrings(item.strengths, 'strength', 0, 6), gaps: aiStrings(item.gaps, 'gap', 0, 6)};
   });
-  if (new Set(channels.map(item => item.ref)).size !== channels.length) throw new HermesError('Hermes described a channel twice.');
+  if (new Set(channels.map(item => item.ref)).size !== channels.length) throw new AiError('Claude described a channel twice.');
   strict(value.script, ['hookPatterns', 'structure', 'pacing', 'callToAction'], 'script guidance');
   strict(value.voice, ['tone', 'emotion', 'pace', 'energy', 'delivery'], 'voice guidance');
   strict(value.editing, ['observations', 'recommendedStyleKey', 'adjustments'], 'editing guidance');
   strict(value.visuals, ['observations', 'recommendedSources'], 'visual guidance');
   strict(value.packaging, ['titlePatterns', 'thumbnailNotes'], 'packaging guidance');
   strict(value.confidence, ['level', 'rationale'], 'confidence');
-  if (!EMOTIONS.includes(value.voice.emotion)) throw new HermesError('Hermes returned an unsupported voice emotion.');
-  if (!Object.hasOwn(VOICE_PACE, value.voice.pace)) throw new HermesError('Hermes returned an unsupported voice pace.');
-  if (!Number.isSafeInteger(value.voice.energy) || value.voice.energy < 0 || value.voice.energy > 100) throw new HermesError('Hermes returned an invalid voice energy.');
-  if (!styleKeys.has(value.editing.recommendedStyleKey)) throw new HermesError('Hermes recommended a style that is not in the Style Library.');
-  if (!Array.isArray(value.editing.adjustments) || value.editing.adjustments.length > 8) throw new HermesError('Hermes returned invalid style adjustments.');
+  if (!EMOTIONS.includes(value.voice.emotion)) throw new AiError('Claude returned an unsupported voice emotion.');
+  if (!Object.hasOwn(VOICE_PACE, value.voice.pace)) throw new AiError('Claude returned an unsupported voice pace.');
+  if (!Number.isSafeInteger(value.voice.energy) || value.voice.energy < 0 || value.voice.energy > 100) throw new AiError('Claude returned an invalid voice energy.');
+  if (!styleKeys.has(value.editing.recommendedStyleKey)) throw new AiError('Claude recommended a style that is not in the Style Library.');
+  if (!Array.isArray(value.editing.adjustments) || value.editing.adjustments.length > 8) throw new AiError('Claude returned invalid style adjustments.');
   const adjustments = value.editing.adjustments.map(item => {
     strict(item, ['setting', 'value', 'reason'], 'style adjustment');
-    return {setting: item.setting, value: adjustmentValue(item.setting, item.value), reason: hermesText(item.reason, 'adjustment reason', 5, 300)};
+    return {setting: item.setting, value: adjustmentValue(item.setting, item.value), reason: aiText(item.reason, 'adjustment reason', 5, 300)};
   });
-  if (new Set(adjustments.map(item => item.setting)).size !== adjustments.length) throw new HermesError('Hermes proposed the same style setting twice.');
-  const recommendedSources = hermesStrings(value.visuals.recommendedSources, 'visual source', 1, 5, 40);
-  if (recommendedSources.some(item => !VISUAL_SOURCES.includes(item))) throw new HermesError('Hermes recommended a visual source outside stock and AI options.');
+  if (new Set(adjustments.map(item => item.setting)).size !== adjustments.length) throw new AiError('Claude proposed the same style setting twice.');
+  const recommendedSources = aiStrings(value.visuals.recommendedSources, 'visual source', 1, 5, 40);
+  if (recommendedSources.some(item => !VISUAL_SOURCES.includes(item))) throw new AiError('Claude recommended a visual source outside stock and AI options.');
   const listOf = (items, min, max, keys, label, map) => {
-    if (!Array.isArray(items) || items.length < min || items.length > max) throw new HermesError(`Hermes returned an invalid ${label} list.`);
+    if (!Array.isArray(items) || items.length < min || items.length > max) throw new AiError(`Claude returned an invalid ${label} list.`);
     return items.map(item => { strict(item, keys, label); return map(item); });
   };
-  const area = item => { if (!AREAS.includes(item.area)) throw new HermesError('Hermes returned an unsupported area.'); return item.area; };
-  const adopt = listOf(value.adopt, 1, blend ? 10 : 6, ['area', 'pattern', 'refs'], 'adopted pattern', item => ({area: area(item), pattern: hermesText(item.pattern, 'adopted pattern', 5, 400), refs: refList(item.refs, refs, 'adopted pattern')}));
-  const original = listOf(value.original, 3, blend ? 30 : 14, ['area', 'contribution'], 'original contribution', item => ({area: area(item), contribution: hermesText(item.contribution, 'original contribution', 5, 400)}));
-  if (adopt.length * 7 > original.length * 3) throw new HermesError(`The blueprint adopts ${adopt.length} competitor patterns against ${original.length} original contributions; the owner rule allows at most 30% reference.`);
+  const area = item => { if (!AREAS.includes(item.area)) throw new AiError('Claude returned an unsupported area.'); return item.area; };
+  const adopt = listOf(value.adopt, 1, blend ? 10 : 6, ['area', 'pattern', 'refs'], 'adopted pattern', item => ({area: area(item), pattern: aiText(item.pattern, 'adopted pattern', 5, 400), refs: refList(item.refs, refs, 'adopted pattern')}));
+  const original = listOf(value.original, 3, blend ? 30 : 14, ['area', 'contribution'], 'original contribution', item => ({area: area(item), contribution: aiText(item.contribution, 'original contribution', 5, 400)}));
+  if (adopt.length * 7 > original.length * 3) throw new AiError(`The blueprint adopts ${adopt.length} competitor patterns against ${original.length} original contributions; the owner rule allows at most 30% reference.`);
   if (blend) {
     // Each area may only learn from the channels the owner picked for it, and keeps its own 30/70 balance.
     for (const item of adopt) {
       const allowed = blend.areaSources[item.area] || [];
-      if (!allowed.length) throw new HermesError(`The blueprint adopts a ${item.area} pattern, but no competitor was picked for that area; it must stay 100% original.`);
+      if (!allowed.length) throw new AiError(`The blueprint adopts a ${item.area} pattern, but no competitor was picked for that area; it must stay 100% original.`);
       const outside = item.refs.map(ref => refs.get(ref)).find(channel => !allowed.includes(channel));
-      if (outside) throw new HermesError(`The blueprint uses ${outside} for ${item.area}, but that channel was not picked for ${item.area}.`);
+      if (outside) throw new AiError(`The blueprint uses ${outside} for ${item.area}, but that channel was not picked for ${item.area}.`);
     }
     for (const name of AREAS) {
       const taken = adopt.filter(item => item.area === name).length, own = original.filter(item => item.area === name).length;
-      if (taken && taken * 7 > own * 3) throw new HermesError(`The ${name} area adopts ${taken} pattern(s) against ${own} original contribution(s); each area allows at most 30% reference.`);
+      if (taken && taken * 7 > own * 3) throw new AiError(`The ${name} area adopts ${taken} pattern(s) against ${own} original contribution(s); each area allows at most 30% reference.`);
     }
   }
-  const avoid = listOf(value.avoid, 0, 8, ['pattern', 'reason'], 'avoid item', item => ({pattern: hermesText(item.pattern, 'avoid pattern', 3, 300), reason: hermesText(item.reason, 'avoid reason', 3, 300)}));
-  const opportunities = listOf(value.opportunities, 1, 6, ['opportunity', 'refs'], 'opportunity', item => ({opportunity: hermesText(item.opportunity, 'opportunity', 5, 400), refs: refList(item.refs, refs, 'opportunity')}));
-  if (!['low', 'medium', 'high'].includes(value.confidence.level)) throw new HermesError('Hermes returned an invalid confidence level.');
+  const avoid = listOf(value.avoid, 0, 8, ['pattern', 'reason'], 'avoid item', item => ({pattern: aiText(item.pattern, 'avoid pattern', 3, 300), reason: aiText(item.reason, 'avoid reason', 3, 300)}));
+  const opportunities = listOf(value.opportunities, 1, 6, ['opportunity', 'refs'], 'opportunity', item => ({opportunity: aiText(item.opportunity, 'opportunity', 5, 400), refs: refList(item.refs, refs, 'opportunity')}));
+  if (!['low', 'medium', 'high'].includes(value.confidence.level)) throw new AiError('Claude returned an invalid confidence level.');
   const citedChannels = new Set([...adopt, ...opportunities].flatMap(item => item.refs).map(ref => refs.get(ref)).filter(Boolean));
-  if (value.confidence.level === 'high' && citedChannels.size < 2) throw new HermesError('High confidence requires evidence from at least two competitor channels.');
+  if (value.confidence.level === 'high' && citedChannels.size < 2) throw new AiError('High confidence requires evidence from at least two competitor channels.');
   return {
-    summary: hermesText(value.summary, 'summary', 20, 2000), channels,
-    script: {hookPatterns: hermesStrings(value.script.hookPatterns, 'hook pattern', 1, 5), structure: hermesStrings(value.script.structure, 'structure step', 2, 8), pacing: hermesText(value.script.pacing, 'pacing note', 5, 600), callToAction: hermesText(value.script.callToAction, 'call to action', 5, 400)},
-    voice: {tone: hermesText(value.voice.tone, 'voice tone', 3, 200), emotion: value.voice.emotion, pace: value.voice.pace, energy: value.voice.energy, delivery: hermesStrings(value.voice.delivery, 'delivery note', 1, 6)},
-    editing: {observations: hermesStrings(value.editing.observations, 'editing observation', 1, 8), recommendedStyleKey: value.editing.recommendedStyleKey, adjustments},
-    visuals: {observations: hermesStrings(value.visuals.observations, 'visual observation', 1, 6), recommendedSources},
-    packaging: {titlePatterns: hermesStrings(value.packaging.titlePatterns, 'title pattern', 1, 6), thumbnailNotes: hermesStrings(value.packaging.thumbnailNotes, 'thumbnail note', 1, 6)},
+    summary: aiText(value.summary, 'summary', 20, 2000), channels,
+    script: {hookPatterns: aiStrings(value.script.hookPatterns, 'hook pattern', 1, 5), structure: aiStrings(value.script.structure, 'structure step', 2, 8), pacing: aiText(value.script.pacing, 'pacing note', 5, 600), callToAction: aiText(value.script.callToAction, 'call to action', 5, 400)},
+    voice: {tone: aiText(value.voice.tone, 'voice tone', 3, 200), emotion: value.voice.emotion, pace: value.voice.pace, energy: value.voice.energy, delivery: aiStrings(value.voice.delivery, 'delivery note', 1, 6)},
+    editing: {observations: aiStrings(value.editing.observations, 'editing observation', 1, 8), recommendedStyleKey: value.editing.recommendedStyleKey, adjustments},
+    visuals: {observations: aiStrings(value.visuals.observations, 'visual observation', 1, 6), recommendedSources},
+    packaging: {titlePatterns: aiStrings(value.packaging.titlePatterns, 'title pattern', 1, 6), thumbnailNotes: aiStrings(value.packaging.thumbnailNotes, 'thumbnail note', 1, 6)},
     adopt, original, avoid, opportunities,
-    confidence: {level: value.confidence.level, rationale: hermesText(value.confidence.rationale, 'confidence rationale', 10, 1000)},
-    uncertainties: hermesStrings(value.uncertainties, 'uncertainty', 0, 8),
+    confidence: {level: value.confidence.level, rationale: aiText(value.confidence.rationale, 'confidence rationale', 10, 1000)},
+    uncertainties: aiStrings(value.uncertainties, 'uncertainty', 0, 8),
   };
 }
 function blueprintStrings(blueprint) {
@@ -170,7 +172,8 @@ function analysisMessages(input) {
 
 // ---------------------------------------------------------------- room
 class CompetitorIntelligence {
-  constructor(store, connectors, quota, styles) {
+  constructor(store, connectors, quota, styles, ai = new Ai(connectors)) {
+    this.ai = ai;
     this.store = store;
     this.db = store.db;
     this.connectors = connectors;
@@ -202,7 +205,7 @@ class CompetitorIntelligence {
       this.quota.markUnknown(row.id);
     }
     for (const row of this.db.prepare("SELECT id FROM competitor_analyses WHERE status='running'").all()) {
-      this.db.prepare("UPDATE competitor_analyses SET status='interrupted', error='The program stopped while Hermes was running. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
+      this.db.prepare("UPDATE competitor_analyses SET status='interrupted', error='The program stopped while Claude was running. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
       this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(at, row.id);
     }
   }
@@ -493,7 +496,7 @@ class CompetitorIntelligence {
     }
   }
 
-  // ------------------------------------------------------------ analysis (Hermes)
+  // ------------------------------------------------------------ analysis (Claude)
   analysisRow(id) {
     const row = this.db.prepare('SELECT * FROM competitor_analyses WHERE id=?').get(id);
     requireValue(row, 'Competitor analysis not found.', 404);
@@ -572,7 +575,7 @@ class CompetitorIntelligence {
       const family = this.store.family(familyId);
       requireValue(!family.archived, 'Restore this family before analyzing competitors.', 409);
       this.store.version(family, input.familyRevision);
-      const hermes = connectorReference(this.connectors, input.connector, 'hermes', 'Hermes reasoning', true);
+      const claude = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
       const scan = this.publicScan(this.scanRow(text(input.scanId, 'Scan', 10, 64)));
       requireValue(scan.familyId === familyId, 'That scan belongs to another family.');
       requireValue(['completed', 'partial'].includes(scan.status), 'Analyze a completed or partial scan.', 409);
@@ -589,10 +592,10 @@ class CompetitorIntelligence {
         ...(scan.result.youtubeDerivedUse && channel.youtube?.videos ? channel.youtube.videos.map(video => video.title) : []),
       ]).filter(Boolean);
       for (const note of this.latestNotes(familyId).values()) sources.push(...[note.editingStyle, note.voice, note.visuals, note.thumbnails, note.script, note.strengths, note.weaknesses].filter(Boolean));
-      const scope = {familyRevision: family.revision, competitorKeys: keys, connector: hermes, promptVersion: blend ? 2 : 1, tokenLimit: settings.analysisTokenLimit, maxCompletionTokens, promptInput, refs: refMap, copySources: sources, picksRevision, blend};
+      const scope = {familyRevision: family.revision, competitorKeys: keys, connector: claude, promptVersion: blend ? 2 : 1, tokenLimit: settings.analysisTokenLimit, maxCompletionTokens, promptInput, refs: refMap, copySources: sources, picksRevision, blend};
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO competitor_analyses(id,family_id,scan_id,status,scope,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,?,?,?)").run(id, familyId, scan.id, JSON.stringify(scope), requestedBy, at, at);
-      this.store.event(`Queued Hermes competitor analysis for ${family.name}`);
+      this.store.event(`Queued Claude competitor analysis for ${family.name}`);
       return this.publicAnalysis(this.analysisRow(id));
     });
   }
@@ -605,7 +608,7 @@ class CompetitorIntelligence {
       const usage = this.db.prepare('SELECT status FROM intelligence_usage WHERE job_id=?').get(id);
       if (row.status === 'interrupted' || usage?.status === 'unknown') requireValue(input.confirmInterrupted === true, 'Token use for the last attempt is unknown. Confirm the deliberate retry.');
       requireValue(family.revision === scope.familyRevision && !family.archived, 'The family changed. Queue a new analysis.', 409);
-      requireValue(connectorCurrent(this.connectors, scope.connector, 'hermes'), 'The Hermes connector changed or failed its test. Queue a new analysis.', 409);
+      requireValue(connectorCurrent(this.connectors, scope.connector, 'ai'), 'The Claude connection changed or failed its test. Queue a new analysis.', 409);
       if (usage) this.db.prepare('DELETE FROM intelligence_usage WHERE job_id=? AND status IN (\'released\')').run(id);
       if (usage && usage.status !== 'released') this.db.prepare('UPDATE intelligence_usage SET job_id=?, updated_at=? WHERE job_id=?').run(`${id}:attempt${row.attempts}`, now(), id);
       this.db.prepare("UPDATE competitor_analyses SET status='queued', error=NULL, result=NULL, quality=NULL, attempts=attempts+1, updated_at=? WHERE id=?").run(now(), id);
@@ -618,8 +621,8 @@ class CompetitorIntelligence {
       const row = this.db.prepare("SELECT * FROM competitor_analyses WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
       if (!row) return null;
       const scope = JSON.parse(row.scope), family = this.store.family(row.family_id), at = now();
-      if (family.revision !== scope.familyRevision || family.archived || !connectorCurrent(this.connectors, scope.connector, 'hermes')) {
-        this.db.prepare("UPDATE competitor_analyses SET status='stale', error='The family or Hermes connector changed before analysis. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id);
+      if (family.revision !== scope.familyRevision || family.archived || !connectorCurrent(this.connectors, scope.connector, 'ai')) {
+        this.db.prepare("UPDATE competitor_analyses SET status='stale', error='The family or Claude connection changed before analysis. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id);
         return null;
       }
       const summary = this.store.usageSummary(family.id);
@@ -639,26 +642,15 @@ class CompetitorIntelligence {
     this.analysisBusy = true;
     let providerStarted = false;
     try {
-      const key = this.connectors.key(job.scope.connector.id);
-      const trackedFetch = async (url, options) => { if (String(url) === `${HERMES_ORIGIN}/v1/chat/completions`) providerStarted = true; return this.connectors.fetch(url, options); };
-      await new HermesClient(key, trackedFetch).capabilities();
-      let response;
-      try {
-        response = await trackedFetch(`${HERMES_ORIGIN}/v1/chat/completions`, {method: 'POST', headers: {Authorization: `Bearer ${key}`, 'Content-Type': 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(180000),
-          body: JSON.stringify({model: 'hermes-agent', stream: false, max_tokens: job.scope.maxCompletionTokens, messages: analysisMessages(job.scope.promptInput)})});
-      } catch { throw new HermesError('Hermes competitor analysis failed or timed out.'); }
-      if (!response.ok) { await response.body?.cancel(); throw new HermesError(`Hermes competitor analysis returned HTTP ${response.status}.`); }
-      const data = await boundedJson(response, 262144);
-      const usage = {promptTokens: data.usage?.prompt_tokens ?? null, completionTokens: data.usage?.completion_tokens ?? null, totalTokens: data.usage?.total_tokens ?? null};
-      const raw = data?.choices?.[0]?.message?.content;
-      if (typeof raw !== 'string') throw new HermesError('Hermes returned an unexpected completion response.');
+      const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'competitors', messages: analysisMessages(job.scope.promptInput), maxTokens: job.scope.maxCompletionTokens, onStart: () => { providerStarted = true; }});
+      const usage = {...reply.usage, model: reply.model, provider: reply.provider};
       let parsed;
-      try { parsed = JSON.parse(raw); } catch { throw new HermesError('Hermes did not return the required JSON blueprint.'); }
+      try { parsed = JSON.parse(reply.content); } catch { throw new AiError('Claude did not return the required JSON blueprint.'); }
       return this.completeAnalysis(job.id, parsed, usage);
     } catch (error) {
       this.store.transaction(() => {
         const at = now();
-        this.db.prepare('UPDATE competitor_analyses SET status=?, error=?, updated_at=? WHERE id=? AND status=\'running\'').run(providerStarted ? 'interrupted' : 'failed', error instanceof HermesError || error instanceof InputError ? error.message : 'Hermes analysis failed unexpectedly.', at, job.id);
+        this.db.prepare('UPDATE competitor_analyses SET status=?, error=?, updated_at=? WHERE id=? AND status=\'running\'').run(providerStarted ? 'interrupted' : 'failed', error instanceof AiError || error instanceof InputError ? error.message : 'The Claude analysis failed unexpectedly.', at, job.id);
         this.db.prepare('UPDATE intelligence_usage SET status=?, reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END, updated_at=? WHERE job_id=?').run(providerStarted ? 'unknown' : 'released', providerStarted ? 1 : 0, at, job.id);
       });
       return null;
@@ -674,7 +666,7 @@ class CompetitorIntelligence {
       const valid = Number.isSafeInteger(total) && total >= 0 && (prompt === null || Number.isSafeInteger(prompt) && prompt <= total) && (completion === null || Number.isSafeInteger(completion) && completion <= total) && (prompt === null || completion === null || prompt + completion === total);
       if (!valid || total > scope.tokenLimit) {
         this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?').run(valid ? 'budget_violation' : 'unknown', Number.isSafeInteger(prompt) ? prompt : null, Number.isSafeInteger(completion) ? completion : null, Number.isSafeInteger(total) ? total : null, at, id);
-        this.db.prepare('UPDATE competitor_analyses SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Hermes reported token use above the analysis limit.' : 'Hermes did not report valid token usage.', at, id);
+        this.db.prepare('UPDATE competitor_analyses SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Claude reported token use above the analysis limit.' : 'Claude did not report valid token usage.', at, id);
         return null;
       }
       this.db.prepare("UPDATE intelligence_usage SET status='settled', prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?").run(prompt, completion, total, at, id);

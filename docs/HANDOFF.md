@@ -1,3 +1,7 @@
+# Current continuation: 2026-10-07
+
+Version 0.15.0 adds narration-only finishing in Room 07. The owner explicitly preserved the existing Claude direction and deferred music sourcing. Read [CONTINUATION-REVIEW.md](CONTINUATION-REVIEW.md), [AUDIO-ROOM.md](AUDIO-ROOM.md) and the latest BUILD-PROGRESS.md entry before continuing. Earlier notes below are historical where they conflict. Changes were delivered directly to Desktop\YT\youtube; no GitHub push was requested.
+
 # Handoff: continuing in Claude Code (2026-10-05)
 
 On 2026-10-05 the owner asked to move the program and its chats from the Claude desktop app's Cowork mode to **Claude Code** on his PC. From now on the program folder on the owner's PC is the working copy:

@@ -1,11 +1,13 @@
 'use strict';
 // R06 - Niche Factory.
 // Owner niche ideas + NexLev discovery (niche overview, similar channels, keyword thumbnail
-// search, analytics estimates) -> a Hermes rubric evaluation whose score is computed in code,
+// search, analytics estimates) -> a Claude rubric evaluation whose score is computed in code,
 // with hard filters that override the score. Humans shortlist, reject or turn a niche into a family.
 const {randomUUID} = require('node:crypto');
 const {InputError, competitorList} = require('./store');
-const {HERMES_ORIGIN, HermesClient, HermesError, boundedJson, messageTokenUpperBound} = require('./hermes');
+const {AiError, messageTokenUpperBound} = require('./writer');
+const {Ai} = require('./ai');
+
 const {NexLevClient, YouTubePublicClient, normChannel, normVideo, firstArray, cleanText, copiedPhrases, words, connectorCurrent, connectorReference} = require('./intel-sources');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -63,17 +65,17 @@ function ideaInput(input) {
 }
 
 // ---------------------------------------------------------------- evaluation validation
-function hermesText(value, label, min, max) {
-  if (typeof value !== 'string' || value.trim().length < min || value.length > max || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) throw new HermesError(`Hermes returned an invalid ${label}.`);
+function aiText(value, label, min, max) {
+  if (typeof value !== 'string' || value.trim().length < min || value.length > max || /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) throw new AiError(`Claude returned an invalid ${label}.`);
   return value.trim();
 }
 function strict(value, keys, label) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) throw new HermesError(`Hermes returned an unexpected ${label} shape.`);
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(key => !keys.includes(key)) || keys.some(key => !Object.hasOwn(value, key))) throw new AiError(`Claude returned an unexpected ${label} shape.`);
   return value;
 }
-function hermesStrings(value, label, min, max, itemMin, itemMax) {
-  if (!Array.isArray(value) || value.length < min || value.length > max) throw new HermesError(`Hermes returned an invalid ${label} list.`);
-  return value.map(item => hermesText(item, label, itemMin, itemMax));
+function aiStrings(value, label, min, max, itemMin, itemMax) {
+  if (!Array.isArray(value) || value.length < min || value.length > max) throw new AiError(`Claude returned an invalid ${label} list.`);
+  return value.map(item => aiText(item, label, itemMin, itemMax));
 }
 function similarity(a, b) {
   const left = new Set(words(a)), right = new Set(words(b));
@@ -95,35 +97,35 @@ function validateEvaluation(value, {refs, channelRefs, styleKeys, formats}) {
   strict(value.ratings, RUBRIC.map(item => item.key), 'rubric');
   const ratings = Object.fromEntries(RUBRIC.map(item => {
     const rating = strict(value.ratings[item.key], ['rating', 'rationale', 'refs'], item.label);
-    if (!Number.isSafeInteger(rating.rating) || rating.rating < 1 || rating.rating > 5) throw new HermesError(`Hermes returned an invalid ${item.label} rating.`);
-    if (!Array.isArray(rating.refs) || rating.refs.length < 1 || rating.refs.length > 6 || rating.refs.some(ref => typeof ref !== 'string' || !refs.has(ref))) throw new HermesError(`Hermes cited evidence that was not supplied for ${item.label}.`);
-    return [item.key, {rating: rating.rating, rationale: hermesText(rating.rationale, `${item.label} rationale`, 10, 800), refs: [...new Set(rating.refs)]}];
+    if (!Number.isSafeInteger(rating.rating) || rating.rating < 1 || rating.rating > 5) throw new AiError(`Claude returned an invalid ${item.label} rating.`);
+    if (!Array.isArray(rating.refs) || rating.refs.length < 1 || rating.refs.length > 6 || rating.refs.some(ref => typeof ref !== 'string' || !refs.has(ref))) throw new AiError(`Claude cited evidence that was not supplied for ${item.label}.`);
+    return [item.key, {rating: rating.rating, rationale: aiText(rating.rationale, `${item.label} rationale`, 10, 800), refs: [...new Set(rating.refs)]}];
   }));
   strict(value.hardFilters, HARD_FILTERS, 'hard filters');
   const hardFilters = Object.fromEntries(HARD_FILTERS.map(key => {
     const item = strict(value.hardFilters[key], ['pass', 'note'], `${key} filter`);
-    if (typeof item.pass !== 'boolean') throw new HermesError(`Hermes returned an invalid ${key} filter.`);
-    return [key, {pass: item.pass, note: hermesText(item.note, `${key} filter note`, 5, 500)}];
+    if (typeof item.pass !== 'boolean') throw new AiError(`Claude returned an invalid ${key} filter.`);
+    return [key, {pass: item.pass, note: aiText(item.note, `${key} filter note`, 5, 500)}];
   }));
-  const episodeIdeas = hermesStrings(value.episodeIdeas, 'episode idea', 20, 20, 8, 160);
-  episodeIdeas.forEach((idea, index) => { if (episodeIdeas.slice(0, index).some(other => similarity(other, idea) >= 0.8)) throw new HermesError('Hermes returned near-duplicate episode ideas; twenty materially different topics are required.'); });
+  const episodeIdeas = aiStrings(value.episodeIdeas, 'episode idea', 20, 20, 8, 160);
+  episodeIdeas.forEach((idea, index) => { if (episodeIdeas.slice(0, index).some(other => similarity(other, idea) >= 0.8)) throw new AiError('Claude returned near-duplicate episode ideas; twenty materially different topics are required.'); });
   const recommendedCompetitors = (() => {
-    if (!Array.isArray(value.recommendedCompetitors) || value.recommendedCompetitors.length > 10) throw new HermesError('Hermes returned invalid recommended competitors.');
+    if (!Array.isArray(value.recommendedCompetitors) || value.recommendedCompetitors.length > 10) throw new AiError('Claude returned invalid recommended competitors.');
     const unique = [...new Set(value.recommendedCompetitors)];
-    if (unique.some(ref => !channelRefs.has(ref))) throw new HermesError('Hermes recommended a competitor that was not discovered.');
+    if (unique.some(ref => !channelRefs.has(ref))) throw new AiError('Claude recommended a competitor that was not discovered.');
     return unique;
   })();
-  if (!styleKeys.has(value.recommendedStyleKey)) throw new HermesError('Hermes recommended a style that is not in the Style Library.');
+  if (!styleKeys.has(value.recommendedStyleKey)) throw new AiError('Claude recommended a style that is not in the Style Library.');
   const draft = strict(value.familyDraft, ['name', 'audience', 'niche', 'countries', 'format'], 'family draft');
-  if (!formats.includes(draft.format)) throw new HermesError('Hermes proposed a format the idea does not allow.');
-  const familyDraft = {name: hermesText(draft.name, 'family name', 2, 80), audience: hermesText(draft.audience, 'family audience', 10, 2000), niche: hermesText(draft.niche, 'family niche', 10, 1000), countries: hermesStrings(draft.countries, 'country', 1, 12, 2, 60), format: draft.format};
+  if (!formats.includes(draft.format)) throw new AiError('Claude proposed a format the idea does not allow.');
+  const familyDraft = {name: aiText(draft.name, 'family name', 2, 80), audience: aiText(draft.audience, 'family audience', 10, 2000), niche: aiText(draft.niche, 'family niche', 10, 1000), countries: aiStrings(draft.countries, 'country', 1, 12, 2, 60), format: draft.format};
   strict(value.confidence, ['level', 'rationale'], 'confidence');
-  if (!['low', 'medium', 'high'].includes(value.confidence.level)) throw new HermesError('Hermes returned an invalid confidence level.');
+  if (!['low', 'medium', 'high'].includes(value.confidence.level)) throw new AiError('Claude returned an invalid confidence level.');
   return {
-    summary: hermesText(value.summary, 'summary', 20, 2000), positioning: hermesText(value.positioning, 'positioning', 20, 800), ratings, hardFilters, episodeIdeas,
-    reasonsToReject: hermesStrings(value.reasonsToReject, 'reason to reject', 3, 3, 10, 500), recommendedCompetitors, recommendedStyleKey: value.recommendedStyleKey, familyDraft,
-    confidence: {level: value.confidence.level, rationale: hermesText(value.confidence.rationale, 'confidence rationale', 10, 1000)},
-    uncertainties: hermesStrings(value.uncertainties, 'uncertainty', 0, 8, 3, 500),
+    summary: aiText(value.summary, 'summary', 20, 2000), positioning: aiText(value.positioning, 'positioning', 20, 800), ratings, hardFilters, episodeIdeas,
+    reasonsToReject: aiStrings(value.reasonsToReject, 'reason to reject', 3, 3, 10, 500), recommendedCompetitors, recommendedStyleKey: value.recommendedStyleKey, familyDraft,
+    confidence: {level: value.confidence.level, rationale: aiText(value.confidence.rationale, 'confidence rationale', 10, 1000)},
+    uncertainties: aiStrings(value.uncertainties, 'uncertainty', 0, 8, 3, 500),
   };
 }
 
@@ -159,7 +161,8 @@ function analyticsSummary(channelId, data) {
 }
 
 class NicheFactory {
-  constructor(store, connectors, quota, styles) {
+  constructor(store, connectors, quota, styles, ai = new Ai(connectors)) {
+    this.ai = ai;
     this.store = store;
     this.db = store.db;
     this.connectors = connectors;
@@ -186,7 +189,7 @@ class NicheFactory {
       this.quota.markUnknown(row.id);
     }
     for (const row of this.db.prepare("SELECT id FROM niche_evaluations WHERE status='running'").all()) {
-      this.db.prepare("UPDATE niche_evaluations SET status='interrupted', error='The program stopped while Hermes was running. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
+      this.db.prepare("UPDATE niche_evaluations SET status='interrupted', error='The program stopped while Claude was running. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
       this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(at, row.id);
     }
   }
@@ -393,7 +396,7 @@ class NicheFactory {
     }
   }
 
-  // ------------------------------------------------------------ evaluation (Hermes)
+  // ------------------------------------------------------------ evaluation (Claude)
   evaluationRow(id) {
     const row = this.db.prepare('SELECT * FROM niche_evaluations WHERE id=?').get(id);
     requireValue(row, 'Niche evaluation not found.', 404);
@@ -437,7 +440,7 @@ class NicheFactory {
       const idea = this.publicIdea(this.ideaRow(ideaId));
       requireValue(idea.status === 'active', 'Restore this idea before evaluating it.', 409);
       requireValue(input.ideaRevision === idea.revision, 'This niche idea changed in another tab. Reload first.', 409);
-      const hermes = connectorReference(this.connectors, input.connector, 'hermes', 'Hermes reasoning', true);
+      const claude = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
       let discovery = null;
       if (input.discoveryId) {
         discovery = this.publicDiscovery(this.discoveryRow(text(input.discoveryId, 'Discovery', 10, 64)));
@@ -449,10 +452,10 @@ class NicheFactory {
       const settings = this.settings();
       const {promptInput, refs, maxCompletionTokens} = this.buildPromptInput(idea, discovery, settings.evaluationTokenLimit);
       const titles = (discovery?.result?.keywords || []).flatMap(item => item.videos.map(video => video.title)).filter(Boolean);
-      const scope = {ideaRevision: idea.revision, connector: hermes, promptVersion: 1, tokenLimit: settings.evaluationTokenLimit, maxCompletionTokens, promptInput, refs, copySources: titles, channelIndex: (discovery?.result?.channels || []).map(channel => ({ref: channel.ref, channelId: channel.channelId, title: channel.title}))};
+      const scope = {ideaRevision: idea.revision, connector: claude, promptVersion: 1, tokenLimit: settings.evaluationTokenLimit, maxCompletionTokens, promptInput, refs, copySources: titles, channelIndex: (discovery?.result?.channels || []).map(channel => ({ref: channel.ref, channelId: channel.channelId, title: channel.title}))};
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO niche_evaluations(id,idea_id,discovery_id,status,scope,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,?,?,?)").run(id, ideaId, discovery?.id || null, JSON.stringify(scope), requestedBy, at, at);
-      this.store.event(`Queued Hermes niche evaluation: ${idea.title}`);
+      this.store.event(`Queued Claude niche evaluation: ${idea.title}`);
       return this.publicEvaluation(this.evaluationRow(id));
     });
   }
@@ -465,7 +468,7 @@ class NicheFactory {
       const usage = this.db.prepare('SELECT status FROM intelligence_usage WHERE job_id=?').get(id);
       if (row.status === 'interrupted' || usage?.status === 'unknown') requireValue(input.confirmInterrupted === true, 'Token use for the last attempt is unknown. Confirm the deliberate retry.');
       requireValue(idea.revision === scope.ideaRevision && idea.status === 'active', 'The idea changed. Queue a new evaluation.', 409);
-      requireValue(connectorCurrent(this.connectors, scope.connector, 'hermes'), 'The Hermes connector changed or failed its test. Queue a new evaluation.', 409);
+      requireValue(connectorCurrent(this.connectors, scope.connector, 'ai'), 'The Claude connection changed or failed its test. Queue a new evaluation.', 409);
       if (usage?.status === 'released') this.db.prepare('DELETE FROM intelligence_usage WHERE job_id=?').run(id);
       else if (usage) this.db.prepare('UPDATE intelligence_usage SET job_id=?, updated_at=? WHERE job_id=?').run(`${id}:attempt${row.attempts}`, now(), id);
       this.db.prepare("UPDATE niche_evaluations SET status='queued', error=NULL, result=NULL, quality=NULL, score=NULL, decision=NULL, attempts=attempts+1, updated_at=? WHERE id=?").run(now(), id);
@@ -477,8 +480,8 @@ class NicheFactory {
       const row = this.db.prepare("SELECT * FROM niche_evaluations WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
       if (!row) return null;
       const scope = JSON.parse(row.scope), idea = this.publicIdea(this.ideaRow(row.idea_id)), at = now();
-      if (idea.revision !== scope.ideaRevision || idea.status !== 'active' || !connectorCurrent(this.connectors, scope.connector, 'hermes')) {
-        this.db.prepare("UPDATE niche_evaluations SET status='stale', error='The idea or Hermes connector changed before evaluation. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id);
+      if (idea.revision !== scope.ideaRevision || idea.status !== 'active' || !connectorCurrent(this.connectors, scope.connector, 'ai')) {
+        this.db.prepare("UPDATE niche_evaluations SET status='stale', error='The idea or Claude connection changed before evaluation. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id);
         return null;
       }
       const budget = this.tokenSummary();
@@ -498,26 +501,15 @@ class NicheFactory {
     this.evaluationBusy = true;
     let providerStarted = false;
     try {
-      const key = this.connectors.key(job.scope.connector.id);
-      const trackedFetch = async (url, options) => { if (String(url) === `${HERMES_ORIGIN}/v1/chat/completions`) providerStarted = true; return this.connectors.fetch(url, options); };
-      await new HermesClient(key, trackedFetch).capabilities();
-      let response;
-      try {
-        response = await trackedFetch(`${HERMES_ORIGIN}/v1/chat/completions`, {method: 'POST', headers: {Authorization: `Bearer ${key}`, 'Content-Type': 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(180000),
-          body: JSON.stringify({model: 'hermes-agent', stream: false, max_tokens: job.scope.maxCompletionTokens, messages: evaluationMessages(job.scope.promptInput)})});
-      } catch { throw new HermesError('Hermes niche evaluation failed or timed out.'); }
-      if (!response.ok) { await response.body?.cancel(); throw new HermesError(`Hermes niche evaluation returned HTTP ${response.status}.`); }
-      const data = await boundedJson(response, 262144);
-      const usage = {promptTokens: data.usage?.prompt_tokens ?? null, completionTokens: data.usage?.completion_tokens ?? null, totalTokens: data.usage?.total_tokens ?? null};
-      const raw = data?.choices?.[0]?.message?.content;
-      if (typeof raw !== 'string') throw new HermesError('Hermes returned an unexpected completion response.');
+      const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'niche', messages: evaluationMessages(job.scope.promptInput), maxTokens: job.scope.maxCompletionTokens, onStart: () => { providerStarted = true; }});
+      const usage = {...reply.usage, model: reply.model, provider: reply.provider};
       let parsed;
-      try { parsed = JSON.parse(raw); } catch { throw new HermesError('Hermes did not return the required JSON evaluation.'); }
+      try { parsed = JSON.parse(reply.content); } catch { throw new AiError('Claude did not return the required JSON evaluation.'); }
       return this.completeEvaluation(job.id, parsed, usage);
     } catch (error) {
       this.store.transaction(() => {
         const at = now();
-        this.db.prepare("UPDATE niche_evaluations SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(providerStarted ? 'interrupted' : 'failed', error instanceof HermesError || error instanceof InputError ? error.message : 'Hermes evaluation failed unexpectedly.', at, job.id);
+        this.db.prepare("UPDATE niche_evaluations SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(providerStarted ? 'interrupted' : 'failed', error instanceof AiError || error instanceof InputError ? error.message : 'Claude evaluation failed unexpectedly.', at, job.id);
         this.db.prepare('UPDATE intelligence_usage SET status=?, reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END, updated_at=? WHERE job_id=?').run(providerStarted ? 'unknown' : 'released', providerStarted ? 1 : 0, at, job.id);
       });
       return null;
@@ -533,7 +525,7 @@ class NicheFactory {
       const valid = Number.isSafeInteger(total) && total >= 0 && (prompt === null || Number.isSafeInteger(prompt) && prompt <= total) && (completion === null || Number.isSafeInteger(completion) && completion <= total) && (prompt === null || completion === null || prompt + completion === total);
       if (!valid || total > scope.tokenLimit) {
         this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?').run(valid ? 'budget_violation' : 'unknown', Number.isSafeInteger(prompt) ? prompt : null, Number.isSafeInteger(completion) ? completion : null, Number.isSafeInteger(total) ? total : null, at, id);
-        this.db.prepare('UPDATE niche_evaluations SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Hermes reported token use above the evaluation limit.' : 'Hermes did not report valid token usage.', at, id);
+        this.db.prepare('UPDATE niche_evaluations SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Claude reported token use above the evaluation limit.' : 'Claude did not report valid token usage.', at, id);
         return null;
       }
       this.db.prepare("UPDATE intelligence_usage SET status='settled', prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?").run(prompt, completion, total, at, id);

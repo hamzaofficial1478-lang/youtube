@@ -128,7 +128,7 @@ function skillUsagePanel() {
   const usage = state.skills.usage || [];
   const intro = `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">RUNTIME LOG</span><h2>Where skills were actually used</h2></div>${badge(`${usage.length} recorded`, usage.length ? 'green' : 'gray')}</div>
     <p>Every job that received a skill brief is recorded with the exact revisions that were injected and how much of the prompt they used. The brief is capped at ${state.skills.briefByteBudget} bytes of the family's job token limit; anything that does not fit is dropped whole and counted, never trimmed mid-rule.</p></section>`;
-  if (!usage.length) return `${intro}<div class="production-empty"><span class="empty-icon">✦</span><h2>No recorded use yet</h2><p>Approve a skill, then queue a Hermes script or a daily research brief. The injected revisions appear here.</p></div>`;
+  if (!usage.length) return `${intro}<div class="production-empty"><span class="empty-icon">✦</span><h2>No recorded use yet</h2><p>Approve a skill, then queue a Claude script or a daily research brief. The injected revisions appear here.</p></div>`;
   return intro + `<section class="production-card"><table class="skill-table"><thead><tr><th>When</th><th>Room</th><th>Applied at</th><th>Skills</th><th>Bytes</th><th>Dropped</th><th>Outcome</th></tr></thead><tbody>${usage.map(item => `<tr><td>${esc(date(item.createdAt))}</td><td>${esc(item.room)}</td><td><code>${esc(item.taskKey)}</code></td><td>${item.skillIds.map(id => `<code>${esc(id)}</code>`).join(' ')}</td><td>${item.injectedBytes}</td><td>${item.dropped || '—'}</td><td>${esc(item.outcome || 'pending')}</td></tr>`).join('')}</tbody></table></section>`;
 }
 

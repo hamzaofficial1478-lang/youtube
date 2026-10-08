@@ -9,13 +9,15 @@ const {spawn} = require('node:child_process');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const VS = require('./visual-sources');
+const Audio = require('./audio');
 
-const RENDERER_VERSION = 'ffmpeg-montage/1.0.0';
+const RENDERER_VERSION = 'ffmpeg-montage/1.1.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo'];
-const REQUIRED_ENCODERS = ['libx264', 'aac', 'png'];
+REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS.includes(name)));
+const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
 };

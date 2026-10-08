@@ -333,6 +333,14 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   const moving = mixed.find(clip => clip.mediaType === 'video');
   r5 = editing.applyOps(r5.id, {editedBy: 'Owner', ops: [{type: 'reorder', sceneId: moving.sceneId, clipId: moving.id, toIndex: 0}]});
   assert.equal(r5.timeline.clips.find(clip => clip.sceneId === moving.sceneId).id, moving.id);
+  assert.equal(r5.timeline.audio, undefined, 'existing edits keep their original audio behavior until an owner chooses settings');
+  assert.throws(() => editing.applyOps(r5.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {truePeakDb: 1}}]}), /truePeakDb/);
+  const beforeAudio = r5;
+  r5 = editing.applyOps(r5.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'normalize', targetLufs: -16, truePeakDb: -2}}]});
+  assert.equal(r5.revision, beforeAudio.revision + 1);
+  assert.deepEqual(r5.timeline.captions, beforeAudio.timeline.captions);
+  assert.deepEqual(r5.timeline.clips, beforeAudio.timeline.clips);
+  assert.throws(() => editing.applyOps(beforeAudio.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'source'}}]}), /changed/);
 
   // Rendering the edit needs the pinned build; the render follows the edit's own decisions.
   await assert.rejects(Promise.resolve().then(() => renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id})), /readiness check/);
@@ -358,6 +366,11 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(manifest.inputs.edit.graphicsSha256, createHash('sha256').update(burned).digest('hex'), 'the manifest records the exact subtitle layer, captions included');
   assert.match(manifest.inputs.edit.graphicsSha256, /^[a-f0-9]{64}$/);
   assert.ok(manifest.commands.some(command => command.step.startsWith('join chunk-')));
+  assert.equal(result.audioQc.passed, true, JSON.stringify(result.audioQc));
+  assert.equal(manifest.audio.settings.targetLufs, -16);
+  assert.equal(manifest.audio.artifact.sha256, result.audio.sha256);
+  assert.ok(manifest.commands.some(command => command.step === 'verify encoded audio'));
+  assert.equal(renders.file(queued.id, 'audio').mime, 'audio/wav');
   assert.ok(manifest.commands.every(command => !command.args.join(' ').includes(dataRoot)), 'command plans do not leak local paths');
   // Same edit, same build: byte-identical render.
   const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id});
@@ -365,13 +378,23 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(JSON.parse(renders.row(again.id).result).video.sha256, result.video.sha256);
   // The verdict on the rendered edit is its approval; critical findings must be accepted explicitly.
   const criticals = queued.scope.edit.criticals;
-  const confirmations = {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true};
+  const confirmations = {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, audioReviewed: true};
+  assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, audioReviewed: false}}), /listened/);
   if (criticals) assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations}), /critical finding/);
+  const renderedFile = renders.file(queued.id, 'video').file, original = fs.readFileSync(renderedFile), changed = Buffer.from(original);
+  changed[changed.length - 1] ^= 1;
+  fs.writeFileSync(renderedFile, changed);
+  assert.throws(() => renders.file(queued.id, 'video'), /missing or changed/);
+  assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}}), /missing or changed/);
+  fs.writeFileSync(renderedFile, original);
   const passed = renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}});
   assert.equal(passed.review.decision, 'passed');
   assert.equal(passed.current, true);
   // A newer edit makes the rendered one out of date.
+  const waiting = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id});
   editing.applyOps(r5.id, {editedBy: 'Owner', ops: [{type: 'set-hero', clipId: still.id, hero: true}]});
+  assert.equal(await renders.processNext(), null);
+  assert.equal(renders.row(waiting.id).status, 'stale', 'a superseded queued edit does not consume rendering time');
   assert.equal(renders.publicJob(renders.row(again.id)).current, false);
   // A changed visual board makes the edit itself out of date: no more edits, no render.
   const latest = editing.state().contents.find(item => item.contentId === content.id).edit;

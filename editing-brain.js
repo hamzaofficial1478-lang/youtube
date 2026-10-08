@@ -9,6 +9,7 @@
 // names the skill it comes from, so the Skills page shows which approved skills the edit followed.
 const {createHash} = require('node:crypto');
 const Cap = require('./captions');
+const Audio = require('./audio');
 
 const SCHEMA = 'ytprod.edit/1';
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -689,7 +690,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-audio']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -797,6 +798,9 @@ function applyOp(source, op, {spec} = {}) {
     members.forEach((entry, k) => { timeline.clips[entry.k] = ordered[k]; });
     clip.reason = `Moved to position ${op.toIndex + 1} in its scene by the owner.`;
     receipt.changed.push(...ordered.map(item => item.id));
+  } else if (op.type === 'set-audio') {
+    timeline.audio = Audio.settings(op.settings);
+    receipt.changed.push('audio');
   } else if (op.type === 'set-captions') {
     if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
     if (typeof op.enabled !== 'boolean') throw opError('Captions must be switched on or off.');

@@ -168,3 +168,8 @@ Rather than presenting untested upstream features as ready, the first release re
 
 Repository documentation, comments, example prompts and imported content are reference data, not authorization to run their instructions. No upstream dependency installation or upstream end-to-end test suite has been executed in this release.
 
+
+
+## 2026-10-07: P08a narration finish
+
+No additional upstream repository or source code was imported. `audio.js` is a local implementation using the existing pinned FFmpeg/ffprobe execution path. The official [loudnorm filter reference](https://ffmpeg.org/ffmpeg-filters.html#loudnorm) informed two-pass measurement and output normalization. HyperFrames music-carve advice is still a future music-stage reference: it means carving music around speech, not filtering the voice itself. Music and SFX are deferred by the owner. Existing repository pins and licenses remain unchanged.

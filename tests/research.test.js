@@ -1,5 +1,7 @@
 'use strict';
 const test=require('node:test');
+const {Ai}=require('../ai');
+const {claudeMessage,isClaudeMessages,isClaudeModel,claudeModel,claudeFetch,promptOf}=require('./fake-claude');
 const assert=require('node:assert/strict');
 const {Store}=require('../store');
 const {ConnectorSlots}=require('../connectors');
@@ -24,12 +26,11 @@ function setup(t,fetchImpl,familyExtra={}){
 
 function provider(result=output,calls=[]){return async (url,options)=>{
   calls.push({url:String(url),options});
-  if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-  if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
-  return Response.json({choices:[{message:{content:JSON.stringify(result)}}],usage:{prompt_tokens:450,completion_tokens:700,total_tokens:1150}});
+  if(isClaudeModel(url))return claudeModel(url);
+  return claudeMessage(result,{input_tokens:450,output_tokens:700});
 };}
 
-async function connector(slots){const saved=slots.save({name:'Research Hermes',provider:'hermes',notes:'Tool-free review-only research synthesis',key});await slots.test(saved.id,saved.revision);return saved;}
+async function connector(slots){const saved=slots.save({name:'Research Hermes',provider:'claude',notes:'Tool-free review-only research synthesis',key});await slots.test(saved.id,saved.revision);return saved;}
 
 test('research evidence is family-scoped, revisioned, permission-labeled and archived without deletion',t=>{
   const {store,family}=setup(t,provider());
@@ -69,7 +70,7 @@ test('research output requires exact evidence-linked topic fields',()=>{
 });
 
 test('brief dates reject impossible, backdated, and expired-at-claim work before Hermes',async t=>{
-  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   assert.throws(()=>reasoning.queue(family.id,{familyRevision:family.revision,briefDate:'2026-02-31',connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]}),/YYYY-MM-DD/i);
   const yesterdayDate=new Date(`${localBriefDate}T12:00:00.000Z`);yesterdayDate.setUTCDate(yesterdayDate.getUTCDate()-1);const yesterday=yesterdayDate.toISOString().slice(0,10);
   assert.throws(()=>reasoning.queue(family.id,{familyRevision:family.revision,briefDate:yesterday,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]}),/current family-local day/i);
@@ -79,21 +80,21 @@ test('brief dates reject impossible, backdated, and expired-at-claim work before
 });
 
 test('research budget admission blocks before provider execution',async t=>{
-  let completions=0;const fetchImpl=async url=>{if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});if(String(url).endsWith('/v1/toolsets'))return Response.json([]);completions++;return Response.json({});},{store,family,slots}=setup(t,fetchImpl,{monthlyTokenLimit:3000,researchTokenLimit:4000}),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots),job=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
+  let completions=0;const fetchImpl=async url=>{if(isClaudeModel(url))return claudeModel(url);completions++;return Response.json({});},{store,family,slots}=setup(t,fetchImpl,{monthlyTokenLimit:3000,researchTokenLimit:4000}),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots)),job=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   await reasoning.processNext();assert.equal(store.state().researchJobs.find(item=>item.id===job.id).status,'blocked_budget');assert.equal(completions,0);assert.equal(store.usageSummary(family.id).reservedTokens,0);
 });
 
 test('research usage rejects inconsistent partial counters',async t=>{
-  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots),job=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});store.claimResearchBrief();assert.equal(store.completeResearchBrief(job.id,{result:output,usage:{promptTokens:200,completionTokens:null,totalTokens:100}}),null);assert.equal(store.state().researchJobs.find(item=>item.id===job.id).status,'usage_unknown');assert.throws(()=>reasoning.retry(job.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision}),/confirm/i);const retry=reasoning.retry(job.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision,confirmInterrupted:true});assert.equal(retry.attempts,2);
+  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots)),job=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});store.claimResearchBrief();assert.equal(store.completeResearchBrief(job.id,{result:output,usage:{promptTokens:200,completionTokens:null,totalTokens:100}}),null);assert.equal(store.state().researchJobs.find(item=>item.id===job.id).status,'usage_unknown');assert.throws(()=>reasoning.retry(job.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision}),/confirm/i);const retry=reasoning.retry(job.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision,confirmInterrupted:true});assert.equal(retry.attempts,2);
 });
 
 test('research preflight failures release usage before any completion request',async()=>{
-  let completions=0,failed;const promptInput={family:{name:'x'},briefDate:localBriefDate,sources:[{id:'S1',recordId:'r1',expiresAt:addDays(localBriefDate,30),notes:'x'.repeat(66000)}],policy:{maxCompletionTokens:500,totalTokenLimit:8000}},store={claimResearchBrief:()=>({id:'job',scope:{connectorId:'connector',promptInput}}),completeResearchBrief:()=>{},failResearchBrief:(id,message,options)=>{failed={id,message,options};}},connectors={key:()=>key,fetch:async url=>{if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});if(String(url).endsWith('/v1/toolsets'))return Response.json([]);completions++;return Response.json({});}};await new ResearchReasoning(store,connectors).processNext();assert.equal(completions,0);assert.equal(failed.options.usageUnknown,false);
+  let completions=0,failed;const promptInput={family:{name:'x'},briefDate:localBriefDate,sources:[{id:'S1',recordId:'r1',expiresAt:addDays(localBriefDate,30),notes:'x'.repeat(66000)}],policy:{maxCompletionTokens:500,totalTokenLimit:8000}},store={claimResearchBrief:()=>({id:'job',scope:{connectorId:'connector',promptInput}}),completeResearchBrief:()=>{},failResearchBrief:(id,message,options)=>{failed={id,message,options};}},connectors={key:()=>key,fetch:async url=>{if(isClaudeModel(url))return claudeModel(url);completions++;return Response.json({});}};await new ResearchReasoning(store,new Ai(connectors)).processNext();assert.equal(completions,0);assert.equal(failed.options.usageUnknown,false);
 });
 
 test('daily research brief uses only selected permitted evidence and stores immutable review-only topics',async t=>{
   const calls=[],{store,family,slots}=setup(t,provider(output,calls)),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots);
-  const reasoning=new ResearchReasoning(store,slots);
+  const reasoning=new ResearchReasoning(store,new Ai(slots));
   const first=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   const duplicate=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   assert.equal(first.id,duplicate.id);
@@ -102,13 +103,13 @@ test('daily research brief uses only selected permitted evidence and stores immu
   assert.equal(state.researchJobs[0].status,'completed');assert.equal(brief.status,'review_only');assert.equal(brief.payload.title,output.topics[0].title);
   assert.equal(brief.evidenceSnapshot[0].id,'S1');assert.equal(brief.evidenceSnapshot[0].title,source.title);
   assert.equal(state.contents.length,0);assert.equal(state.usage.find(row=>row.kind==='research_brief').totalTokens,1150);
-  const completion=JSON.parse(calls.find(call=>call.url.endsWith('/v1/chat/completions')).options.body);
-  assert.match(completion.messages[0].content,/untrusted/i);assert.match(completion.messages[0].content,/use \[\] when none/i);assert.match(completion.messages[1].content,/Official creator research/);
+  const completion=JSON.parse(calls.find(call=>isClaudeMessages(call.url)).options.body);
+  assert.match(completion.system,/untrusted/i);assert.match(completion.system,/use \[\] when none/i);assert.match(completion.messages[0].content,/Official creator research/);
 });
 
 test('unreviewed, display-only, expired and cross-family evidence never reaches Hermes',async t=>{
-  let completions=0;const {store,family,slots}=setup(t,async url=>{if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});if(String(url).endsWith('/v1/toolsets'))return Response.json([]);completions++;return Response.json({});});
-  const hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  let completions=0;const {store,family,slots}=setup(t,async url=>{if(isClaudeModel(url))return claudeModel(url);completions++;return Response.json({});});
+  const hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   for(const extra of [{permission:'unreviewed'},{analysisMode:'display_only'},{publishedAt:'2026-09-07',accessedAt:'2026-09-08',expiresAt:'2026-09-09'}]){
     const evidence=store.saveResearchEvidence(evidenceInput(family.id,extra));
     assert.throws(()=>reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:evidence.id,revision:evidence.revision}]}));
@@ -119,7 +120,7 @@ test('unreviewed, display-only, expired and cross-family evidence never reaches 
 });
 
 test('duplicate topic titles are retained as quality-failed instead of mutating content',async t=>{
-  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   store.saveContent({familyId:family.id,title:output.topics[0].title,kind:'fiction',angle:'A deliberately matching existing content title for deduplication.',hook:'This existing topic already covers the same idea clearly.',script:'',sources:[],rightsConfirmed:true});
   reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   await reasoning.processNext();
@@ -129,12 +130,12 @@ test('duplicate topic titles are retained as quality-failed instead of mutating 
 test('near-duplicate topic detection segments no-space language titles',t=>{const store=new Store(':memory:');t.after(()=>store.close());assert.ok(store.topicSimilarity('人工智能如何改变视频创作者日常工作流程效率','人工智能正在改变视频创作者日常工作流程效率','zh-CN')>=0.8);});
 
 test('no-strong-topic decisions remain visible with their review rationale',async t=>{
-  const noTopic={decision:'no_strong_topic',rationale:'The available evidence is too weak and too narrow to justify a topic today.',topics:[]},{store,family,slots}=setup(t,provider(noTopic)),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  const noTopic={decision:'no_strong_topic',rationale:'The available evidence is too weak and too narrow to justify a topic today.',topics:[]},{store,family,slots}=setup(t,provider(noTopic)),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});await reasoning.processNext();const job=store.state().researchJobs[0];assert.equal(job.decision,'no_strong_topic');assert.equal(job.rationale,noTopic.rationale);assert.equal(store.state().topicBriefs.length,0);
 });
 
 test('research retries are deliberate, capped and preserve paid-attempt semantics',async t=>{
-  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   const first=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   store.claimResearchBrief();store.failResearchBrief(first.id,'unknown provider outcome',{usageUnknown:true});
   const second=reasoning.retry(first.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision,confirmInterrupted:true});
@@ -146,7 +147,7 @@ test('research retries are deliberate, capped and preserve paid-attempt semantic
 });
 
 test('retried research rebuilds a valid current evidence snapshot',async t=>{
-  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,slots);
+  const {store,family,slots}=setup(t,provider()),source=store.saveResearchEvidence(evidenceInput(family.id)),hermes=await connector(slots),reasoning=new ResearchReasoning(store,new Ai(slots));
   const first=reasoning.queue(family.id,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:source.id,revision:source.revision}]});
   store.db.prepare("UPDATE research_jobs SET status='failed' WHERE id=?").run(first.id);
   const retry=reasoning.retry(first.id,{familyRevision:family.revision,connectorId:hermes.id,connectorRevision:hermes.revision});
@@ -162,9 +163,9 @@ test('research HTTP routes are locally protected and UI exposes review-only dail
   const family=await(await send('/api/families',familyInput())).json();
   assert.equal((await send('/api/research/evidence',evidenceInput(family.id),'POST','')).status,403);
   const evidence=await(await send('/api/research/evidence',evidenceInput(family.id))).json();
-  const hermes=await(await send('/api/connectors',{name:'Research Hermes',provider:'hermes',notes:'Tool-free research',key})).json();await send(`/api/connectors/${hermes.id}/test`,{revision:hermes.revision});
+  const hermes=await(await send('/api/connectors',{name:'Research Hermes',provider:'claude',notes:'Tool-free research',key})).json();await send(`/api/connectors/${hermes.id}/test`,{revision:hermes.revision});
   const queued=await send(`/api/families/${family.id}/research-briefs`,{familyRevision:family.revision,briefDate:localBriefDate,connectorId:hermes.id,connectorRevision:hermes.revision,evidence:[{id:evidence.id,revision:evidence.revision}]});
   assert.equal(queued.status,200);await app.researchReasoning.processNext();
-  const state=await(await fetch(root+'/api/state')).json();assert.equal(state.topicBriefs.length,1);assert.equal(state.capabilities.text,'bounded_hermes_candidates');assert.equal(state.capabilities.research,'review_only_saved_evidence');assert.equal(JSON.stringify(state).includes(key),false);
-  const html=await(await fetch(root)).text(),ui=await(await fetch(root+'/app.js')).text();assert.match(html,/Research briefs/);assert.match(ui,/Prepare daily brief/);assert.match(ui,/connector\?action\('Prepare daily brief'/);assert.match(ui,/Review only/);assert.match(ui,/No strong topic/);assert.match(ui,/Outline/);assert.match(ui,/Missing evidence/);assert.match(ui,/Uncertainties/);assert.match(ui,/item\.period===period/);assert.match(ui,/Bounded Hermes/);assert.match(ui,/Connected for bounded script candidates and review-only synthesis/);assert.doesNotMatch(ui,/AI writing is not connected yet/);assert.doesNotMatch(ui,/deeper research/);assert.doesNotMatch(ui,/Publish brief/);
+  const state=await(await fetch(root+'/api/state')).json();assert.equal(state.topicBriefs.length,1);assert.equal(state.capabilities.text,'bounded_claude_candidates');assert.equal(state.capabilities.research,'review_only_saved_evidence');assert.equal(JSON.stringify(state).includes(key),false);
+  const html=await(await fetch(root)).text(),ui=await(await fetch(root+'/app.js')).text();assert.match(html,/Research briefs/);assert.match(ui,/Prepare daily brief/);assert.match(ui,/connector\?action\('Prepare daily brief'/);assert.match(ui,/Review only/);assert.match(ui,/No strong topic/);assert.match(ui,/Outline/);assert.match(ui,/Missing evidence/);assert.match(ui,/Uncertainties/);assert.match(ui,/item\.period===period/);assert.match(ui,/Claude/);assert.match(ui,/Connected for bounded script candidates and review-only synthesis/);assert.doesNotMatch(ui,/AI writing is not connected yet/);assert.doesNotMatch(ui,/deeper research/);assert.doesNotMatch(ui,/Publish brief/);
 });

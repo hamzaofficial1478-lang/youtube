@@ -49,16 +49,16 @@ function sceneRoomView(family) {
 
 function sceneInputsCard(content) {
   const inputs = content.inputs, row = (ok, title, detail) => `<div class="handoff-record"><span>${ok ? '✓' : '○'}</span><div><strong>${title}</strong><p>${detail}</p></div></div>`;
-  const planJobs = content.planJobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} Hermes plan · ${esc(date(job.createdAt))}</strong><small>Attempt ${job.attempts}/3${job.usage?.total ? ` · ${job.usage.total.toLocaleString()} tokens` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'scene-plan-retry', job.id, 'text-button') : ''}</div>`).join('');
+  const planJobs = content.planJobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} Claude plan · ${esc(date(job.createdAt))}</strong><small>Attempt ${job.attempts}/3${job.usage?.total ? ` · ${job.usage.total.toLocaleString()} tokens` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'scene-plan-retry', job.id, 'text-button') : ''}</div>`).join('');
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">INPUTS & GATE</span><h2>Locked inputs</h2></div>${badge(inputs.ready ? 'Ready' : 'Blocked', inputs.ready ? 'green' : 'gray')}</div>
     ${row(content.contentState === 'approved', `Approved script v${content.contentRevision}`, esc(content.title))}
     ${row(inputs.voice.ready, 'Approved narration', inputs.voice.ready ? `${sceneClock(inputs.voice.durationSeconds)} · timing source for every scene` : esc(inputs.voice.blocker || 'Approve a narration in the Voice Room.'))}
     ${row(inputs.style.ready, inputs.style.ready ? `${esc(inputs.style.name)} r${inputs.style.revision}` : 'Family style', inputs.style.ready ? `Sources: ${esc(inputs.sources.map(styleLabel).join(', '))}` : esc(inputs.style.blocker || 'Assign a style in Room 03.'))}
-    <div class="card-actions">${inputs.ready ? action('Split narration (free)', 'scene-plan-rules', content.contentId, 'secondary') + action('Plan with Hermes', 'scene-plan-hermes', content.contentId, 'primary') : ''}</div>
+    <div class="card-actions">${inputs.ready ? action('Split narration (free)', 'scene-plan-rules', content.contentId, 'secondary') + action('Plan with Claude', 'scene-plan-claude', content.contentId, 'primary') : ''}</div>
     ${planJobs ? `<div class="history-list">${planJobs}</div>` : ''}</section>`;
 }
 function sceneEmptyPlan(content) {
-  return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Start with the free narration split (whole sentences grouped to the style\'s scene length) or ask Hermes to direct scenes and shots. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
+  return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Start with the free narration split (whole sentences grouped to the style\'s scene length) or ask Claude to direct scenes and shots. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
 }
 
 function scenePlanCard(content, manifest) {
@@ -69,7 +69,7 @@ function scenePlanCard(content, manifest) {
     !manifest.scope.current && manifest.contentRevision === content.contentRevision ? action('Refresh for current narration and style', 'scene-refresh', manifest.id, 'primary') : '',
     action('Visual settings', 'scene-settings', content.familyId, 'secondary'),
   ].join('');
-  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'hermes' ? 'Hermes' : manifest.source === 'rules' ? 'Narration split' : 'Edited')}</div></div>
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'claude' ? 'Claude' : manifest.source === 'hermes' ? 'Earlier AI planner' : manifest.source === 'rules' ? 'Narration split' : 'Edited')}</div></div>
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
@@ -150,9 +150,9 @@ function sceneAction(command, id, button) {
   const content = sceneContent(), manifest = sceneLatest(content);
   const nameAndNote = `<div class="form-grid">${scenePersonField()}<label>Change note <span class="hint">Optional</span><input name="note" maxlength="300"></label></div>`;
   if (command === 'scene-plan-rules') return sceneDialog('plan-rules', 'Split the narration into scenes', 'FREE · NO PROVIDER CALL', `<p class="hint">Groups whole sentences toward the middle of the style's scene length, sets shots from its shot limits and fills search words from the narration. You can edit everything afterwards.</p><div class="form-grid">${scenePersonField()}</div>`, 'Create plan', {contentId: id});
-  if (command === 'scene-plan-hermes') {
+  if (command === 'scene-plan-claude') {
     const settings = state.scenes.settings[content.familyId];
-    return sceneDialog('plan-hermes', 'Ask Hermes to direct the scenes', 'HERMES · TOKEN BUDGET', `<p class="hint">Hermes reads the numbered narration sentences, the style limits and any approved competitor technique guidance, and returns scenes and shots. Reserves up to ${settings.plannerTokenLimit.toLocaleString()} tokens from the family's monthly limit. Plans that break the style's limits are saved as drafts with issues to fix.</p><div class="form-grid"><label>Hermes connector<select name="connector">${sceneConnectorOptions('hermes')}</select></label>${scenePersonField()}</div>`, 'Ask Hermes', {contentId: id});
+    return sceneDialog('plan-claude', 'Ask Claude to direct the scenes', 'CLAUDE · TOKEN BUDGET', `<p class="hint">Claude reads the numbered narration sentences, the style limits and any approved competitor technique guidance, and returns scenes and shots. Reserves up to ${settings.plannerTokenLimit.toLocaleString()} tokens from the family's monthly limit. Plans that break the style's limits are saved as drafts with issues to fix.</p><div class="form-grid"><label>Claude connector<select name="connector">${sceneConnectorOptions('ai')}</select></label>${scenePersonField()}</div>`, 'Ask Claude', {contentId: id});
   }
   if (command === 'scene-plan-retry' || command === 'scene-job-retry') {
     const job = command === 'scene-plan-retry' ? content.planJobs.find(item => item.id === id) : content.jobs.find(item => item.id === id);
@@ -240,7 +240,7 @@ document.getElementById('scene-form').addEventListener('submit', event => {
   saveForm(form, async () => {
     const content = sceneContent();
     if (kind === 'plan-rules') { await api(`/api/content/${data.contentId}/scene-plans`, {mode: 'rules', requestedBy: person, contentRevision: content.contentRevision}); message = 'Scene plan created. Review the scenes, then approve the plan.'; return; }
-    if (kind === 'plan-hermes') { await api(`/api/content/${data.contentId}/scene-plans`, {mode: 'hermes', requestedBy: person, contentRevision: content.contentRevision, connector: sceneConnectorRef(value('connector'))}); message = 'Hermes scene plan queued.'; return; }
+    if (kind === 'plan-claude') { await api(`/api/content/${data.contentId}/scene-plans`, {mode: 'claude', requestedBy: person, contentRevision: content.contentRevision, connector: sceneConnectorRef(value('connector'))}); message = 'Claude scene plan queued.'; return; }
     if (kind === 'settings') {
       const cents = Math.round(Number(value('budget')) * 100);
       await api(`/api/families/${data.familyId}/visual-settings`, {revision: data.revision, monthlyBudgetCents: cents, imageModel: value('imageModel'), imageQuality: value('imageQuality'), imageFormat: value('imageFormat'), priceCents: {low: Number(value('low')), medium: Number(value('medium')), high: Number(value('high'))}, stockOrder: value('stockOrder').split(','), perSearch: Number(value('perSearch')), plannerTokenLimit: Number(value('plannerTokenLimit'))});

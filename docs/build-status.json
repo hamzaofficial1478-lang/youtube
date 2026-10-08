@@ -1,7 +1,7 @@
 {
-  "version": "0.14.1",
-  "updated": "2026-10-06",
-  "nextAction": "Review and approve the skill drafts you want in use (Skills page; 344 drafts including the new youtube-agent-skill and HyperFrames packs). Add a writing voice to each family. Draft a fresh edit for each approved script to get its caption track, chapters and Shorts candidates. Next build: P08 Audio Room (music sourcing decision needed from the owner), then map routes and stick-figure animation. Owner actions still pending: run the FFmpeg readiness check, pin the build, render the first edit from real visuals and record the style-proof verdict.",
+  "version": "0.15.0",
+  "updated": "2026-10-07",
+  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. Before enabling later production stages, close P07 caption editing/export gaps and validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -291,8 +291,9 @@
         {
           "id": "P08",
           "title": "Audio Room for licensed music, SFX and mix",
-          "status": "planned",
-          "remaining": "Track asset licenses and attribution, store ducking/fades as timeline data, and test loudness, peaks, clipping, silence and channel layout."
+          "status": "testing",
+          "remaining": "Owner chose narration-only first on 2026-10-07. Music sourcing/licensing, music frequency carve, ducking, fades and SFX remain deferred. Real narration listening and a full primary-language production proof remain pending. P08 is not marked fully complete.",
+          "evidence": "0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md."
         },
         {
           "id": "P09",
@@ -388,6 +389,8 @@
     }
   ],
   "decisions": [
+    "2026-10-07: Preserve the existing Claude writer direction; this supersedes the earlier Hermes-only decision.",
+    "2026-10-07: Build narration-only Audio Room first; choose music sourcing later.",
     "2026-10-04: Deliver verified changes to the owner's local folder (Desktop\\YT\\youtube); push to GitHub only on request.",
     "2026-10-04: Hermes stays the writer for scripts and research briefs.",
     "2026-10-04: Build each room to full depth before moving on; integrated testing of all rooms follows.",
@@ -402,5 +405,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Captions and YouTube craft"
+  "milestone": "Narration finishing"
 }

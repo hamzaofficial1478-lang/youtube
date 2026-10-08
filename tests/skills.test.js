@@ -1,12 +1,14 @@
 'use strict';
 const test = require('node:test');
+const {Ai}=require('../ai');
+const {claudeMessage,isClaudeModel,claudeModel,claudeFetch,promptOf}=require('./fake-claude');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {Store} = require('../store');
 const {SkillsEngine, validateSkill, loadPacks, RULES, TASK_KEYS, SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET} = require('../skills');
-const {scriptMessages} = require('../hermes');
+const {scriptMessages} = require('../writer');
 const {createApp} = require('../server');
 
 const root = path.join(__dirname, '..');
@@ -241,8 +243,8 @@ test('an approved brief reaches the Hermes script prompt, is logged, and changes
   const family = store.saveFamily({...familyFixture, monthlyBudget: 500});
   const content = store.saveContent({familyId: family.id, title: 'How trust became money', kind: 'fiction', angle: 'Follow two invented villages through a trade that needs trust.', hook: 'Before coins existed, trust already had a price.', script: 'Draft body for the fixture.', sources: [], rightsConfirmed: true});
   store.db.prepare("INSERT INTO connectors(id,name_key,payload,secret) VALUES('c1','hermes slot',?,?)")
-    .run(JSON.stringify({id: 'c1', provider: 'hermes', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
-  const queue = () => store.queueHermesScript(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1});
+    .run(JSON.stringify({id: 'c1', provider: 'claude', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
+  const queue = () => store.queueScriptJob(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1});
   const before = queue();
   assert.equal(JSON.parse(before.input).promptInput.skills, undefined, 'no approved skill means no injection');
   assert.deepEqual(JSON.parse(before.input).skillRevisionIds, []);
@@ -278,10 +280,10 @@ test('the prompt brief never exceeds the family job token limit', t => {
   const family = store.saveFamily({...familyFixture, monthlyBudget: 500, monthlyTokenLimit: 200000, scriptTokenLimit: 1000});
   const content = store.saveContent({familyId: family.id, title: 'How trust became money', kind: 'fiction', angle: 'Follow two invented villages through a trade that needs trust.', hook: 'Before coins existed, trust already had a price.', script: 'Draft body for the fixture.', sources: [], rightsConfirmed: true});
   store.db.prepare("INSERT INTO connectors(id,name_key,payload,secret) VALUES('c1','hermes slot',?,?)")
-    .run(JSON.stringify({id: 'c1', provider: 'hermes', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
+    .run(JSON.stringify({id: 'c1', provider: 'claude', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
   for (const id of ['hooks.universal-3-hook', 'script.spoken-standard', 'qc.output-qa']) approveById(skills, id);
   assert.throws(
-    () => store.queueHermesScript(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1}),
+    () => store.queueScriptJob(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1}),
     /reduce the approved skills bound to script writing/);
 });
 
@@ -363,13 +365,13 @@ test('the quality gate and the review rooms raise lesson candidates automaticall
   const family = store.saveFamily({...familyFixture, monthlyBudget: 500});
   const content = store.saveContent({familyId: family.id, title: 'How trust became money', kind: 'fiction', angle: 'Follow two invented villages through a trade that needs trust.', hook: 'Before coins existed, trust already had a price.', script: 'Draft body for the fixture.', sources: [], rightsConfirmed: true});
   store.db.prepare("INSERT INTO connectors(id,name_key,payload,secret) VALUES('c1','hermes slot',?,?)")
-    .run(JSON.stringify({id: 'c1', provider: 'hermes', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
-  const job = store.queueHermesScript(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1});
+    .run(JSON.stringify({id: 'c1', provider: 'claude', name: 'Hermes slot', revision: 1, test: {status: 'passed'}}), Buffer.from('fixture'));
+  const job = store.queueScriptJob(content.id, {revision: content.revision, connectorId: 'c1', connectorRevision: 1});
   store.db.prepare("UPDATE jobs SET status='running' WHERE id=?").run(job.id);
   store.db.prepare("INSERT INTO llm_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'script','2026-10','reserved',6000,?,?)").run(job.id, family.id, new Date().toISOString(), new Date().toISOString());
   // A short script fails the format gate; the gate's own finding becomes a lesson candidate.
   const candidate = {title: 'How trust became money', angle: 'A fixture angle long enough to pass validation.', hook: 'Before coins existed, trust already had a price.', script: 'Before coins existed, trust already had a price. Far too short for long-form.', claims: [], uncertainties: []};
-  store.completeHermesScriptJob(job.id, {candidate, usage: {promptTokens: 100, completionTokens: 100, totalTokens: 200}});
+  store.completeScriptJob(job.id, {candidate, usage: {promptTokens: 100, completionTokens: 100, totalTokens: 200}});
   assert.equal(store.db.prepare('SELECT status FROM jobs WHERE id=?').get(job.id).status, 'quality_failed');
   const lessons = skills.lessons('proposed');
   assert.equal(lessons.length, 1);

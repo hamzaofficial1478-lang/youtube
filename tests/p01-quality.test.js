@@ -1,10 +1,12 @@
 'use strict';
 const test=require('node:test');
+const {Ai}=require('../ai');
+const {claudeMessage,isClaudeModel,claudeModel,claudeFetch,promptOf}=require('./fake-claude');
 const assert=require('node:assert/strict');
-const {assessScriptQuality,scriptPolicy,wordCount}=require('../hermes');
+const {assessScriptQuality,scriptPolicy,wordCount}=require('../writer');
 const {Store,reviewIssues}=require('../store');
 const {ConnectorSlots}=require('../connectors');
-const {HermesReasoning}=require('../hermes');
+const {ScriptWriter}=require('../writer');
 
 const protector={transform:(operation,input)=>Buffer.from([...input].reverse())};
 const key='fixture-hermes-'+'x'.repeat(32);
@@ -20,7 +22,7 @@ const contentInput=(familyId,extra={})=>({familyId,title:'A quality-gated factua
 const candidate=(count=650)=>({title:'A quality-gated factual script',angle:'Explain one mechanism with a useful original example.',hook:'This familiar system hides a surprising cost today.',script:structuredScript('This familiar system hides a surprising cost today.',count),claims:[{text:'The supplied evidence supports the example.',sourceIds:['S1']}],uncertainties:['The evidence does not prove a universal outcome.']});
 
 test('format-specific script quality rejects short and incomplete candidates at exact boundaries',()=>{
-  assert.deepEqual(scriptPolicy('long-form'),{minWords:600,targetMinWords:800,targetMaxWords:1000,maxWords:1200,minParagraphs:4,maxCompletionTokens:4000});
+  assert.deepEqual(scriptPolicy('long-form'),{minWords:600,targetMinWords:800,targetMaxWords:1000,maxWords:1200,minParagraphs:4,maxCompletionTokens:16000});
   assert.equal(assessScriptQuality(candidate(599),'long-form').passed,false);
   assert.equal(assessScriptQuality(candidate(600),'long-form').passed,true);
   assert.equal(assessScriptQuality(candidate(1201),'long-form').passed,false);
@@ -45,12 +47,11 @@ test('monthly token admission blocks before any Hermes generation call',async t=
   const content=store.saveContent(contentInput(family.id));
   let completions=0;
   const slots=new ConnectorSlots(store,protector,async url=>{
-    if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-    if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
+    if(isClaudeModel(url))return claudeModel(url);
     completions++;return Response.json({});
   });
-  const connector=slots.save({name:'Budgeted Hermes',provider:'hermes',notes:'Isolated budget test',key});await slots.test(connector.id,connector.revision);
-  const reasoning=new HermesReasoning(store,slots);
+  const connector=slots.save({name:'Budgeted Hermes',provider:'claude',notes:'Isolated budget test',key});await slots.test(connector.id,connector.revision);
+  const reasoning=new ScriptWriter(store,new Ai(slots));
   const job=reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   await reasoning.processNext();
   const saved=store.state().jobs.find(item=>item.id===job.id);
@@ -65,12 +66,11 @@ test('passing output settles usage and stores immutable quality evidence',async 
   const content=store.saveContent(contentInput(family.id));
   const generated=candidate(650);
   const slots=new ConnectorSlots(store,protector,async url=>{
-    if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-    if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
-    return Response.json({choices:[{message:{content:JSON.stringify(generated)}}],usage:{prompt_tokens:500,completion_tokens:900,total_tokens:1400}});
+    if(isClaudeModel(url))return claudeModel(url);
+    return claudeMessage(generated,{input_tokens:500,output_tokens:900});
   });
-  const connector=slots.save({name:'Settled Hermes',provider:'hermes',notes:'Isolated usage test',key});await slots.test(connector.id,connector.revision);
-  const reasoning=new HermesReasoning(store,slots);
+  const connector=slots.save({name:'Settled Hermes',provider:'claude',notes:'Isolated usage test',key});await slots.test(connector.id,connector.revision);
+  const reasoning=new ScriptWriter(store,new Ai(slots));
   reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   await reasoning.processNext();
   const state=store.state(),saved=state.scriptCandidates[0];
@@ -89,12 +89,11 @@ test('short but schema-valid paid output is retained and cannot become usable',a
   const content=store.saveContent(contentInput(family.id));
   const generated=candidate(267);
   const slots=new ConnectorSlots(store,protector,async url=>{
-    if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-    if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
-    return Response.json({choices:[{message:{content:JSON.stringify(generated)}}],usage:{prompt_tokens:400,completion_tokens:500,total_tokens:900}});
+    if(isClaudeModel(url))return claudeModel(url);
+    return claudeMessage(generated,{input_tokens:400,output_tokens:500});
   });
-  const connector=slots.save({name:'Quality Hermes',provider:'hermes',notes:'Isolated quality test',key});await slots.test(connector.id,connector.revision);
-  const reasoning=new HermesReasoning(store,slots);
+  const connector=slots.save({name:'Quality Hermes',provider:'claude',notes:'Isolated quality test',key});await slots.test(connector.id,connector.revision);
+  const reasoning=new ScriptWriter(store,new Ai(slots));
   reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   await reasoning.processNext();
   const state=store.state();

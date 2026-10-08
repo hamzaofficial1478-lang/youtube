@@ -8,7 +8,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
-const {HERMES_ORIGIN, HermesClient, HermesError, boundedJson, messageTokenUpperBound, wordCount} = require('./hermes');
+const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
+const {Ai} = require('./ai');
 const {connectorCurrent, connectorReference} = require('./intel-sources');
 const VS = require('./visual-sources');
 
@@ -201,23 +202,23 @@ function planMessages(input) {
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
-function hermesScenes(raw, ids = true) {
-  object(raw, 'Hermes plan');
+function aiScenes(raw, ids = true) {
+  object(raw, 'Claude plan');
   const keys = Object.keys(raw);
-  requireValue(keys.every(key => ['summary', 'scenes'].includes(key)) && Array.isArray(raw.scenes), 'Hermes returned a plan with unexpected fields.');
-  const asText = (value, label, max) => { requireValue(typeof value === 'string' && value.length <= max, `Hermes returned an invalid ${label}.`); return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').trim(); };
+  requireValue(keys.every(key => ['summary', 'scenes'].includes(key)) && Array.isArray(raw.scenes), 'Claude returned a plan with unexpected fields.');
+  const asText = (value, label, max) => { requireValue(typeof value === 'string' && value.length <= max, `Claude returned an invalid ${label}.`); return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').trim(); };
   return {
     summary: raw.summary === undefined ? '' : asText(raw.summary, 'summary', 600),
     scenes: raw.scenes.map(scene => {
-      object(scene, 'Hermes scene');
-      requireValue(Object.keys(scene).every(key => ['sentenceStart', 'sentenceEnd', 'purpose', 'direction', 'onScreenText', 'shots'].includes(key)), 'Hermes returned a scene with unexpected fields.');
-      requireValue(Array.isArray(scene.shots), 'Hermes returned a scene without shots.');
+      object(scene, 'Claude scene');
+      requireValue(Object.keys(scene).every(key => ['sentenceStart', 'sentenceEnd', 'purpose', 'direction', 'onScreenText', 'shots'].includes(key)), 'Claude returned a scene with unexpected fields.');
+      requireValue(Array.isArray(scene.shots), 'Claude returned a scene without shots.');
       return {
         id: ids ? shortId('sc') : undefined, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, purpose: scene.purpose,
         direction: asText(scene.direction ?? '', 'direction', 600), onScreenText: asText(scene.onScreenText ?? '', 'on-screen text', 140),
         shots: scene.shots.map(shot => {
-          object(shot, 'Hermes shot');
-          requireValue(Object.keys(shot).every(key => ['source', 'query', 'prompt', 'motion', 'notes'].includes(key)), 'Hermes returned a shot with unexpected fields.');
+          object(shot, 'Claude shot');
+          requireValue(Object.keys(shot).every(key => ['source', 'query', 'prompt', 'motion', 'notes'].includes(key)), 'Claude returned a shot with unexpected fields.');
           return {id: shortId('sh'), source: shot.source, query: asText(shot.query ?? '', 'search query', 100), prompt: asText(shot.prompt ?? '', 'image prompt', 1500), motion: shot.motion, notes: asText(shot.notes ?? '', 'shot note', 500)};
         }),
       };
@@ -226,7 +227,8 @@ function hermesScenes(raw, ids = true) {
 }
 
 class SceneRoom {
-  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null} = {}) {
+  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null, ai = new Ai(connectors)} = {}) {
+    this.ai = ai;
     this.store = store;
     this.db = store.db;
     this.connectors = connectors;
@@ -268,7 +270,7 @@ class SceneRoom {
     const at = now();
     this.store.transaction(() => {
       for (const row of this.db.prepare("SELECT id FROM scene_plan_jobs WHERE status='running'").all()) {
-        this.db.prepare("UPDATE scene_plan_jobs SET status='interrupted', error='The program stopped while Hermes was planning. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
+        this.db.prepare("UPDATE scene_plan_jobs SET status='interrupted', error='The program stopped while Claude was planning. Token use is unknown; retry deliberately.', updated_at=? WHERE id=?").run(at, row.id);
         this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(at, row.id);
       }
       for (const row of this.db.prepare("SELECT id, kind FROM visual_jobs WHERE status='running'").all()) {
@@ -406,7 +408,7 @@ class SceneRoom {
     object(input);
     const createdBy = person(input.requestedBy);
     const mode = input.mode;
-    requireValue(['rules', 'hermes'].includes(mode), 'Choose the free narration split or the Hermes scene director.');
+    requireValue(['rules', 'claude'].includes(mode), 'Choose the free narration split or the Claude scene director.');
     const content = this.store.content(contentId), inputs = this.inputs(content);
     requireValue(inputs.ready, inputs.blockers[0], 409);
     requireValue(input.contentRevision === content.revision, 'The script changed in another tab. Reload before planning.', 409);
@@ -418,7 +420,7 @@ class SceneRoom {
         return {manifest: this.publicManifest(this.insertManifest({inputs, content, scenes, summary: 'Narration split into scenes by the free rule-based planner.', source: 'rules', note: 'New plan from the narration split', createdBy}), {detail: true})};
       });
     }
-    const connector = connectorReference(this.connectors, input.connector, 'hermes', 'Hermes', true);
+    const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     const settings = this.settings(inputs.family.id), timed = timeSentences(sentences, inputs.voice.durationSeconds), spec = inputs.spec;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
@@ -436,7 +438,7 @@ class SceneRoom {
       const id = randomUUID(), at = now();
       const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit, maxCompletionTokens, promptInput, sentenceCount: sentences.length, sentencesHash: hash(sentences)};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(scope), createdBy, at, at);
-      this.store.event(`Queued Hermes scene plan for "${content.title}"`);
+      this.store.event(`Queued Claude scene plan for "${content.title}"`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
     });
   }
@@ -452,7 +454,7 @@ class SceneRoom {
       const row = this.planJobRow(id);
       requireValue(['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(row.status), `A ${row.status} scene plan cannot be retried.`, 409);
       requireValue(row.attempts < 3, 'This scene plan already used 3 attempts. Start a new plan.', 409);
-      if (row.status === 'interrupted') requireValue(input.confirmInterrupted === true, 'The last attempt was interrupted and Hermes may have used tokens. Confirm the deliberate retry.', 409);
+      if (row.status === 'interrupted') requireValue(input.confirmInterrupted === true, 'The last attempt was interrupted and Claude may have used tokens. Confirm the deliberate retry.', 409);
       const usage = this.db.prepare('SELECT * FROM intelligence_usage WHERE job_id=?').get(id);
       if (usage) this.db.prepare('UPDATE intelligence_usage SET job_id=? WHERE job_id=?').run(`${id}:attempt${row.attempts}`, id);
       this.db.prepare("UPDATE scene_plan_jobs SET status='queued', error=NULL, quality=NULL, updated_at=? WHERE id=?").run(now(), id);
@@ -465,8 +467,8 @@ class SceneRoom {
       const row = this.db.prepare("SELECT * FROM scene_plan_jobs WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
       if (!row) return null;
       const scope = JSON.parse(row.scope), content = this.store.content(row.content_id), inputs = this.inputs(content), at = now();
-      const current = content.revision === scope.contentRevision && inputs.ready && inputs.voice.approvalId === scope.voiceApprovalId && inputs.style.revisionId === scope.styleRevisionId && connectorCurrent(this.connectors, scope.connector, 'hermes');
-      if (!current) { this.db.prepare("UPDATE scene_plan_jobs SET status='stale', error='The script, narration, style or Hermes connector changed before planning. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id); return null; }
+      const current = content.revision === scope.contentRevision && inputs.ready && inputs.voice.approvalId === scope.voiceApprovalId && inputs.style.revisionId === scope.styleRevisionId && connectorCurrent(this.connectors, scope.connector, 'ai');
+      if (!current) { this.db.prepare("UPDATE scene_plan_jobs SET status='stale', error='The script, narration, style or Claude connection changed before planning. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id); return null; }
       const summary = this.store.usageSummary(inputs.family.id);
       if (summary.settledTokens + summary.reservedTokens + scope.tokenLimit > inputs.family.tokenBudget.monthlyLimit) {
         this.db.prepare("UPDATE scene_plan_jobs SET status='blocked_budget', error='The family monthly token limit cannot reserve this plan. Raise it or wait for next month.', updated_at=? WHERE id=?").run(at, row.id);
@@ -484,26 +486,15 @@ class SceneRoom {
     this.planBusy = true;
     let started = false;
     try {
-      const key = this.connectors.key(job.scope.connector.id);
-      const tracked = async (url, options) => { if (String(url) === `${HERMES_ORIGIN}/v1/chat/completions`) started = true; return this.connectors.fetch(url, options); };
-      await new HermesClient(key, tracked).capabilities();
-      let response;
-      try {
-        response = await tracked(`${HERMES_ORIGIN}/v1/chat/completions`, {method: 'POST', headers: {Authorization: `Bearer ${key}`, 'Content-Type': 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(240000),
-          body: JSON.stringify({model: 'hermes-agent', stream: false, max_tokens: job.scope.maxCompletionTokens, messages: planMessages(job.scope.promptInput)})});
-      } catch { throw new HermesError('Hermes scene planning failed or timed out.'); }
-      if (!response.ok) { await response.body?.cancel(); throw new HermesError(`Hermes scene planning returned HTTP ${response.status}.`); }
-      const data = await boundedJson(response, 524288);
-      const usage = {prompt: data.usage?.prompt_tokens ?? null, completion: data.usage?.completion_tokens ?? null, total: data.usage?.total_tokens ?? null};
-      const raw = data?.choices?.[0]?.message?.content;
-      if (typeof raw !== 'string') throw new HermesError('Hermes returned an unexpected completion response.');
+      const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: planMessages(job.scope.promptInput), maxTokens: job.scope.maxCompletionTokens, onStart: () => { started = true; }});
+      const usage = {prompt: reply.usage.promptTokens, completion: reply.usage.completionTokens, total: reply.usage.totalTokens, model: reply.model, provider: reply.provider};
       let parsed;
-      try { parsed = JSON.parse(raw); } catch { parsed = undefined; }
+      try { parsed = JSON.parse(reply.content); } catch { parsed = undefined; }
       return this.completePlan(job.id, parsed, usage);
     } catch (error) {
       this.store.transaction(() => {
         const at = now();
-        this.db.prepare("UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(started ? 'interrupted' : 'failed', error instanceof HermesError || error instanceof InputError ? error.message : 'Hermes scene planning failed.', at, job.id);
+        this.db.prepare("UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(started ? 'interrupted' : 'failed', error instanceof AiError || error instanceof InputError ? error.message : 'Claude scene planning failed.', at, job.id);
         this.db.prepare('UPDATE intelligence_usage SET status=?, reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END, updated_at=? WHERE job_id=?').run(started ? 'unknown' : 'released', started ? 1 : 0, at, job.id);
       });
       return null;
@@ -519,21 +510,21 @@ class SceneRoom {
       const valid = Number.isSafeInteger(total) && total >= 0 && (prompt === null || Number.isSafeInteger(prompt)) && (completion === null || Number.isSafeInteger(completion)) && (prompt === null || completion === null || prompt + completion === total);
       if (!valid || total > scope.tokenLimit) {
         this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?').run(valid ? 'budget_violation' : 'unknown', Number.isSafeInteger(prompt) ? prompt : null, Number.isSafeInteger(completion) ? completion : null, Number.isSafeInteger(total) ? total : null, at, id);
-        this.db.prepare('UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Hermes reported token use above the planner limit.' : 'Hermes did not report valid token usage.', at, id);
+        this.db.prepare('UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=?').run(valid ? 'budget_violation' : 'usage_unknown', valid ? 'Claude reported token use above the planner limit.' : 'Claude did not report valid token usage.', at, id);
         return null;
       }
       this.db.prepare("UPDATE intelligence_usage SET status='settled', prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?").run(prompt, completion, total, at, id);
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
       const fail = message => { this.db.prepare("UPDATE scene_plan_jobs SET status='quality_failed', quality=?, error=?, updated_at=? WHERE id=?").run(JSON.stringify({passed: false, issues: [message]}), message, at, id); return null; };
-      if (parsed === undefined) return fail('Hermes did not return the required JSON plan.');
+      if (parsed === undefined) return fail('Claude did not return the required JSON plan.');
       if (content.revision !== scope.contentRevision || inputs.voice.approvalId !== scope.voiceApprovalId || inputs.style.revisionId !== scope.styleRevisionId) {
-        this.db.prepare("UPDATE scene_plan_jobs SET status='stale', error='The script, narration or style changed while Hermes was planning. The plan was not saved.', updated_at=? WHERE id=?").run(at, id);
+        this.db.prepare("UPDATE scene_plan_jobs SET status='stale', error='The script, narration or style changed while Claude was planning. The plan was not saved.', updated_at=? WHERE id=?").run(at, id);
         return null;
       }
       let plan, manifest;
       try {
-        plan = hermesScenes(parsed);
-        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, source: 'hermes', note: 'New plan from the Hermes scene director', createdBy: row.created_by});
+        plan = aiScenes(parsed);
+        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, source: 'claude', note: 'New plan from the Claude scene director', createdBy: row.created_by});
       } catch (error) {
         if (error instanceof InputError) return fail(error.message);
         throw error;
@@ -1224,4 +1215,4 @@ class SceneRoom {
   }
 }
 
-module.exports = {SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, hermesScenes, planMessages, PURPOSES, SETTINGS_DEFAULTS};
+module.exports = {SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, PURPOSES, SETTINGS_DEFAULTS};

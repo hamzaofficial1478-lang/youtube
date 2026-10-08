@@ -1,16 +1,18 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { HermesClient, HermesReasoning, validateCandidate } = require('../hermes');
+const { ScriptWriter, generateScript, validateCandidate } = require('../writer');
+const { Ai } = require('../ai');
+const { claudeMessage, claudeFetch, isClaudeModel, claudeModel, promptOf } = require('./fake-claude');
 const { Store } = require('../store');
 const { ConnectorSlots } = require('../connectors');
 const { createApp } = require('../server');
 
-const key = 'fixture-hermes-' + 'x'.repeat(32);
+const key = 'sk-ant-api03-fixture-' + 'x'.repeat(32);
 const fixtureProtector = {transform:(operation, input) => Buffer.from([...input].reverse())};
 const qualityScript=(hook,count=650)=>{const filler=Array.from({length:count-hook.split(/\s+/).length},(_,index)=>`detail${index+1}`);const size=Math.floor(filler.length/4);return [hook+' '+filler.slice(0,size).join(' '),filler.slice(size,size*2).join(' '),filler.slice(size*2,size*3).join(' '),filler.slice(size*3).join(' ')].join('\n\n');};
 
-test('factual Hermes candidates require sourced claims', () => {
+test('factual script candidates require sourced claims', () => {
   const sourceIds = new Set(['S1']);
   const base = {title:'A valid candidate title',angle:'A sufficiently detailed original candidate angle.',hook:'A specific opening hook?',script:'A sufficiently detailed original English candidate script that is long enough for strict candidate validation and careful review.',claims:[],uncertainties:[]};
   assert.throws(() => validateCandidate(base, sourceIds, true), /claim/i);
@@ -18,60 +20,21 @@ test('factual Hermes candidates require sourced claims', () => {
   assert.deepEqual(validateCandidate({...base,claims:[{text:'A factual statement.',sourceIds:['S1']}]}, sourceIds, true).claims[0].sourceIds,['S1']);
 });
 
-test('Hermes capability check uses only the fixed loopback API and bearer header', async () => {
-  const calls = [];
-  const client = new HermesClient(key, async (url, options) => {
-    calls.push({url:String(url), options});
-    if (String(url).endsWith('/v1/toolsets')) return Response.json({object:'list',platform:'api_server',data:[{name:'terminal',enabled:false,configured:true,tools:['terminal']}]});
-    return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-  });
-  const result = await client.capabilities();
-  assert.equal(result.chatCompletions, true);
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].url, 'http://127.0.0.1:8642/v1/capabilities');
-  assert.equal(calls[0].options.headers.Authorization, 'Bearer ' + key);
-  assert.equal(calls[0].options.redirect, 'error');
-  assert.equal(calls[1].url, 'http://127.0.0.1:8642/v1/toolsets');
-  assert.equal(calls[1].options.headers.Authorization, 'Bearer ' + key);
-  assert.ok(calls[0].options.signal);
-  assert.equal(JSON.stringify(result).includes(key), false);
-});
-
-test('Hermes capability check rejects enabled concrete tools and bounds streamed metadata', async () => {
-  const enabled = new HermesClient(key, async url => String(url).endsWith('/v1/toolsets')
-    ? Response.json([{name:'terminal',enabled:true,configured:true,tools:['terminal']}])
-    : Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}}));
-  await assert.rejects(enabled.capabilities(), /tool-free/i);
-  let pulls=0;
-  const oversized = new HermesClient(key, async url => {
-    if (!String(url).endsWith('/v1/capabilities')) return Response.json([]);
-    return new Response(new ReadableStream({pull(controller){pulls++;controller.enqueue(new Uint8Array(70000));if(pulls===3)controller.close();}}));
-  });
-  await assert.rejects(oversized.capabilities(), /too large/i);
-  assert.ok(pulls < 3);
-});
-
-test('Hermes connector is stored as its own protected local reasoning provider', async t => {
+test('the Claude API key is stored protected and never appears in any response', async t => {
   const calls = [];
   const store = new Store(':memory:');
   t.after(() => store.close());
-  const slots = new ConnectorSlots(store, fixtureProtector, async (url, options) => {
-    calls.push({url:String(url), options});
-    if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
-    return Response.json({auth:{type:'bearer',required:true}, features:{chat_completions:true}});
-  });
-  const slot = slots.save({name:'Control Room reasoning', provider:'hermes', notes:'Dedicated local reasoning engine', key});
+  const slots = new ConnectorSlots(store, fixtureProtector, async (url, options) => { calls.push({url: String(url), options}); return claudeModel(url); });
+  const slot = slots.save({name:'Control Room Claude', provider:'claude', notes:'Claude API key for the program', key});
   const checked = await slots.test(slot.id, slot.revision);
-  assert.equal(checked.connector.provider, 'hermes');
+  assert.equal(checked.connector.provider, 'claude');
   assert.equal(checked.connector.test.status, 'passed');
-  assert.equal(calls.length, 2);
-  assert.equal(calls[0].url, 'http://127.0.0.1:8642/v1/capabilities');
-  assert.equal(calls[1].url, 'http://127.0.0.1:8642/v1/toolsets');
-  assert.equal(calls[0].options.headers.Authorization, 'Bearer ' + key);
+  assert.ok(calls.every(call => isClaudeModel(call.url)), 'the test only reads model details');
+  assert.equal(calls[0].options.headers.get('x-api-key'), key);
   assert.equal(JSON.stringify(slots.list()).includes(key), false);
+  assert.equal(JSON.stringify(checked).includes(key), false);
 });
-
-test('Hermes returns one validated primary-locale script candidate without mutating source input', async () => {
+test('Claude returns one validated primary-locale script candidate without mutating source input', async () => {
   const calls = [];
   const hook='The room is organized, so why does the task still feel slow?';
   const payload = {
@@ -89,23 +52,20 @@ test('Hermes returns one validated primary-locale script candidate without mutat
     policy:{totalTokenLimit:8000,maxCompletionTokens:4000}
   };
   const snapshot = structuredClone(input);
-  const client = new HermesClient(key, async (url, options) => {
-    calls.push({url:String(url), options});
-    return Response.json({choices:[{message:{content:JSON.stringify(payload)}}], usage:{prompt_tokens:120, completion_tokens:80, total_tokens:200}});
-  });
-  const result = await client.generateScript(input);
+  const store = new Store(':memory:');
+  const slots = new ConnectorSlots(store, fixtureProtector, claudeFetch(() => claudeMessage(payload, {input_tokens:120, output_tokens:80}), calls));
+  const connector = slots.save({name:'Claude', provider:'claude', key});
+  const result = await generateScript(new Ai(slots), connector.id, input);
+  store.close();
   assert.deepEqual(input, snapshot);
   assert.deepEqual(result.candidate, payload);
-  assert.deepEqual(result.usage, {promptTokens:120, completionTokens:80, totalTokens:200});
+  assert.deepEqual(result.usage, {promptTokens:120, completionTokens:80, totalTokens:200, model:'claude-opus-5-5', provider:'claude'});
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].url, 'http://127.0.0.1:8642/v1/chat/completions');
-  assert.equal(calls[0].options.method, 'POST');
-  assert.equal(calls[0].options.headers.Authorization, 'Bearer ' + key);
-  assert.equal(calls[0].options.redirect, 'error');
-  const sent = JSON.parse(calls[0].options.body);
-  assert.equal(sent.stream, false);
-  assert.equal(sent.messages.some(message => message.content.includes('https://example.com/evidence')), true);
-  assert.equal(sent.messages.some(message => message.content.includes('en-US')), true);
+  assert.equal(calls[0].body.model, 'claude-opus-5-5', 'scripts are written by the main model');
+  assert.equal(calls[0].body.max_tokens, 4000);
+  assert.equal(calls[0].headers.get('x-api-key'), key);
+  assert.equal(promptOf(calls[0].body).includes('https://example.com/evidence'), true);
+  assert.equal(calls[0].body.system.includes('en-US'), true);
   assert.equal(JSON.stringify(result).includes(key), false);
 });
 
@@ -118,23 +78,18 @@ test('reasoning job stores an immutable candidate and never overwrites the draft
   const generated = {
     title:'Why routines feel harder than expected',angle:'Follow one routine and identify hidden handoffs.',hook:generatedHook,script:qualityScript(generatedHook),claims:[{text:'The supplied evidence describes a workflow example.',sourceIds:['S1']}],uncertainties:['The result is not universal.']
   };
-  let generationCalls = 0, toolsetChecks = 0;
-  const slots = new ConnectorSlots(store, fixtureProtector, async (url) => {
-    if (String(url).endsWith('/v1/capabilities')) return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-    if (String(url).endsWith('/v1/toolsets')) { toolsetChecks++; return Response.json([]); }
-    generationCalls++;
-    return Response.json({choices:[{message:{content:JSON.stringify(generated)}}],usage:{total_tokens:321}});
-  });
-  const connector = slots.save({name:'Hermes soul',provider:'hermes',notes:'Dedicated local script reasoning',key});
+  let generationCalls = 0;
+  const slots = new ConnectorSlots(store, fixtureProtector, claudeFetch(() => { generationCalls++; return claudeMessage(generated, {input_tokens:200, output_tokens:121}); }));
+  const connector = slots.save({name:'Claude',provider:'claude',notes:'Program Claude key',key});
   await slots.test(connector.id, connector.revision);
-  const reasoning = new HermesReasoning(store, slots);
+  const reasoning = new ScriptWriter(store, new Ai(slots));
   const first = reasoning.queue(content.id, {revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   const duplicate = reasoning.queue(content.id, {revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   assert.equal(first.id, duplicate.id);
   await reasoning.processNext();
   const state = store.state();
   assert.equal(generationCalls, 1);
-  assert.equal(toolsetChecks, 2);
+  assert.equal(state.scriptCandidates[0].usage.model, 'claude-opus-5-5', 'the candidate records which model wrote it');
   assert.equal(state.jobs.find(job => job.id === first.id).status, 'completed');
   assert.equal(state.scriptCandidates.length, 1);
   assert.equal(state.scriptCandidates[0].contentId, content.id);
@@ -151,31 +106,29 @@ test('reasoning job stores an immutable candidate and never overwrites the draft
   assert.equal(store.state().scriptCandidates.length, 1);
 });
 
-test('Hermes claim and completion revalidate connector test status without a revision change', async t => {
+test('script claim and completion revalidate the Claude connection without a revision change', async t => {
   const store = new Store(':memory:');t.after(() => store.close());
   const family=store.saveFamily({name:'Connector checks',tier:'A',countries:['United States'],audience:'Adults reviewing original fictional explanations.',niche:'Fiction',spanishLocale:'es-419',englishLocale:'en-US',timezone:'Asia/Karachi',monthlyBudget:0,cadence:1,format:'long-form'});
   const content=store.saveContent({familyId:family.id,title:'A fictional connector check',kind:'fiction',angle:'Use an original fictional scenario to verify connector safety.',hook:'What changes while Hermes is answering?',script:'Existing fictional script content remains unchanged while connector invariants are checked before generation and again before completion.',sources:[],rightsConfirmed:true});
   const generated={title:'A fictional candidate',angle:'An original fictional angle that is detailed enough for review.',hook:'What changed during generation?',script:'A sufficiently detailed fictional candidate script that remains separate from the saved draft and requires deliberate operator review before use.',claims:[],uncertainties:[]};
   let generationCalls=0,connector;
-  const slots=new ConnectorSlots(store,fixtureProtector,async url=>{
-    if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});
-    if(String(url).endsWith('/v1/toolsets'))return Response.json([]);
+  const slots=new ConnectorSlots(store,fixtureProtector,claudeFetch(()=>{
     generationCalls++;const row=slots.row(connector.id),payload=JSON.parse(row.payload);payload.test={status:'failed',at:new Date().toISOString(),message:'Changed without revision'};store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload),connector.id);
-    return Response.json({choices:[{message:{content:JSON.stringify(generated)}}],usage:{}});
-  });
-  connector=slots.save({name:'Checked Hermes',provider:'hermes',notes:'Connector invariant fixture',key});await slots.test(connector.id,connector.revision);
-  const reasoning=new HermesReasoning(store,slots);
+    return claudeMessage(generated,null);
+  }));
+  connector=slots.save({name:'Checked Claude',provider:'claude',notes:'Connector invariant fixture',key});await slots.test(connector.id,connector.revision);
+  const reasoning=new ScriptWriter(store,new Ai(slots));
   const first=reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   let payload=JSON.parse(slots.row(connector.id).payload);payload.test.status='failed';store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload),connector.id);
   await reasoning.processNext();assert.equal(generationCalls,0);assert.equal(store.state().jobs.find(job=>job.id===first.id).status,'stale');
   payload.test.status='passed';store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload),connector.id);
-  const second=store.retryHermesScriptJob(first.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  const second=store.retryScriptJob(first.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   await reasoning.processNext();assert.equal(generationCalls,1);assert.equal(store.state().jobs.find(job=>job.id===second.id).status,'stale');assert.equal(store.state().scriptCandidates.length,0);
 });
 
-test('Control Room HTTP queues Hermes reasoning and exposes only the review candidate', async t => {
+test('Control Room HTTP queues Claude script writing and exposes only the review candidate', async t => {
   const generated = {title:'A reviewed candidate title',angle:'A distinct evidence-led angle for this original explanation.',hook:'Why does this familiar process contain a hidden delay?',script:'This is a bounded English script candidate produced for review. It uses the supplied evidence as context, avoids inventing certainty, and leaves the existing saved draft unchanged until the operator chooses to edit it.',claims:[{text:'The fixture supports the example.',sourceIds:['S1']}],uncertainties:['Fixture evidence is limited.']};
-  const app = createApp({dataFile:':memory:',worker:false,protector:fixtureProtector,providerFetch:async url => String(url).endsWith('/v1/capabilities')?Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}}):String(url).endsWith('/v1/toolsets')?Response.json([]):Response.json({choices:[{message:{content:JSON.stringify(generated)}}],usage:{total_tokens:99}})});
+  const app = createApp({dataFile:':memory:',worker:false,protector:fixtureProtector,providerFetch:claudeFetch(()=>claudeMessage(generated,{input_tokens:60,output_tokens:39}))});
   await new Promise(resolve => app.server.listen(0,'127.0.0.1',resolve));
   t.after(() => new Promise(resolve => app.server.close(resolve)));
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -184,11 +137,11 @@ test('Control Room HTTP queues Hermes reasoning and exposes only the review cand
     const response = await fetch(base+route,{method,headers:{'Content-Type':'application/json','X-Local-Token':initial.token},body:JSON.stringify(body)});
     return {response,data:await response.json()};
   };
-  const connector = (await send('/api/connectors',{name:'Hermes soul',provider:'hermes',notes:'Local reasoning',key})).data;
+  const connector = (await send('/api/connectors',{name:'Claude',provider:'claude',notes:'Program Claude key',key})).data;
   assert.equal((await send(`/api/connectors/${connector.id}/test`,{revision:connector.revision})).response.status,200);
   const family = (await send('/api/families',{name:'Family',tier:'A',countries:['United States'],audience:'Adults seeking clear factual explanations.',niche:'Everyday systems',spanishLocale:'es-419',englishLocale:'en-US',timezone:'Asia/Karachi',monthlyBudget:100,cadence:2,format:'long-form'})).data;
   const content = (await send('/api/content',{familyId:family.id,title:'A working factual title',kind:'factual',angle:'An original explanation of hidden process delays.',hook:'Where does the delay hide?',script:'Existing script text that must remain untouched while a separate Hermes candidate is generated for review by the operator.',sources:[{title:'Fixture',url:'https://example.com/source',permission:'permitted',notes:'Permitted fixture evidence for this isolated integration test.'}],rightsConfirmed:true})).data;
-  const queued = await send(`/api/content/${content.id}/hermes-script`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  const queued = await send(`/api/content/${content.id}/ai-script`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
   assert.equal(queued.response.status,200);
   await app.reasoning.processNext();
   const after = await (await fetch(base+'/api/state')).json();
@@ -197,19 +150,19 @@ test('Control Room HTTP queues Hermes reasoning and exposes only the review cand
   assert.equal(after.contents[0].script,content.script);
   assert.equal(JSON.stringify(after).includes(key),false);
   app.store.db.prepare("UPDATE jobs SET status='interrupted' WHERE id=?").run(queued.data.id);
-  assert.equal((await send(`/api/hermes-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision})).response.status,409);
-  const retry2=await send(`/api/hermes-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
+  assert.equal((await send(`/api/script-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision})).response.status,409);
+  const retry2=await send(`/api/script-jobs/${queued.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
   assert.equal(retry2.response.status,200);assert.equal(retry2.data.attempts,2);
-  app.store.claimHermesScriptJob();app.store.failHermesScriptJob(retry2.data.id,'unknown provider outcome',{usageUnknown:true});
-  const retry3=await send(`/api/hermes-jobs/${retry2.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
+  app.store.claimScriptJob();app.store.failScriptJob(retry2.data.id,'unknown provider outcome',{usageUnknown:true});
+  const retry3=await send(`/api/script-jobs/${retry2.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true});
   assert.equal(retry3.response.status,200);assert.equal(retry3.data.attempts,3);
-  app.store.claimHermesScriptJob();app.store.failHermesScriptJob(retry3.data.id,'unknown provider outcome',{usageUnknown:true});
-  assert.equal((await send(`/api/hermes-jobs/${retry3.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true})).response.status,409);
+  app.store.claimScriptJob();app.store.failScriptJob(retry3.data.id,'unknown provider outcome',{usageUnknown:true});
+  assert.equal((await send(`/api/script-jobs/${retry3.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true})).response.status,409);
   const ui = await (await fetch(base+'/app.js')).text();
-  assert.match(ui,/Ask Hermes/);
-  assert.match(ui,/hermes-script/);
+  assert.match(ui,/Ask Claude/);
+  assert.match(ui,/ai-script/);
   assert.match(ui,/Use candidate/);
-  assert.match(ui,/Retry Hermes/);
+  assert.match(ui,/Retry Claude/);
   assert.match(ui,/confirmInterrupted/);
   assert.match(ui,/Source IDs/);
   assert.match(ui,/j\.content_id===c\.id&&j\.revision===c\.revision/);
@@ -219,14 +172,15 @@ test('Control Room HTTP queues Hermes reasoning and exposes only the review cand
   assert.match(ui,/source\.url/);
 });
 
-test('Hermes retests revoke the previous passed state before queue admission',async t=>{
+test('Claude retests revoke the previous passed state before queue admission',async t=>{
   const store=new Store(':memory:');t.after(()=>store.close());
   const family=store.saveFamily({name:'Retest boundary',tier:'A',countries:['Pakistan'],audience:'Adults reviewing bounded original content.',niche:'Original fiction',locales:['en-US'],timezone:'Asia/Karachi',monthlyBudget:20,cadence:1,format:'long-form'});
   const content=store.saveContent({familyId:family.id,title:'A retest boundary draft',kind:'fiction',angle:'Use an original scenario to verify connector retest isolation.',hook:'Can generation start while its connector is being retested?',script:'Existing creator text remains unchanged during this connector boundary test.',sources:[],rightsConfirmed:true});
   let retesting=false,release;
-  const slots=new ConnectorSlots(store,fixtureProtector,async url=>{if(retesting&&String(url).endsWith('/v1/capabilities'))return new Promise(resolve=>{release=resolve;});if(String(url).endsWith('/v1/capabilities'))return Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}});return Response.json([]);});
-  const connector=slots.save({name:'Retested Hermes',provider:'hermes',notes:'Boundary fixture',key});await slots.test(connector.id,connector.revision);const reasoning=new HermesReasoning(store,slots);retesting=true;const pending=slots.test(connector.id,connector.revision);
-  assert.equal(slots.list()[0].busy,true);assert.equal(store.hermesConnectorCurrent({connectorId:connector.id,connectorRevision:connector.revision}),false);
+  const slots=new ConnectorSlots(store,fixtureProtector,async url=>{if(retesting&&isClaudeModel(url)){retesting=false;return new Promise(resolve=>{release=()=>resolve(claudeModel(url));});}return claudeModel(url);});
+  const connector=slots.save({name:'Retested Claude',provider:'claude',notes:'Boundary fixture',key});await slots.test(connector.id,connector.revision);const reasoning=new ScriptWriter(store,new Ai(slots));retesting=true;const pending=slots.test(connector.id,connector.revision);
+  assert.equal(slots.list()[0].busy,true);assert.equal(store.aiConnectorCurrent({connectorId:connector.id,connectorRevision:connector.revision}),false);
   assert.throws(()=>reasoning.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision}),{status:409});
-  release(Response.json({auth:{type:'bearer',required:true},features:{chat_completions:true}}));await pending;
+  while(!release)await new Promise(resolve=>setTimeout(resolve,5)); // the SDK reaches the network a few steps later
+  release();await pending;
 });

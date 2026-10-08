@@ -93,6 +93,7 @@ function renderAction(command, id, button) {
       <label class="checkbox-label"><input type="checkbox" name="watchedFully">I watched the whole proxy with sound.</label>
       <label class="checkbox-label"><input type="checkbox" name="styleMatches">Motion, pacing and transitions match ${esc(job.scope.styleName)}.</label>
       <label class="checkbox-label"><input type="checkbox" name="syncReviewed">The visuals stay in step with the narration.</label>
+      ${job.result.audioQc ? '<label class="checkbox-label"><input type="checkbox" name="audioReviewed">I listened to the finished narration for clarity and natural delivery.</label>' : ''}
       ${job.result.qcPassed ? '' : '<label class="checkbox-label"><input type="checkbox" name="qcAccepted">I accept the technical QC findings shown for this proxy.</label>'}
       ${job.scope.edit?.criticals ? `<label class="checkbox-label"><input type="checkbox" name="critiqueAccepted">I accept the editor's ${job.scope.edit.criticals} critical finding${job.scope.edit.criticals === 1 ? '' : 's'} for edit r${job.scope.edit.revision}.</label>` : ''}`, 'Record verdict', {id});
   }
@@ -108,7 +109,7 @@ document.getElementById('render-form').addEventListener('submit', event => {
     if (kind === 'check') { const report = await api('/api/render-readiness', {requestedBy: person}); message = report.passed ? `FFmpeg ${report.ffmpeg.version} passed every check.` : `The check found ${report.issues.length} issue(s).`; return; }
     if (kind === 'pin') { await api('/api/render-pins', {readinessId: data.readinessId, pinnedBy: person, reason: value('reason')}); message = 'Build pinned for rendering.'; return; }
     if (kind === 'start') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = 'Proxy render queued.'; return; }
-    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
+    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), audioReviewed: checked('audioReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
     throw new Error('Unknown form.');
   }, () => message);
 });

@@ -1,5 +1,6 @@
 'use strict';
 const test = require('node:test');
+const {claudeMessage, isClaudeMessages} = require('./fake-claude');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -15,7 +16,7 @@ const {NicheFactory, scoreRatings, decisionFor} = require('../niche-factory');
 const {createApp} = require('../server');
 
 const protector = {transform: (operation, input) => Buffer.from([...input].reverse())};
-const KEYS = {nexlev: 'nexlev-fixture-key-0123456789', youtube: 'youtube-fixture-key-0123456789', hermes: 'hermes-fixture-key-0123456789abcdef'};
+const KEYS = {nexlev: 'nexlev-fixture-key-0123456789', youtube: 'youtube-fixture-key-0123456789', claude: 'claude-fixture-key-0123456789abcdef'};
 const json = (body, status = 200) => new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json'}});
 const words = (count, prefix) => Array.from({length: count}, (_, index) => `${prefix}${index + 1}`).join(' ');
 const hook = 'Every coin in your pocket began as a promise between strangers.';
@@ -24,8 +25,8 @@ const vid = n => `vid${String(n).padStart(8, '0')}`;
 const channelIds = ['UCaaaaaaaaaaaaaaaaaaaaaa', 'UCbbbbbbbbbbbbbbbbbbbbbb', 'UCcccccccccccccccccccccc'];
 const TRANSCRIPT = 'Long before banks existed people needed a way to trust a stranger they would never meet again so they invented tokens and tallies that recorded every promise';
 
-// One fake network for NexLev, YouTube and Hermes. Every call is recorded.
-function fakeNetwork({hermesContent = null, hermesUsage = {prompt_tokens: 3000, completion_tokens: 1500, total_tokens: 4500}, nexlevStatus = 200} = {}) {
+// One fake network for NexLev, YouTube and Claude. Every call is recorded.
+function fakeNetwork({claudeContent = null, claudeUsage = {prompt_tokens: 3000, completion_tokens: 1500, total_tokens: 4500}, nexlevStatus = 200} = {}) {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     const target = new URL(String(url));
@@ -59,12 +60,12 @@ function fakeNetwork({hermesContent = null, hermesUsage = {prompt_tokens: 3000, 
       if (target.pathname === '/youtube/v3/videos') return json({items: [{id: vid(70), snippet: {title: 'YouTube raw title A', publishedAt: '2026-09-20T10:00:00Z'}, contentDetails: {duration: 'PT9M5S', caption: 'false', definition: 'hd'}, statistics: {viewCount: '5000'}}, {id: vid(71), snippet: {title: 'YouTube raw title B', publishedAt: '2026-09-25T10:00:00Z'}, contentDetails: {duration: 'PT45S'}, statistics: {}}]});
       return json({}, 404);
     }
-    if (target.origin === 'http://127.0.0.1:8642') {
+    if (target.origin === 'https://api.anthropic.com') {
       if (target.pathname === '/v1/capabilities') return json({auth: {type: 'bearer', required: true}, features: {chat_completions: true}});
       if (target.pathname === '/v1/toolsets') return json([]);
-      if (target.pathname === '/v1/chat/completions') {
-        const body = JSON.parse(options.body), content = typeof hermesContent === 'function' ? hermesContent(body) : hermesContent;
-        return json({choices: [{message: {content: JSON.stringify(content)}}], usage: hermesUsage});
+      if (isClaudeMessages(url)) {
+        const body = JSON.parse(options.body), content = typeof claudeContent === 'function' ? claudeContent(body) : claudeContent;
+        return claudeMessage(content, {input_tokens: claudeUsage.prompt_tokens, output_tokens: claudeUsage.completion_tokens});
       }
     }
     throw new Error(`Unexpected request to ${url}`);
@@ -83,7 +84,7 @@ function setup(t, network, familyExtra = {}) {
     store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload), slot.id);
     return {id: slot.id, revision: slot.revision};
   };
-  const ids = {nexlev: make('nexlev'), youtube: make('youtube'), hermes: make('hermes')};
+  const ids = {nexlev: make('nexlev'), youtube: make('youtube'), claude: make('claude')};
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
   const intel = new CompetitorIntelligence(store, connectors, quota, styles);
   const niches = new NicheFactory(store, connectors, quota, styles);
@@ -221,19 +222,19 @@ test('handles without a YouTube connector produce a partial scan; over-cap scans
   assert.equal(intel.state().families[family.id].scans[0].status, 'blocked_quota');
 });
 
-test('Hermes blueprint is validated, reviewed by a human and then drives style, voice and script guidance', async t => {
-  const network = fakeNetwork({hermesContent: blueprint()});
+test('Claude blueprint is validated, reviewed by a human and then drives style, voice and script guidance', async t => {
+  const network = fakeNetwork({claudeContent: blueprint()});
   const {store, intel, family, ids, styles} = setup(t, network);
   intel.saveNote(family.id, {competitorKey: `channel_id:${channelIds[0].toLowerCase()}`, expectedRevision: 0, createdBy: 'Owner', editingStyle: 'Slow pans over archival maps with a ledger motif.', voice: 'Deep, calm narrator.'});
   intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, youtubeConnector: ids.youtube});
   const scan = await intel.processNextScan();
-  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.hermes, requestedBy: 'Owner'});
+  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   assert.equal(queued.status, 'queued');
   assert.ok(Object.keys(queued.refs).includes('N1'));
-  const prompt = await (async () => { await intel.processNextAnalysis(); return network.calls.find(call => call.path === '/v1/chat/completions').body; })();
-  const userData = JSON.parse(prompt.messages[1].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
-  assert.equal(JSON.stringify(userData).includes('YouTube raw title'), false, 'YouTube API data is not sent to Hermes without derived-use approval');
-  assert.match(prompt.messages[0].content, /at most 30%/);
+  const prompt = await (async () => { await intel.processNextAnalysis(); return network.calls.find(call => call.path === '/v1/messages').body; })();
+  const userData = JSON.parse(prompt.messages[0].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
+  assert.equal(JSON.stringify(userData).includes('YouTube raw title'), false, 'YouTube API data is not sent to Claude without derived-use approval');
+  assert.match(prompt.system, /at most 30%/);
   const analysis = intel.publicAnalysis(intel.analysisRow(queued.id));
   assert.equal(analysis.status, 'completed');
   assert.equal(analysis.quality.referenceSharePercent, 29);
@@ -247,7 +248,7 @@ test('Hermes blueprint is validated, reviewed by a human and then drives style, 
   assert.equal(intel.voiceDirection(family.id).pace, 1);
 
   const content = store.saveContent({familyId: family.id, title: 'Who trusted the first coin?', kind: 'fiction', angle: 'An invented market day shows why tokens needed trust.', hook, script, sources: [], rightsConfirmed: true});
-  const job = store.queueHermesScript(content.id, {revision: content.revision, connectorId: ids.hermes.id, connectorRevision: ids.hermes.revision});
+  const job = store.queueScriptJob(content.id, {revision: content.revision, connectorId: ids.claude.id, connectorRevision: ids.claude.revision});
   assert.match(job.type, new RegExp(`:g${queued.id}$`));
   assert.equal(JSON.parse(job.input).promptInput.guidance.analysisId, queued.id);
 
@@ -276,11 +277,11 @@ test('blueprints that break the 30/70 rule, cite unknown evidence or copy wordin
   assert.throws(() => validateBlueprint(blueprint({editing: {...blueprint().editing, adjustments: [{setting: 'renderer.adapter', value: 'x', reason: 'Not allowed here.'}]}}), context), /unsupported style setting/);
   assert.throws(() => validateBlueprint(blueprint({confidence: {level: 'high', rationale: 'Only one channel cited.'}, opportunities: [{opportunity: 'Single source', refs: ['C1']}]}), context), /two competitor channels/);
 
-  const copying = fakeNetwork({hermesContent: blueprint({summary: 'They invented tokens and tallies that recorded every promise, and so should we.'})});
+  const copying = fakeNetwork({claudeContent: blueprint({summary: 'They invented tokens and tallies that recorded every promise, and so should we.'})});
   const {intel, family, ids} = setup(t, copying);
   intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, youtubeConnector: ids.youtube});
   const scan = await intel.processNextScan();
-  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.hermes, requestedBy: 'Owner'});
+  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   await intel.processNextAnalysis();
   const blocked = intel.publicAnalysis(intel.analysisRow(queued.id));
   assert.equal(blocked.status, 'quality_failed');
@@ -289,7 +290,7 @@ test('blueprints that break the 30/70 rule, cite unknown evidence or copy wordin
 });
 
 test('interrupted scans and analyses are never replayed silently', async t => {
-  const network = fakeNetwork({hermesContent: blueprint()});
+  const network = fakeNetwork({claudeContent: blueprint()});
   const {store, connectors, styles, quota, intel, family, ids} = setup(t, network);
   const scan = intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev});
   intel.claimScan();
@@ -299,7 +300,7 @@ test('interrupted scans and analyses are never replayed silently', async t => {
   assert.equal(restarted.retryScan(scan.id, {confirmInterrupted: true}).attempts, 2);
   const result = await restarted.processNextScan();
   assert.equal(result.status, 'completed');
-  const analysis = restarted.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.hermes, requestedBy: 'Owner'});
+  const analysis = restarted.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   restarted.claimAnalysis();
   const again = new CompetitorIntelligence(store, connectors, quota, styles);
   assert.equal(again.publicAnalysis(again.analysisRow(analysis.id)).status, 'interrupted');
@@ -330,7 +331,7 @@ function evaluation(extra = {}) {
 }
 
 test('Niche Factory: owner ideas, NexLev discovery, rubric score in code, hard filters and family link', async t => {
-  const network = fakeNetwork({hermesContent: evaluation()});
+  const network = fakeNetwork({claudeContent: evaluation()});
   const {store, niches, ids} = setup(t, network);
   assert.throws(() => niches.saveIdea({title: 'x', description: 'short', formats: ['long-form'], createdBy: 'Owner'}), /Niche title/);
   const idea = niches.saveIdea({title: 'Origins of money', description: 'Story-led explainers about how money began and what it teaches today.', audience: 'Curious adults', countries: ['United States'], formats: ['long-form'], keywords: ['history of money'], seedChannels: [channelIds[0]], createdBy: 'Owner'});
@@ -345,7 +346,7 @@ test('Niche Factory: owner ideas, NexLev discovery, rubric score in code, hard f
   assert.equal(discovery.result.analytics[0].label, 'NexLev estimate');
   assert.equal(discovery.result.keywords[0].videos[0].title, 'The first coins ever minted');
 
-  const job = niches.queueEvaluation(idea.id, {ideaRevision: idea.revision, discoveryId: discovery.id, connector: ids.hermes, requestedBy: 'Owner'});
+  const job = niches.queueEvaluation(idea.id, {ideaRevision: idea.revision, discoveryId: discovery.id, connector: ids.claude, requestedBy: 'Owner'});
   await niches.processNextEvaluation();
   const evaluated = niches.publicEvaluation(niches.evaluationRow(job.id));
   assert.equal(evaluated.status, 'completed');
@@ -365,20 +366,20 @@ test('Niche Factory: owner ideas, NexLev discovery, rubric score in code, hard f
 
 test('Niche evaluations: a failed hard filter blocks approval; duplicate or copied episode ideas are rejected', async t => {
   const ideaOnly = {ratings: Object.fromEntries(Object.entries(evaluation().ratings).map(([key, value]) => [key, {...value, refs: ['IDEA']}])), recommendedCompetitors: []};
-  const failing = fakeNetwork({hermesContent: evaluation({...ideaOnly, hardFilters: {...evaluation().hardFilters, rights: {pass: false, note: 'Relies on copyrighted film clips.'}}})});
+  const failing = fakeNetwork({claudeContent: evaluation({...ideaOnly, hardFilters: {...evaluation().hardFilters, rights: {pass: false, note: 'Relies on copyrighted film clips.'}}})});
   const {niches, ids} = setup(t, failing);
   const idea = niches.saveIdea({title: 'Movie money moments', description: 'Explaining money scenes from famous films and shows.', formats: ['long-form'], keywords: ['movie money scenes'], createdBy: 'Owner'});
-  const job = niches.queueEvaluation(idea.id, {ideaRevision: idea.revision, connector: ids.hermes, requestedBy: 'Owner'});
+  const job = niches.queueEvaluation(idea.id, {ideaRevision: idea.revision, connector: ids.claude, requestedBy: 'Owner'});
   await niches.processNextEvaluation();
   const result = niches.publicEvaluation(niches.evaluationRow(job.id));
   assert.equal(result.decision, 'do_not_produce');
   assert.throws(() => niches.review(job.id, {decision: 'approve', reviewer: 'Owner', confirmations: {evidenceReviewed: true, estimatesUnderstood: true}}), /hard filter failed/);
   assert.equal(niches.review(job.id, {decision: 'reject', reviewer: 'Owner', notes: 'Rights risk is too high.'}).review.decision, 'rejected');
 
-  const dupes = fakeNetwork({hermesContent: evaluation({...ideaOnly, episodeIdeas: Array.from({length: 20}, () => 'Why salt was the first money')})});
+  const dupes = fakeNetwork({claudeContent: evaluation({...ideaOnly, episodeIdeas: Array.from({length: 20}, () => 'Why salt was the first money')})});
   const second = setup(t, dupes);
   const other = second.niches.saveIdea({title: 'Salt economy', description: 'How salt shaped trade and taxes across empires.', formats: ['long-form'], keywords: ['salt trade'], createdBy: 'Owner'});
-  const dupJob = second.niches.queueEvaluation(other.id, {ideaRevision: other.revision, connector: second.ids.hermes, requestedBy: 'Owner'});
+  const dupJob = second.niches.queueEvaluation(other.id, {ideaRevision: other.revision, connector: second.ids.claude, requestedBy: 'Owner'});
   await second.niches.processNextEvaluation();
   const dup = second.niches.publicEvaluation(second.niches.evaluationRow(dupJob.id));
   assert.equal(dup.status, 'quality_failed');
@@ -412,7 +413,7 @@ test('blend picks: each competitor link chooses what to learn, every area learns
     adopt: [{area: 'script', pattern: 'Open on a tangible object before the history', refs: ['C1', 'T1']}, {area: 'visuals', pattern: 'Use maps to show trade routes', refs: ['V1']}, {area: 'editing', pattern: 'Hold archival stills a little longer', refs: ['C2']}],
     original: [...original('script', 3), ...original('visuals', 3), ...original('editing', 3), ...original('voice', 1), ...original('packaging', 1)],
   });
-  const network = fakeNetwork({hermesContent: blended()});
+  const network = fakeNetwork({claudeContent: blended()});
   const {intel, family, ids} = setup(t, network);
   const [a, b] = [`channel_id:${channelIds[0].toLowerCase()}`, `channel_id:${channelIds[1].toLowerCase()}`];
   assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {'handle:@stranger': ['voice']}}), /not in this family/);
@@ -424,13 +425,13 @@ test('blend picks: each competitor link chooses what to learn, every area learns
 
   intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev});
   const scan = await intel.processNextScan();
-  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.hermes, requestedBy: 'Owner'});
+  const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   assert.deepEqual(queued.blend.areaSources, {script: ['C1'], voice: [], editing: ['C2'], visuals: ['C1'], packaging: []});
   assert.deepEqual(queued.blend.ownAreas, ['voice', 'packaging']);
   await intel.processNextAnalysis();
-  const chat = network.calls.find(call => call.path === '/v1/chat/completions').body;
-  assert.match(chat.messages[0].content, /may only use an area that has picked channels/);
-  const sent = JSON.parse(chat.messages[1].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
+  const chat = network.calls.find(call => call.path === '/v1/messages').body;
+  assert.match(chat.system, /may only use an area that has picked channels/);
+  const sent = JSON.parse(chat.messages[0].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
   assert.deepEqual(sent.channels.find(item => item.ref === 'C1').ownerWantsToLearn, ['Narration', 'Visuals']);
   const analysis = intel.publicAnalysis(intel.analysisRow(queued.id));
   assert.equal(analysis.status, 'completed', JSON.stringify(analysis.quality));

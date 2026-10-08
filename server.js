@@ -2,12 +2,14 @@
 const http=require('node:http');
 const fs=require('node:fs');
 const path=require('node:path');
+const os=require('node:os');
 const {randomBytes,timingSafeEqual}=require('node:crypto');
 const {Store,InputError}=require('./store');
 const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
-const {HermesReasoning}=require('./hermes');
+const {ScriptWriter}=require('./writer');
 const {ResearchReasoning}=require('./research');
+const {Ai,ClaudeCode,MODELS,DEFAULT_MODELS,TASK_ROLE}=require('./ai');
 const {VoiceRuntime}=require('./voice');
 const {StyleLibrary}=require('./style');
 const {QuotaLedger}=require('./intel-sources');
@@ -21,21 +23,24 @@ const craft=require('./craft');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
-function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={}}={}) {
-  const dataRoot=dataFile===':memory:'?path.join(root,'data'):path.dirname(path.resolve(dataFile));
+const files={ '/audio-room.js':['public/audio-room.js','text/javascript; charset=utf-8'], '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={},claudeCode=null}={}) {
+  // In-memory fixtures must never share media, recovery cleanup or credentials with the owner's program.
+  const dataRoot=dataFile===':memory:'?fs.mkdtempSync(path.join(os.tmpdir(),'control-room-memory-')):path.dirname(path.resolve(dataFile));
   const store=new Store(dataFile,{artifactRoot:dataRoot}), token=randomBytes(32).toString('hex');
-  research ||= new YouTubeResearch(new WindowsVault(path.dirname(dataFile)));
-  const connectors=new ConnectorSlots(store,protector||new WindowsVault(path.dirname(dataFile)),providerFetch);
-  const reasoning=new HermesReasoning(store,connectors);
-  const researchReasoning=new ResearchReasoning(store,connectors);
+  research ||= new YouTubeResearch(new WindowsVault(dataRoot));
+  const connectors=new ConnectorSlots(store,protector||new WindowsVault(dataRoot),providerFetch);
+  // One AI layer for every room: Claude on the owner's chosen connection, one call per model at a time.
+  const ai=new Ai(connectors,{claudeCode:claudeCode||new ClaudeCode()});connectors.ai=ai;
+  const reasoning=new ScriptWriter(store,ai);
+  const researchReasoning=new ResearchReasoning(store,ai);
   const ffmpeg=voiceOptions.ffmpeg||getFFmpegPath(),ffprobe=voiceOptions.ffprobe||process.env.FFPROBE_PATH||(path.isAbsolute(ffmpeg)?path.join(path.dirname(ffmpeg),process.platform==='win32'?'ffprobe.exe':'ffprobe'):'ffprobe');
   const styles=new StyleLibrary(store);
   // The Skills Engine attaches its runtime to the store so the prompt-building rooms can reach
   // the approved skill brief. Nothing is injected until a skill revision is approved by a human.
   const skills=new SkillsEngine(store,{root}).attach();
-  const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles),nicheFactory=new NicheFactory(store,connectors,quota,styles);
-  const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel});
+  const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles,ai),nicheFactory=new NicheFactory(store,connectors,quota,styles,ai);
+  const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel,ai});
   const renderRoom=new RenderRoom(store,styles,sceneRoom,{dataRoot,ffmpeg,ffprobe});
   const editingRoom=new EditingRoom(store,styles,sceneRoom,renderRoom,{ffmpeg});
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
@@ -62,15 +67,15 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
         if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-reviewed-skills-engine'});
-        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),hermesReady=connectorState.some(item=>item.provider==='hermes'&&item.hasKey&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),editing:editingRoom.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
-          capabilities:{skills:skillState.counts.approved>0?'approved_skills_injected':'drafts_only_not_injected',research:hermesReady?'review_only_saved_evidence':'saved_evidence_only',text:hermesReady?'bounded_hermes_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
+        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),claudeReady=connectorState.some(item=>['claude','claude-code'].includes(item.provider)&&(item.hasKey||item.provider==='claude-code')&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,ai:{claudeCodeFound:!!ai.claudeCode.command,models:MODELS,defaults:DEFAULT_MODELS,taskRoles:TASK_ROLE},youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),editing:editingRoom.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+          capabilities:{skills:skillState.counts.approved>0?'approved_skills_injected':'drafts_only_not_injected',research:claudeReady?'review_only_saved_evidence':'saved_evidence_only',text:claudeReady?'bounded_claude_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
         const voiceAudio=pathname.match(/^\/api\/voice-auditions\/([a-f0-9-]+)\/audio$/);
         if(voiceAudio){const audition=store.voiceAudition(voiceAudio[1]),integrity=store.verifyVoiceArtifact(audition);if(!integrity.ok)throw new InputError(integrity.reason||'Voice artifact file is unavailable.',404);const {filename,stat}=integrity,range=req.headers.range;if(range){const match=range.match(/^bytes=(\d+)-(\d*)$/);if(!match)throw new InputError('Invalid audio byte range.',416);const start=Number(match[1]),end=match[2]?Number(match[2]):stat.size-1;if(!(Number.isSafeInteger(start)&&Number.isSafeInteger(end)&&start>=0&&end>=start&&end<stat.size))throw new InputError('Audio byte range is outside the artifact.',416);res.writeHead(206,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${stat.size}`,'Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(filename,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':audition.artifact.mime||'audio/wav','Accept-Ranges':'bytes','Content-Length':stat.size,'Cache-Control':'no-store'});return fs.createReadStream(filename).pipe(res);}
-        const renderFile=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(video|sheet|manifest)$/);
-        if(renderFile){const {file,mime,size}=renderRoom.file(renderFile[1],renderFile[2]);const range=req.headers.range;if(renderFile[2]==='video'&&range){const match=range.match(/^bytes=(\d*)-(\d*)$/);if(!match||(!match[1]&&!match[2]))throw new InputError('Invalid video byte range.',416);let start=match[1]?Number(match[1]):Math.max(0,size-Number(match[2])),end=match[1]&&match[2]?Math.min(Number(match[2]),size-1):size-1;if(!(start>=0&&start<=end&&end<size))throw new InputError('Video byte range is outside the file.',416);res.writeHead(206,{'Content-Type':mime,'Content-Range':`bytes ${start}-${end}/${size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(file,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Accept-Ranges':renderFile[2]==='video'?'bytes':'none','Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
+        const renderFile=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(video|sheet|manifest|audio)$/);
+        if(renderFile){const {file,mime,size}=renderRoom.file(renderFile[1],renderFile[2]);const range=req.headers.range;if(['video','audio'].includes(renderFile[2])&&range){const match=range.match(/^bytes=(\d*)-(\d*)$/);if(!match||(!match[1]&&!match[2]))throw new InputError('Invalid video byte range.',416);let start=match[1]?Number(match[1]):Math.max(0,size-Number(match[2])),end=match[1]&&match[2]?Math.min(Number(match[2]),size-1):size-1;if(!(start>=0&&start<=end&&end<size))throw new InputError('Video byte range is outside the file.',416);res.writeHead(206,{'Content-Type':mime,'Content-Range':`bytes ${start}-${end}/${size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(file,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Accept-Ranges':['video','audio'].includes(renderFile[2])?'bytes':'none','Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
         const captionFile=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/captions\.srt$/);
         if(captionFile){const {text,filename}=editingRoom.captionsSrt(captionFile[1]);res.writeHead(200,{'Content-Type':'application/x-subrip; charset=utf-8','Content-Disposition':`attachment; filename="captions.srt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
         const sceneBoard=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/board$/);
@@ -190,9 +195,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(researchRetry&&req.method==='POST')return json(res,200,researchReasoning.retry(researchRetry[1],body));
         const researchBrief=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/research-briefs$/);
         if(researchBrief&&req.method==='POST')return json(res,200,researchReasoning.queue(researchBrief[1],body));
-        const retry=pathname.match(/^\/api\/hermes-jobs\/([a-f0-9-]+)\/retry$/);
+        const retry=pathname.match(/^\/api\/script-jobs\/([a-f0-9-]+)\/retry$/);
         if(retry&&req.method==='POST')return json(res,200,reasoning.retry(retry[1],body));
-        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|review|storyboard|hermes-script))?$/);
+        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|review|storyboard|ai-script))?$/);
         if(!match)throw new InputError('Action not found.',404);
         const [,kind,id,action]=match;
         if(kind==='families' && !action && req.method==='PUT')result=store.saveFamily(body,id);
@@ -200,16 +205,16 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         else if(kind==='content' && !action && req.method==='PUT')result=store.saveContent(body,id);
         else if(kind==='content' && action==='review' && req.method==='POST')result=store.reviewContent(id,body);
         else if(kind==='content' && action==='storyboard' && req.method==='POST')result=store.queueStoryboard(id,body);
-        else if(kind==='content' && action==='hermes-script' && req.method==='POST')result=reasoning.queue(id,body);
+        else if(kind==='content' && action==='ai-script' && req.method==='POST')result=reasoning.queue(id,body);
         else throw new InputError('Action not found.',404);
       }
       json(res,200,result);
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Hermes worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Script worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
-  return {server,store,styles,quota,competitorIntel,nicheFactory,sceneRoom,renderRoom,editingRoom,connectors,reasoning,researchReasoning,voiceRuntime,voiceReady};
+  return {server,store,dataRoot,styles,quota,competitorIntel,nicheFactory,sceneRoom,renderRoom,editingRoom,connectors,ai,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);

@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const C = require('../craft');
-const {assessScriptQuality, scriptMessages} = require('../hermes');
+const {assessScriptQuality, scriptMessages} = require('../writer');
 const {Store} = require('../store');
 const {createApp} = require('../server');
 

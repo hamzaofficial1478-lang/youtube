@@ -1,5 +1,6 @@
 'use strict';
 const test = require('node:test');
+const {claudeMessage, isClaudeMessages} = require('./fake-claude');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -17,7 +18,7 @@ const {createApp} = require('../server');
 const hasFFmpeg = (() => { try { execFileSync('ffprobe', ['-version'], {stdio: 'ignore'}); execFileSync('ffmpeg', ['-version'], {stdio: 'ignore'}); return true; } catch { return false; } })();
 const skip = hasFFmpeg ? false : 'FFmpeg/ffprobe are not installed on this machine';
 const protector = {transform: (operation, input) => Buffer.from([...input].reverse())};
-const KEYS = {pexels: 'pexels-fixture-key-0123456789', pixabay: 'pixabay-fixture-key-0123456789', openai: 'openai-fixture-key-0123456789abcdef', hermes: 'hermes-fixture-key-0123456789abcdef'};
+const KEYS = {pexels: 'pexels-fixture-key-0123456789', pixabay: 'pixabay-fixture-key-0123456789', openai: 'openai-fixture-key-0123456789abcdef', claude: 'claude-fixture-key-0123456789abcdef'};
 const json = (body, status = 200, headers = {}) => new Response(JSON.stringify(body), {status, headers: {'content-type': 'application/json', ...headers}});
 const media = {};
 function mediaFixtures() {
@@ -47,7 +48,7 @@ function blueprintPlan(sentenceCount, extra = {}) {
   return {summary: 'Two shots per pair of sentences, stock first.', scenes, ...extra};
 }
 
-function fakeNetwork({hermesPlan = null, hermesUsage = {prompt_tokens: 9000, completion_tokens: 4000, total_tokens: 13000}, openaiStatus = 200, failChat = false} = {}) {
+function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, completion_tokens: 4000, total_tokens: 13000}, openaiStatus = 200, failChat = false} = {}) {
   const calls = [];
   const fetchImpl = async (url, options = {}) => {
     const target = new URL(String(url));
@@ -76,14 +77,14 @@ function fakeNetwork({hermesPlan = null, hermesUsage = {prompt_tokens: 9000, com
       if (openaiStatus !== 200) return json({error: {message: 'nope'}}, openaiStatus);
       return json({created: 1, data: [{b64_json: mediaFixtures().png.toString('base64'), revised_prompt: 'A blue field'}], usage: {input_tokens: 20, output_tokens: 1000, total_tokens: 1020}}, 200, {'x-request-id': 'req_fixture'});
     }
-    if (target.origin === 'http://127.0.0.1:8642') {
+    if (target.origin === 'https://api.anthropic.com') {
       if (target.pathname === '/v1/capabilities') return json({auth: {type: 'bearer', required: true}, features: {chat_completions: true}});
       if (target.pathname === '/v1/toolsets') return json([]);
-      if (target.pathname === '/v1/chat/completions') {
+      if (isClaudeMessages(url)) {
         if (failChat) throw new Error('socket hang up');
-        const body = JSON.parse(options.body), input = JSON.parse(body.messages[1].content);
-        const plan = typeof hermesPlan === 'function' ? hermesPlan(input) : hermesPlan;
-        return json({choices: [{message: {content: typeof plan === 'string' ? plan : JSON.stringify(plan)}}], usage: hermesUsage});
+        const body = JSON.parse(options.body), input = JSON.parse(body.messages[0].content);
+        const plan = typeof claudePlan === 'function' ? claudePlan(input) : claudePlan;
+        return claudeMessage(plan, {input_tokens: claudeUsage.prompt_tokens, output_tokens: claudeUsage.completion_tokens});
       }
     }
     throw new Error(`Unexpected request to ${url}`);
@@ -103,7 +104,7 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
     store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload), slot.id);
     return {id: slot.id, revision: slot.revision};
   };
-  const ids = {pexels: make('pexels'), pixabay: make('pixabay'), openai: make('openai'), hermes: make('hermes')};
+  const ids = {pexels: make('pexels'), pixabay: make('pixabay'), openai: make('openai'), claude: make('claude')};
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
   const family = store.saveFamily({name: 'Money History', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format, monthlyTokenLimit: 500000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['@CoinOrigins']});
   let content = store.saveContent({familyId: family.id, title: 'How promises became money', kind: 'fiction', angle: 'Follow invented market towns as they learn to record trust.', hook, script, sources: [], rightsConfirmed: true});
@@ -225,26 +226,26 @@ test('inputs gate planning; the free narration split covers every sentence withi
   assert.throws(() => approvePlan(room, {...manifest, id: manifest.id}) && approvePlan(room, manifest), /already has a decision/);
 });
 
-test('Hermes scene director: structural failures are blocked, timing issues stay on a draft, tokens are reserved and settled', async t => {
+test('Claude scene director: structural failures are blocked, timing issues stay on a draft, tokens are reserved and settled', async t => {
   let mode = 'broken';
-  const network = fakeNetwork({hermesPlan: input => {
+  const network = fakeNetwork({claudePlan: input => {
     const count = input.sentences.length;
     if (mode === 'broken') return {summary: 'x', scenes: [{sentenceStart: 2, sentenceEnd: count, purpose: 'hook', direction: '', onScreenText: '', shots: [{source: 'stock-video', query: 'market', prompt: '', motion: 'static', notes: ''}]}]};
     if (mode === 'competitor') return blueprintPlan(count, {scenes: blueprintPlan(count).scenes.map((scene, index) => index === 3 ? {...scene, shots: [{...scene.shots[0], query: 'coinorigins market'}, scene.shots[1]]} : scene)});
     return blueprintPlan(count);
   }});
   const {room, content, ids, store, family} = setup(t, network);
-  assert.throws(() => room.createPlan(content.id, {mode: 'hermes', requestedBy: 'Owner', contentRevision: content.revision}), /Hermes/);
-  const queued = room.createPlan(content.id, {mode: 'hermes', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.hermes});
-  assert.throws(() => room.createPlan(content.id, {mode: 'hermes', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.hermes}), /already being prepared/);
+  assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision}), /Claude/);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude}), /already being prepared/);
   await room.processNextPlan();
   let job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'quality_failed');
   assert.match(job.quality.issues[0], /must start at sentence 1/);
   assert.equal(job.usage.status, 'settled');
   assert.equal(store.usageSummary(family.id).settledTokens, 13000);
-  const chat = network.calls.find(call => call.path === '/v1/chat/completions');
-  const sent = JSON.parse(chat.body.messages[1].content);
+  const chat = network.calls.find(call => call.path === '/v1/messages');
+  const sent = JSON.parse(chat.body.messages[0].content);
   assert.equal(sent.style.sources.includes('maps-and-diagrams'), false, 'only executable sources are offered');
   assert.ok(chat.body.max_tokens >= 600);
 
@@ -255,12 +256,12 @@ test('Hermes scene director: structural failures are blocked, timing issues stay
   assert.equal(job.status, 'completed');
   assert.equal(job.attempts, 2);
   const draft = latestManifest(room, content.id);
-  assert.equal(draft.source, 'hermes');
+  assert.equal(draft.source, 'claude');
   assert.match(draft.issues.join(' '), /names a competitor \("coinorigins"\)/);
   assert.throws(() => approvePlan(room, draft), /Resolve the plan issues/);
 
   mode = 'good';
-  const second = room.createPlan(content.id, {mode: 'hermes', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.hermes});
+  const second = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();
   const clean = latestManifest(room, content.id);
   assert.equal(clean.revision, 2);
@@ -270,7 +271,7 @@ test('Hermes scene director: structural failures are blocked, timing issues stay
   assert.equal(room.publicPlanJob(room.planJobRow(second.job.id)).manifestId, clean.id);
 
   const failing = setup(t, fakeNetwork({failChat: true}));
-  const failed = failing.room.createPlan(failing.content.id, {mode: 'hermes', requestedBy: 'Owner', contentRevision: failing.content.revision, connector: failing.ids.hermes});
+  const failed = failing.room.createPlan(failing.content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: failing.content.revision, connector: failing.ids.claude});
   await failing.room.processNextPlan();
   const interrupted = failing.room.publicPlanJob(failing.room.planJobRow(failed.job.id));
   assert.equal(interrupted.status, 'interrupted');

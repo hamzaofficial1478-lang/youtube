@@ -362,7 +362,7 @@ function loadPacks(root = __dirname) {
 
 // ---------------------------------------------------------------- engine
 
-// How much of a Hermes prompt one skill brief may occupy. messageTokenUpperBound counts bytes as
+// How much of a Claude prompt one skill brief may occupy. messageTokenUpperBound counts bytes as
 // an upper bound on tokens, so this is a byte budget taken out of the family's job token limit.
 const BRIEF_BYTE_BUDGET = 1800;
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
@@ -706,7 +706,7 @@ class SkillsEngine {
     return selected;
   }
 
-  // The compact brief that goes into a Hermes system prompt. A skill that does not fit the byte
+  // The compact brief that goes into a Claude system prompt. A skill that does not fit the byte
   // budget is dropped whole and counted, never trimmed mid-rule.
   brief(taskKey, {familyId = null, byteBudget = BRIEF_BYTE_BUDGET} = {}) {
     integer(byteBudget, 200, 20000, 'Brief byte budget');

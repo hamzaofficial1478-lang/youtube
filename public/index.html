@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/editing-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/editing-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/audio-room.js" defer></script><script src="/app.js" defer></script></head>
 <body>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
@@ -39,14 +39,14 @@
         <label class="full">Competitor channels <span class="hint">3-10 recommended. One per line: an @handle, a UC… channel ID or a youtube.com channel link. Competitor Intelligence will study them to learn techniques, never to copy. On the Competitors page you choose what to keep from each link (voice-over, narration, editing, thumbnails, visuals).</span><textarea name="competitors" rows="3" maxlength="4000" placeholder="https://www.youtube.com/@competitor-one&#10;@competitor-two"></textarea></label>
         <label>Primary content locale<input name="primaryLocale" required minlength="2" maxlength="255" value="en-US" placeholder="en-US"><span class="hint">Required. This is the original script and master channel language.</span></label>
         <label>Optional additional locales<input name="additionalLocales" maxlength="2560" placeholder="es-419, it-IT"><span class="hint">Leave blank for a one-channel family, or add comma-separated locale codes for more channels.</span></label>
-        <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning target only. Hermes script/research calls may use paid provider capacity; token limits and deliberate retries apply separately.</span></label>
+        <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning target only. Claude script/research calls may use paid provider capacity; token limits and deliberate retries apply separately.</span></label>
         <label>Original videos per week<input name="cadence" type="number" required min="1" max="14" step="1" value="2"></label>
         <label class="full">Planning time zone<input name="timezone" required value="Asia/Karachi" placeholder="Asia/Karachi"></label>
         <label>Monthly LLM token limit<input name="monthlyTokenLimit" type="number" required min="0" max="10000000" step="1" value="100000"><span class="hint">Shared by script and research jobs. Zero blocks generation.</span></label>
         <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="8000" step="1" value="6000"></label>
         <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="8000" step="1" value="4000"></label>
       </div>
-      <details class="writing-voice"><summary>Writing voice <span class="hint">Optional. Hermes writes in it; words the channel never uses block a script candidate.</span></summary>
+      <details class="writing-voice"><summary>Writing voice <span class="hint">Optional. Claude writes in it; words the channel never uses block a script candidate.</span></summary>
         <div class="form-grid">
           <label class="full">Who one video talks to <span class="hint">One person, named properly, not "viewers".</span><textarea name="wvAudience" maxlength="400" rows="2" placeholder="e.g. A first-time home baker whose loaves come out dense and who has watched ten recipe videos already."></textarea></label>
           <label>Words the channel never uses <span class="hint">One per line or comma-separated (40 max).</span><textarea name="wvNever" rows="3" maxlength="2000" placeholder="unlock&#10;game-changer&#10;let's dive in"></textarea></label>
@@ -76,7 +76,7 @@
         <label class="full">What the source supports<textarea name="notes" required minlength="10" maxlength="3000" rows="3"></textarea></label>
         <label class="full">Rights and use notes<textarea name="rightsNotes" required minlength="10" maxlength="2000" rows="2"></textarea></label>
       </div>
-      <p class="note">The URL is stored for review, not fetched. Source text is untrusted data. Only explicitly permitted, unexpired evidence can reach the tool-free Hermes profile.</p>
+      <p class="note">The URL is stored for review, not fetched. Source text is untrusted data. Only explicitly permitted, unexpired evidence can reach the tool-free Claude profile.</p>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="evidence-dialog">Cancel</button><button type="submit" class="button primary">Save evidence</button></div>
     </form>
@@ -91,7 +91,7 @@
         <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
         <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
         <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
-        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Hermes candidate after reviewing it.</span><textarea name="script" maxlength="50000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
+        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Claude candidate after reviewing it.</span><textarea name="script" maxlength="50000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
       </div>
       <div class="section-heading"><h3>Evidence & source rights</h3><button class="button text-button" type="button" id="add-source">+ Add source</button></div>
       <div id="source-fields"></div>
@@ -263,6 +263,24 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="intel-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
     </form>
   </dialog>
+  <dialog id="setup-dialog" aria-labelledby="setup-heading">
+    <form id="setup-form">
+      <div class="dialog-heading"><div><p class="eyebrow">BEFORE YOU START</p><h2 id="setup-heading">Set up Claude for the program</h2></div></div>
+      <p class="hint">Claude writes the scripts and makes the editing, visual and niche decisions. Choose how the program reaches Claude and which two models do the work. Both models can run at the same time.</p>
+      <fieldset class="setup-choice"><legend>How should the program use Claude?</legend>
+        <label class="radio-card"><input type="radio" name="mode" value="claude-code" checked><span><strong>My Claude subscription</strong><small>Uses the Claude Code app already logged in on this PC. No per-token bill; your plan's usage limits apply. For your own personal use only. <b data-claude-code-status></b></small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="claude"><span><strong>A Claude API key</strong><small>Pay per token through your Claude Console account. The key is protected for your Windows account and never shown again.</small></span></label>
+      </fieldset>
+      <div class="form-grid">
+        <label class="full" data-setup-key hidden>Claude API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="sk-ant-..."></label>
+        <label>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
+        <label>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
+      </div>
+      <p class="note" data-setup-result aria-live="polite">Saving creates the connection and runs its test: the API key reads the two models' details (no generation); the subscription asks Claude one tiny question.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-setup-skip>Skip for now</button><button type="submit" class="button primary">Save and test</button></div>
+    </form>
+  </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
     <form id="connector-form">
       <div class="dialog-heading"><h2 id="connector-heading">Add connector slot</h2><button type="button" class="icon-button" data-close="connector-dialog" aria-label="Close connector dialog">×</button></div>
@@ -270,7 +288,9 @@
       <div class="form-grid">
         <label>Connector name<input name="name" required minlength="2" maxlength="80" placeholder="e.g. Main research project"></label>
         <label>Provider<select name="provider"></select></label>
-        <label class="full">API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Leave blank to keep the saved key"></label>
+        <label class="full" data-key-field>API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Leave blank to keep the saved key"></label>
+        <label data-model-field>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
+        <label data-model-field>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
         <label class="checkbox-label full"><input name="clearKey" type="checkbox"><span>Remove the saved key from this slot</span></label>
         <label class="full">Setup notes<input name="notes" maxlength="1000" placeholder="Purpose or planned setup. Do not put secrets here."></label>
       </div>

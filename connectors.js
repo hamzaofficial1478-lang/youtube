@@ -2,13 +2,16 @@
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
 const {YouTubeResearch, responseJson} = require('./youtube');
-const {HermesClient} = require('./hermes');
+const {MODELS, DEFAULT_MODELS, AiError} = require('./ai');
 
 const PROVIDERS = {
   youtube: {name: 'YouTube public research', test: 'Public channel lookup', ready: true},
   openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
-  hermes: {name: 'Hermes reasoning engine', test: 'Authenticated capability and tool-free profile check; no generation', ready: true},
+  'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
+  claude: {name: 'Claude API key', test: 'Reads the chosen models\' details with the key; no generation', ready: true, ai: true},
+  // Owner decision 2026-10-06: Claude replaced Hermes. Old Hermes slots stay visible so they can be deleted.
+  hermes: {name: 'Hermes (removed; use Claude)', test: 'Hermes was removed from the program on 2026-10-06. Delete this slot.', ready: false, retired: true},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
   pexels: {name: 'Pexels stock library', test: 'One photo search for "nature" (uses 1 Pexels request); nothing is downloaded', ready: true},
   pixabay: {name: 'Pixabay stock library', test: 'One photo search for "nature" (uses 1 Pixabay request); nothing is downloaded', ready: true},
@@ -33,6 +36,8 @@ class ConnectorSlots {
     const old=id?this.row(id):null;if(old)this.checkRevision(old,input.revision);
     const provider=input.provider;
     if(!Object.hasOwn(PROVIDERS,provider))throw new InputError('Choose a supported connector type.');
+    if(PROVIDERS[provider].retired&&!old)throw new InputError('Hermes was removed from the program. Add a Claude connection instead.');
+    if(PROVIDERS[provider].keyless&&input.key)throw new InputError('The Claude subscription connection uses the Claude Code login on this PC; it takes no API key.');
     if(old&&JSON.parse(old.payload).provider!==provider)throw new InputError('Create a new slot to change provider. Keys cannot be moved between providers.');
     const name=text(input.name,'connector name',80,2), notes=text(input.notes||'','setup notes',1000);
     if(input.clearKey!==undefined&&typeof input.clearKey!=='boolean')throw new InputError('Invalid clear-key choice.');
@@ -46,6 +51,11 @@ class ConnectorSlots {
     if(input.clearKey)encrypted=null;
     if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key)));
     const next={name,provider,notes,revision:old?JSON.parse(old.payload).revision+1:1,test:null,updatedAt:new Date().toISOString()};
+    // The two Claude models a connection uses: main (scripts, editing, visuals, niches) and support (the rest).
+    if(PROVIDERS[provider].ai){
+      const pick=(value,role)=>{const model=value??(old?JSON.parse(old.payload).models?.[role]:undefined)??DEFAULT_MODELS[role];if(!Object.hasOwn(MODELS,model))throw new InputError(`Choose a supported Claude model for the ${role} role.`);return model;};
+      next.models={main:pick(input.models?.main,'main'),support:pick(input.models?.support,'support')};
+    }
     const recordId=id||randomUUID();
     this.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name_key=excluded.name_key,payload=excluded.payload,secret=excluded.secret').run(recordId,name.toLowerCase(),JSON.stringify(next),encrypted);
     return this.public(this.row(recordId));
@@ -64,8 +74,11 @@ class ConnectorSlots {
     this.busy.add(id);
     let result=null, failure=null;
     try{
-      const key=this.key(id);
-      if(slot.provider==='youtube'){
+      const key=PROVIDERS[slot.provider].keyless?null:this.key(id);
+      if(PROVIDERS[slot.provider].ai){
+        const {Ai}=require('./ai');
+        result=await(this.ai||new Ai(this)).test(slot,key);
+      }else if(slot.provider==='youtube'){
         const research=new YouTubeResearch({get:()=>key},this.fetch);
         result=await research.lookup(channel);
       }else if(slot.provider==='nexlev'){
@@ -78,9 +91,6 @@ class ConnectorSlots {
         const client=slot.provider==='pexels'?new PexelsClient(key,this.fetch):new PixabayClient(key,this.fetch);
         const found=await client.search({capabilityId:`${slot.provider}-photo`,query:'nature',perPage:3});
         result={access:'stock_search',message:`${PROVIDERS[slot.provider].name} accepted the API key and returned ${found.candidates.length} photo result(s) (1 request used). Nothing was downloaded.`};
-      }else if(slot.provider==='hermes'){
-        result=await new HermesClient(key,this.fetch).capabilities();
-        result.message='Hermes authenticated capability and tool-free profile checks passed. No content was generated.';
       }else{
         const url=slot.provider==='openai'?'https://api.openai.com/v1/models':'https://api.elevenlabs.io/v2/voices?page_size=1';
         const headers=slot.provider==='openai'?{Authorization:`Bearer ${key}`}:{'xi-api-key':key};
@@ -94,7 +104,7 @@ class ConnectorSlots {
         result={access:'read_only_metadata',message:slot.provider==='openai'?'Model-list access passed. Generation, model access and billing are not tested.':'Voice-list access passed. Speech generation and voice rights are not tested.'};
       }
       slot.test={status:'passed',at:new Date().toISOString(),message:result.message||'Public channel lookup passed. Channel ownership and uploads are not authorized.'};
-    }catch(error){failure=error instanceof InputError?error:new InputError('Connector test failed. No credentials or raw provider errors are shown.',502);slot.test={status:'failed',at:new Date().toISOString(),message:failure.message};}
+    }catch(error){failure=error instanceof InputError?error:error instanceof AiError?new InputError(error.message,error.status):new InputError('Connector test failed. No credentials or raw provider errors are shown.',502);slot.test={status:'failed',at:new Date().toISOString(),message:failure.message};}
     finally{this.busy.delete(id);}
     // No slot writes can interleave while its async request is in flight.
     this.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(slot),id);

@@ -211,6 +211,8 @@ document.getElementById('edit-form').addEventListener('submit', event => {
       }
       if (form.elements.position) { const members = tl.clips.filter(item => item.sceneId === clip.sceneId), to = Number(value('position')); if (members[to]?.id !== clip.id) ops.push({type: 'reorder', sceneId: clip.sceneId, clipId: clip.id, toIndex: to}); }
       if (form.elements.hero.checked !== !!clip.hero) ops.push({type: 'set-hero', clipId: clip.id, hero: form.elements.hero.checked});
+    } else if (kind === 'audio') {
+      ops.push({type: 'set-audio', settings: {mode: value('audioMode'), targetLufs: Number(value('targetLufs')), truePeakDb: Number(value('truePeakDb'))}});
     } else if (kind === 'graphic-add') {
       ops.push({type: 'add-graphic', template: value('template'), startSeconds: Number(value('start')), seconds: Number(value('seconds')), title: value('title'), accent: value('accent') || undefined, lines: value('lines').split('\n').map(line => line.trim()).filter(Boolean)});
     } else if (kind === 'graphic') {

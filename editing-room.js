@@ -10,6 +10,7 @@ const B = require('./editing-brain');
 const R = require('./render');
 const C = require('./craft');
 const Cap = require('./captions');
+const Audio = require('./audio');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -290,6 +291,12 @@ class EditingRoom {
     const state = this.currentFor(timeline);
     requireValue(state.current, state.reason, 409);
     const {timeline: payload} = this.timelinePayload(row), review = JSON.parse(row.critique);
+    if (payload.audio) {
+      Audio.settings(payload.audio);
+      const readiness = this.renders.latestReadiness();
+      requireValue(Audio.REQUIRED_FILTERS.every(name => readiness?.filters?.[name] === true) && readiness?.encoders?.pcm_s24le === true,
+        'Audio finishing needs a fresh FFmpeg readiness check and pinned build (Room 05).', 409);
+    }
     const ass = B.graphicsAss(payload, state.inputs.spec);
     if (ass) {
       const readiness = this.renders.latestReadiness();
