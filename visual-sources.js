@@ -77,10 +77,19 @@ const CAPABILITIES = {
     notes: ['Text-to-image only in this milestone (no reference images).', 'Every image is synthetic media and carries the style\'s disclosure policy.'],
   },
 };
-const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image']};
+// P06c: drawn scenes. The program draws each generated-graphics shot itself (stick figures, props, labels) in the
+// local browser and keeps it as a video clip. No provider, no cost, no third-party media.
+CAPABILITIES['drawn-scene'] = {
+  id: 'drawn-scene', version: REGISTRY_VERSION, provider: 'local', source: 'generated-graphics', kind: 'draw', name: 'Drawn scene (local)', mediaType: 'video',
+  settings: {template: 'sketch-scene', finish: 'From the style: hand-drawn for Stickman and Hand-drawn Canvas, clean for Motion Graphics'},
+  mediaRoles: [], output: {mime: ['video/mp4'], maxBytes: 300 * MB, rendition: 'Drawn at the family resolution and the style frame rate'},
+  rights: {name: 'Drawn by this program', url: '', commercialUse: true, attribution: 'Not required', restrictions: ['Original drawing from the scene plan; no third-party media']}, synthetic: false,
+  cost: {unit: 'shot', paid: false, note: 'Drawn locally in Microsoft Edge or Google Chrome; free.'},
+  notes: ['Each shot is drawn from its sketch in the scene plan: figures, props, labels, arrows and bubbles, drawn on stroke by stroke.'],
+};
+const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image'], 'generated-graphics': ['drawn-scene']};
 const NOT_EXECUTABLE = {
   'ai-video': 'No AI video adapter is enabled yet.',
-  'generated-graphics': 'Generated graphics will be produced by the renderer in a later room.',
   'maps-and-diagrams': 'Maps and diagrams will be produced by the renderer in a later room.',
   'archival-public-domain': 'No public-domain archive adapter is enabled yet.',
 };

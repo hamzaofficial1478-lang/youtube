@@ -163,9 +163,14 @@ const YEAR_PATTERN = /\b(?:(\d{1,5})\s?(BCE|BC|CE|AD)|(1[0-9]{3}|20[0-9]{2}))\b/
 const QUOTE_PATTERN = /[“"]([^”"]{12,180})[”"]/;
 const STOP = new Set('the a an of and or to in on at for with by from as is was were be been it its this that these those his her their our your my into over under than then'.split(' '));
 function labelAfter(sentence, index, length) {
-  const rest = sentence.slice(index + length).replace(/^[\s,.;:]+/, '').split(/\s+/).map(word => word.replace(/[^\p{L}\p{N}'-]/gu, '')).filter(Boolean);
+  const rest = sentence.slice(index + length).replace(/^[\s,.;:]+/, '').split(/\s+/).filter(Boolean);
   const label = [];
-  for (const word of rest) { if (label.length >= 4) break; if (!label.length && STOP.has(word.toLowerCase())) continue; label.push(word); if (/[.,;:!?]$/.test(word)) break; }
+  for (const raw of rest) {
+    const word = raw.replace(/[^\p{L}\p{N}'-]/gu, '');
+    if (label.length >= 4) break;
+    if (word && !(!label.length && STOP.has(word.toLowerCase()))) label.push(word);
+    if (/[.,;:!?]$/.test(raw)) break;
+  }
   return label.join(' ').slice(0, 40);
 }
 // Marks the accent word: an owner *word* marker wins, otherwise the last content word (needs review).
@@ -307,7 +312,9 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
   for (const scene of scenes) {
     const span = sentences.slice(scene.sentenceStart - 1, scene.sentenceEnd);
     const sceneEnd = scene.endFrame;
-    if (scene.onScreenText) {
+    // A drawn scene (P06c) draws its own words, so its plan text is not laid over it again.
+    const drawn = (scene.shots || []).length > 0 && scene.shots.every(shot => shot.source === 'generated-graphics');
+    if (scene.onScreenText && !(drawn && scene.purpose !== 'turn')) {
       const turn = scene.purpose === 'turn';
       const {text: plain, accent, accentSource} = accentOf(scene.onScreenText);
       const dwell = turn ? round(0.75 + Math.max(1.2, 0.35 + plain.split(/\s+/).length / 3.2), 2) : graphicDwellSeconds(plain);
@@ -322,6 +329,7 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
     for (const sentence of span) {
       const start = at(sentence.startSeconds + 0.25), room = Math.round(sentence.durationSeconds * fps);
       if (room < Math.round(1.6 * fps)) continue;
+      if (drawn) continue;
       const quote = sentence.text.match(QUOTE_PATTERN);
       if (quote && quote[1].trim().split(/\s+/).length >= 4) {
         const line = quote[1].trim();

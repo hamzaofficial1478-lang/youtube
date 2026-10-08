@@ -93,19 +93,25 @@ function sceneShotCard(content, manifest, scene, shot) {
   const jobs = content.jobs.filter(job => job.shotId === shot.id), active = jobs.find(job => ['queued', 'running'].includes(job.status));
   const failed = !active && jobs.find(job => ['failed', 'interrupted', 'blocked_quota', 'blocked_budget', 'stale'].includes(job.status) && job.updatedAt >= (selection?.selectedAt || ''));
   const count = content.candidateCounts[shot.id] || 0, editable = manifest.scope.current;
-  const media = asset?.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual for ${esc(shot.label)}" loading="lazy">` : `<span class="shot-empty">${active ? (active.kind === 'search' ? 'Searching…' : active.kind === 'import' ? 'Downloading…' : 'Generating…') : 'No visual yet'}</span>`;
-  return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : esc(asset.provider)}</span>` : ''}</div>
+  const media = asset?.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual for ${esc(shot.label)}" loading="lazy">` : `<span class="shot-empty">${active ? (active.kind === 'search' ? 'Searching…' : active.kind === 'import' ? 'Downloading…' : active.kind === 'draw' ? 'Drawing…' : 'Generating…') : 'No visual yet'}</span>`;
+  return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
-      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.query)}</p>
+      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? sceneSketchSummary(shot.sketch) : shot.query)}</p>
       ${failed ? `<p class="inline-warning">${esc(failed.error || failed.status)}</p>` : ''}
       <div class="shot-actions">${editable ? action(asset ? 'Change' : 'Find visual', 'scene-shot-open', shot.id, asset ? 'secondary' : 'primary') + action('Edit', 'scene-shot-edit', shot.id, 'text-button') + (scene.shots.length > 1 ? action('Remove', 'scene-shot-remove', shot.id, 'text-button danger') : '') : ''}${count ? `<small class="muted">${count} result${count === 1 ? '' : 's'}</small>` : ''}</div></div></div>`;
 }
 
+// What a drawn shot shows, in words: "shock figure · storm · bolt · “5x hotter”".
+function sceneSketchSummary(sketch) {
+  if (!sketch) return 'Drawn from the narration';
+  return sketch.elements.map(item => item.kind === 'figure' ? `${item.pose} figure` : item.kind === 'prop' ? item.prop : item.kind === 'arrow' ? 'arrow' : `“${item.text}”`).join(' · ');
+}
 function sceneBatchCard(content, manifest, family) {
   const settings = state.scenes.settings[family.id], shots = sceneShots(manifest);
   const stockEmpty = shots.filter(shot => shot.source.startsWith('stock-') && !content.selections[shot.id]).length;
   const aiEmpty = shots.filter(shot => shot.source === 'ai-image' && !content.selections[shot.id]).length;
+  const drawn = shots.filter(shot => shot.source === 'generated-graphics').length, drawnEmpty = shots.filter(shot => shot.source === 'generated-graphics' && !content.selections[shot.id]).length;
   const withResults = shots.filter(shot => !content.selections[shot.id] && content.candidateCounts[shot.id]).length;
   const active = sceneActiveJobs(content).length;
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">FILL THE BOARD</span><h2>Batch sourcing</h2></div>${active ? badge(`${active} job${active === 1 ? '' : 's'} running`, 'orange') : ''}</div>
@@ -113,6 +119,7 @@ function sceneBatchCard(content, manifest, family) {
     <div class="batch-list">
       <div><strong>${stockEmpty} stock shot${stockEmpty === 1 ? '' : 's'} empty</strong><small>One search each with your first tested stock library (${esc(settings.stockOrder.join(' → '))}).</small>${manifest.scope.current && stockEmpty ? action('Search all', 'scene-search-all', manifest.id, 'secondary') : ''}</div>
       <div><strong>${withResults} empty shot${withResults === 1 ? '' : 's'} with results</strong><small>Downloads the top result for each, with its license evidence.</small>${manifest.scope.current && withResults ? action('Use top results', 'scene-pick-top', manifest.id, 'secondary') : ''}</div>
+      ${drawn ? `<div><strong>${drawnEmpty} of ${drawn} drawn shot${drawn === 1 ? '' : 's'} to draw</strong><small>The program draws each shot's figures, props and labels itself, stroke by stroke. Free and local; a changed drawing is drawn again.</small>${manifest.scope.current ? action('Draw all scenes', 'scene-draw-all', manifest.id, 'primary') : ''}</div>` : ''}
       <div><strong>${aiEmpty} AI shot${aiEmpty === 1 ? '' : 's'} empty</strong><small>${manifest.status === 'approved' ? `About ${money(aiEmpty * settings.priceCents[settings.imageQuality])} at ${esc(settings.imageQuality)} quality.` : 'Approve the plan before spending on AI images.'}</small>${manifest.scope.current && aiEmpty && manifest.status === 'approved' ? action('Generate all', 'scene-generate-all', manifest.id, 'secondary') : ''}</div>
     </div></section>`;
 }
@@ -205,6 +212,7 @@ function sceneAction(command, id, button) {
     const pexels = intelConnectors('pexels'), pixabay = intelConnectors('pixabay');
     return sceneDialog('search-all', 'Search stock for every empty shot', 'FREE API · HOURLY CAPS', `<div class="form-grid"><label>Pexels connector<select name="pexels">${sceneConnectorOptions('pexels', true)}</select></label><label>Pixabay connector<select name="pixabay">${sceneConnectorOptions('pixabay', true)}</select></label>${scenePersonField()}</div>${!pexels.length && !pixabay.length ? '<p class="inline-warning">Add and test a Pexels or Pixabay connector in Connections first.</p>' : ''}<p class="hint">One request per shot, counted against your hourly caps. Identical searches within 24 hours reuse cached results.</p>`, 'Search', {manifestId: id});
   }
+  if (command === 'scene-draw-all') { if (button) button.disabled = true; return api(`/api/scene-manifests/${id}/draw-all`, {requestedBy: scenePerson() || 'Owner'}).then(result => { toast(`${result.queued} scene${result.queued === 1 ? '' : 's'} queued for drawing.`); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }
   if (command === 'scene-pick-top') return sceneDialog('pick-top', 'Use the top result for every empty shot', 'DOWNLOAD WITH LICENSE EVIDENCE', `<p class="hint">Downloads the first result of each shot's latest search. You can change any shot before approving the board.</p><div class="form-grid">${scenePersonField()}</div>`, 'Download', {manifestId: id});
   if (command === 'scene-generate-all') {
     const settings = state.scenes.settings[content.familyId], usage = state.scenes.usage[content.familyId];

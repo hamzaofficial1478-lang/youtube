@@ -35,17 +35,17 @@ const RENDERERS = {
   },
   'ffmpeg-sketch': {
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
-    note: 'Composites generated sketch frames, labels and diagrams over a clean canvas.',
+    note: 'Drawn scenes (0.19): the program draws each shot (stick figures, props, labels, arrows, bubbles) in the local browser with a hand-drawn finish; the montage assembler cuts them with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
-    note: 'Sandboxed Canvas 2D timeline exported frame by frame, then encoded with FFmpeg.',
+    note: 'Drawn scenes (0.19) with a hand-drawn ink finish, drawn frame by frame in the local browser and encoded with FFmpeg, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
-    note: 'Isolated scene renders with stable scene IDs and text-safe animation (Remotion-style), sandboxed.',
+    note: 'Drawn scenes (0.19) with a clean vector finish, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'cinematic-hybrid': {
@@ -74,7 +74,7 @@ const LAUNCH_PROFILES = [
     typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
-    visuals: {sources: ['ai-image', 'generated-graphics', 'maps-and-diagrams'], primarySource: 'ai-image', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    visuals: {sources: ['generated-graphics', 'ai-image', 'maps-and-diagrams'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['curious', 'light', 'focused'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'accent'},
     renderer: {adapter: 'ffmpeg-sketch'},
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 12, contactSheetEverySeconds: 5},

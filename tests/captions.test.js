@@ -88,6 +88,16 @@ test('the ASS rail sits on the top layer, fades only around real gaps and clears
   assert.deepEqual(Cap.assParts({...timeline, captions: {...captions, enabled: false}}, spec, B.CAPTION_CLEARS).events, []);
 });
 
+test('captions keep their contrast: white on footage and dark styles, the style ink with a white edge on paper', () => {
+  const captions = Cap.buildCaptions({sentences: SENTENCES, pauses: PAUSES, narrationSeconds: 9});
+  const timeline = {captions, format: 'long-form', graphics: [], fps: 30};
+  const paper = Cap.assParts(timeline, {palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E'}, typography: {bodyFont: 'Inter'}}, []);
+  assert.match(paper.styles[0], /^Style: Caption,Inter,50,&H001F1F1F,&H001F1F1F,&H00FFFFFF,&H00FFFFFF,-1,0,0,0,100,100,0,0,1,4,0,2,/);
+  assert.ok(paper.events.filter(event => event.includes('\\c&H3E75E0&')).every(event => event.includes('{\\c&H1F1F1F&}')), 'after the accent word the ink returns, not white');
+  const dark = Cap.assParts(timeline, {palette: {background: '#0E0E0E', primary: '#F2EEE6', accent: '#C9A227'}, typography: {bodyFont: 'Inter'}}, []);
+  assert.match(dark.styles[0], /^Style: Caption,Inter,50,&H00FFFFFF,&H00FFFFFF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,3,1,2,/, 'unchanged for footage');
+});
+
 test('the SRT sidecar is exact and the checks catch overlaps and missing words', () => {
   const captions = Cap.buildCaptions({sentences: SENTENCES, pauses: PAUSES, narrationSeconds: 9});
   const srt = Cap.srt(captions);
@@ -152,6 +162,12 @@ test('captions belong to every new edit, switch on and off as an owner change, a
   assert.deepEqual(finding.op, {type: 'set-captions', enabled: true});
   assert.equal(finding.skill, 'editing.caption-spec');
   assert.equal(B.critique(timeline, SPEC).findings.some(item => item.code === 'captions-off'), false);
+  // A stat's label stops at the clause; a drawn scene shows its own words and numbers, so nothing is laid over it.
+  const strikes = [{n: 1, text: 'Lightning is everywhere on this planet today.', startSeconds: 0, durationSeconds: 3.2}, {n: 2, text: 'That is nearly 4 million strikes a day, most of them over land.', startSeconds: 3.2, durationSeconds: 4.7}, {n: 3, text: 'Nobody.', startSeconds: 7.9, durationSeconds: 1.1}];
+  const edit = (text, source) => B.autoEdit({fps: 30, narrationSeconds: 9, sentences: strikes, scenes: scenes.map(scene => ({...scene, onScreenText: text, shots: scene.shots.map(shot => ({...shot, ...(source ? {source} : {})}))})), assets, spec: SPEC, pauses: []}).graphics.map(item => [item.template, item.lines.join(' / ')]);
+  assert.deepEqual(edit('', null), [['stat', '4 million / strikes a day']], 'the label stops at the comma');
+  assert.deepEqual(edit('Everywhere', null)[0], ['scene-text', 'Everywhere']);
+  assert.deepEqual([edit('', 'generated-graphics'), edit('Everywhere', 'generated-graphics')], [[], []], 'a drawn scene shows its own words and numbers');
   // One caption's words corrected by hand: a new edit with the same timing and a nitpick asking for a listen.
   const target = timeline.captions.groups[1];
   const fixed = B.applyOp(timeline, {type: 'set-caption', groupId: target.id, text: 'Within *months*,'}, {spec: SPEC});

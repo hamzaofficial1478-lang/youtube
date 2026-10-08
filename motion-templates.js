@@ -200,13 +200,205 @@
     },
   };
 
+  // ------------------------------------------------------------ drawn scenes (P06c)
+  // A drawn shot for the Stickman, Hand-drawn Canvas and Motion Graphics styles: stick figures, props, labels,
+  // arrows and bubbles from sketch.js's closed vocabulary. Every element is a list of strokes revealed by length,
+  // so it is drawn on the way a hand sketches it; afterwards it idles (breathing, waving, a flashing bolt).
+  const polyLength = pts => { let n = 0; for (let k = 1; k < pts.length; k++) n += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); return n; };
+  function stroke(pts, {color, width = 6, progress = 1, seed = 1, fill = null, fillAlpha = 1}) {
+    if (progress <= 0 || pts.length < 2) return;
+    const hand = P.finish === 'hand-drawn', target = polyLength(pts) * Math.min(1, progress);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = color;
+    if (fill && progress >= 1) { ctx.save(); ctx.globalAlpha *= fillAlpha; ctx.fillStyle = fill; ctx.beginPath(); pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill(); ctx.restore(); }
+    for (let pass = 0; pass < (hand ? 2 : 1); pass++) {
+      const rand = seeded(seed * 31 + pass * 977), j = () => (hand ? (rand() - 0.5) * (pass ? 4.5 : 2.5) : 0);
+      let drawn = 0;
+      ctx.beginPath(); ctx.moveTo(pts[0][0] + j(), pts[0][1] + j());
+      for (let k = 1; k < pts.length; k++) {
+        const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], length = Math.hypot(x1 - x0, y1 - y0);
+        if (drawn + length >= target) { const f = length ? (target - drawn) / length : 0; ctx.lineTo(x0 + (x1 - x0) * f + j(), y0 + (y1 - y0) * f + j()); break; }
+        ctx.lineTo(x1 + j(), y1 + j()); drawn += length;
+      }
+      ctx.lineWidth = pass ? width * 0.5 : width; ctx.stroke();
+    }
+  }
+  // Draws a list of strokes in order: the element's draw-on progress is shared out by stroke length.
+  function strokes(list, progress, seed) {
+    const lengths = list.map(item => polyLength(item.pts)), total = lengths.reduce((a, b) => a + b, 0) || 1;
+    let done = 0;
+    list.forEach((item, k) => { const share = lengths[k] / total; stroke(item.pts, {...item, progress: share ? clamp01((progress - done) / share) : 1, seed: seed + k}); done += share; });
+  }
+  const ring = (cx, cy, rx, ry = rx, turns = 1, start = -Math.PI / 2, n = 44) => Array.from({length: n + 1}, (_, k) => { const a = start + turns * 2 * Math.PI * k / n; return [cx + rx * Math.cos(a), cy + ry * Math.sin(a)]; });
+  const curve = (x1, y1, cx, cy, x2, y2, n = 18) => Array.from({length: n + 1}, (_, k) => { const s = k / n; return [(1 - s) ** 2 * x1 + 2 * (1 - s) * s * cx + s * s * x2, (1 - s) ** 2 * y1 + 2 * (1 - s) * s * cy + s * s * y2]; });
+  const bumpy = (cx, cy, rx, ry, bumps, depth, n = 64) => Array.from({length: n + 1}, (_, k) => { const a = 2 * Math.PI * k / n, r = 1 + depth * Math.abs(Math.sin(bumps * a / 2)); return [cx + rx * r * Math.cos(a), cy + ry * r * Math.sin(a)]; });
+  const rectPts = (x, y, w, h) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h], [x, y]];
+
+  // Pose angles in degrees from hanging straight down, positive towards the way the figure faces:
+  // f/b = front/back arm [upper, lower], lf/lb = front/back leg [thigh, shin].
+  const POSE = {
+    stand: {f: [16, 8], b: [-16, -8], lf: [7, 0], lb: [-7, 0]},
+    point: {f: [92, 88], b: [-14, -4], lf: [7, 0], lb: [-7, 0]},
+    think: {f: [35, 155], b: [-8, 70], lf: [6, 0], lb: [-6, 0], tilt: 10},
+    shock: {f: [118, 152], b: [-118, -152], lf: [20, 8], lb: [-20, -8], lean: -6},
+    cheer: {f: [128, 160], b: [-128, -160], lf: [12, 0], lb: [-12, 0]},
+    walk: {f: [-22, -12], b: [22, 32], lf: [22, 6], lb: [-22, -36], cycle: 5},
+    run: {f: [-50, 40], b: [60, 100], lf: [48, -18], lb: [-35, -85], cycle: 9, lean: 12},
+    sit: {f: [30, 70], b: [-10, 25], lf: [88, 2], lb: [82, 8], sit: true},
+    wave: {f: [118, 165], b: [-14, -4], lf: [7, 0], lb: [-7, 0], wave: true},
+    shrug: {f: [55, 145], b: [-55, -145], lf: [7, 0], lb: [-7, 0], tilt: -6},
+  };
+  const limb = (x, y, a, length, dir) => [x + Math.sin(a * Math.PI / 180) * length * dir, y + Math.cos(a * Math.PI / 180) * length];
+  function figure(el, t, local, ink, accent, u) {
+    const h = {s: 270, m: 390, l: 530}[el.size] * u, dir = el.facing === 'left' ? -1 : 1, pose = POSE[el.pose];
+    const swing = pose.cycle ? Math.sin(t * pose.cycle) : 0, bob = Math.sin(t * 2.2) * h * 0.006 + (pose.cycle ? Math.abs(swing) * h * 0.012 : 0);
+    const fx = el.x * W, fy = el.y * H - bob, r = h * 0.115, hip = pose.sit ? -0.27 * h : -0.46 * h;
+    const neck = hip - 0.33 * h, shoulder = neck + 0.075 * h, lean = (pose.lean || 0) * dir * Math.PI / 180;
+    const top = [fx + Math.sin(lean) * (hip - neck) * -1, fy + neck];
+    const head = [top[0] + Math.sin((pose.tilt || 0) * dir * Math.PI / 180) * r, top[1] - r];
+    const w = Math.max(5, h * 0.024), arm = h * 0.2, fore = h * 0.19, thigh = h * 0.24, shin = h * 0.23;
+    const hipPt = [fx, fy + hip], sh = [top[0] + (fx - top[0]) * 0.15, fy + shoulder];
+    const legs = [pose.lf, pose.lb].map((leg, k) => { const s = (k ? -1 : 1) * swing * 22; const knee = limb(hipPt[0], hipPt[1], leg[0] + s, thigh, dir); return [hipPt, knee, limb(knee[0], knee[1], leg[1] + s, shin, dir)]; });
+    const arms = [pose.f, pose.b].map((a, k) => { const s = (k ? 1 : -1) * swing * 20, wave = pose.wave && !k ? Math.sin(t * 8) * 22 : 0; const elbow = limb(sh[0], sh[1], a[0] + s, arm, dir); return [sh, elbow, limb(elbow[0], elbow[1], a[1] + s + wave, fore, dir)]; });
+    const color = el.accent ? accent : ink;
+    const list = [{pts: ring(head[0], head[1], r, r, P.finish === 'hand-drawn' ? 1.06 : 1), color, width: w}, {pts: [top, hipPt], color, width: w}, ...legs.map(pts => ({pts, color, width: w})), ...arms.map(pts => ({pts, color, width: w}))];
+    if (pose.sit) list.push({pts: [[hipPt[0] - h * 0.18 * dir, hipPt[1] + h * 0.02], [hipPt[0] + h * 0.12 * dir, hipPt[1] + h * 0.02]], color: alpha(ink, 0.6), width: w * 0.8});
+    strokes(list, local, hashText(`${el.pose}${el.x}`));
+    if (local >= 1 && el.size !== 's') {
+      // A face, small and simple: eyes toward the way it faces, a mouth for the pose.
+      ctx.save(); ctx.fillStyle = color; [-0.32, 0.18].forEach(dx => { ctx.beginPath(); ctx.arc(head[0] + (dx + 0.18) * r * dir, head[1] - 0.12 * r, Math.max(2.5, r * 0.08), 0, Math.PI * 2); ctx.fill(); }); ctx.restore();
+      const mx = head[0] + 0.22 * r * dir, my = head[1] + 0.38 * r;
+      if (el.pose === 'shock') stroke(ring(mx, my, r * 0.14, r * 0.18), {color, width: w * 0.55, seed: 3});
+      else if (el.pose === 'think' || el.pose === 'shrug') stroke([[mx - r * 0.2, my], [mx + r * 0.2, my + r * 0.04]], {color, width: w * 0.55, seed: 4});
+      else stroke(curve(mx - r * 0.24, my - r * 0.04, mx, my + r * 0.2, mx + r * 0.24, my - r * 0.04), {color, width: w * 0.55, seed: 5});
+    }
+    return {x: head[0], y: head[1] - r, h};
+  }
+  // Props, drawn around their centre (cx, cy) at size s.
+  function prop(el, t, local, idle, ink, accent, u) {
+    const s = {s: 150, m: 230, l: 330}[el.size] * u, cx = el.x * W, cy = el.y * H, w = Math.max(4, s * 0.03), soft = alpha(ink, 0.07);
+    const main = el.accent ? accent : ink, tint = el.accent ? alpha(accent, 0.25) : soft, list = [];
+    const add = (pts, extra = {}) => list.push({pts, color: main, width: w, ...extra});
+    switch (el.prop) {
+      case 'sun': add(ring(cx, cy, s * 0.26), {fill: alpha(accent, 0.3)}); for (let k = 0; k < 10; k++) { const a = k * Math.PI / 5, l = s * (0.36 + 0.06 * Math.sin(idle * 3 + k)); add([[cx + Math.cos(a) * s * 0.33, cy + Math.sin(a) * s * 0.33], [cx + Math.cos(a) * (s * 0.33 + l * 0.5), cy + Math.sin(a) * (s * 0.33 + l * 0.5)]]); } break;
+      case 'cloud': case 'storm': {
+        const dx = Math.sin(idle * 0.6) * 6 * u;
+        add(bumpy(cx + dx, cy, s * 0.4, s * 0.2, 5, 0.32), {fill: el.prop === 'storm' ? alpha(ink, 0.22) : soft});
+        if (el.prop === 'storm') for (let k = 0; k < 4; k++) { const off = ((idle * 160 * u + k * 37) % (s * 0.3)); add([[cx - s * 0.24 + k * s * 0.16 + dx, cy + s * 0.3 + off * 0.3], [cx - s * 0.28 + k * s * 0.16 + dx, cy + s * 0.42 + off * 0.3]], {color: alpha(ink, 0.6), width: w * 0.7}); }
+        break;
+      }
+      case 'bolt': {
+        const z = [[0.06, -0.5], [-0.16, 0.02], [0.02, 0.02], [-0.1, 0.5], [0.2, -0.08], [0.03, -0.08], [0.16, -0.5], [0.06, -0.5]].map(([x, y]) => [cx + x * s, cy + y * s]);
+        const flash = local >= 1 && (idle % 1.7) < 0.14;
+        if (flash) { ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 60 * u; }
+        add(z, {color: accent, fill: alpha(accent, flash ? 1 : 0.85)});
+        if (flash) { strokes(list.splice(0), 1, 41); ctx.restore(); }
+        break;
+      }
+      case 'tree': add([[cx - s * 0.05, cy + s * 0.45], [cx - s * 0.04, cy + s * 0.08]]); add([[cx + s * 0.05, cy + s * 0.45], [cx + s * 0.04, cy + s * 0.08]]); add(bumpy(cx, cy - s * 0.12, s * 0.28, s * 0.24, 6, 0.18), {fill: tint}); break;
+      case 'house': add(rectPts(cx - s * 0.3, cy - s * 0.05, s * 0.6, s * 0.45), {fill: soft}); add([[cx - s * 0.38, cy - s * 0.02], [cx, cy - s * 0.38], [cx + s * 0.38, cy - s * 0.02]]); add(rectPts(cx - s * 0.07, cy + s * 0.16, s * 0.14, s * 0.24)); break;
+      case 'city': [[-0.42, 0.5], [-0.2, 0.75], [0.04, 0.4], [0.22, 0.62]].forEach(([x, hgt]) => { add(rectPts(cx + x * s, cy + s * 0.4 - hgt * s, s * 0.18, hgt * s), {fill: soft}); for (let r = 0; r < Math.floor(hgt * 5); r++) add([[cx + x * s + s * 0.05, cy + s * 0.34 - r * s * 0.12], [cx + x * s + s * 0.12, cy + s * 0.34 - r * s * 0.12]], {width: w * 0.6}); }); break;
+      case 'mountain': add([[cx - s * 0.5, cy + s * 0.35], [cx - s * 0.12, cy - s * 0.35], [cx + s * 0.18, cy + s * 0.1], [cx + s * 0.3, cy - s * 0.1], [cx + s * 0.5, cy + s * 0.35]], {fill: soft}); add([[cx - s * 0.22, cy - s * 0.15], [cx - s * 0.12, cy - s * 0.08], [cx - s * 0.03, cy - s * 0.17]]); break;
+      case 'ground': add([[W * 0.04, cy], [W * 0.96, cy]], {color: alpha(ink, 0.7)}); for (let k = 0; k < 9; k++) { const x = W * (0.08 + k * 0.105); add([[x, cy], [x + 10 * u, cy - 14 * u]], {color: alpha(ink, 0.45), width: w * 0.6}); } break;
+      case 'globe': { const turn = 0.42 + 0.12 * Math.sin(idle * 0.9); add(ring(cx, cy, s * 0.36), {fill: tint}); add(ring(cx, cy, s * 0.36 * turn, s * 0.36), {width: w * 0.7}); add([[cx, cy - s * 0.36], [cx, cy + s * 0.36]], {width: w * 0.6}); add([[cx - s * 0.36, cy], [cx + s * 0.36, cy]], {width: w * 0.7}); add(curve(cx - s * 0.3, cy - s * 0.19, cx, cy - s * 0.15, cx + s * 0.3, cy - s * 0.19), {width: w * 0.55}); add(curve(cx - s * 0.3, cy + s * 0.19, cx, cy + s * 0.23, cx + s * 0.3, cy + s * 0.19), {width: w * 0.55}); break; }
+      case 'clock': { add(ring(cx, cy, s * 0.36), {fill: soft}); for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6; add([[cx + Math.cos(a) * s * 0.29, cy + Math.sin(a) * s * 0.29], [cx + Math.cos(a) * s * 0.33, cy + Math.sin(a) * s * 0.33]], {width: w * 0.6}); } const m = idle * 1.6 - Math.PI / 2, hr = idle * 0.13 - Math.PI / 3; add([[cx, cy], [cx + Math.cos(hr) * s * 0.17, cy + Math.sin(hr) * s * 0.17]]); add([[cx, cy], [cx + Math.cos(m) * s * 0.27, cy + Math.sin(m) * s * 0.27]], {color: accent}); break; }
+      case 'thermometer': { const top = cy - s * 0.4, bottom = cy + s * 0.22, r = s * 0.06; add([[cx - r, bottom], [cx - r, top], ...curve(cx - r, top, cx, top - r * 1.6, cx + r, top).slice(1), [cx + r, bottom]]); add(ring(cx, bottom + s * 0.1, s * 0.11), {color: accent, fill: alpha(accent, 0.9)}); const level = local >= 1 ? ease.outCubic(phase(idle, 0, 1.4)) : 0; if (level > 0) { ctx.save(); ctx.fillStyle = accent; ctx.fillRect(cx - r * 0.55, bottom - (bottom - top) * 0.92 * level, r * 1.1, (bottom - top) * 0.92 * level + r); ctx.restore(); } break; }
+      case 'heart': { const beat = 1 + 0.06 * Math.max(0, Math.sin(idle * 6)); add(Array.from({length: 61}, (_, k) => { const a = Math.PI * 2 * k / 60; return [cx + 16 * Math.sin(a) ** 3 * s * 0.024 * beat, cy - (13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)) * s * 0.024 * beat]; }), {color: accent, fill: alpha(accent, 0.85)}); break; }
+      case 'coin': add(ring(cx, cy, s * 0.3), {fill: alpha(accent, 0.35)}); add(ring(cx, cy, s * 0.22), {width: w * 0.7}); add(ring(cx, cy, s * 0.14, s * 0.14, 0.3, Math.PI * 1.05), {width: w * 0.6}); break;
+      case 'money': add(rectPts(cx - s * 0.38, cy - s * 0.2, s * 0.76, s * 0.4), {fill: alpha(accent, 0.25)}); add(ring(cx, cy, s * 0.12), {width: w * 0.7}); add(ring(cx - s * 0.28, cy, s * 0.04), {width: w * 0.6}); add(ring(cx + s * 0.28, cy, s * 0.04), {width: w * 0.6}); break;
+      case 'book': add([[cx, cy - s * 0.2], [cx - s * 0.42, cy - s * 0.26], [cx - s * 0.42, cy + s * 0.22], [cx, cy + s * 0.28], [cx, cy - s * 0.2]], {fill: soft}); add([[cx, cy - s * 0.2], [cx + s * 0.42, cy - s * 0.26], [cx + s * 0.42, cy + s * 0.22], [cx, cy + s * 0.28]], {fill: soft}); for (let k = 0; k < 3; k++) { add([[cx - s * 0.34, cy - s * 0.12 + k * s * 0.12], [cx - s * 0.08, cy - s * 0.09 + k * s * 0.12]], {width: w * 0.5}); add([[cx + s * 0.08, cy - s * 0.09 + k * s * 0.12], [cx + s * 0.34, cy - s * 0.12 + k * s * 0.12]], {width: w * 0.5}); } break;
+      case 'lightbulb': { add(ring(cx, cy - s * 0.1, s * 0.24, s * 0.24, 0.82, Math.PI * 0.66), {fill: local >= 1 ? alpha(accent, 0.4 + 0.2 * Math.sin(idle * 4)) : soft}); add([[cx - s * 0.11, cy + s * 0.12], [cx - s * 0.1, cy + s * 0.3], [cx + s * 0.1, cy + s * 0.3], [cx + s * 0.11, cy + s * 0.12]]); add([[cx - s * 0.1, cy + s * 0.2], [cx + s * 0.1, cy + s * 0.2]], {width: w * 0.6}); if (local >= 1) for (let k = 0; k < 5; k++) { const a = -Math.PI * (0.15 + k * 0.175); add([[cx + Math.cos(a) * s * 0.33, cy - s * 0.1 + Math.sin(a) * s * 0.33], [cx + Math.cos(a) * s * 0.43, cy - s * 0.1 + Math.sin(a) * s * 0.43]], {color: accent}); } break; }
+      case 'flag': { add([[cx - s * 0.25, cy + s * 0.45], [cx - s * 0.25, cy - s * 0.42]]); const wave = k => Math.sin(idle * 4 + k * 2.4) * s * 0.03; add([[cx - s * 0.25, cy - s * 0.42], [cx, cy - s * 0.42 + wave(1)], [cx + s * 0.3, cy - s * 0.42 + wave(2)], [cx + s * 0.3, cy - s * 0.12 + wave(2)], [cx, cy - s * 0.12 + wave(1)], [cx - s * 0.25, cy - s * 0.12]], {color: accent, fill: alpha(accent, 0.5)}); break; }
+      case 'chart': { add([[cx - s * 0.4, cy - s * 0.38], [cx - s * 0.4, cy + s * 0.32], [cx + s * 0.42, cy + s * 0.32]]); [0.3, 0.5, 0.8].forEach((hgt, k) => { const grow = local >= 1 ? ease.outCubic(phase(idle, k * 0.2, 0.6)) : 0; if (grow > 0) { ctx.save(); ctx.fillStyle = k === 2 ? accent : alpha(ink, 0.55); ctx.fillRect(cx - s * 0.3 + k * s * 0.25, cy + s * 0.32 - hgt * s * 0.62 * grow, s * 0.16, hgt * s * 0.62 * grow); ctx.restore(); } }); break; }
+      case 'magnifier': add(ring(cx - s * 0.06, cy - s * 0.06, s * 0.22), {fill: soft}); add([[cx + s * 0.1, cy + s * 0.1], [cx + s * 0.36, cy + s * 0.36]], {width: w * 1.6}); break;
+      case 'sand': { add([...curve(cx - s * 0.48, cy + s * 0.25, cx - s * 0.05, cy - s * 0.4, cx + s * 0.48, cy + s * 0.25), [cx - s * 0.48, cy + s * 0.25]], {fill: alpha(accent, 0.28)}); if (local >= 1) { const rand = seeded(17); ctx.save(); ctx.fillStyle = alpha(ink, 0.55); for (let k = 0; k < 30; k++) { const px = (rand() - 0.5) * 0.8, py = rand(); ctx.beginPath(); ctx.arc(cx + px * s, cy + s * 0.22 - py * s * 0.36 * (1 - Math.abs(px) * 1.6), 2.4 * u, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); } break; }
+      case 'glass': add([[cx, cy - s * 0.42], [cx + s * 0.18, cy - s * 0.1], [cx + s * 0.12, cy + s * 0.38], [cx - s * 0.12, cy + s * 0.38], [cx - s * 0.18, cy - s * 0.1], [cx, cy - s * 0.42]], {fill: alpha(accent, 0.2)}); add([[cx, cy - s * 0.42], [cx, cy + s * 0.38]], {width: w * 0.5}); add([[cx - s * 0.18, cy - s * 0.1], [cx + s * 0.18, cy - s * 0.1]], {width: w * 0.5}); break;
+      case 'waves': for (let k = 0; k < 3; k++) { const grow = (idle * 0.8 + k / 3) % 1; ctx.save(); ctx.globalAlpha *= local >= 1 ? 1 - grow * 0.7 : 1; stroke(ring(cx - s * 0.3, cy, s * (0.18 + k * 0.14 + (local >= 1 ? grow * 0.08 : 0)), s * (0.18 + k * 0.14 + (local >= 1 ? grow * 0.08 : 0)), 0.3, -Math.PI * 0.15), {color: k ? main : accent, width: w, progress: local, seed: 70 + k}); ctx.restore(); } break;
+      case 'question': case 'exclamation': { const pop = ease.outQuart(local); text(el.prop === 'question' ? '?' : '!', cx, cy + s * 0.32, {size: s * 0.9 * (0.6 + 0.4 * pop), color: accent, align: 'center', heading: true, weight: 800, opacity: clamp01(local * 1.5)}); break; }
+      default: break;
+    }
+    strokes(list, local, hashText(`${el.prop}${el.x}${el.y}`));
+    return {x: cx, y: cy - s * 0.5, s};
+  }
+  function textEl(el, local, ink, accent, u) {
+    const size = (el.style === 'number' ? {s: 90, m: 130, l: 180} : el.style === 'title' ? {s: 56, m: 78, l: 108} : {s: 42, m: 54, l: 70})[el.size] * u;
+    // Text never leaves the frame: it shrinks to fit and its centre moves inside the margins.
+    ctx.font = el.style !== 'note' ? headingFont(size, el.style === 'number' ? 800 : 700) : font(size, 700);
+    const full = ctx.measureText(el.text).width, fit = Math.min(1, (W - 2 * M) / Math.max(1, full)), sized = size * fit, half = full * fit / 2;
+    const shown = el.text.slice(0, Math.ceil(el.text.length * clamp01(local * 1.15)));
+    const color = el.accent || el.style === 'number' ? accent : ink, x = Math.min(W - M - half, Math.max(M + half, el.x * W)), y = el.y * H;
+    text(shown, x - half, y, {size: sized, color, align: 'left', baseline: 'middle', heading: el.style !== 'note', weight: el.style === 'number' ? 800 : 700});
+    if (el.style === 'title' && local >= 0.95) stroke([[x - half, y + sized * 0.62], [x + half, y + sized * 0.58]], {color: accent, width: Math.max(4, sized * 0.07), progress: clamp01((local - 0.95) * 20), seed: 91});
+  }
+  function labelFor(el, at, local, ink, u) {
+    if (!el.label || local < 1) return;
+    text(el.label, at.x, at.y - 26 * u, {size: 40 * u, color: ink, align: 'center', heading: true, opacity: clamp01((local - 1) * 3 + 1)});
+  }
+  function sketchScene(t, d) {
+    const darkStyle = (() => { const v = /^#?([0-9a-f]{6})$/i.exec(P.palette.bg)?.[1] || 'ffffff'; return (0.299 * parseInt(v.slice(0, 2), 16) + 0.587 * parseInt(v.slice(2, 4), 16) + 0.114 * parseInt(v.slice(4, 6), 16)) / 255 < 0.45; })();
+    const u = Math.min(W, H) / 1080, board = d.background === 'board' && darkStyle;
+    const ink = board ? '#F1EFE6' : P.palette.ink, accent = P.palette.accent;
+    if (board) { ctx.fillStyle = '#1E2B27'; ctx.fillRect(0, 0, W, H); }
+    // The camera: a slow push towards the centre or a gentle drift across the scene.
+    const k = clamp01(t / Math.max(0.1, P.duration));
+    ctx.save();
+    if (d.camera === 'push') { const z = 1 + 0.05 * ease.inOutSine(k); ctx.translate(W / 2, H / 2); ctx.scale(z, z); ctx.translate(-W / 2, -H / 2); }
+    if (d.camera === 'drift') ctx.translate((0.5 - k) * 36 * u, 0);
+    // The whole drawing appears within its budget (about a third of the shot, 0.8-1.8 s), so the viewer sees the
+    // complete picture for most of the shot; elements overlap as a quick hand would draw them.
+    const boxes = d.elements.map(el => {
+      if (el.kind === 'figure') { const h = {s: 270, m: 390, l: 530}[el.size] * u; return [el.x * W - h * 0.3, el.y * H - h, el.x * W + h * 0.3, el.y * H]; }
+      if (el.kind === 'prop' && el.prop !== 'ground') { const s = {s: 150, m: 230, l: 330}[el.size] * u; return [el.x * W - s * 0.5, el.y * H - s * 0.5, el.x * W + s * 0.5, el.y * H + s * 0.5]; }
+      return null;
+    }).filter(Boolean);
+    const place = el => {
+      if (el.kind !== 'text') return el;
+      const size = (el.style === 'number' ? {s: 90, m: 130, l: 180} : el.style === 'title' ? {s: 56, m: 78, l: 108} : {s: 42, m: 54, l: 70})[el.size] * u;
+      ctx.font = el.style !== 'note' ? headingFont(size, el.style === 'number' ? 800 : 700) : font(size, 700);
+      const half = Math.min(W - 2 * M, ctx.measureText(el.text).width) / 2, x = Math.min(W - M - half, Math.max(M + half, el.x * W));
+      const cover = y => boxes.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
+      const best = [el.y * H, H * 0.12, H * 0.24, H * 0.36, H * 0.62].reduce((a, b) => (cover(b) < cover(a) ? b : a));
+      return {...el, y: best / H};
+    };
+    d = {...d, elements: d.elements.map(place)};
+    const n = d.elements.length, budget = d.drawSeconds || Math.min(1.8, P.duration * 0.3), each = clamp01(budget * 0.55) * 0.6 + 0.25;
+    const step = n > 1 ? Math.max(0.05, (budget - each) / (n - 1)) : 0, heads = [];
+    d.elements.forEach((el, index) => {
+      const start = 0.06 + index * step, length = el.kind === 'figure' ? each * 1.15 : each;
+      const local = clamp01((t - start) / length), idle = Math.max(0, t - start - length);
+      if (local <= 0 && el.kind !== 'figure') return;
+      if (el.kind === 'figure') { if (local <= 0) return; const at = figure(el, t, local, ink, accent, u); heads.push(at); labelFor(el, at, local, ink, u); }
+      else if (el.kind === 'prop') labelFor(el, prop(el, t, local, idle, ink, accent, u), local, ink, u);
+      else if (el.kind === 'text') textEl(el, local, ink, accent, u);
+      else if (el.kind === 'arrow') {
+        const [x1, y1] = [el.from[0] * W, el.from[1] * H], [x2, y2] = [el.to[0] * W, el.to[1] * H], bend = Math.hypot(x2 - x1, y2 - y1) * 0.18;
+        const pts = curve(x1, y1, (x1 + x2) / 2 - (y2 - y1) / Math.hypot(x2 - x1, y2 - y1 || 1) * bend, (y1 + y2) / 2 + (x2 - x1) / Math.hypot(x2 - x1 || 1, y2 - y1) * bend * 0.4, x2, y2);
+        const color = el.accent ? accent : ink, w = 6 * u;
+        stroke(pts, {color, width: w, progress: local, seed: 101 + index});
+        if (local >= 1) { const [ax, ay] = pts.at(-2), a = Math.atan2(y2 - ay, x2 - ax); stroke([[x2 - Math.cos(a - 0.5) * 30 * u, y2 - Math.sin(a - 0.5) * 30 * u], [x2, y2], [x2 - Math.cos(a + 0.5) * 30 * u, y2 - Math.sin(a + 0.5) * 30 * u]], {color, width: w, seed: 111 + index}); }
+        if (el.label && local >= 1) { const length = Math.hypot(x2 - x1, y2 - y1) || 1, nx = (y2 - y1) / length, ny = -(x2 - x1) / length, side = ny > 0 ? -1 : 1; text(el.label, (x1 + x2) / 2 + nx * side * 46 * u, (y1 + y2) / 2 + ny * side * 46 * u, {size: 40 * u, color, align: Math.abs(nx) > 0.7 ? (nx * side > 0 ? 'left' : 'right') : 'center', baseline: 'middle', heading: true}); }
+      } else if (el.kind === 'bubble') {
+        const size = 46 * u, lines = wrap(el.text, W * 0.3, size, true).slice(0, 2), widest = Math.max(...lines.map(item => { ctx.font = headingFont(size); return ctx.measureText(item).width; }));
+        const bw = widest + 60 * u, bh = lines.length * size * 1.25 + 40 * u, bx = el.x * W - bw / 2, by = el.y * H - bh / 2, color = el.accent ? accent : ink;
+        stroke(bumpy(bx + bw / 2, by + bh / 2, bw / 2, bh / 2, el.thought ? 10 : 2, el.thought ? 0.08 : 0.0), {color, width: 5 * u, progress: local, seed: 121 + index, fill: board ? alpha('#000000', 0.25) : alpha('#FFFFFF', 0.85)});
+        const target = heads[0];
+        if (local >= 1 && target) {
+          if (el.thought) [0.35, 0.65].forEach((f, k) => stroke(ring(bx + bw / 2 + (target.x - bx - bw / 2) * f, by + bh + (target.y - by - bh) * f, (10 - k * 4) * u), {color, width: 4 * u, seed: 131 + k}));
+          else stroke([[bx + bw / 2 - 18 * u, by + bh - 2], [bx + bw / 2 + (target.x - bx - bw / 2) * 0.45, by + bh + Math.max(30 * u, (target.y - by - bh) * 0.45)], [bx + bw / 2 + 18 * u, by + bh - 2]], {color, width: 5 * u, seed: 141});
+        }
+        if (local >= 0.6) lines.forEach((item, row) => text(item, bx + bw / 2, by + 20 * u + size * 0.62 + row * size * 1.25, {size, color: board ? '#F1EFE6' : P.palette.ink, align: 'center', baseline: 'middle', heading: true, opacity: clamp01((local - 0.6) * 4)}));
+      }
+    });
+    ctx.restore();
+  }
+  templates['sketch-scene'] = sketchScene;
+
   function renderFrame(t) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.setTransform(scale, 0, 0, scale, 0, 0);
-    // A cutaway panel: fades in over 0.3 s and the whole graphic fades out over the last 0.3 s.
+    // A cutaway panel fades in over 0.3 s and out over the last 0.3 s; a drawn scene is a whole shot and cuts.
     const fadeIn = clamp01(t / 0.3), fadeOut = clamp01((P.duration - t) / 0.3);
-    ctx.globalAlpha = Math.min(fadeIn, fadeOut);
+    ctx.globalAlpha = P.template === 'sketch-scene' ? 1 : Math.min(fadeIn, fadeOut);
     ctx.fillStyle = P.palette.bg; ctx.fillRect(0, 0, W, H);
     if (P.finish === 'hand-drawn') {
       const rand = seeded(hashText(P.template));

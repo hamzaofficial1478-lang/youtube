@@ -169,8 +169,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(scenePlan&&req.method==='POST')return json(res,200,sceneRoom.createPlan(scenePlan[1],body));
         const planRetry=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/retry$/);
         if(planRetry&&req.method==='POST')return json(res,200,sceneRoom.retryPlan(planRetry[1],body));
-        const manifestAction=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/(revisions|review|search-all|pick-top|generate-all|visual-approval)$/);
-        if(manifestAction&&req.method==='POST'){const [,id,kind]=manifestAction;const handler={revisions:()=>sceneRoom.editManifest(id,body),review:()=>sceneRoom.reviewManifest(id,body),'search-all':()=>sceneRoom.queueSearchAll(id,body),'pick-top':()=>sceneRoom.queuePickTop(id,body),'generate-all':()=>sceneRoom.queueGenerateAll(id,body),'visual-approval':()=>sceneRoom.approveVisuals(id,body)}[kind];return json(res,200,await handler());}
+        const manifestAction=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/(revisions|review|search-all|pick-top|generate-all|draw-all|visual-approval)$/);
+        if(manifestAction&&req.method==='POST'){const [,id,kind]=manifestAction;const handler={revisions:()=>sceneRoom.editManifest(id,body),review:()=>sceneRoom.reviewManifest(id,body),'search-all':()=>sceneRoom.queueSearchAll(id,body),'pick-top':()=>sceneRoom.queuePickTop(id,body),'generate-all':()=>sceneRoom.queueGenerateAll(id,body),'draw-all':()=>sceneRoom.queueDrawAll(id,body),'visual-approval':()=>sceneRoom.approveVisuals(id,body)}[kind];return json(res,200,await handler());}
         const shotAction=pathname.match(/^\/api\/scene-shots\/(search|generate|select)$/);
         if(shotAction&&req.method==='POST'){const kind=shotAction[1];return json(res,200,kind==='search'?sceneRoom.queueSearch(body):kind==='generate'?sceneRoom.queueGenerate(body):sceneRoom.select(body));}
         const candidateImport=pathname.match(/^\/api\/visual-candidates\/([a-f0-9-]+)\/import$/);

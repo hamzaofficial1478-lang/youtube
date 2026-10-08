@@ -1,5 +1,5 @@
 {
-  "version": "0.18.0",
+  "version": "0.19.0",
   "updated": "2026-10-08",
   "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
@@ -276,6 +276,13 @@
           "evidence": "Version 0.13 (2026-10-06): six deterministic Canvas2D templates (bar and line charts, timeline, list build, comparison, process diagram) with clean or hand-drawn finish, drawn in the local Microsoft Edge/Chrome over the DevTools Protocol (no npm packages, networking blocked) and overlaid on the edit as lossless RGBA clips. The editing brain proposes them only from the script's own data; owners edit the data line by line or add graphics. Browser readiness probe; manifest records browser and frame hashes. Full suite 165/165; a Shorts edit with an animated timeline renders byte-identically twice; a bar chart added from the page passed QC. Map routes and stick-figure animation remain."
         },
         {
+          "id": "P06c",
+          "title": "Drawn scenes: stick figures, hand-drawn and motion-graphics shots",
+          "status": "testing",
+          "remaining": "Ten poses and 25 props; no hands or held objects, no named recurring characters, no AI-image stick figures, maps or character rigs. Not yet judged by the owner on real narration.",
+          "evidence": "0.19.0 (2026-10-08): sketch.js closed vocabulary with validation, a free fallback from the narration and Claude's planning guide; motion-templates.js sketch-scene draws figures, props, text, arrows and bubbles stroke by stroke with idle motion, hand-drawn or clean finish, text kept in frame and off drawings; generated-graphics is executable as the local drawn-scene capability (Draw all scenes, clips versioned by sketch and engine); drawn styles render through the montage assembler; light-palette captions use the style ink; no overlays duplicate a drawing's words. Demo: Claude planned a 62-second lightning explainer in 17 drawn shots (66 s, 10,190 tokens), drawn at 1080p in 4-6 minutes, edited and rendered with every check passing; frames reviewed and five layout/legibility issues fixed. Full suite 211/211."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -407,5 +414,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Packaging Room"
+  "milestone": "Drawn scenes"
 }

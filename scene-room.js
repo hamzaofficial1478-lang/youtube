@@ -9,6 +9,9 @@ const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
+const Sk = require('./sketch');
+const R = require('./render');
+const {MotionRenderer, findBrowser} = require('./motion');
 const {Ai} = require('./ai');
 const {connectorCurrent, connectorReference} = require('./intel-sources');
 const VS = require('./visual-sources');
@@ -115,6 +118,7 @@ function structural(scenes, sentenceCount, sources, motions) {
       requireValue(typeof shot.notes === 'string' && shot.notes.length <= 500, `${shotLabel} notes must be at most 500 characters.`);
       if (shot.source.startsWith('stock-')) requireValue(shot.query.trim().length >= 2, `${shotLabel} needs stock search words.`);
       if (shot.source === 'ai-image') requireValue(shot.prompt.trim().length >= 10, `${shotLabel} needs an image prompt of at least 10 characters.`);
+      if (shot.source === 'generated-graphics' && shot.sketch !== undefined) { try { Sk.validate(shot.sketch); } catch (error) { throw new InputError(`${shotLabel} drawing: ${error.message}`); } }
     }
     shotTotal += scene.shots.length;
     expected = scene.sentenceEnd + 1;
@@ -137,6 +141,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
     if (shotDuration < pacing.shotMinSeconds && scene.shots.length > 1) issues.push(`${label} has ${scene.shots.length} shots of ${shotDuration.toFixed(1)} s, below the ${pacing.shotMinSeconds} s minimum; remove a shot.`);
     const words = scene.onScreenText.trim() ? scene.onScreenText.trim().split(/\s+/).length : 0;
     if (words > typography.maxWordsOnScreen) issues.push(`${label} on-screen text has ${words} words; the style allows ${typography.maxWordsOnScreen}.`);
+    const narration = span.map(item => item.text).join(' ');
     const shots = scene.shots.map((shot, shotIndex) => {
       const shotLabel = `${label}${String.fromCharCode(65 + shotIndex)}`;
       const limit = shot.source.endsWith('image') && shot.motion === 'static' ? Math.min(pacing.shotMaxSeconds, pacing.maxStaticHoldSeconds) : pacing.shotMaxSeconds;
@@ -146,7 +151,8 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
       const term = terms.find(item => lowered.includes(item));
       if (term) issues.push(`${shotLabel} names a competitor ("${term}"). Describe the visual instead.`);
       if (/\bin the style of\b|\bstyle of [A-Z]/i.test(`${shot.query} ${shot.prompt}`)) issues.push(`${shotLabel} asks for another creator's style. Describe the look in your own words.`);
-      return {id: shot.id, label: shotLabel, source: shot.source, query: shot.query.trim(), prompt: shot.prompt.trim(), motion: shot.motion, notes: shot.notes.trim(), startSeconds: round(start + shotIndex * shotDuration), durationSeconds: shotDuration};
+      const sketch = shot.source === 'generated-graphics' ? {sketch: shot.sketch ? Sk.validate(shot.sketch) : Sk.fromText(narration, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose})} : {};
+      return {id: shot.id, label: shotLabel, source: shot.source, query: shot.query.trim(), prompt: shot.prompt.trim(), motion: shot.motion, notes: shot.notes.trim(), ...sketch, startSeconds: round(start + shotIndex * shotDuration), durationSeconds: shotDuration};
     });
     return {id: scene.id, label, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, purpose: scene.purpose, direction: scene.direction.trim(), onScreenText: scene.onScreenText.trim(), startSeconds: start, durationSeconds: duration, shots};
   });
@@ -204,6 +210,7 @@ function planMessages(input) {
     'For stock sources write 2-6 generic search words in English (no people names, brands, logos or channel names). For ai-image write an original image prompt (no real people, logos, brands, artists, copyrighted characters or channel names; no text in the image).',
     `On-screen text is optional and at most ${input.style.maxWordsOnScreen} words. Direction says what the viewer should understand from the visuals.`,
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
+    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide()] : []),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -223,8 +230,8 @@ function aiScenes(raw, ids = true) {
         direction: asText(scene.direction ?? '', 'direction', 600), onScreenText: asText(scene.onScreenText ?? '', 'on-screen text', 140),
         shots: scene.shots.map(shot => {
           object(shot, 'Claude shot');
-          requireValue(Object.keys(shot).every(key => ['source', 'query', 'prompt', 'motion', 'notes'].includes(key)), 'Claude returned a shot with unexpected fields.');
-          return {id: shortId('sh'), source: shot.source, query: asText(shot.query ?? '', 'search query', 100), prompt: asText(shot.prompt ?? '', 'image prompt', 1500), motion: shot.motion, notes: asText(shot.notes ?? '', 'shot note', 500)};
+          requireValue(Object.keys(shot).every(key => ['source', 'query', 'prompt', 'motion', 'notes', 'sketch'].includes(key)), 'Claude returned a shot with unexpected fields.');
+          return {id: shortId('sh'), source: shot.source, query: asText(shot.query ?? '', 'search query', 100), prompt: asText(shot.prompt ?? '', 'image prompt', 1500), motion: shot.motion, notes: asText(shot.notes ?? '', 'shot note', 500), ...(shot.sketch !== undefined ? {sketch: shot.sketch} : {})};
         }),
       };
     }),
@@ -247,8 +254,9 @@ function sumUsage(list) {
 }
 
 class SceneRoom {
-  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null, ai = new Ai(connectors)} = {}) {
+  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null, ai = new Ai(connectors), browser = findBrowser()} = {}) {
     this.ai = ai;
+    this.browser = browser;
     this.store = store;
     this.db = store.db;
     this.connectors = connectors;
@@ -590,7 +598,7 @@ class SceneRoom {
     requireValue(inputs.ready, inputs.blockers[0], 409);
     const payload = JSON.parse(row.payload), op = input.op;
     let scenes = structuredClone(payload.scenes).map(scene => ({id: scene.id, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, purpose: scene.purpose, direction: scene.direction, onScreenText: scene.onScreenText,
-      shots: scene.shots.map(shot => ({id: shot.id, source: shot.source, query: shot.query, prompt: shot.prompt, motion: shot.motion, notes: shot.notes}))}));
+      shots: scene.shots.map(shot => ({id: shot.id, source: shot.source, query: shot.query, prompt: shot.prompt, motion: shot.motion, notes: shot.notes, ...(shot.sketch ? {sketch: shot.sketch} : {})}))}));
     const sceneIndex = sceneId => { const index = scenes.findIndex(scene => scene.id === sceneId); requireValue(index >= 0, 'Scene not found in this revision.', 404); return index; };
     const findShot = shotId => { for (const scene of scenes) { const index = scene.shots.findIndex(shot => shot.id === shotId); if (index >= 0) return {scene, index}; } throw new InputError('Shot not found in this revision.', 404); };
     let note, sentences = payload.sentences, sameScope = true;
@@ -607,6 +615,7 @@ class SceneRoom {
       if (input.prompt !== undefined) shot.prompt = text(input.prompt, 'Image prompt', 0, 1500);
       if (input.motion !== undefined) shot.motion = input.motion;
       if (input.notes !== undefined) shot.notes = text(input.notes, 'Notes', 0, 500);
+      if (input.sketch !== undefined) { if (input.sketch === null) delete shot.sketch; else shot.sketch = input.sketch; }
       note = `Edited shot ${payload.scenes.flatMap(item => item.shots).find(item => item.id === shot.id).label}`;
     } else if (op === 'add-shot') {
       const scene = scenes[sceneIndex(input.sceneId)];
@@ -853,6 +862,24 @@ class SceneRoom {
       return {queued: contexts.length, estimatedCents: total};
     });
   }
+  // P06c: draw every drawn shot that has no drawing of its current sketch yet (free, local).
+  queueDrawAll(manifestId, input) {
+    object(input);
+    const createdBy = person(input.requestedBy);
+    requireValue(this.browser, 'Drawn scenes are drawn in Microsoft Edge or Google Chrome, and neither was found on this PC.', 503);
+    return this.store.transaction(() => {
+      const mctx = this.manifestContext(manifestId), row = mctx.row, ids = [];
+      for (const shot of mctx.payload.scenes.flatMap(scene => scene.shots)) {
+        if (shot.source !== 'generated-graphics' || this.activeJob(row.content_id, shot.id, 'draw')) continue;
+        const selected = this.db.prepare('SELECT a.rights FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=? AND s.shot_id=?').get(row.content_id, shot.id);
+        if (selected && JSON.parse(selected.rights).sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION})) continue;
+        ids.push(this.insertJob({ctx: this.shotIn(mctx, shot.id), kind: 'draw', capabilityId: 'drawn-scene', scope: {sketch: shot.sketch, sketchHash: hash({sketch: shot.sketch, engine: Sk.VERSION}), durationSeconds: shot.durationSeconds, capability: VS.capability('drawn-scene')}, createdBy}));
+      }
+      requireValue(ids.length, 'Every drawn shot already shows its current drawing, or is being drawn.', 409);
+      this.store.event(`Queued ${ids.length} drawn scene${ids.length === 1 ? '' : 's'} for plan ${manifestId}`);
+      return {queued: ids.length};
+    });
+  }
   jobRow(id) { const row = this.db.prepare('SELECT * FROM visual_jobs WHERE id=?').get(id); requireValue(row, 'Visual job not found.', 404); return row; }
   retryJob(id, input) {
     object(input);
@@ -903,6 +930,7 @@ class SceneRoom {
     try {
       if (job.kind === 'search') return await this.runSearch(job);
       if (job.kind === 'import') return await this.runImport(job);
+      if (job.kind === 'draw') return await this.runDraw(job);
       return await this.runGenerate(job);
     } finally {
       this.visualBusy = false;
@@ -1034,6 +1062,45 @@ class SceneRoom {
         this.db.prepare('UPDATE visual_usage SET status=?, reserved_cents=CASE WHEN ? THEN reserved_cents ELSE 0 END, updated_at=? WHERE job_id=?').run(started ? 'unknown' : 'released', started ? 1 : 0, at, job.id);
       });
       return null;
+    }
+  }
+
+  // A drawn shot becomes a video clip: frames from the 'sketch-scene' template, encoded with FFmpeg, kept with its
+  // sketch so a changed drawing is drawn again. A little longer than the shot, so the editor has room to time cuts.
+  async runDraw(job) {
+    const {ctx, scope} = job, assetId = randomUUID(), dir = path.join(this.assetDir, job.family_id, job.content_id), work = path.join(dir, `.draw-${assetId}`);
+    let file = null, saved = false;
+    try {
+      requireValue(this.browser, 'Drawn scenes need Microsoft Edge or Google Chrome on this PC.', 503);
+      const spec = JSON.parse(this.styles.revisionRow(ctx.row.style_revision_id).spec), size = VS.ORIENTATION[ctx.family.format];
+      const fps = Math.min(30, spec.canvas.frameRate), duration = Math.min(40, Math.max(3, scope.durationSeconds * 1.4 + 1));
+      const renderer = new MotionRenderer({browser: this.browser});
+      let drawn;
+      try {
+        await renderer.start();
+        drawn = await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch), drawSeconds: Math.min(1.8, Math.max(0.8, scope.durationSeconds * 0.35))}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
+          fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, finish: spec.renderer.adapter === 'motion-graphics' ? 'clean' : 'hand-drawn',
+          vertical: ctx.family.format === 'shorts', width: size.width, height: size.height, fps, duration, outDir: work});
+      } finally { await renderer.close(); }
+      file = path.join(dir, `${assetId}.mp4`);
+      await R.run(this.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(work, 'f%05d.png'), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', '-y', file], {timeout: Math.max(120000, drawn.frames * 200)});
+      const probe = await this.evidence(file, 'video/mp4'), thumb = await this.thumbnail(file, assetId, probe), sha256 = VS.sha256File(file), sizeBytes = fs.statSync(file).size;
+      const rights = {basis: 'own-drawing', license: scope.capability.rights, provider: 'local', sketch: scope.sketch, sketchHash: scope.sketchHash, framesSha256: drawn.sha256, drawnAt: now(), synthetic: false, disclosure: 'none', note: 'Drawn by the program from the scene plan; no third-party media.'};
+      this.store.transaction(() => {
+        const at = now();
+        this.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)')
+          .run(assetId, job.family_id, job.content_id, job.shot_id, 'drawn', JSON.stringify(scope.capability), job.id, 'video', path.relative(this.dataRoot, file).replaceAll('\\', '/'), thumb, sha256, sizeBytes, 'video/mp4', JSON.stringify(probe), JSON.stringify(rights), job.created_by, at);
+        saved = true;
+        this.selectTx(job.content_id, job.shot_id, assetId, job.created_by, null, 'draw');
+        this.db.prepare("UPDATE visual_jobs SET status='completed', result=?, updated_at=? WHERE id=?").run(JSON.stringify({assetId, sha256, frames: drawn.frames}), at, job.id);
+      });
+      return this.publicJob(this.jobRow(job.id));
+    } catch (error) {
+      if (file && !saved) fs.rmSync(file, {force: true});
+      this.db.prepare("UPDATE visual_jobs SET status='failed', error=?, updated_at=? WHERE id=?").run(error instanceof InputError ? error.message : `Drawing failed: ${String(error.message).slice(0, 200)}`, now(), job.id);
+      return null;
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
     }
   }
 

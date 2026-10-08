@@ -193,8 +193,12 @@ function assParts(timeline, spec, clearTemplates) {
   if (!captions?.enabled) return {styles: [], events: [], hidden: 0};
   const vertical = timeline.format === 'shorts', M = vertical ? 96 : 144;
   const font = ((spec.typography || {}).bodyFont || 'Arial').replace(/,/g, ' ');
-  const accent = assInline((spec.palette || {}).accent || '#FFD23F'), white = '&HFFFFFF&';
-  const style = `Style: Caption,${font},${vertical ? 80 : 50},&H00FFFFFF,&H00FFFFFF,&H00101010,&H96000000,-1,0,0,0,100,100,0,0,1,${vertical ? 5 : 3},1,2,${M},${M},${vertical ? 620 : 62},1`;
+  const accent = assInline((spec.palette || {}).accent || '#FFD23F');
+  // White words with a dark outline read on footage and dark styles; on a light style (paper, whiteboard) the
+  // words take the style's ink and a white outline instead.
+  const bg = /^#?([0-9a-f]{6})$/i.exec(String((spec.palette || {}).background || ''))?.[1], light = !!bg && (0.299 * parseInt(bg.slice(0, 2), 16) + 0.587 * parseInt(bg.slice(2, 4), 16) + 0.114 * parseInt(bg.slice(4, 6), 16)) / 255 > 0.6;
+  const word = light ? assInline((spec.palette || {}).primary || '#1F1F1F') : '&HFFFFFF&', white = word, edge = light ? '&H00FFFFFF' : '&H00101010';
+  const style = `Style: Caption,${font},${vertical ? 80 : 50},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${edge},${light ? '&H00FFFFFF' : '&H96000000'},-1,0,0,0,100,100,0,0,1,${vertical ? (light ? 6 : 5) : (light ? 4 : 3)},${light ? 0 : 1},2,${M},${M},${vertical ? 620 : 62},1`;
   const clears = clearWindows(timeline, clearTemplates), shown = visibleGroups(captions, clears);
   const events = shown.map((group, k) => {
     const before = k ? group.start - shown[k - 1].end : group.start, after = k + 1 < shown.length ? shown[k + 1].start - group.end : Infinity;
