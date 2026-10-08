@@ -303,4 +303,30 @@ async function sceneCuts(ffmpeg, file, {threshold = SCENE_CUT_THRESHOLD, timeout
   return sceneCutTimes(out.stderr);
 }
 
-module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, tail, object, text, person, requireValue, now, round};
+// ---------------------------------------------------------------- review checks (P09)
+// The whole file must decode without one error line: a damaged frame or a truncated tail fails here even when
+// ffprobe can still read the header.
+const decodeArgs = file => ['-hide_banner', '-nostdin', '-v', 'error', '-i', file, '-map', '0', '-f', 'null', '-'];
+function decodeCheck({stderr = '', failed = false}) {
+  const lines = String(stderr).split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const passed = !failed && !lines.length;
+  return {name: 'full decode', passed, detail: passed ? 'every video frame and audio packet decoded without an error' : `${failed ? 'FFmpeg stopped decoding' : `${lines.length} decode error${lines.length === 1 ? '' : 's'}`}${lines.length ? `: ${lines.slice(0, 2).join(' | ').slice(0, 300)}` : ''}`};
+}
+// Audio and picture must start together and end together (within one frame); an offset or a length
+// difference moves every caption and cut away from the voice.
+function avAlignment(streams, fps) {
+  const video = streams.find(stream => stream.codec_type === 'video'), audio = streams.find(stream => stream.codec_type === 'audio');
+  if (!video || !audio) return {name: 'audio/video alignment', passed: false, detail: `no ${video ? 'audio' : 'video'} stream`};
+  const number = value => (value === undefined || value === null || value === 'N/A' || !Number.isFinite(Number(value)) ? null : Number(value));
+  const offset = (number(audio.start_time) ?? 0) - (number(video.start_time) ?? 0);
+  const drift = number(audio.duration) !== null && number(video.duration) !== null ? number(audio.duration) - number(video.duration) : null;
+  const frame = 1 / fps, ms = value => `${value >= 0 ? '+' : '−'}${Math.round(Math.abs(value) * 1000)} ms`;
+  return {name: 'audio/video alignment', passed: Math.abs(offset) <= frame && drift !== null && Math.abs(drift) <= frame + 0.05,
+    detail: drift === null ? 'stream lengths could not be measured' : `audio starts ${ms(offset)} and ends ${ms(drift)} against the picture (limit ${Math.round(frame * 1000)} ms)`};
+}
+// Contact-sheet tile geometry from the sheet's real size (padding 4, margin 4), so a page can label each tile.
+function sheetGeometry({width, height}, cols, rows) {
+  return {cols, rows, width, height, tileWidth: (width - 8 - (cols - 1) * 4) / cols, tileHeight: (height - 8 - (rows - 1) * 4) / rows};
+}
+
+module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, decodeArgs, decodeCheck, avAlignment, sheetGeometry, tail, object, text, person, requireValue, now, round};

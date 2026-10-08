@@ -59,7 +59,7 @@ function renderDetail(content, job) {
       <div class="qc-checks">${qc}</div>${result.qc.filter(check => !check.passed).map(check => `<p class="inline-warning"><b>${esc(check.name)}:</b> ${esc(check.detail)}</p>`).join('')}
       <p class="hint">Every command, input checksum and log is in the <a href="${esc(result.manifestUrl)}" target="_blank" rel="noopener">render manifest ↗</a>.</p></div></div>
     ${result.sheetUrl ? `<h3 class="intel-subhead">Contact sheet · one frame every ${result.sheet.everySeconds} s</h3><img class="contact-sheet" src="${esc(result.sheetUrl)}" alt="Contact sheet of the proxy">` : ''}
-    ${job.review ? `<div class="handoff-rule"><strong>${job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested'} by ${esc(job.review.reviewer)} · ${esc(date(job.review.at))}</strong><p>${esc(job.review.notes || 'No notes.')}</p></div>` : `<div class="card-actions">${job.current ? action('Record style-proof verdict', 'render-review', job.id, 'primary') : '<span class="muted">The visuals or narration changed after this render. Render again to review it.</span>'}</div>`}
+    ${job.review ? `<div class="handoff-rule"><strong>${job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested'} by ${esc(job.review.reviewer)} · ${esc(date(job.review.at))}</strong><p>${esc(job.review.notes || 'No notes.')}</p></div>` : `<div class="card-actions">${job.current ? '<button class="primary" data-production-room="qc">Review and record the verdict in Room 08</button>' : '<span class="muted">The visuals or narration changed after this render. Render again to review it.</span>'}</div>`}
   </section>`;
 }
 function renderHistory(content) {
@@ -86,16 +86,6 @@ function renderAction(command, id, button) {
   if (command === 'render-cancel' || command === 'render-retry') {
     if (button) button.disabled = true;
     return api(`/api/renders/${id}/${command === 'render-cancel' ? 'cancel' : 'retry'}`, {requestedBy: renderPerson() || 'Owner'}).then(refresh).then(() => toast(command === 'render-cancel' ? 'Render cancelled.' : 'Render requeued.')).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
-  }
-  if (command === 'render-review') {
-    const job = content.renders.find(item => item.id === id);
-    return renderDialog('review', 'Style-proof verdict', 'HUMAN REVIEW', `<div class="form-grid"><label>Verdict<select name="decision"><option value="pass">Style proof passed</option><option value="changes">Needs changes</option></select></label>${renderNameField('Reviewer name')}<label class="full">Notes <span class="hint">Required for “needs changes”</span><input name="notes" maxlength="2000"></label></div>
-      <label class="checkbox-label"><input type="checkbox" name="watchedFully">I watched the whole proxy with sound.</label>
-      <label class="checkbox-label"><input type="checkbox" name="styleMatches">Motion, pacing and transitions match ${esc(job.scope.styleName)}.</label>
-      <label class="checkbox-label"><input type="checkbox" name="syncReviewed">The visuals stay in step with the narration.</label>
-      ${job.result.audioQc ? '<label class="checkbox-label"><input type="checkbox" name="audioReviewed">I listened to the finished narration for clarity and natural delivery.</label>' : ''}
-      ${job.result.qcPassed ? '' : '<label class="checkbox-label"><input type="checkbox" name="qcAccepted">I accept the technical QC findings shown for this proxy.</label>'}
-      ${job.scope.edit?.criticals ? `<label class="checkbox-label"><input type="checkbox" name="critiqueAccepted">I accept the editor's ${job.scope.edit.criticals} critical finding${job.scope.edit.criticals === 1 ? '' : 's'} for edit r${job.scope.edit.revision}.</label>` : ''}`, 'Record verdict', {id});
   }
   return toast('Unknown action.', true);
 }

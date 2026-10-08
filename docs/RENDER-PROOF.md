@@ -46,6 +46,8 @@ A **contact sheet** (one frame every few seconds, per the style) helps you scan 
 
 Renders run on your computer one at a time. You can cancel a queued or running render. A failed, cancelled or interrupted render can be retried (3 attempts); after a restart, a render that was running is marked interrupted and never resumes by itself. Completed results cannot be changed (SQLite trigger).
 
+Since 0.16 every render also checks a **full decode** (no decode error anywhere), **audio/video alignment** (start and end within one frame), **audio clipping** when the edit has no narration finish, and makes a dense **hook contact sheet**. Both sheets record their tile geometry. See REVIEW-QC.md.
+
 ## 4. Style-proof verdict
 
 **Record style-proof verdict** asks you to confirm that you watched the whole proxy with sound, that motion, pacing and transitions match the style, and that the visuals stay in step with the narration. QC findings must be accepted explicitly. "Needs changes" requires a note. A render becomes **out of date** as soon as the visual board, the narration or the script changes, and an out-of-date render cannot pass.

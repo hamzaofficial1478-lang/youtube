@@ -8,7 +8,7 @@ The owner chose narration-only first on 2026-10-07. This is P08a, not the comple
 2. Run the updated FFmpeg readiness check and pin that build in Room 05. Audio requires `aformat`, `loudnorm`, `silencedetect` and the `pcm_s24le` encoder in addition to existing render requirements.
 3. Open Production → Room 07 Audio. Choose the script and **Set audio levels**. Enter your name, choose normalized narration or original levels, and save.
 4. **Render audio preview** creates both a WAV and a video proxy using the current edit. Inspect the encoded audio measurements, listen to the narration, and watch its timing against the video.
-5. Record the existing style-proof verdict with the additional listening confirmation. Failed audio checks block approval even if other technical findings are accepted.
+5. Record the existing style-proof verdict (Room 08 Review & QC since 0.16) with the additional listening confirmation. Failed audio checks block approval even if other technical findings are accepted.
 
 Settings edits and undo create new immutable edit revisions. Earlier source files, edits, renders and verdicts remain historical. A new revision needs its own render and review. A changed board, script, narration or style also invalidates the current handoff through the existing dependency checks.
 

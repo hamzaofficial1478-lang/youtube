@@ -370,6 +370,13 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(result.video.probe.frames ?? Math.round(result.video.probe.durationSeconds * 30), Math.round(36 * 30), 'every frame of the narration is in the render');
   assert.equal(result.qc.find(item => item.name === 'black frames').passed, true, 'the title card and the fade-out are planned, not defects');
   assert.equal(result.qc.find(item => item.name === 'unplanned cuts').passed, true, JSON.stringify(result.qc));
+  // P09: the whole render decodes, sound and picture line up, and the hook gets a dense sheet of its own.
+  assert.equal(result.qc.find(item => item.name === 'full decode').passed, true, JSON.stringify(result.qc));
+  assert.equal(result.qc.find(item => item.name === 'audio/video alignment').passed, true, JSON.stringify(result.qc));
+  assert.equal(result.qc.some(item => item.name === 'audio clipping'), false, 'a finished narration has its own true-peak check');
+  assert.deepEqual([result.hook.everySeconds, result.hook.frames, result.hook.seconds, result.hook.cols, result.hook.rows, result.hook.tileWidth], [0.5, 10, 5, 5, 2, 120]);
+  assert.deepEqual([result.sheet.cols, result.sheet.tileWidth], [8, 120]);
+  assert.equal(renders.file(queued.id, 'hook').mime, 'image/jpeg');
   const manifest = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
   assert.equal(manifest.inputs.edit.revisionId, r5.id);
   const burned = JSON.parse(renders.row(queued.id).scope).edit.graphicsAss;
@@ -387,6 +394,15 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id});
   await renders.processNext();
   assert.equal(JSON.parse(renders.row(again.id).result).video.sha256, result.video.sha256);
+  // P09 Review & QC: one timecoded list with repair links, and the narration aligned with captions, clips and frames.
+  const qcReport = renders.qcReport(queued.id);
+  assert.equal(qcReport.status, 'awaiting-verdict', JSON.stringify(qcReport.blockers));
+  assert.deepEqual(qcReport.timeline.map(row => row.n), editing.cues(editing.inputs(store.content(content.id))).map(cue => cue.n));
+  assert.deepEqual(qcReport.timeline.flatMap(row => row.captions.map(caption => caption.id)), r5.timeline.captions.groups.map(group => group.id), 'every caption sits in exactly one sentence row');
+  assert.ok(qcReport.timeline.every(row => row.clips.length >= 1 && Number.isInteger(row.tile)));
+  assert.ok(qcReport.findings.every(item => item.repair?.room && (item.at === null || Number.isFinite(item.at))));
+  assert.equal(qcReport.findings.some(item => item.code === 'captions-fast'), false, 'caption summaries become caption-by-caption entries');
+  assert.equal(qcReport.sheets.hook.url, `/api/renders/${queued.id}/hook`);
   // The verdict on the rendered edit is its approval; critical findings must be accepted explicitly.
   const criticals = queued.scope.edit.criticals;
   const confirmations = {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, audioReviewed: true};
@@ -396,17 +412,23 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   changed[changed.length - 1] ^= 1;
   fs.writeFileSync(renderedFile, changed);
   assert.throws(() => renders.file(queued.id, 'video'), /missing or changed/);
+  assert.deepEqual(renders.qcReport(queued.id).blockers.map(item => item.code), ['file-changed']);
   assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}}), /missing or changed/);
   fs.writeFileSync(renderedFile, original);
   const passed = renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}});
   assert.equal(passed.review.decision, 'passed');
   assert.equal(passed.current, true);
+  assert.deepEqual(passed.review.report.counts, qcReport.counts, 'the verdict records what the review showed');
+  assert.equal(renders.qcReport(queued.id).status, 'approved');
   // A newer edit makes the rendered one out of date.
   const waiting = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id});
   editing.applyOps(r5.id, {editedBy: 'Owner', ops: [{type: 'set-hero', clipId: still.id, hero: true}]});
   assert.equal(await renders.processNext(), null);
   assert.equal(renders.row(waiting.id).status, 'stale', 'a superseded queued edit does not consume rendering time');
   assert.equal(renders.publicJob(renders.row(again.id)).current, false);
+  const staleReport = renders.qcReport(queued.id);
+  assert.deepEqual([staleReport.status, staleReport.verdictStale, staleReport.blockers[0].code], ['blocked', true, 'out-of-date'], 'a newer edit invalidates the approved review');
+  assert.throws(() => renders.review(again.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}}), /changed after this render/);
   // A changed visual board makes the edit itself out of date: no more edits, no render.
   const latest = editing.state().contents.find(item => item.contentId === content.id).edit;
   const scope = JSON.parse(renders.row(queued.id).scope);

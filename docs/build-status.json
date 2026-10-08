@@ -1,7 +1,7 @@
 {
-  "version": "0.15.1",
+  "version": "0.16.0",
   "updated": "2026-10-08",
-  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
+  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -298,8 +298,9 @@
         {
           "id": "P09",
           "title": "Review & QC Room with video intelligence",
-          "status": "planned",
-          "remaining": "Completely decode proxies/finals; create timestamped contact sheets and aligned transcript/captions; flag black/frozen frames, A/V drift, clipping, unsafe text, stale assets and abrupt cuts."
+          "status": "testing",
+          "remaining": "Not yet proven on real owner material. Final masters (P11) need the same review on the master file. Text-safe areas are kept by fixed layouts, not measured in pixels; no AI look-over of frames (would be an explicit, budgeted owner action producing review notes only).",
+          "evidence": "0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md."
         },
         {
           "id": "P10",
@@ -405,5 +406,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Caption corrections and WebVTT"
+  "milestone": "Review & QC room"
 }

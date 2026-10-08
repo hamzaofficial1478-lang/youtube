@@ -11,6 +11,7 @@ const B = require('./editing-brain');
 const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
 const VS = require('./visual-sources');
 const Audio = require('./audio');
+const Review = require('./review');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
@@ -129,7 +130,7 @@ class RenderRoom {
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg,
         edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, criticals: scope.edit.criticals, verdict: scope.edit.critiqueVerdict, graphics: scope.edit.timeline.graphics.filter(item => item.status === 'accepted').length} : null},
-      result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
+      result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, hookUrl: result.hook ? `/api/renders/${row.id}/hook` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
   }
   queueRender(contentId, input) {
     object(input);
@@ -359,17 +360,29 @@ class RenderRoom {
         ];
         const measured = R.sceneCutTimes((await exec('scene cuts', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-i', out, '-an', '-vf', `select='gt(scene,${R.SCENE_CUT_THRESHOLD})',showinfo`, '-f', 'null', '-'], Math.max(120000, plan.totalFrames * 100))).stderr);
         const unplanned = measured.filter(time => !windows.some(([from, to]) => time >= from && time <= to));
-        cutCheck = {name: 'unplanned cuts', passed: !unplanned.length, detail: unplanned.length ? unplanned.map(time => `${time.toFixed(2)} s (${shotAt(time)})`).join('; ') : `none: ${measured.length} measured cut${measured.length === 1 ? '' : 's'}, all where the edit planned a change`};
+        cutCheck = {name: 'unplanned cuts', passed: !unplanned.length, spans: unplanned.map(time => ({start: time, end: time})), detail: unplanned.length ? unplanned.map(time => `${time.toFixed(2)} s (${shotAt(time)})`).join('; ') : `none: ${measured.length} measured cut${measured.length === 1 ? '' : 's'}, all where the edit planned a change`};
+      }
+      // P09: the whole file decodes, sound and picture line up, and a render without a narration finish is
+      // still checked for clipping (a finished narration has its own true-peak check).
+      const decoded = await exec('full decode', job.paths.ffmpeg, R.decodeArgs(out), Math.max(120000, plan.totalFrames * 100)).catch(error => { if (error.cancelled) throw error; return {stderr: error.stderr || error.message, failed: true}; });
+      let clipping = null;
+      if (!audioInfo && audio) {
+        const peak = Audio.measurement((await exec('audio peak', job.paths.ffmpeg, Audio.analysisArgs(out, Audio.DEFAULTS), Math.max(120000, scope.narration.durationSeconds * 1000))).stderr);
+        clipping = {name: 'audio clipping', passed: peak.truePeakDb !== null && peak.truePeakDb <= -0.1, detail: `${peak.truePeakDb ?? 'unmeasured'} dBTP true peak (clips above -0.1)`};
       }
       const expected = plan.totalFrames / plan.preset.fps, tolerance = 1 / plan.preset.fps + 0.15;
+      const darkSpans = found.black.filter(span => !(span.duration <= qc.maxBlackSeconds || plannedDark(span)));
       const checks = [
+        R.decodeCheck(decoded),
+        R.avAlignment(streams, plan.preset.fps),
         {name: 'duration', passed: Math.abs(probe.durationSeconds - expected) <= tolerance && Math.abs(probe.durationSeconds - scope.narration.durationSeconds) <= tolerance + 0.05, detail: `${probe.durationSeconds.toFixed(2)} s video for ${scope.narration.durationSeconds.toFixed(2)} s narration`},
         {name: 'frame', passed: probe.width === plan.preset.width && probe.height === plan.preset.height && Math.abs((probe.frameRate || 0) - plan.preset.fps) < 0.01, detail: `${probe.width}×${probe.height} at ${probe.frameRate} fps`},
         {name: 'narration audio', passed: !!audio && audio.codec_name === 'aac', detail: audio ? `${audio.codec_name} ${audio.sample_rate} Hz` : 'no audio stream'},
-        {name: 'black frames', passed: found.black.every(span => span.duration <= qc.maxBlackSeconds || plannedDark(span)), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)}${plannedDark(span) ? ', planned' : ''})`).join('; ') : 'none'},
-        {name: 'frozen picture', passed: !found.frozen.length, detail: found.frozen.length ? found.frozen.map(span => `${span.duration === null ? 'until the end' : `${span.duration.toFixed(1)} s`} from ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : `no hold longer than ${qc.maxFrozenSeconds} s`},
+        {name: 'black frames', passed: !darkSpans.length, spans: darkSpans.map(({start, end}) => ({start, end})), detail: found.black.length ? found.black.map(span => `${span.duration.toFixed(2)} s at ${span.start.toFixed(1)} s (${shotAt(span.start)}${plannedDark(span) ? ', planned' : ''})`).join('; ') : 'none'},
+        {name: 'frozen picture', passed: !found.frozen.length, spans: found.frozen.map(({start, end}) => ({start, end})), detail: found.frozen.length ? found.frozen.map(span => `${span.duration === null ? 'until the end' : `${span.duration.toFixed(1)} s`} from ${span.start.toFixed(1)} s (${shotAt(span.start)})`).join('; ') : `no hold longer than ${qc.maxFrozenSeconds} s`},
         ...(cutCheck ? [cutCheck] : []),
         ...(audioInfo ? audioInfo.output.checks : []),
+        ...(clipping ? [clipping] : []),
       ];
       // 5. Contact sheet for review.
       this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);
@@ -378,12 +391,20 @@ class RenderRoom {
       const count = Math.max(1, Math.ceil(expected / every)), cols = Math.min(scope.format === 'shorts' ? 8 : 6, count), rows = Math.ceil(count / cols);
       const sheet = path.join(work, 'contact-sheet.jpg');
       await exec('contact sheet', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', out, '-vf', `fps=1/${every},scale=${scope.format === 'shorts' ? 120 : 240}:-2,tile=${cols}x${rows}:padding=4:margin=4`, '-frames:v', '1', '-q:v', '4', '-y', sheet], Math.max(60000, plan.totalFrames * 50));
+      // The hook gets a dense sheet of its own: every second of the first 15 s (every half second of a Short's first 5 s).
+      const hookEvery = scope.format === 'shorts' ? 0.5 : 1, hookSeconds = Math.min(expected, scope.format === 'shorts' ? 5 : 15);
+      const hookCount = Math.max(1, Math.ceil(hookSeconds / hookEvery)), hookCols = Math.min(5, hookCount), hookRows = Math.ceil(hookCount / hookCols);
+      const hook = path.join(work, 'hook-sheet.jpg');
+      await exec('hook sheet', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-t', String(hookSeconds), '-i', out, '-vf', `fps=${1 / hookEvery},scale=${scope.format === 'shorts' ? 120 : 240}:-2,tile=${hookCols}x${hookRows}:padding=4:margin=4`, '-frames:v', '1', '-q:v', '4', '-y', hook], 60000);
+      const sheetSize = async file => JSON.parse((await exec('sheet size', job.paths.ffprobe, ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'json', file], 30000)).stdout).streams[0];
       // 6. Immutable outputs and manifest.
       this.progress(job.id, 'saving', total, total);
       fs.mkdirSync(finalDir, {recursive: true});
-      const video = path.join(finalDir, 'proxy.mp4'), sheetFinal = path.join(finalDir, 'contact-sheet.jpg');
+      const video = path.join(finalDir, 'proxy.mp4'), sheetFinal = path.join(finalDir, 'contact-sheet.jpg'), hookFinal = path.join(finalDir, 'hook-sheet.jpg');
+      const sheetGrid = R.sheetGeometry(await sheetSize(sheet), cols, rows), hookGrid = R.sheetGeometry(await sheetSize(hook), hookCols, hookRows);
       fs.renameSync(out, video);
       fs.renameSync(sheet, sheetFinal);
+      fs.renameSync(hook, hookFinal);
       const relative = file => path.relative(this.dataRoot, file).replaceAll('\\', '/');
       let audioArtifact = null;
       if (audioInfo) {
@@ -403,7 +424,8 @@ class RenderRoom {
       fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2), {flag: 'wx'});
       const result = {
         video: {relativePath: relative(video), sha256: manifest.output.sha256, sizeBytes: manifest.output.sizeBytes, probe},
-        sheet: {relativePath: relative(sheetFinal), sha256: R.fileSha256(sheetFinal), everySeconds: every, frames: count},
+        sheet: {relativePath: relative(sheetFinal), sha256: R.fileSha256(sheetFinal), everySeconds: every, frames: count, ...sheetGrid},
+        hook: {relativePath: relative(hookFinal), sha256: R.fileSha256(hookFinal), everySeconds: hookEvery, frames: hookCount, seconds: hookSeconds, ...hookGrid},
         manifest: {relativePath: relative(manifestFile), sha256: R.fileSha256(manifestFile)},
         audio: audioArtifact, audioQc: audioInfo?.output || null,
         preset: plan.preset, transition: plan.transition, qc: checks, qcPassed: checks.every(check => check.passed), renderSeconds: round((Date.now() - started) / 1000, 1),
@@ -445,15 +467,19 @@ class RenderRoom {
         requireValue(confirmations.styleMatches === true, 'Confirm that motion, pacing and transitions match the assigned style.');
         requireValue(confirmations.syncReviewed === true, 'Confirm that the visuals stay in step with the narration.');
         if (!result.qcPassed) requireValue(confirmations.qcAccepted === true, 'Accept the technical QC findings or fix them first.');
-        const scope = JSON.parse(row.scope), criticals = scope.edit?.criticals || 0;
+        const scope = JSON.parse(row.scope);
         if (scope.edit?.timeline.audio) {
           requireValue(result.audioQc?.passed === true, 'Fix the audio QC findings before approving this narration finish.', 409);
           requireValue(confirmations.audioReviewed === true, 'Confirm that you listened to the finished narration for clarity and natural delivery.');
-          this.file(id, 'audio');
         }
+        // P09: the review's blockers (out of date, changed files, a file that does not decode) cannot be accepted away;
+        // its critical editorial findings (the critic's and the caption checks') must be accepted explicitly.
+        const report = this.qcReport(id);
+        requireValue(!report.blockers.length, report.blockers[0]?.message, 409);
+        const criticals = report.findings.filter(item => item.severity === 'critical' && item.source !== 'render').length;
         if (criticals) requireValue(confirmations.critiqueAccepted === true, `Accept the editor's ${criticals} critical finding${criticals === 1 ? '' : 's'} or fix them in the edit first.`);
-        for (const kind of ['video', 'sheet', 'manifest']) this.file(id, kind);
-        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, audioReviewed: scope.edit?.timeline.audio ? true : null, qcAccepted: result.qcPassed ? null : true, critiqueAccepted: criticals ? true : null}};
+        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, audioReviewed: scope.edit?.timeline.audio ? true : null, qcAccepted: result.qcPassed ? null : true, critiqueAccepted: criticals ? true : null},
+          report: {schema: report.schema, counts: report.counts, checks: report.checks.length}};
       }
       this.db.prepare('UPDATE render_jobs SET review=?, updated_at=? WHERE id=?').run(JSON.stringify(review), now(), id);
       // Skills Engine: a "needs changes" style proof becomes a lesson candidate for human review.
@@ -470,16 +496,29 @@ class RenderRoom {
       return this.publicJob(this.row(id));
     });
   }
+  // P09 Review & QC: the consolidated, timecoded review of one render, recomputed from its immutable evidence
+  // and the current state of its inputs (so a changed edit or file shows up at once).
+  qcReport(id) {
+    const row = this.row(id), job = this.publicJob(row), scope = JSON.parse(row.scope), result = row.result ? JSON.parse(row.result) : null;
+    const integrity = result ? ['video', 'sheet', 'manifest', 'audio', 'hook'].filter(kind => result[kind]).map(kind => { try { this.file(id, kind); return {kind, ok: true}; } catch (error) { return {kind, ok: false, reason: error.message}; } }) : [];
+    let findings = [], cues = null;
+    if (scope.edit && this.editing) {
+      findings = JSON.parse(this.editing.revisionRow(scope.edit.revisionId).critique).findings;
+      if (job.current) cues = this.editing.cues(this.editing.inputs(this.store.content(row.content_id)));
+    }
+    return {...Review.build({render: {id: row.id, status: row.status, current: job.current, review: job.review}, result, integrity, edit: scope.edit?.timeline || null, findings, cues, urls: {sheet: job.result?.sheetUrl, hook: job.result?.hookUrl}}),
+      contentId: row.content_id, editRevision: scope.edit ? {id: scope.edit.revisionId, revision: scope.edit.revision} : null, videoUrl: job.result?.videoUrl || null, audio: !!scope.edit?.timeline.audio};
+  }
   file(id, kind) {
     const row = this.row(id);
     requireValue(row.result, 'This render has no output yet.', 404);
     const result = JSON.parse(row.result);
-    requireValue(['video', 'sheet', 'manifest', 'audio'].includes(kind), 'File not found.', 404);
+    requireValue(['video', 'sheet', 'manifest', 'audio', 'hook'].includes(kind), 'File not found.', 404);
     const entry = result[kind];
     requireValue(entry, 'File not found.', 404);
     const file = this.localFile(entry.relativePath);
     requireValue(fs.existsSync(file) && fs.statSync(file).size === (entry.sizeBytes ?? fs.statSync(file).size) && R.fileSha256(file) === entry.sha256, 'The render file is missing or changed.', 409);
-    return {file, mime: kind === 'video' ? 'video/mp4' : kind === 'audio' ? 'audio/wav' : kind === 'sheet' ? 'image/jpeg' : 'application/json; charset=utf-8', size: fs.statSync(file).size};
+    return {file, mime: kind === 'video' ? 'video/mp4' : kind === 'audio' ? 'audio/wav' : kind === 'sheet' || kind === 'hook' ? 'image/jpeg' : 'application/json; charset=utf-8', size: fs.statSync(file).size};
   }
 
   state() {

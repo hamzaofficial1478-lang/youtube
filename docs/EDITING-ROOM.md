@@ -4,7 +4,7 @@ Room 05 in the Production panel. The **editing brain** turns the approved visual
 approved narration (Voice Room) and the family style (Room 03) into an **edit**. Every cut, hold, camera
 move, transition and graphic comes with a written reason. A **critic** then reviews the edit the way a
 senior editor would. You can change any decision, redo one scene, undo, and render the edit with your
-pinned FFmpeg build. Your style-proof verdict on the rendered edit is its approval.
+pinned FFmpeg build. Your style-proof verdict on the rendered edit is its approval (recorded in Room 08 Review & QC since 0.16).
 
 Everything here runs on your computer and costs nothing. No model or provider is called.
 
