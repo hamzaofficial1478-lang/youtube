@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.17.0 - planning foundation, competitor channels per family, review-gated reasoning/research, a human-controlled primary-locale Voice Room, the Style Library & Assignment Room, Competitor Intelligence with per-channel blend picks, the Niche Factory, the Scene & Visual Room, the first assembly proxy render, the Skills Engine, the Editing Room, captions (owner-correctable, SRT and WebVTT), narration finishing, the Review & QC room with Claude's frame-by-frame scan, and videos of any length.
+Version 0.18.0 - planning foundation, competitor channels per family, review-gated reasoning/research, a human-controlled primary-locale Voice Room, the Style Library & Assignment Room, Competitor Intelligence with per-channel blend picks, the Niche Factory, the Scene & Visual Room, the first assembly proxy render, the Skills Engine, the Editing Room, captions (owner-correctable, SRT and WebVTT), narration finishing, the Review & QC room with Claude's frame-by-frame scan, videos of any length, and the Packaging Room.
 
 The owner's working copy lives in the local program folder (Desktop\YT\youtube). Verified changes are delivered there; [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube) is updated only when the owner asks for a push. Uploading code to GitHub does not run its server.
 
@@ -48,8 +48,9 @@ Use Ctrl+C to stop a terminal-started server. A different local port can be supp
 23. In **Production → Room 08 · Review & QC**, open the newest render. You get one issue list in time order (render checks on the real file, the editor's critique, every caption), each with a button that opens where it is fixed. The narration is aligned sentence by sentence with its captions, clips, graphics and a frame, next to timestamped contact sheets of the whole video and its hook. Then record the style-proof verdict here. See [Review & QC](docs/REVIEW-QC.md).
 24. **Claude checks every frame first (0.17).** In Room 08 press **Ask Claude to scan every frame**, or switch on *scan every new render* for the family. Claude reads a frame from every shot, graphic and the hook beside what is said there and flags only real problems, each with its frame and a fix button. You then check just those moments and record the verdict.
 25. **Any length (0.17).** Set **Target length (minutes)** on a draft: 1 to 180 minutes. The script, scene planning, narration, edit, render and review all scale with it. See [Video length](docs/VIDEO-LENGTH.md).
+26. In **Production → Room 09 · Packaging**, start a package from the script or ask Claude for one: 5 titles, 3 thumbnails drawn from your approved visuals (judge them at phone size), a description with chapters, the AI note and visual credits, tags and the synthetic-content choice. Every figure must come from the script. Approve it for the video you approved in Room 08 and download it for YouTube Studio. See [Packaging Room](docs/PACKAGING-ROOM.md).
 
-The early six-scene storyboard remains a planning scaffold; the approved Scene Board and Editing Room produce real local proxy renders. AI calls and narration/visual generation are explicit actions with their existing budget and review gates. Additional-language production, packaging, final masters, channel sign-in and publishing remain unfinished.
+The early six-scene storyboard remains a planning scaffold; the approved Scene Board and Editing Room produce real local proxy renders. AI calls and narration/visual generation are explicit actions with their existing budget and review gates. Additional-language production, final masters, channel sign-in and publishing remain unfinished.
 
 ## Where your work is saved
 

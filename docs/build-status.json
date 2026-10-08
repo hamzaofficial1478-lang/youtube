@@ -1,7 +1,7 @@
 {
-  "version": "0.17.0",
+  "version": "0.18.0",
   "updated": "2026-10-08",
-  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
+  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -305,8 +305,9 @@
         {
           "id": "P10",
           "title": "Packaging Room",
-          "status": "planned",
-          "remaining": "Create immutable reviewable thumbnail, title, description and disclosure variants with rights/provenance evidence, without changing live metadata."
+          "status": "testing",
+          "remaining": "Not yet proven on real owner material. AI-generated thumbnail layers (three-layer composites) are not built: thumbnails use the approved visuals. No title/thumbnail A/B data until publishing and analytics exist; the final master (P11) must attach to the approved package.",
+          "evidence": "0.18.0 (2026-10-08): Room 09 Packaging. packaging.js (pure) validates packages, checks honest figures (digits or English words), YouTube limits, title/thumbnail craft, writing voice, disclosure and chapters, composes the description with chapters, AI note and visual credits, and builds the thumbnail ASS layer. packaging-room.js keeps immutable revisions, draws content-addressed 1280x720 thumbnails from the approved visuals with the pinned FFmpeg, drafts with Claude inside a token reservation and approves by name only for a Room 08-approved render; approvals go stale on a newer package, script or Room 08 change. Browser check on a scratch workspace: free start drew 3 thumbnails at 1280x720; the edit dialog saved r2; Room 08 approval by flagged moments; package approval refused until the phone-size confirmation. One real Claude draft (7,196 tokens) was rejected for an accent word not among its overlay words; the parser now drops such an accent instead, and the real draft was not repeated."
         },
         {
           "id": "P11",
@@ -406,5 +407,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Claude frame scan and any video length"
+  "milestone": "Packaging Room"
 }

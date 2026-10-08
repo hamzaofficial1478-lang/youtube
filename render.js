@@ -15,7 +15,7 @@ const RENDERER_VERSION = 'ffmpeg-montage/1.1.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
-const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo'];
+const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo', 'eq', 'vignette'];
 REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS.includes(name)));
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {

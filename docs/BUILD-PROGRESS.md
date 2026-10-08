@@ -91,7 +91,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [ ] **P07 Captions & Localization Room** (testing) - Version 0.14 (2026-10-06): every new edit carries a caption track (captions.js): words timed inside the narration's measured sentence windows with clause pauses anchored at commas; phrases split into the fewest even captions (never ending on a weak word); 2 lines x 42 characters for long-form, rate-sized groups for Shorts; scarce inline emphasis on figures and negations. Burned in as the top ASS layer (bottom band on 16:9, above the Shorts buttons on 9:16, clearing for full-screen graphics), SRT download per edit revision, on/off as an owner change, caption QC in the critic. 7 caption tests plus render checks; full suite 181/181 on Node 24.18.1 with FFmpeg 8.1.2 and Edge 154. 0.15.1 (2026-10-08): owner caption corrections as the revisioned set-caption op (timing fixed, narration words kept for coverage QC and reset, *word* emphasis, critic nitpick) and a WebVTT download beside the SRT; full suite 192/192, browser check of correct/save/reset/download on a scratch workspace.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
 - [ ] **P09 Review & QC Room with video intelligence** (testing) - 0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md. 0.17.0: Claude frame scan (frame-scan.js): frames at every clip, graphic and hook half-second, contact sheets from the pinned FFmpeg, per-answer token reservation, kept answers, findings with frames and repair links in the review, optional named per-family automatic scan; after a completed scan the verdict may confirm flagged moments instead of a full watch. Videos of any length: targetMinutes 1-180 scales the script, job token limit, streamed answers, scene planning in parts, narration and render limits; a 25.5-minute synthetic edit rendered and reviewed with every check passing.
-- [ ] **P10 Packaging Room** (planned) - Create immutable reviewable thumbnail, title, description and disclosure variants with rights/provenance evidence, without changing live metadata.
+- [ ] **P10 Packaging Room** (testing) - 0.18.0 (2026-10-08): Room 09 Packaging. packaging.js (pure) validates packages, checks honest figures (digits or English words), YouTube limits, title/thumbnail craft, writing voice, disclosure and chapters, composes the description with chapters, AI note and visual credits, and builds the thumbnail ASS layer. packaging-room.js keeps immutable revisions, draws content-addressed 1280x720 thumbnails from the approved visuals with the pinned FFmpeg, drafts with Claude inside a token reservation and approves by name only for a Room 08-approved render; approvals go stale on a newer package, script or Room 08 change. Browser check on a scratch workspace: free start drew 3 thumbnails at 1280x720; the edit dialog saved r2; Room 08 approval by flagged moments; package approval refused until the phone-size confirmation. One real Claude draft (7,196 tokens) was rejected for an accent word not among its overlay words; the parser now drops such an accent instead, and the real draft was not repeated.
 - [ ] **P11 Final render, recovery and primary master approval** (planned) - Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master.
 
 ### 04 · Optional configured-language editions
@@ -121,6 +121,28 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-08 — Room 09 Packaging (0.18.0)
+
+- P10 built; read [PACKAGING-ROOM.md](PACKAGING-ROOM.md).
+  - `packaging.js` (pure) covers:
+    - validation;
+    - checks: honest figures (digits or English number words), YouTube limits, title/thumbnail craft, writing voice, disclosure, chapters;
+    - the composed description (text, chapters, AI note, visual credits);
+    - the thumbnail ASS layer;
+    - Claude's prompt and answer.
+  - `packaging-room.js`:
+    - immutable revisions;
+    - content-addressed 1280x720 thumbnails from the approved visuals with the pinned FFmpeg (`eq` and `vignette` added to readiness);
+    - Claude drafts inside a token reservation;
+    - a named approval only for a Room 08-approved render, going stale on change;
+    - export text for YouTube Studio.
+  - `public/packaging-room.js`: Room 09 live, with full-size and phone-size thumbnails and a download link.
+- Tests: `tests/packaging.test.js` (4) and an end-to-end Room 09 test with real FFmpeg (free start, owner edit, unsupported figure, Room 08 gate, approval, Claude draft via a stand-in, stale approval, tampered thumbnail). The last full run was 206/206 before the final small fixes (spelled-out figures, forgiving accent words); afterwards `npm run check` passed and `tests/packaging.test.js` passed 4/4. The full suite was not re-run after those fixes.
+- Browser check: free start drew 3 thumbnails; the edit dialog saved r2; Room 08 approval by flagged moments; package approval refused until the phone-size box was ticked, then approved.
+  - The check also found the false "unsupported 5,000" (the script says "five thousand"), which was fixed.
+  - One real Claude draft (7,196 tokens) was rejected because an accent word was not among its overlay words. The parser now drops such an accent, but the real draft was not repeated.
+- Not tested: a successful real Claude package draft, real owner material. No GitHub push.
 
 ### 2026-10-08 — Claude frame scan and videos of any length (0.17.0)
 

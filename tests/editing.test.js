@@ -13,6 +13,7 @@ const VS = require('../visual-sources');
 const {SceneRoom, splitSentences, timeSentences} = require('../scene-room');
 const {RenderRoom} = require('../render-room');
 const {FrameScanner} = require('../frame-scan');
+const {PackagingRoom} = require('../packaging-room');
 const {ConnectorSlots} = require('../connectors');
 const {EditingRoom} = require('../editing-room');
 const {SkillsEngine} = require('../skills');
@@ -533,6 +534,71 @@ test('repeated owner corrections in two edits of a family raise one lesson, neve
   assert.equal(lessons[0].status, 'proposed');
   assert.match(lessons[0].finding, /2 different edits/);
   assert.equal(skills.state().counts.approved, 0, 'a lesson never changes a skill by itself');
+});
+
+test('Room 09 packages an approved video: thumbnails from the board, honest checks, a Claude draft and an approval that goes stale', {skip}, async t => {
+  const env = setup(t);
+  const {editing, renders, store, content, scenes, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  const readiness = await renders.checkReadiness({requestedBy: 'Owner'});
+  assert.equal(readiness.filters.vignette && readiness.filters.eq, true, 'thumbnails need eq and vignette');
+  renders.pin({readinessId: readiness.id, pinnedBy: 'Owner', reason: 'Reviewed build for packaging.'});
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  await renders.processNext();
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude-1', 'claude-1', JSON.stringify({name: 'claude-1', provider: 'claude-code', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), null);
+  const asked = [];
+  const room = new PackagingRoom(store, scenes, renders, editing, new ConnectorSlots(store, {transform: (op, input) => input}), {complete: async ({task, messages, maxTokens}) => {
+    const input = JSON.parse(messages[1].content);
+    asked.push({task, maxTokens, input});
+    return {content: JSON.stringify({titles: ['Why 1347 changed money', 'The clay mark that became a coin', 'How two villages invented trust', 'Salt, grain and a promise', 'What a token remembered'].map(text => ({text, why: 'formula'})),
+      thumbnails: input.shots.slice(0, 3).map((shot, k) => ({text: ['ONE MARK', 'WHO OWED', 'KEPT'][k], accent: ['MARK', 'OWED', 'KEPT'][k], shot: shot.label, at: shot.media === 'video' ? 1 : 0, layout: 'left', concept: 'One clear focal point.'})),
+      description: 'Two villages, one winter, and the first record of trust.', tags: ['money history', 'clay tokens']}), usage: {promptTokens: 4000, completionTokens: 900, totalTokens: 4900}, model: 'claude-opus-5-5', provider: 'claude-code'};
+  }}, {dataRoot});
+  // A free start: three thumbnail variants drawn locally at 1280x720 from the approved shots.
+  const p1 = await room.startFromScript(content.id, {requestedBy: 'Owner'});
+  assert.deepEqual([p1.revision, p1.actor, p1.payload.thumbnails.length], [1, 'rules', 3]);
+  for (const image of Object.values(p1.images)) {
+    assert.deepEqual([image.width, image.height], [1280, 720]);
+    assert.ok(image.sizeBytes < 2 * 1024 * 1024 && fs.existsSync(path.join(dataRoot, image.relativePath)));
+  }
+  assert.throws(() => room.approve(p1.id, {approvedBy: 'Owner', confirmations: {}}), /Room 08/, 'a package belongs to a video approved in Room 08');
+  // The owner's edit: a figure the script never says is critical on the chosen title.
+  const pkg = {...p1.payload, titles: [{text: 'Why 1347 changed money forever'}, {text: 'The 99 marks that built trust'}], chosenTitle: 't2',
+    thumbnails: p1.payload.thumbnails.map((thumb, k) => ({...thumb, text: ['ONE MARK', 'WHO OWED', 'KEPT'][k], accent: k === 0 ? 'MARK' : ''}))};
+  const p2 = await room.save(content.id, {createdBy: 'Owner', expectedRevision: 1, package: pkg});
+  assert.deepEqual(p2.checks.issues.filter(item => item.severity === 'critical').map(item => item.code), ['unsupported-figure']);
+  assert.notEqual(p2.images.k1.relativePath, p1.images.k1.relativePath, 'new words, new thumbnail');
+  await assert.rejects(room.save(content.id, {createdBy: 'Owner', expectedRevision: 1, package: pkg}), /changed \(now r2\)/);
+  await assert.rejects(room.save(content.id, {createdBy: 'Owner', expectedRevision: 2, package: pkg}), /Nothing changed/);
+  assert.throws(() => store.db.prepare('UPDATE package_revisions SET note=? WHERE id=?').run('x', p2.id), /immutable/);
+  renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, critiqueAccepted: true, audioReviewed: true}});
+  assert.throws(() => room.approve(p2.id, {approvedBy: 'Owner', confirmations: {}}), /critical package checks/);
+  const p3 = await room.save(content.id, {createdBy: 'Owner', expectedRevision: 2, package: {...pkg, chosenTitle: 't1'}});
+  assert.equal(p3.checks.passed, true, JSON.stringify(p3.checks.issues));
+  assert.equal(p3.images.k1.relativePath, p2.images.k1.relativePath, 'unchanged thumbnails are not drawn again');
+  assert.throws(() => room.approve(p3.id, {approvedBy: 'Owner', confirmations: {titleHonest: true, disclosureReviewed: true, creditsReviewed: true}}), /phone size/);
+  const approved = room.approve(p3.id, {approvedBy: 'Owner', confirmations: {titleHonest: true, thumbnailChecked: true, disclosureReviewed: true, creditsReviewed: true}});
+  assert.deepEqual([approved.approval.current, approved.approval.renderId], [true, queued.id]);
+  const exported = room.exportText(p3.id);
+  assert.match(exported.text, /^TITLE\nWhy 1347 changed money forever\n\nDESCRIPTION\n/);
+  assert.match(exported.text, /Visual credits:\nS01A: /);
+  assert.match(exported.filename, /-package-r3\.txt$/);
+  // Claude's draft: a new revision built from the script and the board; the earlier approval goes stale.
+  room.queueDraft(content.id, {requestedBy: 'Owner', connector: {id: 'claude-1', revision: 1}});
+  assert.throws(() => room.queueDraft(content.id, {requestedBy: 'Owner', connector: {id: 'claude-1', revision: 1}}), /already drafting/);
+  const p4 = await room.processNext();
+  assert.deepEqual([p4.revision, p4.actor, p4.payload.titles.length, asked[0].task], [4, 'claude', 5, 'packaging']);
+  assert.equal(asked[0].input.video.script, store.content(content.id).script);
+  assert.ok(asked[0].input.shots.every(shot => shot.label && shot.media));
+  assert.equal(store.db.prepare("SELECT status, total_tokens FROM intelligence_usage WHERE kind='packaging'").get().total_tokens, 4900);
+  const stale = room.publicRevision(room.revisionRow(p3.id)).approval;
+  assert.deepEqual([stale.current, stale.staleReason], [false, 'A newer package revision was saved.']);
+  // A changed thumbnail file is caught.
+  const thumbFile = room.thumbnailFile(p4.id, 'k1');
+  fs.appendFileSync(thumbFile, 'x');
+  assert.throws(() => room.thumbnailFile(p4.id, 'k1'), /missing or changed/);
+  assert.equal(room.state().contents.find(item => item.contentId === content.id).latest.revision, 4);
 });
 
 test('HTTP edit routes need the local token and expose the room in state', async t => {

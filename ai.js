@@ -16,7 +16,7 @@ const MODELS = Object.freeze({'claude-opus-5-5': 'Claude Opus 5.5', 'claude-opus
 const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-opus-4-8'});
 // Owner decision 2026-10-06: Opus 5.5 writes scripts and makes the editing, visual and niche decisions;
 // Opus 4.8 does the rest.
-const TASK_ROLE = Object.freeze({script: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', research: 'support', competitors: 'support'});
+const TASK_ROLE = Object.freeze({script: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', research: 'support', competitors: 'support'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
 // Answers up to this size come back in one response; longer ones (a 30-minute script) are streamed, so the
 // request never meets the SDK's timeout for long non-streaming calls.
