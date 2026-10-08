@@ -9,6 +9,19 @@ function claudeMessage(text, usage = {input_tokens: 120, output_tokens: 80}, ext
   const body = {id: 'msg_test', type: 'message', role: 'assistant', model: extra.model || 'claude-opus-5-5', content: [{type: 'text', text: typeof text === 'string' ? text : JSON.stringify(text)}], stop_reason: extra.stop || 'end_turn', ...(usage ? {usage} : {})};
   return new Response(JSON.stringify(body), {status: 200, headers: {'content-type': 'application/json'}});
 }
+// The same answer as a server-sent event stream (requests above 16,000 output tokens are streamed).
+function claudeStream(text, usage = {input_tokens: 120, output_tokens: 80}, extra = {}) {
+  const {output_tokens: output, ...input} = usage;
+  const events = [
+    ['message_start', {type: 'message_start', message: {id: 'msg_test', type: 'message', role: 'assistant', model: extra.model || 'claude-opus-5-5', content: [], stop_reason: null, usage: {...input, output_tokens: 1}}}],
+    ['content_block_start', {type: 'content_block_start', index: 0, content_block: {type: 'text', text: ''}}],
+    ['content_block_delta', {type: 'content_block_delta', index: 0, delta: {type: 'text_delta', text: typeof text === 'string' ? text : JSON.stringify(text)}}],
+    ['content_block_stop', {type: 'content_block_stop', index: 0}],
+    ['message_delta', {type: 'message_delta', delta: {stop_reason: extra.stop || 'end_turn'}, usage: {output_tokens: output}}],
+    ['message_stop', {type: 'message_stop'}],
+  ];
+  return new Response(events.map(([name, data]) => `event: ${name}\ndata: ${JSON.stringify(data)}\n\n`).join(''), {status: 200, headers: {'content-type': 'text/event-stream'}});
+}
 const isClaudeMessages = url => String(url) === 'https://api.anthropic.com/v1/messages' || String(url).startsWith('https://api.anthropic.com/v1/messages?');
 const isClaudeModel = url => String(url).startsWith('https://api.anthropic.com/v1/models/');
 const claudeModel = url => new Response(JSON.stringify({id: String(url).split('/').pop().split('?')[0], type: 'model', display_name: 'Claude'}), {status: 200, headers: {'content-type': 'application/json'}});
@@ -37,4 +50,4 @@ function fakeClaudeCode(t) {
   return {command: process.execPath, prefix: [path.join(__dirname, 'fake-claude-code.js')], reply, calls};
 }
 
-module.exports = {claudeMessage, isClaudeMessages, isClaudeModel, claudeModel, claudeFetch, promptOf, fakeClaudeCode};
+module.exports = {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, claudeFetch, promptOf, fakeClaudeCode};

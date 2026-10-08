@@ -90,7 +90,7 @@ class EditingRoom {
       const file = this.renders.localFile(inputs.scope.narration.relativePath);
       requireValue(fs.existsSync(file) && R.fileSha256(file) === sha, 'The approved narration file is missing or changed.', 409);
       try {
-        const out = await R.run(ffmpeg, ['-hide_banner', '-nostdin', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.18', '-f', 'null', '-'], {timeout: 120000});
+        const out = await R.run(ffmpeg, ['-hide_banner', '-nostdin', '-i', file, '-af', 'silencedetect=noise=-35dB:d=0.18', '-f', 'null', '-'], {timeout: Math.max(120000, inputs.scope.narration.durationSeconds * 1000)});
         result = {pauses: B.pausesFromSilence(out.stderr), measured: true, ffmpeg: pin.ok ? `pinned ${pin.pin.version}` : 'unpinned', note: 'Pauses measured in the approved narration with FFmpeg silencedetect.'};
       } catch (error) {
         result = {pauses: [], measured: false, note: `Pause measurement failed (${error.message}); cuts use the word-count estimate.`};

@@ -42,9 +42,9 @@
         <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning target only. Claude script/research calls may use paid provider capacity; token limits and deliberate retries apply separately.</span></label>
         <label>Original videos per week<input name="cadence" type="number" required min="1" max="14" step="1" value="2"></label>
         <label class="full">Planning time zone<input name="timezone" required value="Asia/Karachi" placeholder="Asia/Karachi"></label>
-        <label>Monthly LLM token limit<input name="monthlyTokenLimit" type="number" required min="0" max="10000000" step="1" value="100000"><span class="hint">Shared by script and research jobs. Zero blocks generation.</span></label>
-        <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="8000" step="1" value="6000"></label>
-        <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="8000" step="1" value="4000"></label>
+        <label>Monthly LLM token limit<input name="monthlyTokenLimit" type="number" required min="0" max="100000000" step="1" value="1000000"><span class="hint">Shared by script and research jobs. Zero blocks generation.</span></label>
+        <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="400000" step="1" value="24000"><span class="hint">Grows automatically for a long video: a chosen length gets the room its script needs.</span></label>
+        <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="64000" step="1" value="12000"></label>
       </div>
       <details class="writing-voice"><summary>Writing voice <span class="hint">Optional. Claude writes in it; words the channel never uses block a script candidate.</span></summary>
         <div class="form-grid">
@@ -88,10 +88,11 @@
       <div class="form-grid">
         <label>Channel family<select name="familyId" required></select></label>
         <label>Content type<select name="kind"><option value="factual">Factual / educational</option><option value="fiction">Clearly labeled original fiction</option></select></label>
+        <label>Target length (minutes)<input name="targetMinutes" type="number" min="1" max="180" step="1" placeholder="Standard, about 6"><span class="hint">Long-form videos: any length from 1 to 180 minutes. About 150 spoken words a minute.</span></label>
         <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
         <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
         <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
-        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Claude candidate after reviewing it.</span><textarea name="script" maxlength="50000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
+        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Claude candidate after reviewing it.</span><textarea name="script" maxlength="300000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
       </div>
       <div class="section-heading"><h3>Evidence & source rights</h3><button class="button text-button" type="button" id="add-source">+ Add source</button></div>
       <div id="source-fields"></div>
@@ -126,7 +127,7 @@
         <label class="full">Delivery instructions<textarea name="instructions" maxlength="2000" rows="3" placeholder="Tone, cadence, emphasis and prohibited mannerisms."></textarea></label>
         <label class="full">Pronunciation lexicon <span class="hint">One per line: term =&gt; replacement | optional note</span><textarea name="lexicon" maxlength="20000" rows="5" placeholder="SQL => sequel | Channel standard"></textarea></label>
         <label>Monthly character limit<input name="monthlyCharacterLimit" type="number" min="1" max="100000000" step="1" value="100000" required></label>
-        <label>Per-audition character limit<input name="maxCharactersPerAudition" type="number" min="1" max="100000" step="1" value="12000" required></label>
+        <label>Per-audition character limit<input name="maxCharactersPerAudition" type="number" min="1" max="2000000" step="1" value="12000" required><span class="hint">A 30-minute narration is about 27,000 characters.</span></label>
         <label>Estimated cents per 1M characters<input name="priceCentsPerMillionCharacters" type="number" min="0" max="10000000" step="1" value="0" required></label>
         <label class="checkbox-label full"><input name="consentConfirmed" type="checkbox" required><span>I confirm the recorded owner or rights holder authorized this voice use.</span></label>
         <label class="checkbox-label full"><input name="commercialUseConfirmed" type="checkbox" required><span>I reviewed and confirmed commercial use for this exact voice and provider arrangement.</span></label>

@@ -24,17 +24,18 @@ const CAPTION_FIX = {
 // Kept honest on the page: what this review does not measure.
 const NOT_CHECKED = [
   'Text-safe areas are kept by the fixed graphic layouts (captions have their own band); they are not measured in pixels.',
+  'Claude\'s frame scan reads sampled frames of a 360p preview; its findings are notes to check, and a clean scan is not a guarantee.',
   'Facts, rights and how the narration sounds need your own judgement; nothing here approves them.',
   'Word times inside a caption are estimated from the narration’s pauses, not measured.',
 ];
 
-function build({render, result = null, integrity = [], edit = null, findings: editFindings = [], cues = null, urls = {}}) {
+function build({render, result = null, integrity = [], edit = null, findings: editFindings = [], cues = null, urls = {}, scan = null}) {
   const blockers = [], items = [];
   const block = (code, message, repair = null) => blockers.push({code, message, repair});
   const verdict = render.review || null;
   if (render.status !== 'completed' || !result) {
     block('not-rendered', 'This render has no finished output to review.');
-    return {schema: SCHEMA, renderId: render.id, status: 'blocked', verdict, verdictStale: false, blockers, findings: [], counts: count([]), checks: [], timeline: null, sheets: null, notChecked: NOT_CHECKED};
+    return {schema: SCHEMA, renderId: render.id, status: 'blocked', verdict, verdictStale: false, blockers, findings: [], counts: count([]), checks: [], timeline: null, sheets: null, scan: null, notChecked: NOT_CHECKED};
   }
   const toEditing = {room: 'editing', label: 'Open the Editing Room'};
   if (!render.current) block('out-of-date', 'The script, narration, visuals or edit changed after this render. Render the current edit and review that one.', toEditing);
@@ -74,9 +75,18 @@ function build({render, result = null, integrity = [], edit = null, findings: ed
         repair: group ? {room: 'editing', command: 'tl-caption', id: group.id, label: 'Correct the caption'} : toEditing});
     }
   }
+  // 4. Claude's frame scan of this render: review notes on what the frames show, each with its own frame.
+  if (scan?.complete) {
+    const groups = edit?.captions?.groups || [], graphicAt = t => edit?.graphics.find(item => item.status === 'accepted' && item.start / edit.fps <= t && (item.start + item.frames) / edit.fps > t);
+    scan.findings.forEach(item => {
+      const clip = clipAt(item.at), group = item.kind === 'caption' ? groups.find(entry => entry.start <= item.at && entry.end > item.at) : null, graphic = item.kind === 'graphic' ? graphicAt(item.at) : null;
+      items.push({severity: item.severity, source: 'claude', code: `claude-${item.kind}`, at: item.at, until: null, label: clip?.label || null, message: item.what, fix: item.fix || null, frame: {scanId: scan.id, id: item.frame},
+        repair: group ? {room: 'editing', command: 'tl-caption', id: group.id, label: 'Correct the caption'} : graphic ? {room: 'editing', command: 'tl-graphic', id: graphic.id, label: 'Change the graphic'} : clipRepair(clip)});
+    });
+  }
   items.sort((a, b) => (a.at ?? Infinity) - (b.at ?? Infinity) || SEVERITY[a.severity] - SEVERITY[b.severity]);
 
-  // 4. The aligned read: per narration sentence, what is said, shown as captions, cut and put on screen.
+  // 5. The aligned read: per narration sentence, what is said, shown as captions, cut and put on screen.
   const sheet = result.sheet;
   // A moment belongs to the last sentence that started before it, so pauses between sentences lose nothing.
   const rowOf = seconds => Math.max(0, cues.findLastIndex(cue => cue.start <= seconds + 0.001));
@@ -96,7 +106,8 @@ function build({render, result = null, integrity = [], edit = null, findings: ed
   const status = blockers.length ? 'blocked' : !verdict ? 'awaiting-verdict' : verdict.decision === 'passed' ? 'approved' : 'changes-requested';
   return {schema: SCHEMA, renderId: render.id, status, verdict, verdictStale: !!(blockers.length && verdict?.decision === 'passed'), blockers, findings: items, counts: count(items),
     checks: result.qc.map(({name, passed, detail}) => ({name, passed, detail})),
-    timeline, sheets: {overview: sheet ? {...sheet, url: urls.sheet || null} : null, hook: result.hook ? {...result.hook, url: urls.hook || null} : null}, notChecked: NOT_CHECKED};
+    timeline, sheets: {overview: sheet ? {...sheet, url: urls.sheet || null} : null, hook: result.hook ? {...result.hook, url: urls.hook || null} : null},
+    scan: scan ? {id: scan.id, status: scan.status, complete: scan.complete, frames: scan.frames, findings: scan.findings.length, batches: scan.batches, error: scan.error, model: scan.model, createdBy: scan.createdBy, updatedAt: scan.updatedAt, geometry: scan.geometry, sheets: scan.sheets} : null, notChecked: NOT_CHECKED};
 }
 const capital = value => value.charAt(0).toUpperCase() + value.slice(1);
 function count(items) {

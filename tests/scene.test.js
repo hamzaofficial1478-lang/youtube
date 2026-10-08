@@ -92,7 +92,7 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
   return {fetch: fetchImpl, calls};
 }
 
-function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true} = {}) {
+function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'scene-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
@@ -107,7 +107,7 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
   const ids = {pexels: make('pexels'), pixabay: make('pixabay'), openai: make('openai'), claude: make('claude')};
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
   const family = store.saveFamily({name: 'Money History', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format, monthlyTokenLimit: 500000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['@CoinOrigins']});
-  let content = store.saveContent({familyId: family.id, title: 'How promises became money', kind: 'fiction', angle: 'Follow invented market towns as they learn to record trust.', hook, script, sources: [], rightsConfirmed: true});
+  let content = store.saveContent({familyId: family.id, title: 'How promises became money', kind: 'fiction', angle: 'Follow invented market towns as they learn to record trust.', hook, script: scriptText, targetMinutes, sources: [], rightsConfirmed: true});
   store.reviewContent(content.id, {revision: content.revision, action: 'submit'});
   content = store.reviewContent(content.id, {revision: content.revision, action: 'approve'});
   let approval = null;
@@ -278,6 +278,39 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   assert.equal(interrupted.usage.status, 'unknown');
   assert.throws(() => failing.room.retryPlan(failed.job.id, {}), /Confirm the deliberate retry/);
   assert.equal(failing.room.retryPlan(failed.job.id, {confirmInterrupted: true}).status, 'queued');
+});
+
+test('a long script is planned in parts: each part covers its own sentences, and a bad part is asked again alone', async t => {
+  // A 14-minute draft: 180 sentences in 15 paragraphs, planned in three parts of 60.
+  const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
+  let broken = 2;
+  const network = fakeNetwork({claudePlan: input => {
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start += 2) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 1), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show the record keeping clearly.', onScreenText: '', shots: [{source: 'stock-video', query: 'clay tablet market', prompt: '', motion: 'static', notes: ''}]});
+    if (input.part?.index === broken) { broken = null; scenes.pop(); }
+    return {summary: `Part ${input.part?.index}`, scenes};
+  }});
+  const {room, content, ids, store, family} = setup(t, network, {scriptText: longScript, targetMinutes: 14});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  assert.deepEqual(queued.job.parts, {total: 3, done: 0});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'quality_failed');
+  assert.match(job.error, /Part 2 of 3 must cover sentences 61-120 exactly once/);
+  assert.deepEqual(job.parts, {total: 3, done: 1}, 'the good first part is kept');
+  const asked = () => network.calls.filter(call => call.path === '/v1/messages').map(call => JSON.parse(call.body.messages[0].content));
+  assert.deepEqual(asked().map(item => [item.part.index, item.part.of, item.part.firstSentence, item.part.lastSentence, item.sentences.length]), [[1, 3, 1, 60, 60], [2, 3, 61, 120, 60]]);
+  assert.equal(asked()[1].part.before, sentence(60), 'each part sees its neighbouring sentences for continuity');
+  assert.match(network.calls.find(call => call.path === '/v1/messages').body.system, /part 1 of 3 of one video/);
+  room.retryPlan(job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.deepEqual(asked().map(item => item.part.index), [1, 2, 2, 3], 'part 1 was not asked (or paid for) again');
+  const plan = latestManifest(room, content.id);
+  assert.equal(plan.plan.scenes.length, 90);
+  assert.deepEqual([plan.plan.scenes[0].sentenceStart, plan.plan.scenes.at(-1).sentenceEnd, plan.plan.scenes[0].purpose], [1, 180, 'hook']);
+  assert.equal(store.usageSummary(family.id).settledTokens, 4 * 13000, 'each call is settled once, with the attempt that made it');
 });
 
 test('edits create new revisions that keep stable shot IDs; refresh follows a new narration', t => {

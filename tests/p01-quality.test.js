@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const {Ai}=require('../ai');
-const {claudeMessage,isClaudeModel,claudeModel,claudeFetch,promptOf}=require('./fake-claude');
+const {claudeMessage,claudeStream,isClaudeModel,claudeModel,claudeFetch,promptOf}=require('./fake-claude');
 const assert=require('node:assert/strict');
 const {assessScriptQuality,scriptPolicy,wordCount}=require('../writer');
 const {Store,reviewIssues}=require('../store');
@@ -81,6 +81,41 @@ test('passing output settles usage and stores immutable quality evidence',async 
   assert.equal(state.usage[0].status,'settled');
   assert.equal(store.usageSummary(family.id).settledTokens,1400);
   assert.equal(store.content(content.id).script,content.script);
+});
+
+test('the owner chooses any long-form length: words, paragraphs, answer room and job limit scale with it',async t=>{
+  assert.deepEqual(scriptPolicy('long-form',30),{minWords:3375,targetMinWords:4050,targetMaxWords:4950,maxWords:5625,minParagraphs:30,maxCompletionTokens:17000,minutes:30});
+  assert.equal(scriptPolicy('long-form',90).maxCompletionTokens,35000,'a 90-minute script gets room for about 13,500 words');
+  assert.deepEqual(scriptPolicy('long-form',null),scriptPolicy('long-form'),'no chosen length keeps the standard policy');
+  assert.deepEqual(scriptPolicy('shorts',30),scriptPolicy('shorts'),'Shorts keep their own policy');
+  assert.throws(()=>scriptPolicy('long-form',0),/1-180 minutes/);
+  assert.throws(()=>scriptPolicy('long-form',181),/1-180 minutes/);
+  const long=(count,paragraphs)=>{const hook='This familiar system hides a surprising cost today.',per=Math.floor((count-8)/paragraphs);return {hook,script:[hook+' '+words(per,'p0'),...Array.from({length:paragraphs-2},(_,i)=>words(per,`p${i+1}x`)),words(count-8-per*(paragraphs-1),'end')].join('\n\n')};};
+  assert.equal(assessScriptQuality(long(4500,30),'long-form','en',null,30).passed,true,'a 30-minute script of 4,500 words passes');
+  assert.match(assessScriptQuality(long(1000,30),'long-form','en',null,30).issues.join(' '),/A 30-minute script must contain 3375-5625 words; received 1000/);
+  assert.equal(assessScriptQuality(long(4500,30),'long-form').passed,false,'the same words are too long for the standard length');
+  // Store: the length travels with the draft, into the prompt and the reservation; the answer is streamed.
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const family=store.saveFamily(familyInput({scriptTokenLimit:24000}));
+  assert.throws(()=>store.saveContent(contentInput(family.id,{targetMinutes:0})),/Target length in minutes must be a whole number from 1 to 180/);
+  const content=store.saveContent(contentInput(family.id,{targetMinutes:30}));
+  assert.equal(content.targetMinutes,30);
+  assert.equal(reviewIssues(content,'long-form').some(issue=>/30-minute script must contain/.test(issue)),true,'the review gate uses the chosen length');
+  const generated={...candidate(),...long(4500,30)},calls=[];
+  const slots=new ConnectorSlots(store,protector,async(url,init)=>{
+    if(isClaudeModel(url))return claudeModel(url);
+    const body=JSON.parse(init.body);calls.push(body);return claudeStream(generated,{input_tokens:3000,output_tokens:9000});
+  });
+  const connector=slots.save({name:'Long script',provider:'claude',notes:'Length test',key});await slots.test(connector.id,connector.revision);
+  const writer=new ScriptWriter(store,new Ai(slots));
+  const job=writer.queue(content.id,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision}),scope=JSON.parse(job.input);
+  assert.equal(scope.promptInput.content.targetMinutes,30);
+  assert.equal(scope.tokenLimit,17000+12000,'the job limit grows past the family default for a long video');
+  await writer.processNext();
+  assert.deepEqual([calls[0].max_tokens,calls[0].stream],[17000,true]);
+  assert.match(promptOf(calls[0])+calls[0].system,/runs about 30 minutes when read aloud, so it must contain 3375-5625 words/);
+  const saved=store.state().scriptCandidates[0];
+  assert.deepEqual([saved.status,saved.quality.passed,saved.quality.wordCount],['available',true,4500],JSON.stringify(saved.quality.issues));
 });
 
 test('short but schema-valid paid output is retained and cannot become usable',async t=>{

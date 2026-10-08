@@ -12,6 +12,8 @@ const {QuotaLedger} = require('../intel-sources');
 const VS = require('../visual-sources');
 const {SceneRoom, splitSentences, timeSentences} = require('../scene-room');
 const {RenderRoom} = require('../render-room');
+const {FrameScanner} = require('../frame-scan');
+const {ConnectorSlots} = require('../connectors');
 const {EditingRoom} = require('../editing-room');
 const {SkillsEngine} = require('../skills');
 const B = require('../editing-brain');
@@ -408,6 +410,33 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   const confirmations = {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, audioReviewed: true};
   assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, audioReviewed: false}}), /listened/);
   if (criticals) assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations}), /critical finding/);
+  assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, watchedFully: false, flaggedReviewed: true, critiqueAccepted: true}}), /watched the whole proxy/, 'without a frame scan the owner watches it all');
+  // P09b Claude frame scan (a stand-in Claude): sheets cut from the real render, one answer per six sheets, findings in the review.
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude-1', 'claude-1', JSON.stringify({name: 'claude-1', provider: 'claude-code', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), null);
+  const asked = [];
+  const scanner = new FrameScanner(store, renders, new ConnectorSlots(store, {transform: (op, input) => input}), {complete: async ({task, messages}) => {
+    const blocks = messages[1].content, first = blocks[0].text.match(/^F\d+/m)[0];
+    asked.push({task, images: blocks.filter(block => block.type === 'image').length, notes: blocks[0].text});
+    return {content: JSON.stringify({findings: asked.length === 1 ? [{frame: first, severity: 'critical', kind: 'picture', what: 'The opening frame is a flat test pattern.', fix: 'Replace the first shot.'}] : []}), usage: {promptTokens: 9000, completionTokens: 300, totalTokens: 9300}, model: 'claude-opus-5-5', provider: 'claude-code'};
+  }});
+  renders.frameScanner = scanner;
+  assert.throws(() => scanner.queue(queued.id, {connector: {id: 'claude-1', revision: 2}, requestedBy: 'Owner'}), /missing, changed or not tested/);
+  const scan = scanner.queue(queued.id, {connector: {id: 'claude-1', revision: 1}, requestedBy: 'Owner'});
+  assert.throws(() => scanner.queue(queued.id, {connector: {id: 'claude-1', revision: 1}, requestedBy: 'Owner'}), /already scanning/);
+  const scanned = await scanner.processNext();
+  assert.equal(scanned?.status, 'completed', JSON.stringify(scanner.publicScan(scanner.row(scan.id)).error));
+  assert.equal(asked.length, scanned.batches.total);
+  assert.ok(asked.every(call => call.task === 'review' && call.images >= 1));
+  assert.match(asked[0].notes, /F1 at 0:00\.0: narration: "[^"]+"; .*shot /);
+  assert.equal(scanned.sheets.length, Math.ceil(scanned.frames / 16));
+  assert.deepEqual([scanned.geometry.width, scanned.geometry.height], [740, 1300], 'vertical tiles for a Short');
+  assert.match(scanner.sheetFile(scan.id, 1), /sheet-001\.jpg$/);
+  assert.throws(() => scanner.queue(queued.id, {connector: {id: 'claude-1', revision: 1}, requestedBy: 'Owner'}), /already scanned/);
+  const scanUsage = store.db.prepare('SELECT * FROM intelligence_usage WHERE job_id=?').get(scan.id);
+  assert.deepEqual([scanUsage.kind, scanUsage.status, scanUsage.total_tokens], ['frame_scan', 'settled', 9300 * asked.length]);
+  const withScan = renders.qcReport(queued.id), flagged = withScan.findings.find(item => item.source === 'claude');
+  assert.deepEqual([flagged.severity, flagged.at, flagged.repair.command, flagged.frame.scanId], ['critical', 0, 'tl-clip', scan.id]);
+  assert.equal(withScan.scan.complete, true);
   const renderedFile = renders.file(queued.id, 'video').file, original = fs.readFileSync(renderedFile), changed = Buffer.from(original);
   changed[changed.length - 1] ^= 1;
   fs.writeFileSync(renderedFile, changed);
@@ -415,10 +444,12 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.deepEqual(renders.qcReport(queued.id).blockers.map(item => item.code), ['file-changed']);
   assert.throws(() => renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}}), /missing or changed/);
   fs.writeFileSync(renderedFile, original);
-  const passed = renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, critiqueAccepted: true}});
+  // After the scan, checking every flagged moment stands in for watching it all (the owner's choice, recorded).
+  const passed = renders.review(queued.id, {decision: 'pass', reviewer: 'Owner', confirmations: {...confirmations, watchedFully: false, flaggedReviewed: true, critiqueAccepted: true}});
   assert.equal(passed.review.decision, 'passed');
   assert.equal(passed.current, true);
-  assert.deepEqual(passed.review.report.counts, qcReport.counts, 'the verdict records what the review showed');
+  assert.deepEqual([passed.review.confirmations.flaggedReviewed, passed.review.confirmations.watchedFully], [true, false]);
+  assert.deepEqual(passed.review.report.counts, withScan.counts, 'the verdict records what the review showed');
   assert.equal(renders.qcReport(queued.id).status, 'approved');
   // A newer edit makes the rendered one out of date.
   const waiting = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: r5.id});

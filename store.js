@@ -77,7 +77,7 @@ function familyInput(input) {
     writingVoice: writingVoiceInput(input.writingVoice),
     tokenBudget:{
       monthlyLimit:integer(input.monthlyTokenLimit??1000000,0,100000000,'Monthly token limit'),
-      scriptJobLimit:integer(input.scriptTokenLimit??24000,1000,64000,'Script job token limit'),
+      scriptJobLimit:integer(input.scriptTokenLimit??24000,1000,400000,'Script job token limit'),
       researchJobLimit:integer(input.researchTokenLimit??12000,1000,64000,'Research job token limit')
     },
   };
@@ -122,7 +122,9 @@ function contentInput(input) {
       permission: choice(source.permission, ['unreviewed', 'permitted'], 'source permission'), notes: text(source.notes || '', 'Source notes', 0, 3000)};
   });
   return {title, kind, angle: text(input.angle || '', 'Original angle', 0, 3000), hook: text(input.hook || '', 'Hook', 0, 1000),
-    script: text(input.script || '', 'Primary-language script', 0, 50000), sources, rightsConfirmed: input.rightsConfirmed === true};
+    script: text(input.script || '', 'Primary-language script', 0, 300000), sources, rightsConfirmed: input.rightsConfirmed === true,
+    // The owner's chosen length for a long-form video (minutes); empty keeps the standard length.
+    targetMinutes: input.targetMinutes === undefined || input.targetMinutes === null || input.targetMinutes === '' ? null : integer(Number(input.targetMinutes), 1, 180, 'Target length in minutes')};
 }
 
 function researchEvidenceInput(input,defaults={}) {
@@ -150,14 +152,14 @@ function voiceProfileInput(input) {
     model:providerId(input.model,'Voice model'),voiceId:providerId(input.voiceId,'Voice ID'),voiceVersion:text(input.voiceVersion||'provider-current','Voice version',1,120),
     rights:{ownershipBasis:choice(input.ownershipBasis,['provider_stock_voice','self_owned_voice','licensed_custom_voice'],'voice ownership basis'),rightsHolder:text(input.rightsHolder,'Voice rights holder',2,160),consentConfirmed:true,commercialUseConfirmed:true,evidenceReference:text(input.evidenceReference,'Consent or license evidence reference',10,1000),termsReviewedAt:isoDate(input.termsReviewedAt,'Voice terms review date')},
     delivery:{pace,energy:integer(input.energy,0,100,'Energy'),emotion:choice(input.emotion,['neutral','warm','serious','energetic','calm','dramatic'],'emotion'),pauseScale:boundedNumber(input.pauseScale,.5,2,'Pause scale'),emphasis:integer(input.emphasis,0,100,'Emphasis'),instructions:text(input.instructions||'','Delivery instructions',0,2000),stability:boundedNumber(input.stability??.5,0,1,'Stability'),similarity:boundedNumber(input.similarity??.75,0,1,'Similarity'),style:boundedNumber(input.style??0,0,1,'Style')},
-    lexicon:{entries},budget:{monthlyCharacterLimit:integer(input.monthlyCharacterLimit,1,100000000,'Monthly voice character limit'),maxCharactersPerAudition:integer(input.maxCharactersPerAudition,1,100000,'Per-audition character limit'),priceCentsPerMillionCharacters:integer(input.priceCentsPerMillionCharacters??0,0,10000000,'Voice price per million characters')}
+    lexicon:{entries},budget:{monthlyCharacterLimit:integer(input.monthlyCharacterLimit,1,100000000,'Monthly voice character limit'),maxCharactersPerAudition:integer(input.maxCharactersPerAudition,1,2000000,'Per-audition character limit'),priceCentsPerMillionCharacters:integer(input.priceCentsPerMillionCharacters??0,0,10000000,'Voice price per million characters')}
   };
 }
 function reviewIssues(content,format='long-form',locale='en') {
   const issues = [];
   if (content.angle.length < 20) issues.push('Explain the original angle in at least 20 characters.');
   if (content.hook.length < 10) issues.push('Add a specific opening hook.');
-  const quality=assessScriptQuality({script:content.script,hook:content.hook},format,locale);
+  const quality=assessScriptQuality({script:content.script,hook:content.hook},format,locale,null,content.targetMinutes??null);
   issues.push(...quality.issues);
   if (!content.rightsConfirmed) issues.push('Confirm that you reviewed factual accuracy, originality and media/story rights.');
   if (content.kind === 'factual' && !content.sources.length) issues.push('A factual draft needs at least one reviewed source.');
@@ -357,14 +359,14 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Claude connection.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before generating.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
       // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
       const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
       // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
-      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
+      const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:f.tokenBudget.scriptJobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:jobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
       const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
@@ -387,11 +389,11 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Claude connection.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before retrying.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+      const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
-      const {promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,f.tokenBudget.scriptJobLimit,policy.maxCompletionTokens);
+      const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:f.tokenBudget.scriptJobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:jobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
       if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
@@ -448,7 +450,7 @@ class Store {
         this.db.prepare('UPDATE llm_usage SET status=?,prompt_tokens=?,completion_tokens=?,total_tokens=?,updated_at=? WHERE job_id=?').run(status==='usage_unknown'?'unknown':status,Number.isSafeInteger(prompt)?prompt:null,Number.isSafeInteger(completion)?completion:null,validTotal?total:null,at,jobId);
         this.db.prepare('UPDATE jobs SET status=?,error=?,updated_at=? WHERE id=?').run(status,message,at,jobId);return null;
       }
-      const quality=result.quality||assessScriptQuality(result.candidate,f.format,f.primaryLocale,f.writingVoice),candidateStatus=quality.passed?'available':'quality_failed',jobStatus=quality.passed?'completed':'quality_failed',id=randomUUID();
+      const quality=result.quality||assessScriptQuality(result.candidate,f.format,f.primaryLocale,f.writingVoice,c.targetMinutes??null),candidateStatus=quality.passed?'available':'quality_failed',jobStatus=quality.passed?'completed':'quality_failed',id=randomUUID();
       this.db.prepare("INSERT INTO script_candidates(id,job_id,content_id,family_id,content_revision,family_revision,connector_id,connector_revision,language,locale,prompt_version,status,payload,quality,usage,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").run(id,jobId,c.id,f.id,c.revision,f.revision,scope.connectorId,scope.connectorRevision,channelLanguage(f.primaryLocale),f.primaryLocale,scope.promptVersion,candidateStatus,JSON.stringify(result.candidate),JSON.stringify(quality),JSON.stringify(usage),at);
       this.db.prepare("UPDATE llm_usage SET status='settled',prompt_tokens=?,completion_tokens=?,total_tokens=?,updated_at=? WHERE job_id=?").run(prompt,completion,total,at,jobId);
       this.db.prepare('UPDATE jobs SET status=?,result=?,error=?,updated_at=? WHERE id=?').run(jobStatus,JSON.stringify({candidateId:id,usage,quality}),quality.passed?null:quality.issues.join(' '),at,jobId);
@@ -461,7 +463,7 @@ class Store {
   failScriptJob(jobId,message='Claude generation failed. Review the connector and retry deliberately.',{usageUnknown=false}={}) {
     return this.transaction(()=>{const at=now();this.db.prepare("UPDATE jobs SET status=?,error=?,updated_at=? WHERE id=? AND status='running'").run(usageUnknown?'interrupted':'failed',message,at,jobId);this.db.prepare(`UPDATE llm_usage SET status=?,reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END,updated_at=? WHERE job_id=?`).run(usageUnknown?'unknown':'released',usageUnknown?1:0,at,jobId);});
   }
-  scriptCandidate(id){const row=this.db.prepare('SELECT * FROM script_candidates WHERE id=?').get(id);requireValue(row,'Script candidate not found.',404);const payload=JSON.parse(row.payload),family=this.family(row.family_id),quality=assessScriptQuality(payload,family.format,row.locale,family.writingVoice),job=this.db.prepare('SELECT status FROM jobs WHERE id=?').get(row.job_id),status=quality.passed&&row.locale===family.primaryLocale&&row.status==='available'&&job?.status==='completed'?'available':'quality_failed';return {id:row.id,jobId:row.job_id,contentId:row.content_id,familyId:row.family_id,contentRevision:row.content_revision,familyRevision:row.family_revision,connectorId:row.connector_id,connectorRevision:row.connector_revision,language:row.language,locale:row.locale,promptVersion:row.prompt_version,status,payload,quality,usage:JSON.parse(row.usage),createdAt:row.created_at};}
+  scriptCandidate(id){const row=this.db.prepare('SELECT * FROM script_candidates WHERE id=?').get(id);requireValue(row,'Script candidate not found.',404);const payload=JSON.parse(row.payload),family=this.family(row.family_id),job=this.db.prepare('SELECT status,input FROM jobs WHERE id=?').get(row.job_id),minutes=(()=>{try{return JSON.parse(job.input).promptInput?.content?.targetMinutes??null;}catch{return null;}})(),quality=assessScriptQuality(payload,family.format,row.locale,family.writingVoice,minutes),status=quality.passed&&row.locale===family.primaryLocale&&row.status==='available'&&job?.status==='completed'?'available':'quality_failed';return {id:row.id,jobId:row.job_id,contentId:row.content_id,familyId:row.family_id,contentRevision:row.content_revision,familyRevision:row.family_revision,connectorId:row.connector_id,connectorRevision:row.connector_revision,language:row.language,locale:row.locale,promptVersion:row.prompt_version,status,payload,quality,usage:JSON.parse(row.usage),createdAt:row.created_at};}
   scriptCandidates(){return this.db.prepare('SELECT id FROM script_candidates ORDER BY created_at DESC,rowid DESC').all().map(row=>this.scriptCandidate(row.id));}
   queueResearchBrief(familyId,input){
     object(input);return this.transaction(()=>{

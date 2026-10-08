@@ -67,3 +67,34 @@ Same endpoint and form as before (`POST /api/renders/:id/review`), now opened fr
 - for a failed render check, `qcAccepted` as before.
 
 The verdict records the review's counts it was given against.
+
+## 4. Claude frame scan (0.17.0)
+
+Room 08 → **Claude checks every frame first** (`frame-scan.js`). Claude looks at the finished render so that
+you only check the moments it, the render checks, the editor and the caption checks flagged.
+
+- **What it reads**:
+  - a frame from the middle of every clip and every accepted graphic;
+  - every half second of the first 5 seconds (the hook);
+  - fill-in frames so no gap is longer than about 4 seconds;
+  - the last frame.
+
+  Frames are cut from the real render with the pinned FFmpeg into contact sheets of 16 (4×4, 320×180 tiles; 180×320 on Shorts). Each frame is listed with what the narration says, the caption on screen, the shot and any graphic there.
+- **What it reports**: only concrete, visible problems:
+  - picture (black, glitched, stretched, distorted AI images);
+  - mismatch with the narration;
+  - on-screen text;
+  - captions;
+  - graphics that disagree with the narration;
+  - repeated shots;
+  - rights (watermarks, logos, burned-in subtitles, real people).
+
+  Each problem has a frame, a severity and a one-line fix. Taste is not reported. The narration and caption text is treated as untrusted data.
+- **Cost and control**:
+  - Six sheets (96 frames) go into one Claude answer, which reserves 23,200 tokens from the family's monthly limit before it starts; a 30-minute video is about six answers.
+  - It uses the main model (Opus 5.5), on the subscription or the API key.
+  - Nothing is retried by itself. A finished answer is kept, so a retry asks only for the missing ones.
+  - Images go to the Claude Code app as one stream-json message, still with no tools.
+- **Automatic**: the owner can switch on "scan every new render" per family, with a named setting. Each scan still reserves tokens and stops at the monthly limit.
+- **In the review**: findings are listed as "Claude frame scan", with their frame thumbnail and a repair link (the clip, the caption or the graphic at that moment). They are notes to check, not an approval.
+- **Verdict**: once a render has a completed scan, the owner may confirm "I checked every moment Claude and the checks flagged" instead of "I watched the whole render" (owner decision, 2026-10-08). The narration listening confirmation stays mandatory for a narration finish. Blockers still cannot be accepted.

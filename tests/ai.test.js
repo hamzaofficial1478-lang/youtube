@@ -5,14 +5,14 @@ const fs = require('node:fs');
 const {Ai, AiError, ClaudeApi, ClaudeCode, DEFAULT_MODELS, TASK_ROLE} = require('../ai');
 const {Store} = require('../store');
 const {ConnectorSlots} = require('../connectors');
-const {claudeMessage, isClaudeMessages, isClaudeModel, claudeModel, fakeClaudeCode} = require('./fake-claude');
+const {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, fakeClaudeCode} = require('./fake-claude');
 
 const protector = {transform: (op, input) => Buffer.from([...input].reverse())};
 const KEY = 'sk-ant-api03-test-key-0000000000';
 
 test('the API-key connection calls Claude through the SDK with the chosen model, effort and no retries', async () => {
   const calls = [];
-  const fetchImpl = async (url, init) => { calls.push({url: String(url), headers: init.headers, body: JSON.parse(init.body)}); return claudeMessage({ok: true}, {input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 20}, {model: 'claude-opus-5-5'}); };
+  const fetchImpl = async (url, init) => { const body = JSON.parse(init.body); calls.push({url: String(url), headers: init.headers, body}); return (body.stream ? claudeStream : claudeMessage)({ok: true}, {input_tokens: 100, output_tokens: 40, cache_read_input_tokens: 20}, {model: 'claude-opus-5-5'}); };
   const result = await new ClaudeApi(KEY, fetchImpl).complete({model: 'claude-opus-5-5', system: 'Return JSON only.', prompt: 'Data', maxTokens: 50000, effort: 'high'});
   assert.equal(result.content, '{"ok":true}');
   assert.deepEqual(result.usage, {promptTokens: 120, completionTokens: 40, totalTokens: 160});
@@ -22,13 +22,14 @@ test('the API-key connection calls Claude through the SDK with the chosen model,
   assert.equal(call.headers.get('x-api-key'), KEY, 'the key travels in its header only');
   assert.match(call.headers.get('anthropic-beta'), /server-side-fallback-2026-07-01/);
   assert.equal(call.body.fallbacks, 'default', 'a refusal is re-run server side and the served model is recorded');
-  assert.equal(call.body.max_tokens, 16000, 'non-streaming requests stay inside the SDK timeout');
+  assert.deepEqual([call.body.max_tokens, call.body.stream], [50000, true], 'a long answer (a 30-minute script) is streamed instead of capped');
   assert.deepEqual(call.body.output_config, {effort: 'high'});
   assert.equal(call.body.thinking, undefined, 'Opus 5.5 always thinks adaptively; it takes no thinking setting');
   assert.equal(call.body.system, 'Return JSON only.');
   // Opus 4.8 must be asked to think, and takes no fallback beta.
   calls.length = 0;
   await new ClaudeApi(KEY, fetchImpl).complete({model: 'claude-opus-4-8', system: '', prompt: 'Data', maxTokens: 2000, effort: 'medium'});
+  assert.equal(calls[0].body.stream, undefined, 'short answers come back in one response');
   assert.deepEqual(calls[0].body.thinking, {type: 'adaptive'});
   assert.equal(calls[0].body.fallbacks, undefined);
   // Failures are named and never retried.

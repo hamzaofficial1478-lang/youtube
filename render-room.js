@@ -387,7 +387,8 @@ class RenderRoom {
       // 5. Contact sheet for review.
       this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);
       let every = qc.contactSheetEverySeconds;
-      if (expected / every > 60) every = Math.ceil(expected / 60);
+      // Up to 300 frames, so even a long video has a frame every few seconds (and each sentence a close thumbnail).
+      if (expected / every > 300) every = Math.ceil(expected / 300);
       const count = Math.max(1, Math.ceil(expected / every)), cols = Math.min(scope.format === 'shorts' ? 8 : 6, count), rows = Math.ceil(count / cols);
       const sheet = path.join(work, 'contact-sheet.jpg');
       await exec('contact sheet', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', out, '-vf', `fps=1/${every},scale=${scope.format === 'shorts' ? 120 : 240}:-2,tile=${cols}x${rows}:padding=4:margin=4`, '-frames:v', '1', '-q:v', '4', '-y', sheet], Math.max(60000, plan.totalFrames * 50));
@@ -435,6 +436,7 @@ class RenderRoom {
         this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
         this.store.event(`Proxy render ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
       });
+      this.onRendered?.(job.id);
       return this.publicJob(this.row(job.id));
     } catch (error) {
       const cancelled = !!error.cancelled || !!this.current.cancelledBy;
@@ -463,7 +465,9 @@ class RenderRoom {
         requireValue(job.current, 'The visuals or narration changed after this render. Render again before passing the proof.', 409);
         const result = JSON.parse(row.result);
         const confirmations = object(input.confirmations, 'Confirmations');
-        requireValue(confirmations.watchedFully === true, 'Confirm that you watched the whole proxy with sound.');
+        // After Claude scanned every sampled frame, checking each flagged moment can stand in for watching it all.
+        const scanned = !!this.frameScanner?.latestFor(id)?.complete;
+        requireValue(confirmations.watchedFully === true || (scanned && confirmations.flaggedReviewed === true), scanned ? 'Confirm that you checked every moment Claude and the checks flagged, or that you watched the whole render with sound.' : 'Confirm that you watched the whole proxy with sound.');
         requireValue(confirmations.styleMatches === true, 'Confirm that motion, pacing and transitions match the assigned style.');
         requireValue(confirmations.syncReviewed === true, 'Confirm that the visuals stay in step with the narration.');
         if (!result.qcPassed) requireValue(confirmations.qcAccepted === true, 'Accept the technical QC findings or fix them first.');
@@ -477,8 +481,8 @@ class RenderRoom {
         const report = this.qcReport(id);
         requireValue(!report.blockers.length, report.blockers[0]?.message, 409);
         const criticals = report.findings.filter(item => item.severity === 'critical' && item.source !== 'render').length;
-        if (criticals) requireValue(confirmations.critiqueAccepted === true, `Accept the editor's ${criticals} critical finding${criticals === 1 ? '' : 's'} or fix them in the edit first.`);
-        review = {...review, confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, audioReviewed: scope.edit?.timeline.audio ? true : null, qcAccepted: result.qcPassed ? null : true, critiqueAccepted: criticals ? true : null},
+        if (criticals) requireValue(confirmations.critiqueAccepted === true, `Accept the ${criticals} critical finding${criticals === 1 ? '' : 's'} from the editor, the caption checks and Claude, or fix them first.`);
+        review = {...review, confirmations: {watchedFully: confirmations.watchedFully === true, flaggedReviewed: confirmations.flaggedReviewed === true && scanned ? true : null, styleMatches: true, syncReviewed: true, audioReviewed: scope.edit?.timeline.audio ? true : null, qcAccepted: result.qcPassed ? null : true, critiqueAccepted: criticals ? true : null},
           report: {schema: report.schema, counts: report.counts, checks: report.checks.length}};
       }
       this.db.prepare('UPDATE render_jobs SET review=?, updated_at=? WHERE id=?').run(JSON.stringify(review), now(), id);
@@ -506,7 +510,8 @@ class RenderRoom {
       findings = JSON.parse(this.editing.revisionRow(scope.edit.revisionId).critique).findings;
       if (job.current) cues = this.editing.cues(this.editing.inputs(this.store.content(row.content_id)));
     }
-    return {...Review.build({render: {id: row.id, status: row.status, current: job.current, review: job.review}, result, integrity, edit: scope.edit?.timeline || null, findings, cues, urls: {sheet: job.result?.sheetUrl, hook: job.result?.hookUrl}}),
+    const scan = this.frameScanner?.latestFor(row.id) || null;
+    return {...Review.build({render: {id: row.id, status: row.status, current: job.current, review: job.review}, result, integrity, edit: scope.edit?.timeline || null, findings, cues, urls: {sheet: job.result?.sheetUrl, hook: job.result?.hookUrl}, scan}),
       contentId: row.content_id, editRevision: scope.edit ? {id: scope.edit.revisionId, revision: scope.edit.revision} : null, videoUrl: job.result?.videoUrl || null, audio: !!scope.edit?.timeline.audio};
   }
   file(id, kind) {

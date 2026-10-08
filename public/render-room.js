@@ -99,7 +99,10 @@ document.getElementById('render-form').addEventListener('submit', event => {
     if (kind === 'check') { const report = await api('/api/render-readiness', {requestedBy: person}); message = report.passed ? `FFmpeg ${report.ffmpeg.version} passed every check.` : `The check found ${report.issues.length} issue(s).`; return; }
     if (kind === 'pin') { await api('/api/render-pins', {readinessId: data.readinessId, pinnedBy: person, reason: value('reason')}); message = 'Build pinned for rendering.'; return; }
     if (kind === 'start') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = 'Proxy render queued.'; return; }
-    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), audioReviewed: checked('audioReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
+    if (kind === 'scan') { await api(`/api/renders/${data.id}/frame-scan`, {requestedBy: person, connector: data.connector, again: data.again}); message = 'Claude frame scan queued.'; return; }
+    if (kind === 'scan-retry') { await api(`/api/frame-scans/${data.scanId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Frame scan requeued.'; return; }
+    if (kind === 'scan-auto') { await api(`/api/families/${data.familyId}/frame-scan-settings`, {updatedBy: person, auto: data.auto, connector: data.connector}); message = data.auto ? 'Every new render will be scanned by Claude.' : 'Automatic scan switched off.'; return; }
+    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), flaggedReviewed: checked('flaggedReviewed'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), audioReviewed: checked('audioReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
     throw new Error('Unknown form.');
   }, () => message);
 });

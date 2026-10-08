@@ -16,11 +16,14 @@ const MODELS = Object.freeze({'claude-opus-5-5': 'Claude Opus 5.5', 'claude-opus
 const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-opus-4-8'});
 // Owner decision 2026-10-06: Opus 5.5 writes scripts and makes the editing, visual and niche decisions;
 // Opus 4.8 does the rest.
-const TASK_ROLE = Object.freeze({script: 'main', scenes: 'main', niche: 'main', editing: 'main', research: 'support', competitors: 'support'});
+const TASK_ROLE = Object.freeze({script: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', research: 'support', competitors: 'support'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
-const API_MAX_TOKENS = 16000; // non-streaming requests stay well inside the SDK's request timeout
-const CLI_TIMEOUT_MS = 15 * 60 * 1000;
-const MAX_REPLY_BYTES = 4 * 1024 * 1024;
+// Answers up to this size come back in one response; longer ones (a 30-minute script) are streamed, so the
+// request never meets the SDK's timeout for long non-streaming calls.
+const NON_STREAMING_MAX_TOKENS = 16000;
+// Long answers take longer: the Claude Code app gets 15 minutes, or about 40 ms per allowed output token.
+const cliTimeoutMs = maxTokens => Math.max(15 * 60 * 1000, maxTokens * 40);
+const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 
 class AiError extends Error {
   constructor(message, status = 502) { super(message); this.status = status; }
@@ -33,12 +36,14 @@ function findClaudeCode() {
   return candidates.find(file => { try { return !!file && fs.statSync(file).isFile(); } catch { return false; } }) || null;
 }
 
-// Rooms build OpenAI-style message lists; Claude takes one system prompt and the user turn.
+// Rooms build OpenAI-style message lists; Claude takes one system prompt and the user turn. A user turn may
+// carry content blocks (images for the frame scan); then the prompt is the block list.
 function splitMessages(messages) {
   if (!Array.isArray(messages) || !messages.length) throw new AiError('The AI request is empty.', 400);
   const system = messages.filter(item => item.role === 'system').map(item => item.content).join('\n\n');
-  const prompt = messages.filter(item => item.role !== 'system').map(item => item.content).join('\n\n');
-  if (!prompt) throw new AiError('The AI request has no question.', 400);
+  const turns = messages.filter(item => item.role !== 'system').map(item => item.content);
+  const prompt = turns.some(Array.isArray) ? turns.flatMap(item => (Array.isArray(item) ? item : [{type: 'text', text: String(item)}])) : turns.join('\n\n');
+  if (!prompt.length) throw new AiError('The AI request has no question.', 400);
   return {system, prompt};
 }
 // Replies are asked for as JSON only; a fenced block is accepted, anything else is rejected by the caller.
@@ -60,7 +65,7 @@ class ClaudeApi {
   }
   async complete({model, system, prompt, maxTokens, effort, onStart = () => {}}) {
     const request = {
-      model, max_tokens: Math.min(maxTokens, API_MAX_TOKENS), messages: [{role: 'user', content: prompt}],
+      model, max_tokens: maxTokens, messages: [{role: 'user', content: prompt}],
       ...(system ? {system} : {}),
       // Opus 4.8 thinks only when asked; Opus 5.5 and Sonnet 5.5 always think adaptively. Effort sets depth.
       ...(model === 'claude-opus-4-8' ? {thinking: {type: 'adaptive'}} : {}),
@@ -71,9 +76,8 @@ class ClaudeApi {
       onStart();
       // Refusal fallback (server side): a policy decline is re-run on a fallback model inside the same call;
       // the served model is recorded with the result, so nothing switches silently.
-      response = model === 'claude-opus-4-8'
-        ? await this.client.messages.create(request)
-        : await this.client.beta.messages.create({...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'});
+      const [api, params] = model === 'claude-opus-4-8' ? [this.client.messages, request] : [this.client.beta.messages, {...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'}];
+      response = maxTokens > NON_STREAMING_MAX_TOKENS ? await api.stream(params).finalMessage() : await api.create(params);
     } catch (error) {
       if (error instanceof Anthropic.AuthenticationError) throw new AiError('Claude rejected the API key. Check it in Connections.', 401);
       if (error instanceof Anthropic.RateLimitError) throw new AiError('Claude is rate limiting this key. Wait, then retry deliberately.', 429);
@@ -109,20 +113,22 @@ class ClaudeCode {
     fs.writeFileSync(systemFile, system || 'Follow the user message exactly.');
     const env = {...process.env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens)};
     delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; // the subscription login, never a stray key
-    const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', '--output-format', 'json', '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
+    // Images travel as one stream-json user message (still no tools); plain text keeps the simple JSON mode.
+    const blocks = Array.isArray(prompt);
+    const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', ...(blocks ? ['--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json']), '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
     return new Promise((resolve, reject) => {
       const done = (error, value) => { clearTimeout(timer); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
       let child;
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Claude Code app could not be started.', 503)); }
-      const timer = setTimeout(() => { child.kill(); }, CLI_TIMEOUT_MS);
+      const timer = setTimeout(() => { child.kill(); }, cliTimeoutMs(maxTokens));
       let out = '', bytes = 0;
       child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); });
       child.stderr.on('data', () => {});
       child.on('error', () => done(new AiError('The Claude Code app could not be started.', 503)));
       child.on('close', code => {
         let reply;
-        try { reply = JSON.parse(out); } catch { return done(new AiError(bytes > MAX_REPLY_BYTES ? 'Claude Code returned too much output.' : code === null ? 'Claude Code took too long and was stopped. Its usage may still count.' : 'Claude Code returned no readable answer. Check that it is logged in to your subscription.', 502)); }
+        try { reply = blocks ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(new AiError(bytes > MAX_REPLY_BYTES ? 'Claude Code returned too much output.' : code === null ? 'Claude Code took too long and was stopped. Its usage may still count.' : 'Claude Code returned no readable answer. Check that it is logged in to your subscription.', 502)); }
         if (reply.is_error || reply.subtype !== 'success') {
           const said = String(reply.result || '');
           if (/output token maximum/i.test(said)) return done(new AiError('Claude needed more room than this job allows. Raise the family token limit for this kind of job.', 413));
@@ -136,7 +142,7 @@ class ClaudeCode {
         done(null, value);
       });
       child.stdin.on('error', () => {});
-      child.stdin.end(prompt);
+      child.stdin.end(blocks ? `${JSON.stringify({type: 'user', message: {role: 'user', content: prompt}})}\n` : prompt);
     });
   }
 }
@@ -193,4 +199,4 @@ class Ai {
   }
 }
 
-module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, MODELS, DEFAULT_MODELS, TASK_ROLE, EFFORT, findClaudeCode, splitMessages, jsonText};
+module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, MODELS, DEFAULT_MODELS, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};

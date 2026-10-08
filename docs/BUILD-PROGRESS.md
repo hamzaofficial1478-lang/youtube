@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-08. Current application: 0.16.0. Narration-only finishing is implemented in Room 07, the owner can correct caption wording and download WebVTT, and Room 08 Review & QC reviews every render; the current Claude direction is preserved. Editing, animated graphics, captions and proxy renders already work locally. P07 and full P08 remain partial; final masters and publishing are not enabled.
+Last updated: 2026-10-08. Current application: 0.17.0. Narration-only finishing is implemented in Room 07, the owner can correct caption wording and download WebVTT, Room 08 Review & QC reviews every render with Claude scanning every frame first, and videos can be any length (1-180 minutes); the current Claude direction is preserved. Editing, animated graphics, captions and proxy renders already work locally. P07 and full P08 remain partial; final masters and publishing are not enabled.
 
 ## Resume here
 
@@ -90,7 +90,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [x] **S02 YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice** (done) - Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks.
 - [ ] **P07 Captions & Localization Room** (testing) - Version 0.14 (2026-10-06): every new edit carries a caption track (captions.js): words timed inside the narration's measured sentence windows with clause pauses anchored at commas; phrases split into the fewest even captions (never ending on a weak word); 2 lines x 42 characters for long-form, rate-sized groups for Shorts; scarce inline emphasis on figures and negations. Burned in as the top ASS layer (bottom band on 16:9, above the Shorts buttons on 9:16, clearing for full-screen graphics), SRT download per edit revision, on/off as an owner change, caption QC in the critic. 7 caption tests plus render checks; full suite 181/181 on Node 24.18.1 with FFmpeg 8.1.2 and Edge 154. 0.15.1 (2026-10-08): owner caption corrections as the revisioned set-caption op (timing fixed, narration words kept for coverage QC and reset, *word* emphasis, critic nitpick) and a WebVTT download beside the SRT; full suite 192/192, browser check of correct/save/reset/download on a scratch workspace.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
-- [ ] **P09 Review & QC Room with video intelligence** (testing) - 0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md.
+- [ ] **P09 Review & QC Room with video intelligence** (testing) - 0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md. 0.17.0: Claude frame scan (frame-scan.js): frames at every clip, graphic and hook half-second, contact sheets from the pinned FFmpeg, per-answer token reservation, kept answers, findings with frames and repair links in the review, optional named per-family automatic scan; after a completed scan the verdict may confirm flagged moments instead of a full watch. Videos of any length: targetMinutes 1-180 scales the script, job token limit, streamed answers, scene planning in parts, narration and render limits; a 25.5-minute synthetic edit rendered and reviewed with every check passing.
 - [ ] **P10 Packaging Room** (planned) - Create immutable reviewable thumbnail, title, description and disclosure variants with rights/provenance evidence, without changing live metadata.
 - [ ] **P11 Final render, recovery and primary master approval** (planned) - Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master.
 
@@ -121,6 +121,49 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-08 — Claude frame scan and videos of any length (0.17.0)
+
+- Owner requests (2026-10-08):
+  - "make claude to check for the frames": the owner only checks errors, not the whole video.
+  - "do not want the program to be hardcoded or packed too small": 5-, 10-, 20-, 30-minute videos or longer, at the owner's choice.
+- **Frame scan (P09b, [REVIEW-QC.md](REVIEW-QC.md) §4).**
+  - `frame-scan.js` samples a frame at every clip and graphic, the hook at 0.5 s steps, and fill-ins at ≤4 s.
+  - Contact sheets are cut from the real render with the pinned FFmpeg (16 frames each). Six sheets go to Claude per answer, with notes on what the narration, caption, shot and graphic are at each frame.
+  - Each answer is parsed strictly (frame, severity, kind, what, fix) and its findings are kept.
+  - Tokens are reserved per answer (23,200); nothing retries by itself. Failed answers are retried deliberately and alone.
+  - Optional per-family automatic scan, switched on by name.
+  - Findings join the Room 08 list with their frame and repair link. After a completed scan the verdict may confirm "checked every flagged moment" instead of a full watch.
+  - `ai.js` sends image prompts to Claude Code as a stream-json user message, still with no tools. One tiny live call ("red" square) verified that path first.
+- **Any length ([VIDEO-LENGTH.md](VIDEO-LENGTH.md)).**
+  - Drafts carry `targetMinutes` (1-180). The script word range, paragraphs, answer room and job token limit scale with it.
+  - API answers above 16,000 tokens are streamed; Claude Code timeouts scale with the answer size.
+  - Scene plans of long scripts run in parts of 60 sentences, keeping finished parts and settling usage per attempt. Sanity bounds are now 2,000 scenes / 6,000 shots.
+  - Narration: per-narration characters up to 2,000,000; 5-minute requests; analysis and join timeouts scale.
+  - Pause analysis timeout scales; FFmpeg output capture is 4 MiB; the overview contact sheet holds up to 300 frames.
+  - The family form's token fields now match the server (the old UI capped the script job at 8,000 tokens).
+- **Tests**:
+  - `tests/frame-scan.test.js` (3): sampling, sheets, prompt notes, strict answer checks, image path to Claude Code.
+  - The Editing Room render test now scans the real render with a stand-in Claude: sheets, answers, settled usage, findings in the review, and a verdict passed by flagged moments.
+  - A 30-minute script test: policy, store, job limit, streamed answer, quality gate.
+  - A 3-part scene plan with a bad part retried alone and usage settled once per call.
+  - Streaming fake added.
+  - `npm run check` passed; `npm test` **201/201 passed, 0 skipped** (136 s).
+- **Measured, scratch workspace with synthetic media**:
+  - A 25.5-minute edit: 276 clips, 562 captions, 42 graphics, 7 valid chapters.
+  - It rendered at 360p in 393 s (198.5 MB) with all nine file checks passing (273 cuts, all planned).
+  - Its Review & QC report took 1.1 s; page state was 517 KB.
+- **Real scan, scratch 4:15 render, on the owner's subscription**:
+  - 93 frames in one Opus 5.5 answer, 46 s, 18,800 tokens (15,856 in / 2,944 out) inside a 23,200 reservation.
+  - 14 findings, 7 of them critical. On the synthetic test footage Claude flagged:
+    - the test patterns as unrelated to the narration;
+    - TV static as a broken signal;
+    - captions lost on the white colour bars;
+    - a corner label on a clip;
+    - a static-looking opening.
+  - Every finding showed its frame; no CSP violations.
+  - The browser check found the thumbnail overlapping the text column (fixed) and the acceptance wording omitting Claude (fixed).
+- **Not tested**: real narration and stock media at 20-30 minutes, a 60-minute-plus render, final 1080p masters (P11), the API-key streaming path against the live API (tested against a streaming fake). No GitHub push.
 
 ### 2026-10-08 — Room 08 Review & QC (0.16.0)
 

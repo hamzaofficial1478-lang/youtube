@@ -26,7 +26,7 @@ class OpenAISpeechClient{
     const text=boundedText(input.text,'speech text',4096),model=safeId(input.model,'OpenAI speech model'),voiceId=safeId(input.voiceId,'OpenAI voice');
     const speed=Number(input.speed);if(!Number.isFinite(speed)||speed<.25||speed>4)throw new InputError('OpenAI speech speed must be between 0.25 and 4.');
     const body={model,input:text,voice:voiceId,response_format:'wav',speed};if(input.instructions)body.instructions=boundedText(input.instructions,'voice instructions',4096);
-    let response;try{if(input.onRequest)input.onRequest();response=await this.fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(90000)});}catch{throw new InputError('OpenAI speech request failed or timed out after it started. Its billing outcome may be unknown.',502);}
+    let response;try{if(input.onRequest)input.onRequest();response=await this.fetch('https://api.openai.com/v1/audio/speech',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(300000)});}catch{throw new InputError('OpenAI speech request failed or timed out after it started. Its billing outcome may be unknown.',502);}
     const audio=await responseAudio(response);return {audio,extension:'wav',mime:response.headers.get('content-type')||'audio/wav',requestId:response.headers.get('x-request-id')||null};
   }
 }
@@ -36,7 +36,7 @@ class ElevenLabsSpeechClient{
     const text=boundedText(input.text,'speech text',10000),model=safeId(input.model,'ElevenLabs model'),voiceId=safeId(input.voiceId,'ElevenLabs voice');
     const number=(value,label,min,max)=>{value=Number(value);if(!Number.isFinite(value)||value<min||value>max)throw new InputError(`${label} must be between ${min} and ${max}.`);return value;};
     const body={text,model_id:model,voice_settings:{stability:number(input.stability??.5,'Stability',0,1),similarity_boost:number(input.similarity??.75,'Similarity',0,1),style:number(input.style??0,'Style',0,1),speed:number(input.speed??1,'Speed',.7,1.2),use_speaker_boost:true}};
-    let response;try{if(input.onRequest)input.onRequest();response=await this.fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,{method:'POST',headers:{'xi-api-key':this.key,'Content-Type':'application/json',Accept:'audio/mpeg'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(90000)});}catch{throw new InputError('ElevenLabs speech request failed or timed out after it started. Its billing outcome may be unknown.',502);}
+    let response;try{if(input.onRequest)input.onRequest();response=await this.fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,{method:'POST',headers:{'xi-api-key':this.key,'Content-Type':'application/json',Accept:'audio/mpeg'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(300000)});}catch{throw new InputError('ElevenLabs speech request failed or timed out after it started. Its billing outcome may be unknown.',502);}
     const audio=await responseAudio(response);return {audio,extension:'mp3',mime:response.headers.get('content-type')||'audio/mpeg',requestId:response.headers.get('request-id')||response.headers.get('x-request-id')||null};
   }
 }
@@ -59,8 +59,10 @@ async function analyzeAudio(filename,{expectedDuration=null,ffprobe='ffprobe',ff
   const stream=parsed.streams?.find(item=>item.codec_type==='audio');if(!stream)throw new InputError('The generated file contains no decodable audio stream.',502);
   const durationSeconds=Number(stream.duration||parsed.format?.duration),sampleRate=Number(stream.sample_rate),channels=Number(stream.channels);
   if(!Number.isFinite(durationSeconds)||durationSeconds<=0)throw new InputError('The generated audio duration is invalid.',502);
-  const measured=await run(ffmpeg,['-hide_banner','-nostdin','-i',filename,'-af','silencedetect=n=-50dB:d=0.25,ebur128=framelog=quiet','-f','null','-']);
-  const volume=await run(ffmpeg,['-hide_banner','-nostdin','-i',filename,'-af','volumedetect','-f','null','-']);
+  // Measuring time grows with the narration (a 60-minute file still finishes well inside it).
+  const long={timeout:Math.max(120000,durationSeconds*1000)};
+  const measured=await run(ffmpeg,['-hide_banner','-nostdin','-i',filename,'-af','silencedetect=n=-50dB:d=0.25,ebur128=framelog=quiet','-f','null','-'],long);
+  const volume=await run(ffmpeg,['-hide_banner','-nostdin','-i',filename,'-af','volumedetect','-f','null','-'],long);
   const diagnostic=`${measured.stderr||''}\n${measured.stdout||''}`,volumeText=`${volume.stderr||''}\n${volume.stdout||''}`,decodeClean=!/\b(?:error while decoding|invalid data found|corrupt(?:ed)?|decod(?:er|ing) error|error opening input)\b/i.test(diagnostic);
   const durations=[...diagnostic.matchAll(/silence_duration:\s*([0-9.]+)/g)].map(match=>Number(match[1])).filter(Number.isFinite);const starts=[...diagnostic.matchAll(/silence_start:\s*([0-9.]+)/g)].map(match=>Number(match[1])).filter(Number.isFinite);const ends=[...diagnostic.matchAll(/silence_end:\s*([0-9.]+)/g)].map(match=>Number(match[1])).filter(Number.isFinite);
   let silenceSeconds=durations.reduce((sum,value)=>sum+value,0);if(starts.length>ends.length)silenceSeconds+=Math.max(0,durationSeconds-starts.at(-1));
@@ -80,7 +82,7 @@ async function analyzeAudio(filename,{expectedDuration=null,ffprobe='ffprobe',ff
 async function mergeToWav(inputs,output,ffmpeg='ffmpeg'){
   if(!Array.isArray(inputs)||inputs.length===0)throw new InputError('No provider audio chunks were returned.',502);
   const work=path.dirname(inputs[0]),list=path.join(work,`${path.basename(output)}.concat.txt`);fs.writeFileSync(list,inputs.map(file=>`file '${path.basename(file).replaceAll("'","'\\''")}'`).join('\n'),'utf8');
-  try{await run(ffmpeg,['-hide_banner','-nostdin','-loglevel','error','-f','concat','-safe','1','-i',path.basename(list),'-vn','-c:a','pcm_s16le','-y',output],{cwd:work,timeout:180000});}finally{fs.rmSync(list,{force:true});}
+  try{await run(ffmpeg,['-hide_banner','-nostdin','-loglevel','error','-f','concat','-safe','1','-i',path.basename(list),'-vn','-c:a','pcm_s16le','-y',output],{cwd:work,timeout:900000});}finally{fs.rmSync(list,{force:true});}
 }
 class VoiceRuntime{
   constructor(store,connectors,{artifactDir,ffmpeg='ffmpeg',ffprobe='ffprobe'}={}){this.store=store;this.connectors=connectors;this.artifactDir=artifactDir||path.join(process.cwd(),'data','voice-artifacts');this.ffmpeg=ffmpeg;this.ffprobe=ffprobe;this.running=false;}

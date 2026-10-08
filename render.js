@@ -59,7 +59,8 @@ function run(command, args, {timeout = 120000, onSpawn = () => {}, cwd} = {}) {
     let child;
     try { child = spawn(command, args, {cwd, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']}); } catch { reject(new InputError(`${path.basename(command)} could not be started.`, 503)); return; }
     let stdout = '', stderr = '', killedFor = null;
-    const cap = (current, chunk) => { const next = current + chunk; return next.length > 262144 ? next.slice(-262144) : next; };
+    // 4 MiB of FFmpeg output: enough for every cut, pause and loudness line of a multi-hour video.
+    const cap = (current, chunk) => { const next = current + chunk; return next.length > 4194304 ? next.slice(-4194304) : next; };
     child.stdout.on('data', chunk => { stdout = cap(stdout, chunk.toString()); });
     child.stderr.on('data', chunk => { stderr = cap(stderr, chunk.toString()); });
     const timer = setTimeout(() => { killedFor = 'timeout'; child.kill('SIGKILL'); }, timeout);
