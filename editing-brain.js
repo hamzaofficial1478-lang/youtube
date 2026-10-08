@@ -649,6 +649,8 @@ function critique(timeline, spec) {
   if (timeline.captions?.enabled) {
     const issues = Cap.lintCaptions(timeline.captions);
     for (const issue of issues.filter(item => item.severity === 'critical')) findings.push(finding('critical', issue.kind, issue.message, 'Draft a fresh edit so the captions are rebuilt from the narration.', {skill: Cap.SKILL.qc}));
+    const edited = issues.filter(item => item.kind === 'caption-edited');
+    if (edited.length) findings.push(finding('nitpick', 'captions-edited', `${edited.length} caption${edited.length === 1 ? ' was' : 's were'} corrected by hand and no longer match${edited.length === 1 ? 'es' : ''} the narration word for word (${edited.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'Check each one reads right while the narration plays, or reset it to the narration\'s words.', {skill: Cap.SKILL.qc}));
     const fast = issues.filter(item => item.kind === 'caption-too-fast');
     if (fast.length) findings.push(finding('nitpick', 'captions-fast', `${fast.length} caption${fast.length === 1 ? '' : 's'} pass${fast.length === 1 ? 'es' : ''} faster than 20 characters a second (${fast.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'This follows the narration pace; a slower voice pace or fewer words in that phrase fixes it.', {skill: Cap.SKILL.qc}));
     const windows = Cap.clearWindows(timeline, CAPTION_CLEARS);
@@ -690,7 +692,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-audio']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -807,6 +809,10 @@ function applyOp(source, op, {spec} = {}) {
     if (timeline.captions.enabled === op.enabled) throw opError(`Captions are already ${op.enabled ? 'on' : 'off'}.`);
     timeline.captions.enabled = op.enabled;
     receipt.changed.push('captions');
+  } else if (op.type === 'set-caption') {
+    if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
+    try { Cap.editCaption(timeline.captions, op); } catch (error) { throw opError(error.message); }
+    receipt.changed.push(op.groupId);
   }
   validateTimeline(timeline);
   return {timeline, receipt};

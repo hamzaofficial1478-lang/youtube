@@ -68,11 +68,18 @@ lift figures.
 ### Owner controls and checks
 
 - `set-captions {enabled}` is an ordinary owner operation: a new immutable revision, undoable.
+- `set-caption {groupId, text}` (0.15.1) corrects one caption's wording: a spelling, a figure written as
+  digits. Timing never moves (it follows the narration). The group keeps the narration's own timed words, so
+  coverage QC still compares the narration and `{groupId, reset: true}` restores them. `*word*` marks the one
+  emphasised word (punctuation may sit outside the asterisks); no mark means no emphasis. Text is 1 to 84
+  characters on long-form (44 on Shorts), without control characters, braces, backslashes or `-->`. In the
+  Editing Room: **Read and correct the captions → Correct**.
 - The critic adds: `captions-off` (suggestion, one-click fix), caption overlaps or missing words
-  (critical), captions faster than 20 characters a second (nitpick), and on Shorts a warning when
+  (critical), captions faster than 20 characters a second (nitpick), hand-corrected captions (nitpick: listen
+  to them with the narration), and on Shorts a warning when
   full-screen graphics hide more than a quarter of the captions.
-- `GET /api/edit-revisions/:id/captions.srt` downloads the SRT for YouTube (all captions; the platform
-  player draws them, so nothing clears).
+- `GET /api/edit-revisions/:id/captions.srt` and `.../captions.vtt` download SRT or WebVTT for YouTube
+  (all captions; the platform player draws them, so nothing clears). WebVTT escapes `&`, `<` and `>`.
 - The render manifest records the SHA-256 of the exact subtitle layer, captions included.
 
 ## 2. YouTube craft engine (`craft.js`)
@@ -84,7 +91,7 @@ English only and say so for other locales.
 
 | Tool | What it does | Where it shows |
 |---|---|---|
-| `scoreHook` | Specificity, address, stakes, curiosity, length (0-100 each); verdict = 0.6 x mean + 0.4 x weakest; 72+ strong, 55+ workable; names the formula and the fix for the weakest property | Draft craft check; Hermes candidate quality (advice, never a blocker); Shorts candidates' opening lines |
+| `scoreHook` | Specificity, address, stakes, curiosity, length (0-100 each); verdict = 0.6 x mean + 0.4 x weakest; 72+ strong, 55+ workable; names the formula and the fix for the weakest property | Draft craft check; Claude candidate quality (advice, never a blocker); Shorts candidates' opening lines |
 | `lintPackaging` | Title length (60 desktop, 40 mobile, 100 hard), shouting, vague words, a number/name/date, front-loading; thumbnail text at most about 3 words and sharing no word with the title | Draft craft check; **Check the pairing** button |
 | `chapterize` | Pause x 1.6 + vocabulary shift x 3.2 + scene start 1 + script paragraph break 1.5; never in the first or last three sentences; 0:00 first, 3+ chapters, 10 s each | Editing Room, long-form only |
 | `findShorts` | 20-55 s spans that open on a complete thought, contain a turn or a proof and end on a line; ranked by the opening line's hook score; top five without overlap; writing notes for each | Editing Room, long-form only |

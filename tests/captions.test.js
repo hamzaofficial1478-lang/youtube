@@ -95,11 +95,42 @@ test('the SRT sidecar is exact and the checks catch overlaps and missing words',
   assert.equal(srt.split('\n\n').length, captions.groups.length);
   const broken = structuredClone(captions);
   broken.groups[2].start = broken.groups[1].start;
-  broken.groups[3].text = 'and knew why.';
+  broken.groups[3].words.shift();
   const kinds = Cap.lintCaptions(broken, {sentences: SENTENCES}).map(item => item.kind);
   assert.ok(kinds.includes('caption-overlap'));
   assert.ok(kinds.includes('caption-words'));
   assert.equal(Cap.validateCaptions(broken, 9).length, 1);
+});
+
+test('the WebVTT sidecar matches the SRT cues and escapes markup', () => {
+  const captions = Cap.buildCaptions({sentences: SENTENCES, pauses: PAUSES, narrationSeconds: 9});
+  const vtt = Cap.vtt(captions);
+  assert.match(vtt, /^WEBVTT\n\n1\n00:00:00\.000 --> 00:00:03\.\d{3}\nIn 1347 a ship docked in Messina\.\n/);
+  assert.deepEqual(vtt.match(/\d\d:\d\d:\d\d\.\d{3}/g), Cap.srt(captions).match(/\d\d:\d\d:\d\d,\d{3}/g).map(time => time.replace(',', '.')));
+  const marked = structuredClone(captions);
+  marked.groups[0].lines = ['Fish & <chips>'];
+  assert.match(Cap.vtt(marked), /Fish &amp; &lt;chips&gt;/);
+});
+
+test('the owner corrects a caption\'s words without moving its timing, and a reset restores the narration', () => {
+  const captions = Cap.buildCaptions({sentences: SENTENCES, pauses: PAUSES, narrationSeconds: 9});
+  const group = captions.groups.find(item => item.text.includes('60%'));
+  const {start, end, words} = structuredClone(group), original = group.text, originalEmphasis = group.emphasis;
+  Cap.editCaption(captions, {groupId: group.id, text: '  sixty *percent*   of the city was gone,  '});
+  assert.equal(group.text, 'sixty percent of the city was gone,');
+  assert.deepEqual([group.start, group.end, group.words, group.emphasis, group.edited], [start, end, words, 1, true], 'timing and the narration words stay; *word* is the emphasis');
+  assert.deepEqual(group.lines, ['sixty percent of the city was gone,']);
+  const issues = Cap.lintCaptions(captions, {sentences: SENTENCES});
+  assert.deepEqual(issues.filter(item => item.severity === 'critical'), [], 'a hand correction is not a missing narrated word');
+  assert.deepEqual(issues.filter(item => item.kind === 'caption-edited').map(item => item.groupId), [group.id]);
+  assert.throws(() => Cap.editCaption(captions, {groupId: group.id, text: 'sixty *percent* of the city was gone,'}), /Nothing changed/);
+  for (const [text, pattern] of [['', /at least one word/], ['a {\b1} b', /control characters/], ['a --> b', /control characters/], ['*a* *b*', /at most one word/], ['a *b c', /whole word/], ['x'.repeat(85), /at most 84 characters/], [42, /Write the caption/]]) {
+    assert.throws(() => Cap.editCaption(captions, {groupId: group.id, text}), pattern);
+  }
+  assert.throws(() => Cap.editCaption(captions, {groupId: 'cg999', text: 'x'}), /not in this edit/);
+  Cap.editCaption(captions, {groupId: group.id, reset: true});
+  assert.deepEqual([group.text, group.emphasis, group.edited, group.originalEmphasis], [original, originalEmphasis, undefined, undefined]);
+  assert.throws(() => Cap.editCaption(captions, {groupId: group.id, reset: true}), /already shows/);
 });
 
 test('captions belong to every new edit, switch on and off as an owner change, and the critic asks for them back', () => {
@@ -121,4 +152,14 @@ test('captions belong to every new edit, switch on and off as an owner change, a
   assert.deepEqual(finding.op, {type: 'set-captions', enabled: true});
   assert.equal(finding.skill, 'editing.caption-spec');
   assert.equal(B.critique(timeline, SPEC).findings.some(item => item.code === 'captions-off'), false);
+  // One caption's words corrected by hand: a new edit with the same timing and a nitpick asking for a listen.
+  const target = timeline.captions.groups[1];
+  const fixed = B.applyOp(timeline, {type: 'set-caption', groupId: target.id, text: 'Within *months*,'}, {spec: SPEC});
+  assert.deepEqual(fixed.receipt.changed, [target.id]);
+  assert.deepEqual([fixed.timeline.captions.groups[1].text, fixed.timeline.captions.groups[1].emphasis], ['Within months,', 1], 'punctuation may sit outside the asterisks');
+  assert.equal(timeline.captions.groups[1].edited, undefined, 'the earlier timeline is untouched');
+  assert.deepEqual([fixed.timeline.captions.groups[1].start, fixed.timeline.captions.groups[1].end], [target.start, target.end]);
+  assert.equal(B.critique(fixed.timeline, SPEC).findings.find(item => item.code === 'captions-edited').severity, 'nitpick');
+  assert.throws(() => B.applyOp(timeline, {type: 'set-caption', groupId: target.id, text: ''}, {spec: SPEC}), /at least one word/);
+  assert.throws(() => B.applyOp(legacy, {type: 'set-caption', groupId: 'cg001', text: 'x'}, {spec: SPEC}), /before captions existed/);
 });

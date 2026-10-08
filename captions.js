@@ -206,9 +206,52 @@ function assParts(timeline, spec, clearTemplates) {
   return {styles: [style], events, hidden: captions.groups.length - shown.length};
 }
 const srtTime = value => { const ms = Math.max(0, Math.round(value * 1000)); return `${String(Math.floor(ms / 3600000)).padStart(2, '0')}:${String(Math.floor(ms / 60000) % 60).padStart(2, '0')}:${String(Math.floor(ms / 1000) % 60).padStart(2, '0')},${String(ms % 1000).padStart(3, '0')}`; };
-// The SRT sidecar carries every group (platform players draw it themselves, so nothing clears).
+// The SRT and WebVTT sidecars carry every group (platform players draw them, so nothing clears).
 function srt(captions) {
   return captions.groups.map((group, k) => `${k + 1}\n${srtTime(group.start)} --> ${srtTime(group.end)}\n${group.lines.join('\n')}\n`).join('\n');
+}
+const vttText = value => String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function vtt(captions) {
+  return `WEBVTT\n\n${captions.groups.map((group, k) => `${k + 1}\n${srtTime(group.start).replace(',', '.')} --> ${srtTime(group.end).replace(',', '.')}\n${group.lines.map(vttText).join('\n')}\n`).join('\n')}`;
+}
+
+// ---------------------------------------------------------------- owner corrections
+
+// The owner corrects what one caption says (a spelling, a figure written as digits). Timing never moves:
+// it follows the narration. The group keeps the narration's own words, so a reset restores them, and
+// *word* marks the one word lifted in the accent colour.
+function editCaption(captions, {groupId, text, reset = false} = {}) {
+  const problem = message => { throw Object.assign(new Error(message), {status: 400}); };
+  const group = captions.groups.find(item => item.id === groupId);
+  if (!group) problem('That caption is not in this edit.');
+  const limits = LIMITS[captions.format] || LIMITS['long-form'];
+  if (reset === true) {
+    if (!group.edited) problem('This caption already shows the narration\'s words.');
+    group.text = group.words.map(word => word.text).join(' ');
+    group.lines = lineBreak(group.text, limits.lineChars);
+    group.emphasis = group.originalEmphasis ?? null;
+    delete group.edited; delete group.originalEmphasis;
+    return group;
+  }
+  if (typeof text !== 'string') problem('Write the caption text.');
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  if (!tokens.length) problem('A caption needs at least one word. Switch captions off instead of emptying one.');
+  if (/[\x00-\x1F\x7F{}\\]|-->/.test(text)) problem('Caption text cannot contain control characters, braces, backslashes or "-->".');
+  // Punctuation may sit outside the asterisks: *months*, or "*never*".
+  const MARK = /^([^\p{L}\p{N}*]*)\*([^*]+)\*([^\p{L}\p{N}*]*)$/u;
+  const marked = tokens.map((token, index) => (MARK.test(token) ? index : -1)).filter(index => index >= 0);
+  if (marked.length > 1) problem('Mark at most one word with *asterisks*.');
+  const clean = tokens.map(token => token.replace(MARK, '$1$2$3')).join(' ');
+  if (clean.includes('*')) problem('Use *asterisks* only around one whole word.');
+  if (clean.length > limits.lineChars * limits.maxLines) problem(`A caption holds at most ${limits.lineChars * limits.maxLines} characters on two lines.`);
+  const emphasis = marked.length ? marked[0] : null;
+  if (clean === group.text && emphasis === group.emphasis) problem('Nothing changed.');
+  if (!group.edited) group.originalEmphasis = group.emphasis;
+  group.text = clean;
+  group.lines = lineBreak(clean, limits.lineChars);
+  group.emphasis = emphasis;
+  group.edited = true;
+  return group;
 }
 
 // ---------------------------------------------------------------- checks
@@ -224,9 +267,10 @@ function lintCaptions(captions, {sentences = null} = {}) {
     if (seconds > 0 && chars / seconds > MAX_CPS) add('suggestion', 'caption-too-fast', group.id, `Caption ${k + 1} needs ${(chars / seconds).toFixed(0)} characters a second (keep under ${MAX_CPS}).`);
     if (group.lines.length > limits.maxLines) add('suggestion', 'caption-lines', group.id, `Caption ${k + 1} has ${group.lines.length} lines (at most ${limits.maxLines}).`);
     if (group.lines.some(line => line.length > limits.lineChars + 8)) add('suggestion', 'caption-line-length', group.id, `Caption ${k + 1} has a line over ${limits.lineChars} characters.`);
+    if (group.edited) add('nitpick', 'caption-edited', group.id, `Caption ${k + 1} was corrected by hand and no longer matches the narration word for word.`);
   });
   if (sentences) {
-    const spoken = normalise(sentences.map(item => item.text).join(' ')), shown = normalise(captions.groups.map(group => group.text).join(' '));
+    const spoken = normalise(sentences.map(item => item.text).join(' ')), shown = normalise(captions.groups.map(group => group.words.map(word => word.text).join(' ')).join(' '));
     if (spoken.join(' ') !== shown.join(' ')) add('critical', 'caption-words', null, 'The captions do not carry every narrated word exactly once.');
   }
   return issues;
@@ -243,4 +287,4 @@ function validateCaptions(captions, narrationSeconds) {
   return problems;
 }
 
-module.exports = {SCHEMA, METHOD, SKILL, LIMITS, wordTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, lintCaptions, validateCaptions};
+module.exports = {SCHEMA, METHOD, SKILL, LIMITS, wordTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};

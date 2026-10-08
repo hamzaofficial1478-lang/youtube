@@ -293,7 +293,7 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.equal(r1.timeline.captions.enabled, true);
   assert.deepEqual(Cap.lintCaptions(r1.timeline.captions, {sentences: editing.inputs(store.content(content.id)).payload.sentences}).filter(item => item.severity === 'critical'), []);
   assert.ok(r1.timeline.captions.groups.every(group => group.words.length <= 4), 'a Shorts family gets short captions');
-  const srt = editing.captionsSrt(r1.id);
+  const srt = editing.captionsFile(r1.id);
   assert.match(srt.text, /^1\n00:00:0\d,\d{3} --> /);
   assert.match(srt.filename, /^The-first-promise-r1\.srt$/);
   // YouTube craft: sentence cues follow the measured pauses; chapters and Shorts spans only exist for long-form.
@@ -318,7 +318,18 @@ test('the Editing Room drafts, revises, repairs and renders an edit with a human
   assert.throws(() => editing.applyOps(r1.id, {editedBy: 'Owner', ops: [{type: 'set-hero', clipId: still.id, hero: true}]}), /This edit changed \(now r2\)/);
   assert.throws(() => editing.applyOps(r2.id, {editedBy: 'Owner', ops: [{type: 'set-move', clipId: 'nope', kind: 'static'}]}), /not in this edit/);
   assert.equal(editing.state().contents.find(item => item.contentId === content.id).edit.revision, 2, 'a refused edit creates no revision');
-  const r3 = editing.undo(r2.id, {editedBy: 'Owner'});
+  let r3 = editing.undo(r2.id, {editedBy: 'Owner'});
+  assert.equal(r3.payloadHash, r1.payloadHash);
+  // A caption correction is an ordinary owner revision: both sidecars carry the corrected words and undo restores them.
+  const firstCaption = r3.timeline.captions.groups[0];
+  const corrected = editing.applyOps(r3.id, {editedBy: 'Owner', ops: [{type: 'set-caption', groupId: firstCaption.id, text: 'Corrected *words*'}]});
+  assert.deepEqual([corrected.timeline.captions.groups[0].start, corrected.timeline.captions.groups[0].end], [firstCaption.start, firstCaption.end]);
+  assert.ok(corrected.findings.some(item => item.code === 'captions-edited'));
+  const vtt = editing.captionsFile(corrected.id, 'vtt');
+  assert.match(vtt.text, /^WEBVTT\n\n1\n00:00:00\.000 --> 00:00:0\d\.\d{3}\nCorrected words\n/);
+  assert.match(vtt.filename, /^The-first-promise-r4\.vtt$/);
+  assert.match(editing.captionsFile(corrected.id).text, /^1\n00:00:00,000 --> 00:00:0\d,\d{3}\nCorrected words\n/);
+  r3 = editing.undo(corrected.id, {editedBy: 'Owner'});
   assert.equal(r3.payloadHash, r1.payloadHash);
   // Single-scene repair.
   const sceneId = r3.timeline.scenes[1].id;
@@ -487,6 +498,7 @@ test('HTTP edit routes need the local token and expose the room in state', async
   assert.equal((await send(`/api/content/${id}/edits`, {requestedBy: 'Owner', visualApprovalId: 'x'})).status, 404);
   assert.equal((await send(`/api/edit-revisions/${id}/ops`, {editedBy: 'Owner', ops: [{type: 'set-hero'}]})).status, 404);
   assert.equal((await send(`/api/edit-revisions/${id}/undo`, {editedBy: 'Owner'})).status, 404);
+  for (const kind of ['srt', 'vtt']) assert.equal((await fetch(`${base}/api/edit-revisions/${id}/captions.${kind}`)).status, 404);
 });
 
 // ---------------------------------------------------------------- P06b animated (canvas) graphics

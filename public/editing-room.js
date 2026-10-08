@@ -38,12 +38,12 @@ function captionLine(group) {
 function editCaptions(edit, stale) {
   const captions = edit.timeline.captions;
   if (!captions) return '<h3 class="intel-subhead">Captions</h3><p class="hint">This edit was drafted before captions existed. Draft a fresh edit to add them.</p>';
-  const vertical = edit.timeline.format === 'shorts', groups = captions.groups;
+  const vertical = edit.timeline.format === 'shorts', groups = captions.groups, edited = groups.filter(group => group.edited).length;
   const toggle = stale ? '' : captions.enabled ? action('Switch captions off', 'tl-captions', 'off', 'secondary') : action('Switch captions on', 'tl-captions', 'on', 'primary');
   return `<h3 class="intel-subhead">Captions · ${captions.enabled ? 'burned into the render' : 'off'} · ${groups.length} captions</h3>
     <p class="hint">${esc(captions.note)} ${vertical ? 'On this vertical video the captions sit above the Shorts buttons and step aside while a full-screen graphic shows its own text.' : 'They sit in the bottom band; graphics stay above it.'} At most one word per caption is lifted in the accent colour: figures and words like "never" or "only", and never in two captions in a row.</p>
-    <div class="card-actions">${toggle}<a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.srt" download>Download SRT for YouTube</a></div>
-    <details class="scene-history"><summary>Read the captions (${groups.length})</summary><div class="history-list caption-list">${groups.map(group => `<div class="history-row"><span class="muted">${renderClock(group.start)}</span><span>${captionLine(group)}</span></div>`).join('')}</div></details>`;
+    <div class="card-actions">${toggle}<a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.srt" download>Download SRT for YouTube</a><a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.vtt" download>Download WebVTT</a></div>
+    <details class="scene-history"><summary>Read and correct the captions (${groups.length}${edited ? `, ${edited} corrected by hand` : ''})</summary><div class="history-list caption-list">${groups.map(group => `<div class="history-row"><span class="muted">${renderClock(group.start)}</span><span>${captionLine(group)}${group.edited ? ' <span class="muted">· corrected</span>' : ''}</span>${stale ? '' : action('Correct', 'tl-caption', group.id, 'secondary')}</div>`).join('')}</div></details>`;
 }
 
 // YouTube craft drafts (youtube-agent-skill): chapters, Shorts spans and the retention reader. Nothing here publishes.
@@ -174,6 +174,13 @@ function editAction(command, id, button) {
       <label class="full">Text or data<textarea name="lines" rows="6" maxlength="1500" required></textarea><span class="hint">${Object.entries(EDIT_CANVAS_FORMAT).map(([key, format]) => `${esc(EDIT_TEMPLATE_NAMES[key])}: ${esc(format)}`).join('<br>')}<br>Text graphics: 1-3 lines.</span></label></div>`;
     return editDialog('graphic-add', 'Add a graphic', 'OWNER EDIT · NEW REVISION', body, 'Add graphic', {revisionId: edit.id});
   }
+  if (command === 'tl-caption') {
+    const group = tl.captions?.groups.find(item => item.id === id);
+    if (!group) return toast('That caption is no longer in this edit.', true);
+    const marked = group.text.split(' ').map((word, index) => (index === group.emphasis ? `*${word}*` : word)).join(' ');
+    const body = `<p class="hint">Shown ${renderClock(group.start)}–${renderClock(group.end)}. The narration says: “${esc(group.words.map(word => word.text).join(' '))}” Fix the spelling or write a figure as digits; the timing stays with the narration. Put *asterisks* around one word to lift it in the accent colour.</p><div class="form-grid"><label class="full">Caption<input name="caption" maxlength="200" value="${esc(marked)}"></label>${group.edited ? '<label class="full checkbox-label"><input type="checkbox" name="reset">Go back to the narration’s own words</label>' : ''}</div>`;
+    return editDialog('caption', `Caption at ${renderClock(group.start)}`, 'OWNER EDIT · NEW REVISION', body, 'Save caption', {groupId: group.id, revisionId: edit.id});
+  }
   if (command === 'tl-graphic') {
     const item = tl.graphics.find(graphic => graphic.id === id);
     if (!item) return toast('That graphic is no longer in this edit.', true);
@@ -211,6 +218,9 @@ document.getElementById('edit-form').addEventListener('submit', event => {
       }
       if (form.elements.position) { const members = tl.clips.filter(item => item.sceneId === clip.sceneId), to = Number(value('position')); if (members[to]?.id !== clip.id) ops.push({type: 'reorder', sceneId: clip.sceneId, clipId: clip.id, toIndex: to}); }
       if (form.elements.hero.checked !== !!clip.hero) ops.push({type: 'set-hero', clipId: clip.id, hero: form.elements.hero.checked});
+    } else if (kind === 'caption') {
+      if (form.elements.reset?.checked) ops.push({type: 'set-caption', groupId: data.groupId, reset: true});
+      else if (form.elements.caption.value !== form.elements.caption.defaultValue) ops.push({type: 'set-caption', groupId: data.groupId, text: value('caption')});
     } else if (kind === 'audio') {
       ops.push({type: 'set-audio', settings: {mode: value('audioMode'), targetLufs: Number(value('targetLufs')), truePeakDb: Number(value('truePeakDb'))}});
     } else if (kind === 'graphic-add') {

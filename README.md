@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.15.0 - planning foundation, competitor channels per family, review-gated reasoning/research, a human-controlled primary-locale Voice Room, the Style Library & Assignment Room, Competitor Intelligence with per-channel blend picks, the Niche Factory, the Scene & Visual Room, the first assembly proxy render, the Skills Engine, the Editing Room, captions and narration finishing.
+Version 0.15.1 - planning foundation, competitor channels per family, review-gated reasoning/research, a human-controlled primary-locale Voice Room, the Style Library & Assignment Room, Competitor Intelligence with per-channel blend picks, the Niche Factory, the Scene & Visual Room, the first assembly proxy render, the Skills Engine, the Editing Room, captions (owner-correctable, SRT and WebVTT) and narration finishing.
 
 The owner's working copy lives in the local program folder (Desktop\YT\youtube). Verified changes are delivered there; [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube) is updated only when the owner asks for a push. Uploading code to GitHub does not run its server.
 

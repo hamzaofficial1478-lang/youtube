@@ -338,12 +338,12 @@ class EditingRoom {
     const cues = this.cues(inputs), locale = inputs.family.primaryLocale;
     return {chapters: inputs.scope.format === 'long-form' ? C.chapterize(cues) : null, shorts: inputs.scope.format === 'long-form' ? C.findShorts(cues, {locale}) : null};
   }
-  // The SRT sidecar of one edit revision's captions (every group; platform players draw it themselves).
-  captionsSrt(revisionId) {
+  // The SRT or WebVTT sidecar of one edit revision's captions (every group; platform players draw it themselves).
+  captionsFile(revisionId, kind = 'srt') {
     const row = this.revisionRow(revisionId), {timeline} = this.timelinePayload(row);
     requireValue(timeline.captions, 'This edit was drafted before captions existed. Draft a fresh edit to get captions.', 404);
     const content = this.store.content(this.timelineRow(row.timeline_id).content_id);
-    return {text: Cap.srt(timeline.captions), filename: `${content.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'captions'}-r${row.revision}.srt`};
+    return {text: kind === 'vtt' ? Cap.vtt(timeline.captions) : Cap.srt(timeline.captions), filename: `${content.title.replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'captions'}-r${row.revision}.${kind === 'vtt' ? 'vtt' : 'srt'}`};
   }
   // Reads a YouTube Studio audience-retention CSV against this script's narration.
   retention(contentId, input) {
