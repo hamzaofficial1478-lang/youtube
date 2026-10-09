@@ -752,3 +752,63 @@ test('a stock clip window stays inside one shot when the clip hides a cut', () =
   assert.deepEqual(B.cleanWindow(12, 3, [8], 1), {inSeconds: 1, moved: false}, 'a clean default window stays');
   assert.deepEqual(B.cleanWindow(5, 4, [2.5], 0.5), {inSeconds: 0.5, moved: false}, 'no shot is long enough: the critic will name the cut');
 });
+
+test('a planned cue cuts on its word, and a drawn shot plays from its first frame', () => {
+  const {sentences, scenes, assets, narrationSeconds} = fixture();
+  const cued = scenes.map(scene => (scene.id === 'sc2' ? {...scene, shots: [scene.shots[0], {...scene.shots[1], cue: 'the air itself', source: 'generated-graphics'}]} : scene));
+  const timeline = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: cued, assets: {...assets, d: {assetId: 'D', mediaType: 'video', clipSeconds: 20}}, spec: SPEC, pauses: []});
+  const clip = timeline.clips.find(item => item.shotId === 'd');
+  const word = require('../sketch').matchPhrase(Cap.wordTimings({sentences, pauses: [], narrationSeconds}), 'the air itself');
+  assert.equal(clip.start, Math.round(word.seconds * 30), 'the cut lands on the cue');
+  assert.match(clip.reason, /Cut on "the air itself"/);
+  assert.equal(clip.skill, 'editing.visual-on-the-word');
+  assert.deepEqual([clip.inSeconds, clip.speed], [0, 1]);
+  assert.match(clip.trimReason, /Drawn for this exact hold/);
+  const plain = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes, assets, spec: SPEC, pauses: []});
+  assert.notEqual(plain.clips.find(item => item.shotId === 'd').start, clip.start, 'without a cue the breathing pattern decides');
+});
+
+test('documentary partners: hand-drawn cutaways are drawn again at render time on the narrator\'s words', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, renders, scenes, store, content, dataRoot} = env;
+  let {manifest} = scenes.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  const targets = manifest.plan.scenes.slice(1, 3).map(scene => scene.shots[0]);
+  for (const [k, shot] of targets.entries()) {
+    manifest = scenes.editManifest(manifest.id, {op: 'update-shot', shotId: shot.id, source: 'generated-graphics', createdBy: 'Owner', expectedRevision: manifest.revision,
+      sketch: {engine: k ? 'motion' : 'handdrawn', set: 'none', elements: [{kind: 'prop', prop: k ? 'pie-chart' : 'map', x: 0.5, y: 0.45, size: 'xl'}, {kind: 'text', text: k ? '1 in 4' : 'Trade routes', style: k ? 'counter' : 'title', x: 0.5, y: 0.15}]}});
+  }
+  assert.throws(() => scenes.editManifest(manifest.id, {op: 'update-shot', shotId: targets[0].id, sketch: {engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, createdBy: 'Owner', expectedRevision: manifest.revision}), /draws with motion or handdrawn/, 'stick figures never join a documentary');
+  scenes.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', confirmations: {coverageReviewed: true, directionReviewed: true}});
+  // Drawn previews first, then stock stills for the rest of the board.
+  assert.equal(scenes.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, 2);
+  for (let k = 0; k < 2; k++) assert.equal((await scenes.processNextVisual())?.status, 'completed');
+  const media = path.join(dataRoot, 'fixture-media');
+  fs.mkdirSync(media, {recursive: true});
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1080x1920', '-frames:v', '1', '-y', path.join(media, 'still.jpg')]);
+  for (const shot of manifest.plan.scenes.flatMap(scene => scene.shots).filter(item => item.source !== 'generated-graphics')) {
+    const id = randomUUID(), relative = `visual-assets/${content.familyId}/${content.id}/${id}.jpg`, file = path.join(dataRoot, relative);
+    fs.mkdirSync(path.dirname(file), {recursive: true}); fs.copyFileSync(path.join(media, 'still.jpg'), file);
+    const bytes = fs.readFileSync(file), probe = await VS.probeMedia(file);
+    store.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,NULL,?,?,?,?,?,?,?)')
+      .run(id, content.familyId, content.id, shot.id, 'stock', JSON.stringify(VS.capability('pexels-photo')), 'fixture', 'image', relative, sha(bytes), bytes.length, 'image/jpeg', JSON.stringify(probe), JSON.stringify({basis: 'stock-license', license: VS.CAPABILITIES['pexels-photo'].rights, synthetic: false, disclosure: 'none'}), 'Owner', new Date().toISOString());
+    scenes.select({manifestId: manifest.id, shotId: shot.id, assetId: id, selectedBy: 'Owner'});
+  }
+  const approval = await scenes.approveVisuals(manifest.id, {approvedBy: 'Owner', confirmations: {rightsReviewed: true, sequenceReviewed: true, warningsAccepted: true}});
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const drawnClips = edit.timeline.clips.filter(clip => targets.some(shot => shot.id === clip.shotId));
+  assert.ok(drawnClips.every(clip => clip.inSeconds === 0 && /Drawn for this exact hold/.test(clip.trimReason)));
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for drawn cutaways.'});
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  const done = await renders.processNext();
+  assert.equal(done?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.ok(result.qc.every(check => check.passed || check.name === 'clipping'), JSON.stringify(result.qc.filter(check => !check.passed)));
+  const record = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
+  assert.deepEqual(record.inputs.edit.drawn.clips.map(item => item.clipId).sort(), drawnClips.map(clip => clip.id).sort());
+  assert.equal(record.inputs.edit.drawn.engine, require('../sketch').VERSION);
+  // Inside a drawn cutaway the frame is the dark documentary page, not the bright test still.
+  const clip = drawnClips[0], video = path.join(dataRoot, result.video.relativePath), still = path.join(dataRoot, 'drawn.png');
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String((clip.start + clip.frames / 2) / edit.timeline.fps), '-i', video, '-frames:v', '1', '-vf', 'scale=1:1:flags=area,format=gray', '-f', 'rawvideo', '-y', still]);
+  assert.ok(fs.readFileSync(still)[0] < 90, `the drawn cutaway is on screen (average luma ${fs.readFileSync(still)[0]})`);
+});

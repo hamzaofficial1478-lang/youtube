@@ -11,6 +11,8 @@ const R = require('./render');
 const C = require('./craft');
 const Cap = require('./captions');
 const Audio = require('./audio');
+const Sk = require('./sketch');
+const E = require('./engines');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -65,7 +67,7 @@ class EditingRoom {
     for (const item of snapshot.shots) {
       requireValue(planned.has(item.shotId), `${item.label} is missing from the approved plan.`, 409);
       const row = this.scenes.assetRow(item.assetId), probe = JSON.parse(row.probe);
-      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path};
+      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(row.origin === 'drawn' ? {sketch: JSON.parse(row.rights).sketch} : {})};
       files[item.shotId] = row.relative_path;
     }
     const styleRow = this.styles.revisionRow(base.manifestRow.style_revision_id);
@@ -105,7 +107,8 @@ class EditingRoom {
     const pin = this.renders.pinCheck();
     const ffmpeg = pin.ok ? pin.paths.ffmpeg : R.resolveExecutable(this.ffmpeg);
     if (!ffmpeg) return;
-    for (const asset of Object.values(inputs.assets).filter(item => item.mediaType === 'video')) {
+    // Drawn clips are drawn by the program (their flashes and wipes are planned), so only stock video is measured.
+    for (const asset of Object.values(inputs.assets).filter(item => item.mediaType === 'video' && item.origin !== 'drawn')) {
       if (this.db.prepare('SELECT 1 FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION)) continue;
       const file = this.renders.localFile(asset.relativePath);
       requireValue(fs.existsSync(file) && R.fileSha256(file) === asset.sha256, 'An approved visual file is missing or changed.', 409);
@@ -116,7 +119,7 @@ class EditingRoom {
     }
   }
   cachedCuts(asset) {
-    const row = asset.mediaType === 'video' ? this.db.prepare('SELECT payload FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION) : null;
+    const row = asset.mediaType === 'video' && asset.origin !== 'drawn' ? this.db.prepare('SELECT payload FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION) : null;
     return row ? JSON.parse(row.payload).cuts : undefined;
   }
   brainInput(inputs, analysis, variants = {}) {
@@ -129,7 +132,7 @@ class EditingRoom {
     return {
       alignment,
       edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale,
-        scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source}))}))},
+        scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
     };
   }
   // Approved skills that apply to editing for this family, recorded with every edit for provenance.
@@ -309,7 +312,14 @@ class EditingRoom {
       for (const graphic of canvas) { try { B.canvasData(graphic.template, graphic.title, graphic.lines); } catch (error) { throw new InputError(`${graphic.template} at ${(graphic.start / payload.fps).toFixed(1)} s: ${error.message}`, 409); } }
     }
     const files = Object.fromEntries(payload.clips.map(clip => [clip.id, {relativePath: state.inputs.assets[clip.shotId].relativePath, sha256: state.inputs.assets[clip.shotId].sha256}]));
-    return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
+    // Drawn shots (P06d) are drawn again at render time for their exact hold, timed to the narration's words.
+    const engine = E.primaryEngine(state.inputs.spec), drawings = {};
+    for (const clip of payload.clips.filter(item => state.inputs.assets[item.shotId].origin === 'drawn')) {
+      try { Sk.validate(state.inputs.assets[clip.shotId].sketch, {primary: engine, lenient: true}); } catch (error) { throw new InputError(`${clip.label} drawing: ${error.message} Plan or draw this shot again.`, 409); }
+      drawings[clip.id] = {sketch: state.inputs.assets[clip.shotId].sketch};
+    }
+    if (Object.keys(drawings).length) requireValue(this.renders.latestReadiness()?.motion?.passed === true, 'Drawn shots are drawn in a local browser. Run the readiness check again (Room 05); it must find Microsoft Edge or Google Chrome.', 409);
+    return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, drawings, engine, criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
   }
 
   isLatest(revisionId) {

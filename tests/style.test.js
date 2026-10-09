@@ -227,3 +227,23 @@ test('HTTP style routes require the local token, validate input and return the l
   assert.equal(after.styles.handoffs.find(item => item.familyId === family.id).ready, true);
   assert.equal((await send('/api/style-assignments/00000000-0000-0000-0000-000000000000/revoke', {revokedBy: 'Fixture', reason: 'Unknown assignment id.', familyRevision: 1})).status, 404);
 });
+
+test('launch profiles follow the launch library: a newer built-in spec arrives as a draft; an owner revision is never followed', t => {
+  const {store, styles} = setup(t);
+  const {specHash, LAUNCH_VERSION} = require('../style');
+  const stick = profile(styles, 'stickman-sketch-explainer'), doc = profile(styles, 'documentary-montage');
+  // A workspace seeded by an older launch library: its newest Stickman revision is an older launch spec.
+  const older = {...stick.revisions[0].spec, pacing: {...stick.revisions[0].spec.pacing, shotMaxSeconds: 7}};
+  store.db.prepare('INSERT INTO style_revisions(id,profile_id,revision,status,spec,spec_hash,change_note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+    .run('older-launch', stick.id, 2, 'approved', JSON.stringify(older), specHash(older), 'Launch profile.', 'Launch library v1', new Date().toISOString());
+  styles.createRevision(doc.id, {spec: {...doc.revisions[0].spec, pacing: {...doc.revisions[0].spec.pacing, shotMaxSeconds: 9}}, createdBy: 'Owner', changeNote: 'Slower documentary pacing for this family.', expectedRevision: 1});
+  const reopened = new StyleLibrary(store);
+  const upgraded = profile(reopened, 'stickman-sketch-explainer').revisions;
+  assert.equal(upgraded.length, 3);
+  assert.deepEqual([upgraded[2].status, upgraded[2].createdBy, upgraded[2].specHash], ['draft', LAUNCH_VERSION, upgraded[0].specHash], 'the current built-in spec, as a draft to approve');
+  assert.match(upgraded[2].changeNote, /stickman engine/);
+  assert.equal(upgraded[1].status, 'approved', 'the approved older revision is untouched');
+  assert.equal(profile(reopened, 'documentary-montage').revisions.length, 2, 'the owner\'s own revision is never followed by an automatic one');
+  new StyleLibrary(store);
+  assert.equal(profile(reopened, 'stickman-sketch-explainer').revisions.length, 3, 'opening again adds nothing');
+});

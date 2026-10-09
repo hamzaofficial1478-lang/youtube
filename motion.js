@@ -11,7 +11,9 @@ const {spawn} = require('node:child_process');
 const {createHash} = require('node:crypto');
 const {InputError} = require('./store');
 
-const TEMPLATE_FILE = path.join(__dirname, 'motion-templates.js');
+// The page script: the drawn-shot engine (P06d) first, then the templates that call it.
+const TEMPLATE_FILES = ['drawn-kit.js', 'drawn-props.js', 'drawn-things.js', 'drawn-figures.js', 'drawn-sets.js', 'drawn-engine.js', 'motion-templates.js'].map(name => path.join(__dirname, name));
+const pageScript = () => TEMPLATE_FILES.map(file => fs.readFileSync(file, 'utf8')).join(';\n');
 const BROWSER_CANDIDATES = [
   process.env.MOTION_BROWSER,
   'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
@@ -96,11 +98,12 @@ class MotionRenderer {
     if (result.exceptionDetails) throw new InputError(`Motion template error: ${result.exceptionDetails.exception?.description?.split('\n')[0] || result.exceptionDetails.text}`, 502);
     return result.result.value;
   }
-  // Renders one graphic to numbered PNG frames (f00000.png ...). Returns the frame count and a hash of all frames.
-  async render({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, outDir, onFrame = () => {}}) {
+  // Renders one graphic to numbered frames (f00000.png ...; JPEG for opaque drawn shots, three times faster to
+  // capture than PNG). Returns the frame count, the frame pattern and a hash of all frames.
+  async render({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
     if (!this.injected) {
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
-      await this.evaluate(fs.readFileSync(TEMPLATE_FILE, 'utf8') + '\ntrue');
+      await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
     const params = {template, data, palette, fonts, finish, vertical, width, height, fps, duration};
@@ -110,19 +113,19 @@ class MotionRenderer {
     fs.mkdirSync(outDir, {recursive: true});
     const frames = Math.max(1, Math.round(duration * fps)), hash = createHash('sha256');
     for (let index = 0; index < frames; index++) {
-      const url = await this.evaluate(`MOTION.renderFrame(${index}/${fps}) && document.getElementById('stage').toDataURL('image/png')`);
-      const png = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
-      hash.update(png);
-      fs.writeFileSync(path.join(outDir, `f${String(index).padStart(5, '0')}.png`), png);
+      const url = await this.evaluate(`MOTION.renderFrame(${index}/${fps}) && document.getElementById('stage').toDataURL(${format === 'jpeg' ? "'image/jpeg', 0.95" : "'image/png'"})`);
+      const bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+      hash.update(bytes);
+      fs.writeFileSync(path.join(outDir, `f${String(index).padStart(5, '0')}.${format === 'jpeg' ? 'jpg' : 'png'}`), bytes);
       onFrame(index + 1, frames);
     }
-    return {frames, sha256: hash.digest('hex')};
+    return {frames, sha256: hash.digest('hex'), pattern: `f%05d.${format === 'jpeg' ? 'jpg' : 'png'}`};
   }
   // One frame as PNG bytes, for checks.
   async frame({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, t}) {
     if (!this.injected) {
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
-      await this.evaluate(fs.readFileSync(TEMPLATE_FILE, 'utf8') + '\ntrue');
+      await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
     await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, vertical, width, height, fps, duration})})`);
@@ -177,4 +180,4 @@ async function inspectBrowser({browser = findBrowser()} = {}) {
   return report;
 }
 
-module.exports = {MotionRenderer, inspectBrowser, findBrowser, TEMPLATE_FILE};
+module.exports = {MotionRenderer, inspectBrowser, findBrowser, TEMPLATE_FILES};

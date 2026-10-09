@@ -4,6 +4,7 @@
 // FFmpeg build, runs technical QC, keeps an immutable manifest and asks a human for the style-proof verdict.
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const R = require('./render');
@@ -12,6 +13,7 @@ const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
 const VS = require('./visual-sources');
 const Audio = require('./audio');
 const Review = require('./review');
+const Sk = require('./sketch');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
@@ -273,6 +275,7 @@ class RenderRoom {
       });
       const out = path.join(work, 'proxy.mp4');
       let plan, motionInfo = null;
+      const drawnInfo = [];
       if (scope.edit) {
         const files = {};
         for (const [clipId, entry] of Object.entries(scope.edit.files)) {
@@ -281,6 +284,47 @@ class RenderRoom {
           files[clipId] = file;
         }
         if (scope.edit.graphicsAss) fs.writeFileSync(path.join(work, 'graphics.ass'), scope.edit.graphicsAss);
+        // Drawn shots: each is drawn again for its exact hold (plus its transition), and every drawing arrives on the
+        // narrator's words as the captions time them. The approved drawing and engine decide every frame.
+        const drawings = Object.entries(scope.edit.drawings || {});
+        if (drawings.length) {
+          const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], tl = scope.edit.timeline, fps = Math.min(tl.fps, R.PRESETS.proxy.maxFps);
+          const spec = scope.style.spec, spoken = (tl.captions?.groups || []).flatMap(group => group.words);
+          // Up to three local browsers draw shots side by side (each frame stays a pure function of its shot).
+          const renderers = Array.from({length: Math.max(1, Math.min(3, Math.floor(os.cpus().length / 2), drawings.length))}, () => new MotionRenderer({browser: this.browser}));
+          this.current.handle = {kill: () => { renderers.forEach(item => item.close()); }};
+          let next = 0, finished = 0;
+          const drawOne = async (renderer, k) => {
+            const [clipId, drawing] = drawings[k];
+            const index = tl.clips.findIndex(item => item.id === clipId), clip = tl.clips[index], extra = index < tl.clips.length - 1 ? tl.joins[index].frames : 0;
+            const start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
+            const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3)}));
+            const sketch = Sk.validate(drawing.sketch, {primary: scope.edit.engine, lenient: true});
+            const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
+            const drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
+              vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder), format: 'jpeg'});
+            const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', '-an', '-y', file];
+            const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});
+            logs.push({step: `encode ${clip.label}`, ok: true, stderr: R.tail(out.stderr)});
+            fs.rmSync(path.join(work, folder), {recursive: true, force: true});
+            files[clipId] = path.join(work, file);
+            drawnInfo.push({clipId, label: clip.label, frames: drawn.frames, framesSha256: drawn.sha256, index: k});
+            this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total);
+          };
+          try {
+            await Promise.all(renderers.map(item => item.start()));
+            await Promise.all(renderers.map(async renderer => {
+              while (next < drawings.length) {
+                if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
+                await drawOne(renderer, next++);
+              }
+            }));
+          } finally {
+            await Promise.all(renderers.map(item => item.close()));
+            this.current.handle = null;
+          }
+          drawnInfo.sort((x, y) => x.index - y.index).forEach(item => { delete item.index; });
+        }
         // Canvas graphics: drawn frame by frame in the local browser, then packed into lossless RGBA clips.
         const canvasGraphics = scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && B.CANVAS_TEMPLATES.includes(item.template));
         const overlays = [];
@@ -358,6 +402,8 @@ class RenderRoom {
           ...tl.clips.slice(1).map((clip, k) => { const soft = tl.joins[k].type === 'cut' ? 0 : sec(tl.joins[k].frames); return [sec(clip.start) - soft - 0.12, sec(clip.start) + soft + 0.12]; }),
           ...tl.graphics.filter(item => item.status === 'accepted').flatMap(item => [[sec(item.start) - 0.12, sec(item.start) + 0.7], [sec(item.start + item.frames) - 0.7, sec(item.start + item.frames) + 0.12]]),
           ...(plan.fadeFrames ? [[(plan.totalFrames - plan.fadeFrames) / plan.preset.fps - 0.12, plan.totalFrames / plan.preset.fps + 1]] : []),
+          // A drawn shot's flashes, stamps and wipes are part of its drawing, not hidden cuts.
+          ...tl.clips.filter(clip => scope.edit.drawings?.[clip.id]).map(clip => [sec(clip.start) - 0.12, sec(clip.start + clip.frames) + 0.12]),
         ];
         const measured = R.sceneCutTimes((await exec('scene cuts', job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-i', out, '-an', '-vf', `select='gt(scene,${R.SCENE_CUT_THRESHOLD})',showinfo`, '-f', 'null', '-'], Math.max(120000, plan.totalFrames * 100))).stderr);
         const unplanned = measured.filter(time => !windows.some(([from, to]) => time >= from && time <= to));
@@ -417,7 +463,7 @@ class RenderRoom {
       const scrub = args => args.map(arg => String(arg).replaceAll(work, '<work>').replaceAll(this.dataRoot, '<data>'));
       const manifest = {
         renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg,
-          edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null, canvas: motionInfo} : null},
+          edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null, canvas: motionInfo, ...(drawnInfo.length ? {drawn: {engine: Sk.VERSION, clips: drawnInfo}} : {})} : null},
         shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, clipId: segment.clipId || null, assetId: segment.assetId, sha256: scope.edit ? scope.edit.files[segment.clipId].sha256 : scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
         commands: [...audioCommands.map(command => ({step: command.step, args: scrub(command.args)})), ...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), ...(plan.chunks || []).map(chunk => ({step: `join ${chunk.file}`, args: scrub(chunk.args)})), {step: 'assemble', args: scrub(plan.final.args)}],
         output: {sha256: R.fileSha256(video), sizeBytes: fs.statSync(video).size, probe}, audio: audioInfo ? {...audioInfo, artifact: audioArtifact} : null, qc: checks, detections: found, logs,

@@ -35,17 +35,17 @@ const RENDERERS = {
   },
   'ffmpeg-sketch': {
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
-    note: 'Drawn scenes (0.19): the program draws each shot (stick figures, props, labels, arrows, bubbles) in the local browser with a hand-drawn finish; the montage assembler cuts them with the narration, captions and graphics.',
+    note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
-    note: 'Drawn scenes (0.19) with a hand-drawn ink finish, drawn frame by frame in the local browser and encoded with FFmpeg, then assembled like a montage.',
+    note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
-    note: 'Drawn scenes (0.19) with a clean vector finish, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
+    note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'cinematic-hybrid': {
@@ -61,44 +61,47 @@ const STANDARD_PROHIBITED = [
   'Presenting AI-generated imagery as real footage or real events',
 ];
 
+// The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
+// added as a draft revision (never approved or assigned automatically).
+const LAUNCH_VERSION = 'Launch library v2';
 const LAUNCH_PROFILES = [
-  {key: 'stickman-sketch-explainer', spec: {
+  {key: 'stickman-sketch-explainer', upgrade: 'Launch library v2 (0.20): the stickman engine. Drawn shots are the only source (stock and AI images do not pair with stick figures), faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
-    summary: 'Sparse stick figures, purposeful diagrams and readable labels on a clean canvas; the narration leads and every drawing earns its place.',
+    summary: 'Cartoon stick characters with distinct looks, expressions and gestures act every line inside built sets, with kinetic words and effects on the narrator\'s words; energetic, word-timed and never still.',
     bestFit: ['Educational explainers', 'Business and money concepts', 'Psychology and how-it-works'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 2.5, shotMaxSeconds: 7, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 8},
-    transitions: {allowed: ['cut', 'crossfade', 'push'], default: 'cut', maxDurationMs: 400},
-    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 25, easing: 'ease-in-out'},
+    pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5},
+    transitions: {allowed: ['cut', 'crossfade', 'push'], default: 'cut', maxDurationMs: 300},
+    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 60, easing: 'ease-in-out'},
     typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics', 'ai-image', 'maps-and-diagrams'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
-    audio: {musicMoods: ['curious', 'light', 'focused'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'accent'},
+    visuals: {sources: ['generated-graphics'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['upbeat', 'curious', 'playful'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'ffmpeg-sketch'},
-    qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 12, contactSheetEverySeconds: 5},
+    qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'hand-drawn-canvas', spec: {
+  {key: 'hand-drawn-canvas', upgrade: 'Launch library v2 (0.20): the hand-drawn engine. Drawn shots only (footage and AI images do not pair with ink drawings; stick figures do not either), with inked motion graphics as the partner.', spec: {
     name: 'Hand-drawn Canvas',
-    summary: 'Original whole-pose drawings with deliberate holds and a pencil, ink or riso finish for storytelling and essays.',
+    summary: 'Ink illustrations and ink figures drawn line by line on paper, with a living line, washed colour and inked motion graphics, for storytelling and essays.',
     bestFit: ['Storytelling', 'Video essays', 'Artistic education'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 24, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 3, shotMaxSeconds: 9, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 10},
+    pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 8},
     transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], default: 'crossfade', maxDurationMs: 600},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 20, easing: 'ease-in-out'},
     typography: {headingFont: 'Caveat', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#F6F0E4', primary: '#2B2B2B', accent: '#B5473A', text: '#2B2B2B'},
     captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    visuals: {sources: ['generated-graphics'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['warm', 'reflective', 'acoustic'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
     renderer: {adapter: 'canvas-frames'},
-    qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 10, minSceneSeconds: 2.5, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
+    qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'motion-graphics', spec: {
+  {key: 'motion-graphics', upgrade: 'Launch library v2 (0.20): the motion-graphics engine draws its own shots, with stick-figure moments and stock plates as partners.', spec: {
     name: 'Motion Graphics',
     summary: 'Fast, text-safe animated graphics with stable scene IDs; built for strong hooks, workflows and product concepts.',
     bestFit: ['Fast hooks and Shorts', 'Workflows and tutorials', 'Tech and product concepts'],
@@ -116,7 +119,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'documentary-montage', spec: {
+  {key: 'documentary-montage', upgrade: 'Launch library v2 (0.20): hand-drawn and motion-graphics explainer cutaways join the footage as partners (drawn by the program, free).', spec: {
     name: 'Documentary Montage',
     summary: 'Evidence-led stock and archival shots with per-shot provenance, restrained Ken Burns motion, maps and readable labels; chronology follows the narration.',
     bestFit: ['History and culture', 'Finance and economics stories', 'Sourced factual essays'],
@@ -128,7 +131,7 @@ const LAUNCH_PROFILES = [
     typography: {headingFont: 'Source Serif 4', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#0E0E0E', primary: '#F2EEE6', accent: '#C9A227', text: '#FFFFFF'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
-    visuals: {sources: ['stock-video', 'stock-image', 'archival-public-domain', 'maps-and-diagrams', 'ai-image'], primarySource: 'stock-video', aiDisclosure: 'always-disclose', characterConsistency: false},
+    visuals: {sources: ['stock-video', 'stock-image', 'archival-public-domain', 'maps-and-diagrams', 'ai-image', 'generated-graphics'], primarySource: 'stock-video', aiDisclosure: 'always-disclose', characterConsistency: false},
     audio: {musicMoods: ['documentary', 'reflective', 'tense'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
     renderer: {adapter: 'ffmpeg-montage'},
     qc: {maxBlackSeconds: 1, maxFrozenSeconds: 6, minSceneSeconds: 2.5, maxSceneSeconds: 15, contactSheetEverySeconds: 5},
@@ -382,14 +385,25 @@ class StyleLibrary {
     }
   }
 
+  // New workspaces get every launch profile; a profile whose newest revision is still a launch revision gets the
+  // current launch spec as a new draft when it changed, so the owner always has the newest built-in version to
+  // approve. A revision the owner made is never followed by an automatic one.
   seedLaunchProfiles() {
     this.store.transaction(() => {
       for (const launch of LAUNCH_PROFILES) {
-        if (this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(launch.key)) continue;
-        const spec = validateStyleSpec(structuredClone(launch.spec)), profileId = randomUUID(), at = now();
+        const spec = validateStyleSpec(structuredClone(launch.spec)), at = now(), existing = this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(launch.key);
+        if (existing) {
+          const latest = this.latestRevision(existing.id);
+          if (latest.spec_hash === specHash(spec) || !latest.created_by.startsWith('Launch library') || latest.created_by === LAUNCH_VERSION) continue;
+          this.db.prepare('INSERT INTO style_revisions(id,profile_id,revision,status,spec,spec_hash,change_note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+            .run(randomUUID(), existing.id, latest.revision + 1, 'draft', JSON.stringify(spec), specHash(spec), launch.upgrade || 'Updated launch profile. Review before assignment.', LAUNCH_VERSION, at);
+          this.store.event(`Launch library update: ${spec.name} r${latest.revision + 1} (draft) is ready to review`);
+          continue;
+        }
+        const profileId = randomUUID();
         this.db.prepare('INSERT INTO style_profiles(id,profile_key,origin,base_revision_id,created_at) VALUES(?,?,?,?,?)').run(profileId, launch.key, 'launch', null, at);
         this.db.prepare('INSERT INTO style_revisions(id,profile_id,revision,status,spec,spec_hash,change_note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
-          .run(randomUUID(), profileId, 1, 'draft', JSON.stringify(spec), specHash(spec), 'Launch profile from the Production Panel architecture. Review before first assignment.', 'Launch library v1', at);
+          .run(randomUUID(), profileId, 1, 'draft', JSON.stringify(spec), specHash(spec), 'Launch profile from the Production Panel architecture. Review before first assignment.', LAUNCH_VERSION, at);
       }
     });
   }
@@ -694,4 +708,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, OWNER_REFERENCE_LIMIT};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT};

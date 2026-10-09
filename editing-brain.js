@@ -10,6 +10,7 @@
 const {createHash} = require('node:crypto');
 const Cap = require('./captions');
 const Audio = require('./audio');
+const Sk = require('./sketch');
 
 const SCHEMA = 'ytprod.edit/1';
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -312,9 +313,9 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
   for (const scene of scenes) {
     const span = sentences.slice(scene.sentenceStart - 1, scene.sentenceEnd);
     const sceneEnd = scene.endFrame;
-    // A drawn scene (P06c) draws its own words, so its plan text is not laid over it again.
+    // A drawn scene (P06c/P06d) draws its own words, titles and numbers, so nothing from the plan is laid over it.
     const drawn = (scene.shots || []).length > 0 && scene.shots.every(shot => shot.source === 'generated-graphics');
-    if (scene.onScreenText && !(drawn && scene.purpose !== 'turn')) {
+    if (scene.onScreenText && !drawn) {
       const turn = scene.purpose === 'turn';
       const {text: plain, accent, accentSource} = accentOf(scene.onScreenText);
       const dwell = turn ? round(0.75 + Math.max(1.2, 0.35 + plain.split(/\s+/).length / 3.2), 2) : graphicDwellSeconds(plain);
@@ -395,6 +396,9 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
   const lastShot = sceneRows[sceneRows.length - 1].shots.at(-1).id;
   const clips = [];
   let breath = 0;
+  // Planned cues (the words a shot starts on) become exact cuts, on the measured narration's word times.
+  const words = scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences, pauses, narrationSeconds}) : [];
+  const cueCuts = new Set();
   for (const scene of sceneRows) {
     const shots = scene.shots, n = shots.length, sceneFrames = scene.endFrame - scene.startFrame;
     const shift = scene.variant * 2;
@@ -428,23 +432,29 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
       }
       if (best !== null) { cut.frame = best; cut.snapped = true; taken.add(best); }
     });
-    const edges = [scene.startFrame, ...cuts.map(cut => cut.frame), scene.endFrame];
+    let edges = [scene.startFrame, ...cuts.map(cut => cut.frame), scene.endFrame];
+    const sceneWords = words.filter(word => word.start * fps >= scene.startFrame - 1 && word.start * fps < scene.endFrame);
+    const cueFrames = shots.map((shot, k) => (k === 0 ? scene.startFrame : shot.cue ? (hit => (hit ? Math.round(hit.seconds * fps) : null))(Sk.matchPhrase(sceneWords, shot.cue)) : null));
+    const gap = Math.round(0.5 * fps);
+    const cued = n > 1 && cueFrames.every((frame, k) => frame !== null && (k === 0 || frame - cueFrames[k - 1] >= gap)) && scene.endFrame - cueFrames.at(-1) >= gap;
+    if (cued) { edges = [...cueFrames, scene.endFrame]; shots.forEach((shot, k) => { if (k) cueCuts.add(shot.id); }); }
     lengths = edges.slice(1).map((edge, k) => edge - edges[k]);
     shots.forEach((shot, k) => {
       const asset = assets[shot.id];
       const hero = (k === 0 && heroScenes.has(scene.id)) || shot.id === lastShot;
       let reason;
       if (k === 0) reason = scene.index === 0 ? 'Opens the video fast: the first shot stays inside the hook limit.' : `Starts scene ${scene.label} on its first sentence.`;
+      else if (cued) reason = `Cut on "${shot.cue}": the picture changes as the narrator says it.`;
       else reason = cuts[k - 1].snapped ? 'Cut lands on the sentence break, so the picture changes as the new line begins.' : 'Cut placed by the breathing pattern (long, medium, short, short, very long).';
       if (hero) reason += ' Hero shot: held longer.';
       clips.push({id: `cl_${shot.id}`, shotId: shot.id, sceneId: scene.id, assetId: asset.assetId, label: shot.label, mediaType: asset.mediaType, start: edges[k], frames: lengths[k],
-        clipSeconds: asset.clipSeconds ?? null, inSeconds: 0, speed: 1, move: null, hero, part: null, reason, ...(Array.isArray(asset.cuts) ? {sourceCuts: asset.cuts} : {}), skill: cuts[k - 1]?.snapped ? SKILL.onTheWord : SKILL.rhythm, planned: shot.motion, plannedSource: shot.source, register: scene.register, purpose: scene.purpose, variant: scene.variant});
+        clipSeconds: asset.clipSeconds ?? null, inSeconds: 0, speed: 1, move: null, hero, part: null, reason, ...(Array.isArray(asset.cuts) ? {sourceCuts: asset.cuts} : {}), skill: cuts[k - 1]?.snapped || (cued && k) ? SKILL.onTheWord : SKILL.rhythm, planned: shot.motion, plannedSource: shot.source, register: scene.register, purpose: scene.purpose, variant: scene.variant});
     });
   }
   // Break runs of three near-equal holds by rolling an unsnapped cut (skill editing.change-cadence).
   for (let k = 2; k < clips.length; k++) {
     const trio = [clips[k - 2], clips[k - 1], clips[k]];
-    if (trio.some(clip => clip.sceneId !== trio[1].sceneId)) continue;
+    if (trio.some(clip => clip.sceneId !== trio[1].sceneId) || cueCuts.has(trio[1].shotId) || cueCuts.has(trio[2].shotId)) continue;
     const lo = Math.min(...trio.map(clip => clip.frames)), hi = Math.max(...trio.map(clip => clip.frames));
     if (hi > lo * 1.03) continue;
     const nudge = Math.max(2, Math.round(trio[1].frames * 0.15));
@@ -467,6 +477,13 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
   let previousMove = null;
   clips.forEach((clip, index) => {
     const hold = clip.frames / fps;
+    // A drawn shot (P06d) is drawn again for its exact hold when the video renders, so it plays from its first frame.
+    if (clip.plannedSource === 'generated-graphics' && clip.mediaType === 'video') {
+      clip.trimReason = 'Drawn for this exact hold when the video renders: its drawings arrive on the narrator\'s words.';
+      clip.skillTrim = SKILL.trim;
+      previousMove = 'video';
+      return;
+    }
     if (clip.mediaType === 'video') {
       const length = clip.clipSeconds || hold;
       if (length > hold + 0.3) {

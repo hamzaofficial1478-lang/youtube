@@ -74,6 +74,7 @@ function scenePlanCard(content, manifest) {
     ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
+    ${manifest.plan.cast?.length ? `<p class="muted"><strong>Cast:</strong> ${manifest.plan.cast.map(member => esc(`${member.name}${member.role ? ` (${member.role})` : ''}`)).join(' · ')}</p>` : ''}
     <p class="hint">${esc(manifest.plan.timing.note)} Every edit creates a new revision; untouched shots keep their IDs and visuals.</p>
     <div class="card-actions">${actions}</div>
     <details class="scene-history"><summary>Revision history (${content.manifests.length})</summary><ul class="intel-list">${history}</ul></details>
@@ -97,15 +98,17 @@ function sceneShotCard(content, manifest, scene, shot) {
   return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
-      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? sceneSketchSummary(shot.sketch) : shot.query)}</p>
+      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? sceneSketchSummary(shot.sketch, manifest.plan.cast) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
       ${failed ? `<p class="inline-warning">${esc(failed.error || failed.status)}</p>` : ''}
       <div class="shot-actions">${editable ? action(asset ? 'Change' : 'Find visual', 'scene-shot-open', shot.id, asset ? 'secondary' : 'primary') + action('Edit', 'scene-shot-edit', shot.id, 'text-button') + (scene.shots.length > 1 ? action('Remove', 'scene-shot-remove', shot.id, 'text-button danger') : '') : ''}${count ? `<small class="muted">${count} result${count === 1 ? '' : 's'}</small>` : ''}</div></div></div>`;
 }
 
-// What a drawn shot shows, in words: "shock figure · storm · bolt · “5x hotter”".
-function sceneSketchSummary(sketch) {
+// What a drawn shot shows, in words: "Stickman · storm set · Max (scared, cower) · bolt · “5x hotter” · flash".
+function sceneSketchSummary(sketch, cast = []) {
   if (!sketch) return 'Drawn from the narration';
-  return sketch.elements.map(item => item.kind === 'figure' ? `${item.pose} figure` : item.kind === 'prop' ? item.prop : item.kind === 'arrow' ? 'arrow' : `“${item.text}”`).join(' · ');
+  const name = item => cast.find(member => member.id === item.who)?.name || 'figure';
+  const parts = sketch.elements.map(item => item.kind === 'figure' ? `${name(item)} (${item.expression || 'neutral'}, ${item.pose})` : item.kind === 'prop' ? item.prop : item.kind === 'arrow' ? 'arrow' : item.kind === 'fx' ? item.effect : `“${item.text}”`);
+  return [sketch.engine ? styleLabel(sketch.engine) : null, sketch.set && sketch.set !== 'none' ? `${sketch.set} set` : null, ...parts].filter(Boolean).join(' · ');
 }
 function sceneBatchCard(content, manifest, family) {
   const settings = state.scenes.settings[family.id], shots = sceneShots(manifest);

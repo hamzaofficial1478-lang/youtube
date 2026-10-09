@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-08. Current application: 0.19.0. Narration-only finishing is implemented in Room 07, the owner can correct caption wording and download WebVTT, Room 08 Review & QC reviews every render with Claude scanning every frame first, and videos can be any length (1-180 minutes); the current Claude direction is preserved. Editing, animated graphics, captions and proxy renders already work locally. P07 and full P08 remain partial; final masters and publishing are not enabled.
+Last updated: 2026-10-09. Current application: 0.20.0. Narration-only finishing is implemented in Room 07, the owner can correct caption wording and download WebVTT, Room 08 Review & QC reviews every render with Claude scanning every frame first, and videos can be any length (1-180 minutes); the current Claude direction is preserved. Editing, animated graphics, captions and proxy renders already work locally. P07 and full P08 remain partial; final masters and publishing are not enabled.
 
 ## Resume here
 
@@ -50,7 +50,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Current milestone: captions (P07, primary language) and the YouTube craft engine (S02), v0.14. Acceptance: captions are part of the immutable edit revision and follow the narration, carry every narrated word exactly once, never overlap, are burned in as the top layer only when switched on and download as SRT; graphics keep out of the caption band; the craft scores equal the upstream Python tools on the same inputs; craft output is advice or a draft only; never-used words block Hermes candidates but never the owner's own draft. Remaining for P07: measured word timing, owner-editable caption text, WebVTT, locale caption editions (L01-L03). Earlier: FFmpeg readiness and assembly proxy (P05) v0.10 is complete. Acceptance: readiness records versions, checksums, filters, encoders and a byte-identical fixture; renders run only with the pinned binaries and only from current approved inputs whose checksums still match; the proxy is frame-exact against the narration for cut, crossfade and dip-to-black; QC covers duration, frame, audio, black and frozen pictures; results and manifests are immutable; a human records the style-proof verdict. Previous milestone: Scene & Visual Room (P04) v0.9 is complete with fake-provider verification. Acceptance: a plan needs an approved script, an approved narration and a ready style handoff; every revision is immutable with stable scene and shot IDs; stock searches stay within hourly caps and a 24-hour cache; downloads come only from provider media hosts with size, type, checksum and ffprobe checks; AI images are admitted against a monthly budget and never retried silently; a named human approves the plan and the full board with rights and AI-disclosure decisions; any later change ends the approval. Previous milestone: Competitor Intelligence (R05) and Niche Factory (R06) v0.8 are complete with fake-provider verification. Acceptance: no outside request without an explicit owner action, reserved data caps and token budgets, no automatic retries, YouTube data about other channels display-only and purged after 30 days, blueprints blocked unless they pass the 30/70 rule and copy guard, niche scores computed in code with hard filters winning, and every effect (script guidance, narrator prefill, style draft, new family) behind a named human review. Previous milestone: Style Library & Assignment Room v0.7 is complete. Acceptance: five launch styles exist as reviewable drafts; no draft can be assigned; every revision is immutable; a family default must be approved and format-compatible; overrides need explicit acknowledgement; fallbacks are manual-only; retiring or revoking blocks the handoff instead of switching styles. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 19 / 37 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 19 / 38 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -88,6 +88,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [x] **P06 Editing Room: editing brain, critic and revisioned edit** (done) - Version 0.12 (2026-10-05): a deterministic editing brain (editing-brain.js) drafts the edit from the approved board, the narration pauses measured with FFmpeg silencedetect and the family style: sentence-snapped cuts, breathing holds with heroes and the hook limit, eased camera moves that never repeat on neighbours, long-still punch-ins, clip trims and safe slow-downs, structural transitions within a budget, a fade-out ending, retention markers and proposed motion graphics (stat, quote, date, plan text, the owner's title card at turns). A critic scores slideshow risk and files critical/suggestion/polish findings with fixes and skill IDs. Immutable revisions, optimistic concurrency, undo, single-scene repair, owner-correction lessons, and an edit render through the pinned FFmpeg with an ASS graphics layer, uniform BT.709 segments, planned-dark QC and a byte-identical re-render. 8 editing tests; full suite 162/162; desktop and 390 x 844 browser flows passed. 0.14.1: stock clips are measured for hidden cuts and kept inside one shot; the critic flags hidden cuts and edit renders check for unplanned cuts (claude-video scene detection).
 - [x] **P06b Animated graphics: canvas charts, timelines, lists, comparisons and diagrams** (done) - Version 0.13 (2026-10-06): six deterministic Canvas2D templates (bar and line charts, timeline, list build, comparison, process diagram) with clean or hand-drawn finish, drawn in the local Microsoft Edge/Chrome over the DevTools Protocol (no npm packages, networking blocked) and overlaid on the edit as lossless RGBA clips. The editing brain proposes them only from the script's own data; owners edit the data line by line or add graphics. Browser readiness probe; manifest records browser and frame hashes. Full suite 165/165; a Shorts edit with an animated timeline renders byte-identically twice; a bar chart added from the page passed QC. Map routes and stick-figure animation remain.
 - [ ] **P06c Drawn scenes: stick figures, hand-drawn and motion-graphics shots** (testing) - 0.19.0 (2026-10-08): sketch.js closed vocabulary with validation, a free fallback from the narration and Claude's planning guide; motion-templates.js sketch-scene draws figures, props, text, arrows and bubbles stroke by stroke with idle motion, hand-drawn or clean finish, text kept in frame and off drawings; generated-graphics is executable as the local drawn-scene capability (Draw all scenes, clips versioned by sketch and engine); drawn styles render through the montage assembler; light-palette captions use the style ink; no overlays duplicate a drawing's words. Demo: Claude planned a 62-second lightning explainer in 17 drawn shots (66 s, 10,190 tokens), drawn at 1080p in 4-6 minutes, edited and rendered with every check passing; frames reviewed and five layout/legibility issues fixed. Full suite 211/211.
+- [ ] **P06d Engines that work together: stickman, hand-drawn, motion graphics and footage** (testing) - 0.20.0 (2026-10-09): engines.js primary/partner matrix with written refusals (stickman never joins hand-drawn); sketch.js cast with looks, 40 poses, 26 expressions, 15 emotes, about 125 props, 25 sets, moods, 25 motion effects, 9 kinetic text styles, cues on words, lenient repair of Claude drawings with named warnings; browser engine in six drawn-*.js files (pure functions of time, catalog equal to the vocabulary); Room 04 720p previews; renders redraw drawn shots on the captions' word times with three browsers and JPEG frames; the brain cuts on cue words and never trims drawn clips; launch library v2 drafts for unrevised launch profiles. Demo: Claude planned the 39.5 s lightning script in 18 cued shots with a cast of two (105 s, 14,569 tokens, no warnings), previews drawn in 276 s, render at 1080p in 150 s (489 s before the speed-up), every check passing; frame review found and fixed a counter hidden behind its burst, a title card over a drawn shot, false hidden-cut flags on drawn flashes, characters and a stamp cropped during zooms, and a slow ink reveal. Full suite 220/220 passed, 0 skipped (263 s).
 - [x] **S02 YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice** (done) - Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks.
 - [ ] **P07 Captions & Localization Room** (testing) - Version 0.14 (2026-10-06): every new edit carries a caption track (captions.js): words timed inside the narration's measured sentence windows with clause pauses anchored at commas; phrases split into the fewest even captions (never ending on a weak word); 2 lines x 42 characters for long-form, rate-sized groups for Shorts; scarce inline emphasis on figures and negations. Burned in as the top ASS layer (bottom band on 16:9, above the Shorts buttons on 9:16, clearing for full-screen graphics), SRT download per edit revision, on/off as an owner change, caption QC in the critic. 7 caption tests plus render checks; full suite 181/181 on Node 24.18.1 with FFmpeg 8.1.2 and Edge 154. 0.15.1 (2026-10-08): owner caption corrections as the revisioned set-caption op (timing fixed, narration words kept for coverage QC and reset, *word* emphasis, critic nitpick) and a WebVTT download beside the SRT; full suite 192/192, browser check of correct/save/reset/download on a scratch workspace.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
@@ -122,6 +123,55 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-09 — engines that work together: the stickman engine, hand-drawn and motion partners (0.20.0)
+
+- **Owner review of the 0.19 demo:**
+  - The scenes were plain; props looked like still images.
+  - There was no scene building, no motion graphics, no gestures, and the pace was slow.
+  - The owner wants stick characters like their reference (big heads, looks, expressions) and Claude reasoning about characters.
+  - Styles should update automatically.
+  - Engines should work together, with sensible pairings (never stickman inside hand-drawn).
+  - Budget is not a concern; quality is. Built P06d; read [DRAWN-SCENES.md](DRAWN-SCENES.md).
+- **Code:**
+  - `engines.js` (new): the matrix of primary engines, partners and refusals; planner sources; Claude's guide.
+  - `sketch.js`: the cast; the vocabulary (poses, expressions, emotes, props, sets, moods, camera, transitions, effects, text styles); cues; lenient and strict checks; the fallback; the guide.
+  - `drawn-kit.js`, `drawn-props.js`, `drawn-things.js`, `drawn-figures.js`, `drawn-sets.js`, `drawn-engine.js` (new): the browser engine. `motion-templates.js` delegates drawn shots to it, and `motion.js` loads it and captures opaque frames as JPEG.
+  - `scene-room.js`:
+    - partner sources;
+    - cast across plan parts (16 sentences per part when drawing is primary);
+    - cue timing;
+    - repaired drawings with plan warnings, strict owner edits;
+    - 720p previews timed on words.
+  - `editing-brain.js`: cuts on cue words; drawn clips never trimmed; no plan overlays on drawn scenes.
+  - `editing-room.js`: drawings in the render scope; no cut measurement for drawn clips.
+  - `render-room.js`: redraws drawn shots on the captions' word times (up to three browsers), records frame hashes and the engine version, and treats drawn shots' own flashes as planned changes.
+  - `style.js`: launch library v2 (Stickman drawn-only, faster pacing; Hand-drawn drawn-only; Documentary gains drawn cutaways); new launch specs added as drafts to unrevised launch profiles.
+  - Scene Room: the cast and each shot's cue.
+- **Demo** (separate demo workspace on this PC, never the owner's data):
+  - The same lightning script as the 0.19 demo, so the two can be compared. The free Windows voice now runs at rate +2 with long pauses shortened outside the program (39.5 s instead of 62 s).
+  - Claude planned 18 shots, all cued, with a cast of two: Sam (blue hoodie) and Dr. Volt (white curly hair, glasses, moustache, lab coat). It used motion shots for 45 per second, 4 million a day and 30,000 degrees. This took 105 s and 14,569 tokens, with no warnings.
+  - Previews took 276 s. The edit had 18 clips, 15 of them cut on their cue words, and the critic found nothing.
+  - The 1080p render went from 489 s to 150 s after switching to JPEG frames and three browsers. Every check passed.
+  - The frame review found these issues, all fixed:
+    - a counter hidden behind its own burst (backdrop effects now draw first);
+    - a title card covering a drawn shot (no plan overlays on drawn scenes);
+    - false hidden-cut flags on drawn flashes;
+    - a character and a stamp cropped during zooms (the camera now keeps characters and words in frame);
+    - a slow ink reveal.
+- **Tests:**
+  - new `tests/engines.test.js` (2) and `tests/drawn.test.js` (every vocabulary word draws, frames are identical on redraw, shots never sit still);
+  - `tests/sketch.test.js` rewritten (6);
+  - the drawn-scene planner test (cast, cues, repairs, strict owner edits, 720p preview);
+  - editing tests for cue cuts and a documentary with hand-drawn and motion cutaways rendered on words;
+  - a style test for launch-library upgrades.
+  - `npm run check` passed; `npm test` **220/220 passed, 0 skipped (263 s)**.
+- **Not tested:**
+  - ElevenLabs narration with drawn shots;
+  - Shorts drawn shots end to end;
+  - hand-drawn and motion styles end to end with real Claude plans (only in automatic tests and contact sheets).
+
+  No GitHub push.
 
 ### 2026-10-08 — drawn scenes for stick-figure, hand-drawn and motion-graphics videos (0.19.0)
 

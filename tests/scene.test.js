@@ -16,6 +16,7 @@ const {SceneRoom, splitSentences, timeSentences, keywords} = require('../scene-r
 const {RenderRoom} = require('../render-room');
 const {findBrowser} = require('../motion');
 const Sk = require('../sketch');
+const Cap = require('../captions');
 const {createApp} = require('../server');
 
 const hasFFmpeg = (() => { try { execFileSync('ffprobe', ['-version'], {stdio: 'ignore'}); execFileSync('ffmpeg', ['-version'], {stdio: 'ignore'}); return true; } catch { return false; } })();
@@ -316,47 +317,58 @@ test('a long script is planned in parts: each part covers its own sentences, and
   assert.equal(store.usageSummary(family.id).settledTokens, 4 * 13000, 'each call is settled once, with the attempt that made it');
 });
 
-test('drawn scenes: every drawn shot carries a drawing, Claude\'s drawings are checked, and the program draws the shot itself', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
-  const drawing = n => ({background: 'paper', camera: 'push', elements: [{kind: 'figure', pose: n % 2 ? 'point' : 'think', x: 0.3, y: 0.78}, {kind: 'prop', prop: n === 99 ? 'dragon' : 'coin', x: 0.65, y: 0.4, accent: true}, {kind: 'text', text: `Market ${n}`, style: 'title'}]});
-  let broken = true;
+test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings repaired or named, and the program draws the shot itself', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
+  const drawing = n => ({engine: 'stickman', set: 'bank', camera: 'push', elements: [{kind: 'figure', who: 'c1', pose: n % 2 ? 'point' : 'think', expression: 'excited', x: 0.3, y: 0.8}, {kind: 'prop', prop: n === 99 ? 'dragon' : 'coin', x: 0.65, y: 0.4, accent: true}, {kind: 'text', text: `Market ${n}`, style: 'title'}]});
   const network = fakeNetwork({claudePlan: input => {
     const scenes = [];
-    for (let start = 1; start <= input.sentences.length; start += 15) scenes.push({sentenceStart: start, sentenceEnd: Math.min(input.sentences.length, start + 14), purpose: start === 1 ? 'hook' : 'explain', direction: 'Draw the market.', onScreenText: '', shots: [1, 2].map(k => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: drawing(broken && start === 16 && k === 2 ? 99 : k)}))});
-    return {summary: 'Drawn markets.', scenes};
+    // Parts of 16 sentences, planned in scenes of up to 8.
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) {
+      const second = start + 4 <= last ? input.sentences.find(item => item.n === start + 1) : null;
+      scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: 'Draw the market.', onScreenText: '', shots: (second ? [1, 2] : [1]).map(k => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', ...(k === 2 && second ? {cue: second.text.split(' ').slice(0, 2).join(' ')} : {}), sketch: drawing(start === 9 && k === 2 ? 99 : k)}))});
+    }
+    return {summary: 'Drawn markets.', cast: [{id: 'c1', name: 'Ava', role: 'the narrator', look: {hair: 'bun', hairColor: 'red', outfit: 'suit'}}], scenes};
   }});
   const {room, content, ids, store, styles, dataRoot, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false});
   narrate(30);
-  // The free planner gives every drawn shot a drawing made from its own narration.
+  // The free planner gives every drawn shot a drawing made from its own narration, acted by a default narrator.
   const {manifest: rules} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
   const ruleShots = rules.plan.scenes.flatMap(scene => scene.shots);
-  assert.ok(ruleShots.length && ruleShots.every(shot => shot.source === 'generated-graphics' && Sk.validate(shot.sketch)), 'Stickman draws by default');
-  // Claude's drawings use the vocabulary; one bad prop fails the plan with the shot named.
+  assert.ok(ruleShots.length && ruleShots.every(shot => shot.source === 'generated-graphics' && Sk.validate(shot.sketch, {cast: rules.plan.cast}).engine === 'stickman'), 'Stickman draws by default');
+  assert.deepEqual([rules.plan.engine, rules.plan.cast.map(item => item.name)], ['stickman', ['Narrator']]);
+  // Claude designs the cast once; an unknown prop is left out with a named warning instead of failing the plan.
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();
-  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
-  assert.equal(job.status, 'quality_failed');
-  assert.match(job.error, /Scene \d+ shot 2 drawing: Element 2 prop must be one of/);
-  assert.match(network.calls.find(call => call.path === '/v1/messages').body.system, /For generated-graphics shots leave query and prompt empty[\s\S]*"kind": "figure", "pose"/);
-  broken = false;
-  room.retryPlan(job.id, {});
-  await room.processNextPlan();
-  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);
+  const system = network.calls.find(call => call.path === '/v1/messages').body.system;
+  assert.match(system, /ENGINES\. This video's primary engine is stickman[\s\S]*Never use montage here[\s\S]*BUILD EVERY SHOT LIKE A SCENE/);
+  assert.match(system, /"cast": \[characters\]/);
   let plan = latestManifest(room, content.id);
-  assert.deepEqual(plan.plan.scenes[0].shots[0].sketch, Sk.validate(drawing(1)));
-  // The owner redraws one shot; the others keep theirs.
+  assert.deepEqual(plan.plan.cast.map(item => [item.id, item.name, item.look.hair, item.look.outfit]), [['c1', 'Ava', 'bun', 'suit']]);
+  assert.equal(plan.plan.scenes[0].shots[0].sketch.elements[0].look.hair, 'bun', 'every shot draws the character with the same look');
+  assert.ok(plan.warnings.some(item => /^S02B drawing: Element 2: "dragon" is not in the prop library/.test(item)), plan.warnings.join(' | '));
+  assert.deepEqual(plan.plan.scenes[1].shots[1].sketch.elements.map(el => el.kind), ['figure', 'text']);
+  // A shot with a cue starts when its words are spoken, not at an even split of the scene.
+  const scene = plan.plan.scenes[0], cueShot = scene.shots[1], spoken = Cap.wordTimings({sentences: plan.plan.sentences, pauses: [], narrationSeconds: plan.plan.timing.narrationSeconds});
+  assert.ok(cueShot.cue);
+  assert.equal(cueShot.startSeconds, Math.round(Sk.matchPhrase(spoken.filter(word => word.start >= scene.startSeconds), cueShot.cue).seconds * 1000) / 1000);
+  assert.notEqual(cueShot.startSeconds, Math.round((scene.startSeconds + scene.durationSeconds / 2) * 1000) / 1000);
+  // The owner redraws one shot (checked strictly); the others keep theirs.
   const first = plan.plan.scenes[0].shots[0], second = plan.plan.scenes[0].shots[1];
-  plan = room.editManifest(plan.id, {op: 'update-shot', shotId: first.id, sketch: {elements: [{kind: 'figure', pose: 'cheer'}]}, createdBy: 'Owner', expectedRevision: plan.revision});
-  assert.equal(plan.plan.scenes[0].shots[0].sketch.elements[0].pose, 'cheer');
+  assert.throws(() => room.editManifest(plan.id, {op: 'update-shot', shotId: first.id, sketch: {elements: [{kind: 'prop', prop: 'dragon'}]}, createdBy: 'Owner', expectedRevision: plan.revision}), /Drawing: Element 1 prop must be one of/);
+  plan = room.editManifest(plan.id, {op: 'update-shot', shotId: first.id, sketch: {elements: [{kind: 'figure', who: 'c1', pose: 'cheer'}]}, createdBy: 'Owner', expectedRevision: plan.revision});
+  assert.deepEqual([plan.plan.scenes[0].shots[0].sketch.elements[0].pose, plan.plan.scenes[0].shots[0].sketch.elements[0].look.hair], ['cheer', 'bun']);
   assert.deepEqual(plan.plan.scenes[0].shots[1].sketch, second.sketch);
+  assert.equal(plan.plan.scenes[0].shots[1].cue, second.cue, 'cues survive an edit');
   plan = approvePlan(room, plan);
-  // The program draws a shot itself: a local video clip, kept with its drawing, selected for the shot.
+  // The program draws a preview of each shot itself: a local video clip, kept with its drawing, selected for the shot.
   const {queued: count} = room.queueDrawAll(plan.id, {requestedBy: 'Owner'});
-  assert.equal(count, plan.plan.scenes.flatMap(scene => scene.shots).length);
+  assert.equal(count, plan.plan.scenes.flatMap(item => item.shots).length);
   const drawn = await room.processNextVisual();
   assert.equal(drawn?.status, 'completed', JSON.stringify(store.db.prepare("SELECT error FROM visual_jobs WHERE status='failed'").all()));
   const asset = room.assetRow(drawn.result.assetId), probe = JSON.parse(asset.probe), rights = JSON.parse(asset.rights);
-  assert.deepEqual([asset.origin, asset.media_type, asset.mime, probe.width, probe.height], ['drawn', 'video', 'video/mp4', 1920, 1080]);
+  assert.deepEqual([asset.origin, asset.media_type, asset.mime, probe.width, probe.height], ['drawn', 'video', 'video/mp4', 1280, 720]);
   assert.deepEqual([rights.basis, rights.synthetic, rights.disclosure], ['own-drawing', false, 'none']);
   assert.ok(probe.durationSeconds >= plan.plan.scenes[0].shots[0].durationSeconds, 'a drawn clip is never shorter than its shot');
   assert.equal(store.db.prepare('SELECT asset_id FROM visual_selections WHERE content_id=? AND shot_id=?').get(content.id, drawn.shotId).asset_id, asset.id);

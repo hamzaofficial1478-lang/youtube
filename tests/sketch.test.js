@@ -1,38 +1,78 @@
 'use strict';
-// P06c drawn scenes: the closed vocabulary, the free fallback from the narration, and the guide Claude reads.
+// P06c/P06d drawn shots: the closed vocabulary, cast, word timing, the free fallback and the guide Claude reads.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Sk = require('../sketch');
 
-test('a drawn scene uses the closed vocabulary; positions stay inside the frame and above the captions', () => {
-  const scene = Sk.validate({elements: [{kind: 'figure', pose: 'shock', x: 1.4, y: 0.99}, {kind: 'prop', prop: 'bolt', accent: true, label: 'Lightning {bold}'}, {kind: 'text', text: '  5x  hotter <b> ', style: 'title'}, {kind: 'arrow', from: [0.1, 0.5], to: [0.4, 0.5]}, {kind: 'bubble', text: 'Why later?', thought: true}]});
-  assert.deepEqual([scene.background, scene.camera], ['paper', 'push'], 'defaults');
-  assert.deepEqual([scene.elements[0].x, scene.elements[0].y, scene.elements[0].size, scene.elements[0].facing], [0.92, 0.8, 'm', 'right'], 'clamped into the frame, feet above the caption band');
-  assert.equal(scene.elements[1].label, 'Lightning bold', 'braces never reach the drawing');
-  assert.equal(scene.elements[2].text, '5x hotter b', 'markup and spacing are cleaned');
-  assert.equal(scene.elements[4].thought, true);
+const cast = Sk.validateCast([{id: 'c1', name: 'Max', role: 'the narrator', look: {hair: 'spiky', hairColor: 'ginger'}}, {id: 'boss', name: 'The Boss', look: {body: 'creature'}}]);
+
+test('a drawn shot uses the closed vocabulary; positions stay inside the frame and above the captions', () => {
+  const shot = Sk.validate({elements: [{kind: 'figure', pose: 'shock', x: 1.4, y: 0.99}, {kind: 'prop', prop: 'bolt', accent: true, label: 'Lightning {bold}'}, {kind: 'text', text: '  5x  hotter <b> ', style: 'stamp'}, {kind: 'arrow', from: [0.1, 0.5], to: 2}, {kind: 'bubble', text: 'Why later?', thought: true, on: 1}, {kind: 'fx', effect: 'burst', on: 2}]});
+  assert.deepEqual([shot.engine, shot.set, shot.mood, shot.camera, shot.transition], ['stickman', 'none', 'normal', 'push', 'cut'], 'defaults');
+  const [figure, prop, text, arrow, bubble, fx] = shot.elements;
+  assert.deepEqual([figure.x, figure.y, figure.size, figure.facing, figure.expression, figure.look.hair], [0.9, 0.84, 'm', 'right', 'neutral', 'messy'], 'clamped into the frame, feet above the caption band, the default look');
+  assert.equal(prop.label, 'Lightning bold', 'braces never reach the drawing');
+  assert.equal(text.text, '5x hotter b', 'markup and spacing are cleaned');
+  assert.deepEqual([arrow.from, arrow.to, bubble.on, fx.on], [[0.1, 0.5], 2, 1, 2], 'arrows, bubbles and effects can point at other elements');
   for (const [raw, pattern] of [
-    [{elements: []}, /1-8 elements/], [{elements: Array(9).fill({kind: 'prop', prop: 'sun'})}, /1-8 elements/], [{elements: [{kind: 'prop', prop: 'dragon'}]}, /prop must be one of/],
-    [{elements: [{kind: 'figure', pose: 'dance'}]}, /pose must be one of/], [{elements: [{kind: 'video'}]}, /kind must be/], [{elements: [{kind: 'text', text: ''}]}, /needs text/],
-    [{elements: [{kind: 'arrow', from: [0.1]}]}, /needs from and to/], [{background: 'neon', elements: [{kind: 'prop', prop: 'sun'}]}, /Background must be/], [[], /must be an object/],
+    [{elements: []}, /1-12 elements/], [{elements: Array(13).fill({kind: 'prop', prop: 'sun'})}, /1-12 elements/], [{elements: [{kind: 'prop', prop: 'dragon'}]}, /prop must be one of/],
+    [{elements: [{kind: 'figure', pose: 'moonwalk'}]}, /pose must be one of/], [{elements: [{kind: 'video'}]}, /kind must be/], [{elements: [{kind: 'text', text: ''}]}, /needs text/],
+    [{elements: [{kind: 'arrow', from: [0.1]}]}, /from must be a point/], [{set: 'volcano-lair', elements: [{kind: 'prop', prop: 'sun'}]}, /Set must be one of/], [[], /must be an object/],
+    [{engine: 'handdrawn', elements: [{kind: 'prop', prop: 'sun'}]}, /draws with stickman or motion, not handdrawn/],
   ]) assert.throws(() => Sk.validate(raw), pattern);
 });
 
-test('the free fallback draws what the narration says: a reacting figure, the props it mentions, its number', () => {
-  const hot = Sk.fromText('A single bolt of lightning is five times hotter than the surface of the sun.');
-  assert.deepEqual(hot.elements.map(item => item.kind === 'figure' ? `figure:${item.pose}` : item.kind === 'prop' ? item.prop : `text:${item.text}`), ['figure:shock', 'bolt', 'sun']);
+test('Claude\'s near-misses are repaired with a warning; the owner\'s own edits are checked strictly', () => {
+  const warnings = [];
+  const shot = Sk.validate({engine: 'stickman', set: 'office', elements: [{kind: 'prop', prop: 'cash'}, {kind: 'prop', prop: 'dragon'}, {kind: 'figure', pose: 'moonwalk', who: 'c1'}, {kind: 'figure', who: 'ghost'}]}, {cast, lenient: true, warn: message => warnings.push(message)});
+  assert.deepEqual(shot.elements.map(el => el.prop || el.pose), ['money', 'stand', 'stand'], 'a synonym maps onto the library, an unknown prop is left out, an unknown pose stands');
+  assert.equal(shot.elements[1].look.hair, 'spiky', 'a cast member keeps their look in every shot');
+  assert.equal(shot.elements[2].who, undefined);
+  assert.equal(warnings.length, 3);
+  assert.match(warnings.join(' '), /"dragon" is not in the prop library[\s\S]*pose must be one of[\s\S]*ghost, who is not in the cast/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'prop', prop: 'dragon'}]}, {lenient: true}), /at least one element/, 'nothing drawable is still an error');
+  // A footage video draws its partner cutaways with the hand-drawn or motion engine, never stick figures.
+  assert.equal(Sk.validate({engine: 'handdrawn', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'handdrawn');
+  assert.throws(() => Sk.validate({engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}), /draws with motion or handdrawn/);
+});
+
+test('the cast is validated once and characters keep their looks', () => {
+  assert.deepEqual(cast.map(item => [item.id, item.name, item.look.body, item.look.hair]), [['c1', 'Max', 'stick', 'spiky'], ['boss', 'The Boss', 'creature', 'messy']]);
+  assert.equal(Sk.validateCast(Array(9).fill(0).map((_, k) => ({id: `c${k}`}))).length, Sk.MAX_CAST);
+  assert.throws(() => Sk.validateCast([{id: 'a'}, {id: 'a'}]), /repeats the id a/);
+  assert.throws(() => Sk.validateCast([{look: {hair: 'dreadlocks-of-fire'}}]), /hair must be one of/);
+});
+
+test('drawings arrive on the narrator\'s words: cues, changes and exits resolve against the spoken words', () => {
+  const words = 'A single bolt of lightning is five times hotter than the surface of the sun'.split(' ').map((text, k) => ({text, start: k * 0.25}));
+  const shot = Sk.validate({elements: [{kind: 'figure', pose: 'cower', then: [{at: 'hotter', pose: 'shock'}]}, {kind: 'prop', prop: 'bolt', at: 'bolt', until: 'surface'}, {kind: 'text', text: '5x', style: 'stamp', at: 'five times'}, {kind: 'prop', prop: 'sun', at: 'suns'}, {kind: 'prop', prop: 'moon', at: 'moonlight'}], focus: [{at: 'sun', x: 0.8, y: 0.3, zoom: 1.8}]});
+  const times = Sk.timing(shot, words);
+  assert.deepEqual(times.elements.map(item => item.t0), [null, 0.5, 1.5, 3.5, null], 'a cue matches its word (stems too); an unspoken cue stays unset and the engine staggers it');
+  assert.deepEqual([times.elements[0].then, times.elements[1].t1, times.focus], [[2], 2.75, [3.5]]);
+  assert.deepEqual(Sk.matchPhrase(words, 'five times'), {index: 6, seconds: 1.5});
+  assert.equal(Sk.matchPhrase(words, 'six times'), null);
+});
+
+test('the free fallback builds a scene from the narration: a set, the narrator acting, props it names, its number counting up', () => {
+  const hot = Sk.fromText('A single bolt of lightning is five times hotter than the surface of the sun.', {cast});
+  assert.equal(hot.set, 'storm');
+  assert.deepEqual(hot.elements.map(el => el.kind === 'figure' ? `${el.who}:${el.pose}:${el.expression}` : el.prop || el.text), ['c1:shock:shocked', 'bolt', 'sun']);
   const count = Sk.fromText('Right now, lightning is striking about 45 times every second.', {shotIndex: 1});
   assert.equal(count.elements[0].facing, 'left', 'every other shot mirrors the layout');
-  assert.deepEqual(count.elements.at(-1), {kind: 'text', text: '45', x: 0.5, y: 0.16, size: 'l', style: 'number', accent: true});
-  assert.equal(Sk.fromText('A quiet morning.', {onScreenText: 'The calm before'}).elements.at(-1).text, 'The calm before', 'the plan\'s on-screen text wins');
-  assert.equal(Sk.fromText('Nothing to see.', {purpose: 'hook'}).elements[1].prop, 'exclamation', 'a hook without a prop gets an exclamation');
+  assert.deepEqual(count.elements.at(-1), {kind: 'text', text: '45', style: 'counter', x: 0.5, y: 0.15, size: 'l', accent: true, enter: 'auto'});
+  const hook = Sk.fromText('Nothing to see.', {purpose: 'hook'});
+  assert.deepEqual([hook.camera, hook.elements[1].effect, hook.elements[1].on, hook.elements[2].prop], ['punch', 'burst', 3, 'exclamation'], 'a hook opens on a punch with a burst behind its prop');
+  assert.equal(Sk.fromText('Prices rise.', {primary: 'motion'}).elements.some(el => el.kind === 'figure'), false, 'motion graphics without a cast draw no figure');
   assert.deepEqual(Sk.fromText('A single bolt of lightning.'), Sk.fromText('A single bolt of lightning.'), 'deterministic');
 });
 
-test('Claude reads the whole vocabulary and the layout rules', () => {
-  const guide = Sk.promptGuide();
-  for (const word of [...Sk.POSES, ...Sk.PROPS]) assert.ok(guide.includes(word), word);
-  assert.match(guide, /bottom fifth of the frame clear for captions/);
-  assert.match(guide, /Never write text the narration does not support/);
+test('Claude reads the whole vocabulary, the scene-building rules and the layout rules', () => {
+  const guide = Sk.promptGuide('stickman');
+  for (const word of [...Sk.POSES, ...Sk.PROPS, ...Sk.EXPRESSIONS, ...Sk.SETS, ...Sk.FX, ...Sk.EMOTES, ...Sk.LOOK.headwear]) assert.ok(guide.includes(word), word);
+  assert.match(guide, /BUILD EVERY SHOT LIKE A SCENE/);
+  assert.match(guide, /keep the bottom 18% clear for captions/);
+  assert.match(guide, /Never copy a real person or another channel's characters/);
+  assert.match(guide, /"engine": stickman\|motion/);
+  assert.match(Sk.promptGuide('montage'), /"engine": motion\|handdrawn/);
   assert.match(Sk.VERSION, /^drawn-scene\/\d+$/);
 });
