@@ -422,7 +422,7 @@ class SceneRoom {
     if (spec && !sources.length) blockers.push(`${spec.name} has no visual source this milestone can execute.`);
     return {
       family, ready: !blockers.length, blockers,
-      voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
+      voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, auditionId: voice.auditionId || null, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
       style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
       spec, sources, engine: planner.engine, primarySource: planner.primarySource,
     };
@@ -513,7 +513,12 @@ class SceneRoom {
       style: {name: spec.name, summary: spec.summary, engine: inputs.engine, sources: inputs.sources, primarySource: inputs.primarySource, cameraMoves: spec.motion.cameraMoves,
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
-      sentences: timed.map(item => ({n: item.n, seconds: round(item.durationSeconds, 1), text: item.text})),
+      // The narrator's performance (voice direction), when the approved narration was directed: faces, moods
+      // and pace follow the voice.
+      sentences: (performed => timed.map(item => {
+        const line = performed?.lines[item.n - 1], same = performed?.sentences[item.n - 1]?.text === item.text;
+        return {n: item.n, seconds: round(item.durationSeconds, 1), text: item.text, ...(line && same ? {delivery: {emotion: line.emotion, energy: line.energy, pace: line.pace}} : {})};
+      }))(inputs.voice.auditionId ? this.store.voiceDirectionLines?.(inputs.voice.auditionId) : null),
       competitorGuidance: this.visualGuidance(inputs.family.id),
     };
     // One part for an ordinary script; a long one is split into parts of PART_SENTENCES with their neighbours' words.

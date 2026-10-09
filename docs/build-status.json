@@ -1,5 +1,5 @@
 {
-  "version": "0.21.0",
+  "version": "0.22.0",
   "updated": "2026-10-08",
   "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
@@ -297,6 +297,13 @@
           "evidence": "0.21.0 (2026-10-09): engines.js now describes strengths, risks and usual mixes and nothing is forbidden in code (owner instruction: reasoning, not hard-coded rules); shots that leave the main look need a reason in their notes; launch library v3 restores photos/footage/AI images to drawing styles as options; the cast takes every character the script needs (sanity bound 40); scenes carry a setting; Sk.continuity notes place jumps and screen-direction flips; the continuity review (second Claude answer per part, own token limit) redraws shots that do not match their words. Real Claude test on the 39.5 s demo: the review changed 4 of 18 shots with reasons (a stamp naming the sun before it was spoken, a stamp cropped by a zoom, a picture that did not match 'hear it', a character jumping sides), 43,222 tokens for plan and review. Drawn frames back to lossless PNG."
         },
         {
+          "id": "P08b",
+          "title": "Voice direction: the narrator's emotion follows the script",
+          "status": "testing",
+          "remaining": "Not yet heard live: needs the owner's ElevenLabs key and an Eleven v3/v4 voice; tag reading varies by voice. The Windows demo voice cannot perform tags. The scene planner's use of the direction is covered by code review, not by an automatic test.",
+          "evidence": "0.22.0 (2026-10-09): delivery.js (18 emotions, energy, pace, pause, stressed words; inline tags on ElevenLabs v3/v4, per-segment voice settings or OpenAI instructions; request limits; Claude prompt); voice-direction.js (Claude on a click inside a token reservation, immutable revisions per script revision, strict owner edits); auditions perform the newest direction with billed tag characters and 3 paid attempts per direction; the scene planner receives each sentence's delivery. tests/delivery.test.js (4). Full suite 225/225."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -428,5 +435,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Engine reasoning and continuity review"
+  "milestone": "Voice direction"
 }
