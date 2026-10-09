@@ -11,6 +11,8 @@
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
   const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, none: 0};
+  // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
+  const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' ? 0.45 : ENTER_SECONDS[enter] ?? 0.34);
   const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch']);
   const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse']);
   const MARKS = new Set(['underline', 'circle', 'cross', 'check', 'spotlight']);
@@ -55,11 +57,15 @@
     const el = d.elements.map((item, i) => {
       const cue = times.elements?.[i] || {};
       let ts = cue.t0;
+      const enter = !item.enter || item.enter === 'auto' ? autoEnter(item, engine) : item.enter;
+      // A drawing arriving on a word starts a moment before it, so it has landed when the word is heard.
+      if (ts != null && item.kind !== 'fx') ts -= Math.min(0.3, 0.08 + 0.45 * enterSeconds(enter, engine));
       if (ts == null) { ts = engine === 'handdrawn' ? 0.05 + order * Math.min(0.5, Math.max(0.18, dur * 0.45 / Math.max(1, uncued))) : 0.03 + order * 0.08; order++; }
       ts = Math.max(0, Math.min(ts, dur - 0.3));
       const te = cue.t1 != null && cue.t1 > ts + 0.25 ? cue.t1 : null;
-      const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] ?? ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
-      return {ts, te, enter: !item.enter || item.enter === 'auto' ? autoEnter(item, engine) : item.enter, steps, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
+      // A change of pose or face anticipates its word by a beat, as an animator would key it.
+      const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] != null ? Math.max(ts, cue.then[k] - 0.1) : ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
+      return {ts, te, enter, steps, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
     });
     // A shot never opens on an empty frame: when nothing would be on screen for the first 0.6 s, the first
     // character (or else the first thing) is there from the start.
@@ -69,7 +75,7 @@
     // still icon pasted on a page.
     const props = d.elements.map((item, i) => i).filter(i => d.elements[i].kind === 'prop' && !['cloud', 'rainbow'].includes(d.elements[i].prop));
     const stage = !d.elements.some(item => item.kind === 'figure') && (!d.set || ['abstract', 'none'].includes(d.set)) && props.length && props.length <= 2 ? props.reduce((a, b) => (est[b].r > est[a].r ? b : a)) : null;
-    const focus = (d.focus || []).map((item, k) => ({...item, t: times.focus?.[k] ?? dur * (k + 1) / ((d.focus || []).length + 1)})).sort((a, b) => a.t - b.t);
+    const focus = (d.focus || []).map((item, k) => ({...item, t: times.focus?.[k] != null ? Math.max(0, times.focus[k] - 0.15) : dur * (k + 1) / ((d.focus || []).length + 1)})).sort((a, b) => a.t - b.t);
     const impulses = [];
     d.elements.forEach((item, i) => {
       if (item.kind === 'fx' && ['shake', 'punch'].includes(item.effect)) impulses.push({kind: item.effect, t: el[i].ts});
@@ -365,7 +371,7 @@
     if (t < tm.ts) return;
     const exitAt = tm.te;
     if (exitAt !== null && t > exitAt + 0.22) return;
-    const local = t - tm.ts, enter = el.kind === 'fx' ? 'none' : tm.enter, d = ENTER_SECONDS[enter] ?? 0.34;
+    const local = t - tm.ts, enter = el.kind === 'fx' ? 'none' : tm.enter, d = enterSeconds(enter);
     let sx = 1, sy = 1, dx = 0, dy = 0, a = 1, p = 1;
     if (d && local < d) {
       const q = local / d;

@@ -382,7 +382,7 @@ function sceneJoin(previous, next, budget, spec, fps) {
 }
 
 // The auto edit. `variants` (sceneId -> n) lets single-scene repair produce a different take of one scene.
-function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en'}) {
+function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null}) {
   const totalFrames = Math.max(1, Math.round(narrationSeconds * fps));
   const {pacing} = spec;
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
@@ -397,7 +397,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
   const clips = [];
   let breath = 0;
   // Planned cues (the words a shot starts on) become exact cuts, on the measured narration's word times.
-  const words = scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences, pauses, narrationSeconds}) : [];
+  const words = scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences, pauses, narrationSeconds, measured}) : [];
   const cueCuts = new Set();
   for (const scene of sceneRows) {
     const shots = scene.shots, n = shots.length, sceneFrames = scene.endFrame - scene.startFrame;
@@ -434,7 +434,8 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     });
     let edges = [scene.startFrame, ...cuts.map(cut => cut.frame), scene.endFrame];
     const sceneWords = words.filter(word => word.start * fps >= scene.startFrame - 1 && word.start * fps < scene.endFrame);
-    const cueFrames = shots.map((shot, k) => (k === 0 ? scene.startFrame : shot.cue ? (hit => (hit ? Math.round(hit.seconds * fps) : null))(Sk.matchPhrase(sceneWords, shot.cue)) : null));
+    // A cut on a cue word lands two frames before the word, the way an editor cuts ahead of the voice.
+    const cueFrames = shots.map((shot, k) => (k === 0 ? scene.startFrame : shot.cue ? (hit => (hit ? Math.max(scene.startFrame + 1, Math.round(hit.seconds * fps) - 2) : null))(Sk.matchPhrase(sceneWords, shot.cue)) : null));
     const gap = Math.round(0.5 * fps);
     const cued = n > 1 && cueFrames.every((frame, k) => frame !== null && (k === 0 || frame - cueFrames[k - 1] >= gap)) && scene.endFrame - cueFrames.at(-1) >= gap;
     if (cued) { edges = [...cueFrames, scene.endFrame]; shots.forEach((shot, k) => { if (k) cueCuts.add(shot.id); }); }
@@ -551,7 +552,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     joins, graphics, markers,
     ending: {fadeOutFrames: Math.min(Math.round(0.6 * fps), Math.floor(clips[clips.length - 1].frames / 2)), reason: 'The video fades out on its last image instead of freezing.', skill: SKILL.endings},
     // Captions follow the narration, not the clips: owner changes to cuts and graphics never move them.
-    captions: Cap.buildCaptions({sentences, pauses, narrationSeconds, format, locale}),
+    captions: Cap.buildCaptions({sentences, pauses, narrationSeconds, format, locale, measured}),
   };
   validateTimeline(timeline);
   return timeline;

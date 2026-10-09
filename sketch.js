@@ -244,16 +244,36 @@ function mend(shots, cast = []) {
       if (issue.kind === 'place') { fixes.push({label: issue.shot.label, fix: `Kept the ${issue.previous.sketch.set}: its words do not move the story to the ${issue.shot.sketch.set}.`}); issue.shot.sketch.set = issue.previous.sketch.set; }
       else { issue.figure.facing = issue.before.facing; fixes.push({label: issue.shot.label, fix: `${name(issue.figure.who)} keeps facing ${issue.before.facing} after changing sides, so the direction on screen holds.`}); }
     }
-    // A character already on screen in the shot before stays there from the first frame, not popping in again.
-    const a = shots[k - 1], b = shots[k];
-    if (!a.sketch || !b.sketch || a.sceneId !== b.sceneId) continue;
-    for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who && (el.at || !['auto', 'none'].includes(el.enter || 'auto')))) {
-      if (!a.sketch.elements.some(el => el.kind === 'figure' && el.who === fig.who)) continue;
-      delete fig.at; fig.enter = 'none';
-      fixes.push({label: b.label, fix: `${name(fig.who)} stays on screen from ${a.label} instead of appearing again.`});
-    }
+    fixes.push(...carryOne(shots[k - 1], shots[k], name));
+  }
+  // Two characters with nothing between them on the ground stand together: far apart they stay small at the
+  // edges with dead space in the middle.
+  for (const shot of shots) {
+    const figs = shot.sketch?.elements.filter(el => el.kind === 'figure') || [];
+    if (figs.length !== 2) continue;
+    const [a, b] = [...figs].sort((p, q) => p.x - q.x), gap = b.x - a.x;
+    if (gap <= 0.5 || shot.sketch.elements.some(el => !['figure', 'fx'].includes(el.kind) && (el.x ?? 0.5) > a.x + 0.08 && (el.x ?? 0.5) < b.x - 0.08 && (el.y ?? 0.5) > 0.5)) continue;
+    const mid = (a.x + b.x) / 2, k = 0.4 / gap, move = x => round3(mid + (x - mid) * k);
+    for (const fig of figs) { fig.x = move(fig.x); for (const step of fig.then || []) if (step.x !== undefined) step.x = move(step.x); }
+    fixes.push({label: shot.label, fix: `${name(a.who)} and ${name(b.who)} stand closer together, so they fill the frame.`});
   }
   return fixes;
+}
+// A character already on screen in the shot before stays there from the first frame, not popping in again.
+function carryOne(a, b, name) {
+  if (!a?.sketch || !b?.sketch || a.sceneId !== b.sceneId) return [];
+  const fixes = [];
+  for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who && (el.at || !['auto', 'none'].includes(el.enter || 'auto')))) {
+    if (!a.sketch.elements.some(el => el.kind === 'figure' && el.who === fig.who)) continue;
+    delete fig.at; fig.enter = 'none';
+    fixes.push({label: b.label, fix: `${name(fig.who)} stays on screen from ${a.label} instead of appearing again.`});
+  }
+  return fixes;
+}
+// Only the carry (never a change of place or position), for drawings of an existing plan at render time.
+function carry(shots, cast = []) {
+  const name = id => cast.find(item => item.id === id)?.name || id;
+  return shots.flatMap((shot, k) => (k ? carryOne(shots[k - 1], shot, name) : []));
 }
 
 // ---------------------------------------------------------------- timing on the narrator's words
@@ -348,4 +368,4 @@ function promptGuide(primary = 'stickman') {
   ].join('\n');
 }
 
-module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, timing, matchPhrase, fromText, promptGuide};
+module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

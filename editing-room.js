@@ -73,7 +73,7 @@ class EditingRoom {
     const styleRow = this.styles.revisionRow(base.manifestRow.style_revision_id);
     const scope = {
       contentRevision: content.revision, visualApprovalId: base.visual.approvalId, manifestId: base.manifestRow.id, manifestRevision: base.manifestRow.revision, manifestHash: base.manifestRow.payload_hash,
-      narration: {approvalId: base.voice.approvalId, sha256: base.voice.artifact.sha256, relativePath: base.voice.artifact.relativePath, durationSeconds: base.voice.analysis.durationSeconds},
+      narration: {approvalId: base.voice.approvalId, sha256: base.voice.artifact.sha256, relativePath: base.voice.artifact.relativePath, durationSeconds: base.voice.analysis.durationSeconds, ...(base.voice.analysis.alignment?.words?.length ? {words: base.voice.analysis.alignment.words} : {})},
       style: {revisionId: styleRow.id, revision: styleRow.revision, specHash: styleRow.spec_hash, name: base.spec.name}, format: base.family.format,
     };
     return {...base, payload, snapshot, assets, files, scope, scopeHash: hash(scope), script: content.script};
@@ -131,7 +131,7 @@ class EditingRoom {
     }));
     return {
       alignment,
-      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale,
+      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
         scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
     };
   }

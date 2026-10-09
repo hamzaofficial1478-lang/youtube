@@ -110,10 +110,18 @@ test('an audition performs the newest direction: tagged requests, varied speed, 
   const sample = path.join(artifactRoot, 'provider.wav');
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'sine=frequency=380:duration=1', '-ar', '44100', '-ac', '1', '-y', sample]);
   const bytes = fs.readFileSync(sample), requests = [];
-  const runtime = new VoiceRuntime(store, {key: () => 'fixture-key', fetch: async (url, options) => { requests.push(JSON.parse(options.body)); return new Response(bytes, {status: 200, headers: {'content-type': 'audio/mpeg'}}); }}, {artifactDir: path.join(artifactRoot, 'artifacts')});
+  // ElevenLabs answers with the audio and every character's time (here spread evenly over the 1 s take).
+  const timed = text => ({audio_base64: bytes.toString('base64'), alignment: {characters: [...text], character_start_times_seconds: [...text].map((_, k) => k / text.length), character_end_times_seconds: [...text].map((_, k) => (k + 1) / text.length)}});
+  const runtime = new VoiceRuntime(store, {key: () => 'fixture-key', fetch: async (url, options) => { assert.match(String(url), /\/with-timestamps\?/); requests.push(JSON.parse(options.body)); return new Response(JSON.stringify(timed(requests.at(-1).text)), {status: 200, headers: {'content-type': 'application/json'}}); }}, {artifactDir: path.join(artifactRoot, 'artifacts')});
   await runtime.processNext();
   assert.deepEqual(requests.slice(0, 4).map(item => [item.text.split(' ')[0], item.voice_settings.speed]), [['[dramatically]', 1.1], ['[curious]', 1], ['[excited]', 1.1], ['[somberly]', 0.9]]);
   assert.match(requests[4].text, /^Storm clouds build/, 'unmarked sentences are read as written');
   const audition = store.voiceAuditions().find(item => item.jobId === job.id);
+  // Measured word timing: every spoken word, no delivery tags, later parts offset by the parts before them.
+  const measured = store.voiceAudition(audition.id).analysis.alignment;
+  assert.equal(measured.method, 'measured');
+  assert.equal(measured.words.some(word => /\[|\]/.test(word.text)), false);
+  assert.ok(measured.words.every((word, k) => k === 0 || word.start >= measured.words[k - 1].start), 'in time order across parts');
+  assert.ok(measured.words.at(-1).start > 1, 'later parts start after the first take');
   assert.deepEqual(store.voiceDirectionLines(audition.id).lines.slice(0, 4).map(line => line.emotion), ['dramatic', 'curious', 'excited', 'somber'], 'the scene planner reads the performed direction');
 });

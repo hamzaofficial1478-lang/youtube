@@ -30,7 +30,8 @@ function weight(token) {
 // Times every word. Each sentence window is measured (cuts sit on real pauses); inside it words share the
 // speaking time by spoken weight, and each pause measured inside the sentence is anchored at the clause
 // break nearest its time (or the nearest word break), so commas and breaths split the words correctly.
-function wordTimings({sentences, pauses = [], narrationSeconds}) {
+function wordTimings({sentences, pauses = [], narrationSeconds, measured = null}) {
+  if (measured?.length) { const exact = measuredTimings(sentences, measured); if (exact) return exact; }
   const words = [];
   sentences.forEach((sentence, index) => {
     const tokens = String(sentence.text).match(/\S+/g) || [];
@@ -72,6 +73,30 @@ function wordTimings({sentences, pauses = [], narrationSeconds}) {
     }
   });
   return words;
+}
+
+// Measured timing (the voice provider's own word timestamps): the script's words are matched in order to the
+// spoken words; a word said differently (a pronunciation fix) takes the time between its matched neighbours.
+// Null when too few words match to trust it, so the estimate is used instead.
+function measuredTimings(sentences, measured) {
+  const key = text => bare(String(text)).toLowerCase();
+  const spoken = measured.map(word => ({key: key(word.text), start: Number(word.start), end: Number(word.end)})).filter(word => Number.isFinite(word.start) && Number.isFinite(word.end));
+  const tokens = sentences.flatMap((sentence, index) => (String(sentence.text).match(/\S+/g) || []).map(text => ({text, sentence: sentence.n ?? index + 1, key: key(text)})));
+  if (!tokens.length || !spoken.length) return null;
+  const hits = new Array(tokens.length).fill(null);
+  let from = 0;
+  tokens.forEach((token, i) => { for (let k = from; k < Math.min(spoken.length, from + 8); k++) if (token.key && spoken[k].key === token.key) { hits[i] = spoken[k]; from = k + 1; return; } });
+  if (hits.filter(Boolean).length < tokens.length * 0.6) return null;
+  const words = tokens.map((token, i) => ({text: token.text, start: hits[i]?.start ?? null, end: hits[i]?.end ?? null, sentence: token.sentence}));
+  for (let i = 0; i < words.length; i++) {
+    if (words[i].start !== null) continue;
+    let j = i;
+    while (j < words.length && words[j].start === null) j++;
+    const from = i ? words[i - 1].end : Math.max(0, (words[j]?.start ?? 0) - 0.3 * (j - i)), to = j < words.length ? words[j].start : from + 0.3 * (j - i);
+    for (let k = i; k < j; k++) { words[k].start = round(from + (to - from) * (k - i) / (j - i)); words[k].end = round(from + (to - from) * (k - i + 1) / (j - i)); }
+    i = j - 1;
+  }
+  return words.map(word => ({...word, start: round(word.start), end: round(Math.max(word.start, word.end))}));
 }
 
 function lineBreak(text, lineChars) {
@@ -121,9 +146,9 @@ function splitPhrase(phrase, {maxWords, maxChars, maxSeconds, english}) {
 // Groups words into caption cues. Phrases end where the voice breaks (a sentence end, a pause of 0.18 s or
 // more, a clause break); a phrase over the format's word, character or time limit (Shorts also by speaking
 // rate) is split into the fewest, most even captions, never ending one on a weak word like "the" or "did".
-function buildCaptions({sentences, pauses = [], narrationSeconds, format = 'long-form', locale = 'en'}) {
+function buildCaptions({sentences, pauses = [], narrationSeconds, format = 'long-form', locale = 'en', measured = null}) {
   const limits = LIMITS[format] || LIMITS['long-form'], english = !locale || /^en(?:-|$)/i.test(locale);
-  const words = wordTimings({sentences, pauses, narrationSeconds});
+  const exact = measured?.length ? measuredTimings(sentences, measured) : null, words = exact || wordTimings({sentences, pauses, narrationSeconds});
   const rate = new Map();
   for (const word of words) { const item = rate.get(word.sentence) || {n: 0, from: word.start, to: word.end}; item.n++; item.to = word.end; rate.set(word.sentence, item); }
   const cap = sentence => {
@@ -169,7 +194,7 @@ function buildCaptions({sentences, pauses = [], narrationSeconds, format = 'long
     previousHad = group.emphasis !== null;
     previousSentence = group.sentence;
   }
-  return {schema: SCHEMA, method: METHOD, enabled: true, format, groups: groups.map(({sentence, ...group}) => group), note: pauses.length ? 'Sentence starts and clause pauses are measured in the narration; word times inside a phrase are estimated by spoken length.' : 'No pauses were measured, so word times are estimated from word lengths only.', skill: SKILL.grouping};
+  return {schema: SCHEMA, method: exact ? 'measured' : METHOD, enabled: true, format, groups: groups.map(({sentence, ...group}) => group), note: exact ? 'Word times are measured: the voice provider timed every word.' : pauses.length ? 'Sentence starts and clause pauses are measured in the narration; word times inside a phrase are estimated by spoken length.' : 'No pauses were measured, so word times are estimated from word lengths only.', skill: SKILL.grouping};
 }
 
 // While a full-frame designed graphic holds text on a vertical frame, the caption rail clears (the
@@ -291,4 +316,4 @@ function validateCaptions(captions, narrationSeconds) {
   return problems;
 }
 
-module.exports = {SCHEMA, METHOD, SKILL, LIMITS, wordTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};
+module.exports = {SCHEMA, METHOD, SKILL, LIMITS, wordTimings, measuredTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};

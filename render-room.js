@@ -310,6 +310,11 @@ class RenderRoom {
         // Drawn shots: each is drawn again for its exact hold (plus its transition), and every drawing arrives on the
         // narrator's words as the captions time them. The approved drawing and engine decide every frame.
         const drawings = Object.entries(scope.edit.drawings || {});
+        // A character already on screen in the clip before (same scene) stays on screen across the cut, even in
+        // plans made before that rule (Sk.carry only removes a re-entrance; it never moves anything).
+        const ordered = scope.edit.timeline.clips.map(clip => ({label: clip.label, sceneId: clip.sceneId, clipId: clip.id, sketch: scope.edit.drawings?.[clip.id] ? structuredClone(scope.edit.drawings[clip.id].sketch) : null}));
+        Sk.carry(ordered);
+        const carried = Object.fromEntries(ordered.filter(item => item.sketch).map(item => [item.clipId, item.sketch]));
         if (drawings.length) {
           const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], tl = scope.edit.timeline, fps = Math.min(tl.fps, R.PRESETS.proxy.maxFps);
           const spec = scope.style.spec, spoken = (tl.captions?.groups || []).flatMap(group => group.words);
@@ -323,7 +328,7 @@ class RenderRoom {
             const index = tl.clips.findIndex(item => item.id === clipId), clip = tl.clips[index], extra = index < tl.clips.length - 1 ? tl.joins[index].frames : 0;
             const start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
             const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3)}));
-            const sketch = Sk.validate(drawing.sketch, {primary: scope.edit.engine, lenient: true});
+            const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: scope.edit.engine, lenient: true});
             const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
             const drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
               vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});

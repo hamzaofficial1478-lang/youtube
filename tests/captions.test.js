@@ -179,3 +179,17 @@ test('captions belong to every new edit, switch on and off as an owner change, a
   assert.throws(() => B.applyOp(timeline, {type: 'set-caption', groupId: target.id, text: ''}, {spec: SPEC}), /at least one word/);
   assert.throws(() => B.applyOp(legacy, {type: 'set-caption', groupId: 'cg001', text: 'x'}, {spec: SPEC}), /before captions existed/);
 });
+
+test('measured word times from the voice replace the estimate; a re-spelled word takes the time between its neighbours', () => {
+  const sentences = [{n: 1, text: 'SQL makes data easy.', startSeconds: 0, durationSeconds: 2}, {n: 2, text: 'Try it today.', startSeconds: 2, durationSeconds: 1.5}];
+  // The voice said "sequel" (a pronunciation fix), so "SQL" has no measured match of its own.
+  const spoken = [{text: 'sequel', start: 0.1, end: 0.5}, {text: 'makes', start: 0.6, end: 0.9}, {text: 'data', start: 1.0, end: 1.3}, {text: 'easy.', start: 1.35, end: 1.8}, {text: 'Try', start: 2.2, end: 2.4}, {text: 'it', start: 2.45, end: 2.55}, {text: 'today.', start: 2.6, end: 3.1}];
+  const words = Cap.wordTimings({sentences, pauses: [], narrationSeconds: 3.5, measured: spoken});
+  assert.deepEqual(words.slice(1).map(word => [word.text, word.start]), [['makes', 0.6], ['data', 1], ['easy.', 1.35], ['Try', 2.2], ['it', 2.45], ['today.', 2.6]]);
+  assert.ok(words[0].start < 0.6 && words[0].end <= 0.6, 'the re-spelled word sits before its matched neighbour');
+  const captions = Cap.buildCaptions({sentences, narrationSeconds: 3.5, measured: spoken});
+  assert.equal(captions.method, 'measured');
+  assert.equal(captions.groups[0].words[1].start, 0.6);
+  // Too few matches: the estimate stays.
+  assert.equal(Cap.buildCaptions({sentences, narrationSeconds: 3.5, measured: [{text: 'unrelated', start: 0, end: 1}]}).method, 'estimated');
+});

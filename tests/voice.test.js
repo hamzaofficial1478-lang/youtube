@@ -104,12 +104,12 @@ test('provider-specific settings fail before admission',t=>{
 
 test('speech clients use fixed provider endpoints, bounded payloads and never return credentials',async()=>{
   const calls=[];
-  const fetchImpl=async(url,options)=>{calls.push({url:String(url),options});return new Response(Buffer.alloc(100,1),{status:200,headers:{'content-type':'audio/wav','x-request-id':'req-fixture'}});};
+  const fetchImpl=async(url,options)=>{calls.push({url:String(url),options});if(String(url).includes('elevenlabs'))return new Response(JSON.stringify({audio_base64:Buffer.alloc(100,1).toString('base64'),alignment:{characters:[...'[calm] SQL is'],character_start_times_seconds:[0,0,0,0,0,0,0,0.1,0.2,0.3,0.4,0.5,0.6],character_end_times_seconds:[0,0,0,0,0,0,0,0.2,0.3,0.4,0.5,0.6,0.7]}}),{status:200,headers:{'content-type':'application/json','request-id':'req-fixture'}});return new Response(Buffer.alloc(100,1),{status:200,headers:{'content-type':'audio/wav','x-request-id':'req-fixture'}});};
   const key='fixture-provider-'+'x'.repeat(32);
   const openai=await new OpenAISpeechClient(key,fetchImpl).synthesize({text:'SQL is useful.',model:'gpt-4o-mini-tts',voiceId:'alloy',speed:1,instructions:'Say SQL as sequel.'});
   assert.equal(calls[0].url,'https://api.openai.com/v1/audio/speech');assert.equal(JSON.parse(calls[0].options.body).response_format,'wav');assert.equal(openai.requestId,'req-fixture');
   const eleven=await new ElevenLabsSpeechClient(key,fetchImpl).synthesize({text:'SQL is useful.',model:'eleven_multilingual_v2',voiceId:'voice_fixture_123',speed:1,stability:.5,similarity:.75,style:.2});
-  assert.match(calls[1].url,/^https:\/\/api\.elevenlabs\.io\/v1\/text-to-speech\/voice_fixture_123\?output_format=mp3_44100_128$/);
+  assert.match(calls[1].url,/^https:\/\/api\.elevenlabs\.io\/v1\/text-to-speech\/voice_fixture_123\/with-timestamps\?output_format=mp3_44100_128$/);assert.equal(eleven.audio.length,100);assert.deepEqual(eleven.words,[{text:'SQL',start:0.1,end:0.4},{text:'is',start:0.5,end:0.7}],'character times become words; delivery tags are not words');
   assert.equal(JSON.parse(calls[1].options.body).model_id,'eleven_multilingual_v2');assert.equal(JSON.stringify([openai,eleven]).includes(key),false);
 });
 

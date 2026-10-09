@@ -774,7 +774,7 @@ test('a planned cue cuts on its word, and a drawn shot plays from its first fram
   const timeline = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: cued, assets: {...assets, d: {assetId: 'D', mediaType: 'video', clipSeconds: 20}}, spec: SPEC, pauses: []});
   const clip = timeline.clips.find(item => item.shotId === 'd');
   const word = require('../sketch').matchPhrase(Cap.wordTimings({sentences, pauses: [], narrationSeconds}), 'the air itself');
-  assert.equal(clip.start, Math.round(word.seconds * 30), 'the cut lands on the cue');
+  assert.equal(clip.start, Math.round(word.seconds * 30) - 2, 'the cut lands two frames ahead of the cue word');
   assert.match(clip.reason, /Cut on "the air itself"/);
   assert.equal(clip.skill, 'editing.visual-on-the-word');
   assert.deepEqual([clip.inSeconds, clip.speed], [0, 1]);
