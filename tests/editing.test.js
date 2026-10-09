@@ -810,5 +810,109 @@ test('documentary partners: hand-drawn cutaways are drawn again at render time o
   // Inside a drawn cutaway the frame is the dark documentary page, not the bright test still.
   const clip = drawnClips[0], video = path.join(dataRoot, result.video.relativePath), still = path.join(dataRoot, 'drawn.png');
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-ss', String((clip.start + clip.frames / 2) / edit.timeline.fps), '-i', video, '-frames:v', '1', '-vf', 'scale=1:1:flags=area,format=gray', '-f', 'rawvideo', '-y', still]);
-  assert.ok(fs.readFileSync(still)[0] < 90, `the drawn cutaway is on screen (average luma ${fs.readFileSync(still)[0]})`);
+  assert.ok(fs.readFileSync(still)[0] < 90, `the drawn cutaway is on screen (average luma ${fs.readFileSync(still)[0]})`);  // P08c: the family's sound effects land on the drawn moments (the counter ticks, the title whooshes in).
+  const {room, eleven} = soundtrackRoom(env);
+  room.saveSettings(content.familyId, {...SOUND_SETTINGS, revision: 0, commercialUseConfirmed: true});
+  room.queueLibrary(content.familyId, {requestedBy: 'Owner', connector: eleven, costConfirmed: true});
+  for (let k = 0; k < 20; k++) await room.processNextAudio();
+  const withSfx = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {sfx: {enabled: true, density: 'rich', levelDb: -12}}}]});
+  const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: withSfx.id});
+  const placed = JSON.parse(renders.row(again.id).scope).edit.soundtrack.sfx;
+  assert.ok(placed.some(item => item.kind === 'tick') && placed.some(item => item.kind === 'whoosh'), JSON.stringify(placed.map(item => item.kind)));
+  assert.ok(placed.every(item => drawnClips.some(clip => item.seconds >= clip.start / edit.timeline.fps - 0.1 && item.seconds < (clip.start + clip.frames) / edit.timeline.fps)), 'effects only on the drawn shots');
+  assert.equal((await renders.processNext())?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(again.id)).error));
+  const sfxResult = JSON.parse(renders.row(again.id).result);
+  assert.equal(sfxResult.audioQc.passed, true, JSON.stringify(sfxResult.audioQc));
+  assert.equal(JSON.parse(fs.readFileSync(path.join(dataRoot, sfxResult.manifest.relativePath), 'utf8')).audio.mix.sfx.length, placed.length);
+});
+
+// ---------------------------------------------------------------- P08c music and sound effects
+const {SoundtrackRoom} = require('../soundtrack');
+// A soundtrack room with a tested Claude and ElevenLabs connection; the fake ElevenLabs returns real MP3s
+// of the requested length (a low tone for music, a short noise for effects).
+function soundtrackRoom({store, scenes, renders, editing, dataRoot}, {reply = ''} = {}) {
+  const at = new Date().toISOString(), asked = [], generated = [];
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude-1', 'claude-1', JSON.stringify({name: 'claude-1', provider: 'claude-code', revision: 1, test: {status: 'passed', at}}), null);
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('eleven-1', 'eleven-1', JSON.stringify({name: 'eleven-1', provider: 'elevenlabs', revision: 1, test: {status: 'passed', at}}), Buffer.from('x'));
+  const ai = {complete: async ({task, messages, maxTokens, onStart}) => { onStart?.(); asked.push({task, maxTokens, input: JSON.parse(messages[1].content)}); return {content: reply, usage: {promptTokens: 3000, completionTokens: 400, totalTokens: 3400}, model: 'claude-opus-5-5'}; }};
+  const clientFor = id => ({generate: async (kind, body, onRequest) => {
+    onRequest();
+    generated.push({id, kind, body});
+    const file = path.join(dataRoot, `generated-${generated.length}.mp3`), seconds = kind === 'music' ? body.music_length_ms / 1000 : body.duration_seconds;
+    ffmpeg(['-f', 'lavfi', '-i', kind === 'music' ? 'sine=frequency=110:sample_rate=44100' : 'anoisesrc=c=pink:a=0.6', '-t', String(seconds), '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '128k', '-y', file]);
+    return {audio: fs.readFileSync(file), requestId: `req-${generated.length}`};
+  }});
+  const room = new SoundtrackRoom(store, new ConnectorSlots(store, {transform: (op, input) => input}), scenes, {dataRoot, ai, renders, clientFor});
+  editing.soundtrack = room;
+  return {room, asked, generated, claude: {id: 'claude-1', revision: 1}, eleven: {id: 'eleven-1', revision: 1}};
+}
+const SOUND_SETTINGS = {updatedBy: 'Owner', musicModel: 'music_v2_5', monthlyMusicSeconds: 120, monthlySfx: 30, centsPerMusicMinute: 30, centsPerSfx: 3};
+
+test('Room 07 scores the video with Claude, generates each cue once inside the limits and mixes it under the voice', {skip}, async t => {
+  const env = setup(t);
+  const {editing, renders, store, content, family, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  const reply = `Here is the score: ${JSON.stringify({summary: 'A curious open, then warmth as the promise lands.', cues: [
+    {start: 0, end: 14, mood: 'curious', energy: 3, prompt: 'Soft marimba and pizzicato strings, 92 BPM, curious and light', entry: 'hit', exit: 'fade', reason: 'The hook.'},
+    {start: 16, end: 50, mood: 'warm', energy: 2, prompt: 'Warm felt piano with gentle pads, 80 BPM, reflective', entry: 'fade', exit: 'fade', reason: 'The promise lands dry first.'}]})}`;
+  const {room, asked, generated, claude, eleven} = soundtrackRoom(env, {reply});
+  // The free score works at once; nothing is generated before the owner confirms commercial use.
+  const free = room.rulesScore(content.id, {requestedBy: 'Owner'});
+  assert.deepEqual([free.revision, free.source, free.ready, free.cues[0].start, free.cues.at(-1).end], [1, 'rules', false, 0, 36]);
+  assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), /commercial use/);
+  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 0, commercialUseConfirmed: true});
+  assert.throws(() => room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 0, commercialUseConfirmed: true}), /another tab/);
+  // Claude scores from the scenes and the narration, inside a token reservation.
+  room.queueScore(content.id, {requestedBy: 'Owner', connector: claude});
+  assert.throws(() => room.queueScore(content.id, {requestedBy: 'Owner', connector: claude}), /already scoring/);
+  const scored = await room.processNextScore();
+  assert.deepEqual([scored.revision, scored.source, scored.cues.length, scored.cues[1].end, scored.current], [2, 'claude', 2, 36, true]);
+  assert.equal(room.score(free.id).current, false, 'the older score is no longer current');
+  assert.equal(asked[0].task, 'scenes');
+  assert.equal(asked[0].input.durationSeconds, 36);
+  assert.ok(asked[0].input.scenes.length >= 3 && asked[0].input.sentences.length >= 5);
+  assert.equal(store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='music_score'").get().status, 'settled');
+  assert.throws(() => store.db.prepare('UPDATE scores SET note=? WHERE id=?').run('x', scored.id), /immutable/);
+  // Generation needs the cost confirmed, is admitted against the limit and is kept: never generated twice.
+  assert.throws(() => room.queueMusic(scored.id, {requestedBy: 'Owner', connector: eleven}), /Confirm the estimated cost/);
+  assert.deepEqual(room.queueMusic(scored.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), {queued: 2, estimatedCents: 19});
+  for (let k = 0; k < 2; k++) assert.equal((await room.processNextAudio())?.status, 'completed', JSON.stringify(room.state().jobs));
+  const ready = room.score(scored.id);
+  assert.equal(ready.ready, true);
+  assert.equal(room.assetFile(ready.cues[0].asset.id).mime, 'audio/mpeg', 'the listen player gets the checked file');
+  assert.ok(ready.cues[0].asset.probe.durationSeconds >= 15 && Number.isFinite(ready.cues[0].asset.probe.loudnessLufs));
+  assert.ok(generated.every(item => item.body.force_instrumental === true && /no vocals/.test(item.body.prompt)));
+  assert.throws(() => room.queueMusic(scored.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), /already has its music/);
+  assert.equal(room.usage(family.id).musicSeconds, 37);
+  assert.throws(() => store.db.prepare("UPDATE audio_assets SET key='x'").run(), /immutable/);
+  // The sound-effect library stops at the monthly limit and continues after a deliberate retry.
+  room.saveSettings(family.id, {...SOUND_SETTINGS, monthlySfx: 19, revision: 1, commercialUseConfirmed: true});
+  assert.deepEqual(room.queueLibrary(family.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), {queued: 20, estimatedCents: 60});
+  for (let k = 0; k < 20; k++) await room.processNextAudio();
+  const blocked = room.state().jobs.filter(job => job.status === 'blocked_budget');
+  assert.equal(blocked.length, 1);
+  assert.equal(room.library(family.id).filter(item => item.asset).length, 19);
+  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 2, commercialUseConfirmed: true});
+  room.retryAudio(blocked[0].id, {});
+  assert.equal((await room.processNextAudio())?.status, 'completed');
+  assert.equal(room.library(family.id).every(item => item.asset), true);
+  // The edit names the score; the render lays the music under the finished voice and checks the encoded mix.
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  assert.throws(() => editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {music: {enabled: true}}}]}), /score/);
+  const mixed = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'normalize', targetLufs: -16, truePeakDb: -2, music: {enabled: true, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: scored.id}, sfx: {enabled: true, density: 'rich', levelDb: -12}}}]});
+  assert.equal(mixed.timeline.audio.music.scoreId, scored.id, 'the edit names its score');
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  assert.equal(report.filters.sidechaincompress && report.filters.amix && report.filters.adelay, true, 'the mix filters are part of readiness');
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the music mix.'});
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: mixed.id});
+  assert.deepEqual((({music, sfx}) => [music.length, sfx.length])(JSON.parse(renders.row(queued.id).scope).edit.soundtrack), [2, 0], 'no drawn shots: no invented effects');
+  const done = await renders.processNext();
+  assert.equal(done?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.equal(result.audioQc.passed, true, JSON.stringify(result.audioQc));
+  assert.ok(Math.abs(result.audioQc.integratedLufs - -16) <= 1, `the whole mix is brought back to the target (${result.audioQc.integratedLufs})`);
+  const record = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
+  assert.deepEqual(record.audio.mix.music.map(item => item.cueId), ['cue001', 'cue002']);
+  assert.ok(record.commands.some(command => command.step === 'mix music and effects'));
+  assert.ok(record.commands.every(command => !command.args.join(' ').includes(dataRoot)), 'command plans do not leak local paths');
 });

@@ -1,7 +1,7 @@
 {
-  "version": "0.22.0",
-  "updated": "2026-10-08",
-  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
+  "version": "0.23.0",
+  "updated": "2026-10-09",
+  "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -304,6 +304,13 @@
           "evidence": "0.22.0 (2026-10-09): delivery.js (18 emotions, energy, pace, pause, stressed words; inline tags on ElevenLabs v3/v4, per-segment voice settings or OpenAI instructions; request limits; Claude prompt); voice-direction.js (Claude on a click inside a token reservation, immutable revisions per script revision, strict owner edits); auditions perform the newest direction with billed tag characters and 3 paid attempts per direction; the scene planner receives each sentence's delivery. tests/delivery.test.js (4). Full suite 225/225."
         },
         {
+          "id": "P08c",
+          "title": "Music and sound effects: the score, generated music, the family library and the mix",
+          "status": "testing",
+          "remaining": "Not yet heard live: needs the owner's ElevenLabs key, the commercial-use confirmation and a real listening review. No speech-frequency carve of the music yet. Per-cue editing exists in the API only.",
+          "evidence": "0.23.0 (2026-10-09): music.js (score validation that refuses named artists, free score, Claude music-supervisor prompt, ElevenLabs music and sound-effect requests, 20 effect kinds in the main engine's flavour, effects placed from drawn-shot events by density, one FFmpeg mix graph with sidechain ducking); soundtrack.js (family settings with commercial-use confirmation and monthly limits, immutable scores and checksummed generated files, Claude and ElevenLabs only on a click inside reservations, never retried by themselves); the render mixes music and effects under the finished voice and normalizes the whole mix; Room 07 page with score, settings, library, players and the mix settings. tests/soundtrack.test.js (3, one with real FFmpeg for every ducking choice) and two render tests with real FFmpeg (a Claude score generated through a fake ElevenLabs, limits, retry, mix at -16 LUFS; effects on hand-drawn and motion cutaways). Two bugs found by the tests and the browser check and fixed: generated-file checksums and a rounding overlap in the free score. Browser check on the demo workspace: free score, settings save, paid buttons refuse without a tested ElevenLabs connection."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -320,7 +327,7 @@
           "id": "P08",
           "title": "Audio Room for licensed music, SFX and mix",
           "status": "testing",
-          "remaining": "Owner chose narration-only first on 2026-10-07. Music sourcing/licensing, music frequency carve, ducking, fades and SFX remain deferred. Real narration listening and a full primary-language production proof remain pending. P08 is not marked fully complete.",
+          "remaining": "Narration finishing (0.15) and music/SFX (0.23, P08c) are built. Music frequency carve, real narration and music listening, and a full primary-language production proof remain pending. P08 is not marked fully complete.",
           "evidence": "0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md."
         },
         {

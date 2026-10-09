@@ -1,15 +1,42 @@
 'use strict';
-// P08a: bounded narration finishing. Pure settings/filter/QC helpers; the render worker owns all I/O.
-// No music, external calls, timing edits or arbitrary filter strings enter this contract.
+// P08a: bounded narration finishing; P08c adds the music bed and sound effects (music.js builds the mix).
+// Pure settings/filter/QC helpers; the render worker owns all I/O. No external calls, timing edits or arbitrary
+// filter strings enter this contract.
 const SCHEMA = 'ytprod.audio/1';
 const DEFAULTS = Object.freeze({schema: SCHEMA, mode: 'normalize', targetLufs: -16, truePeakDb: -2});
-const REQUIRED_FILTERS = Object.freeze(['aformat', 'loudnorm', 'silencedetect']);
+const MIX_FILTERS = Object.freeze(['amix', 'adelay', 'afade', 'atrim', 'asplit', 'sidechaincompress', 'alimiter', 'volume', 'anull', 'anullsink', 'asetpts']);
+const REQUIRED_FILTERS = Object.freeze(['aformat', 'loudnorm', 'silencedetect', ...MIX_FILTERS]);
+const MUSIC_DEFAULTS = Object.freeze({enabled: false, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: null});
+const SFX_DEFAULTS = Object.freeze({enabled: false, density: 'accent', levelDb: -12});
+const DUCKS = Object.freeze(['off', 'light', 'medium', 'strong']), DENSITIES = Object.freeze(['none', 'subtle', 'accent', 'rich']);
 const fail = message => { throw Object.assign(new Error(message), {status: 400}); };
 
 function settings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('Audio settings must be an object.');
-  if (Object.keys(input).some(key => !Object.hasOwn(DEFAULTS, key))) fail('Unsupported audio setting. Music and effects are not enabled.');
+  if (Object.keys(input).some(key => !Object.hasOwn(DEFAULTS, key) && !['music', 'sfx'].includes(key))) fail('Unsupported audio setting.');
   const out = {...DEFAULTS, ...input};
+  const block = (value, defaults, label) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} settings must be an object.`);
+    if (Object.keys(value).some(key => !Object.hasOwn(defaults, key))) fail(`Unsupported ${label.toLowerCase()} setting.`);
+    const merged = {...defaults, ...value};
+    if (typeof merged.enabled !== 'boolean') fail(`${label} must be switched on or off.`);
+    return merged;
+  };
+  if (input.music !== undefined) {
+    const m = out.music = block(input.music, MUSIC_DEFAULTS, 'Music');
+    if (!Number.isFinite(m.levelLufs) || m.levelLufs < -40 || m.levelLufs > -14) fail('The music level must be -40 to -14 LUFS.');
+    if (!DUCKS.includes(m.duck)) fail(`Ducking must be one of: ${DUCKS.join(', ')}.`);
+    if (!Number.isFinite(m.fadeSeconds) || m.fadeSeconds < 0 || m.fadeSeconds > 5) fail('Music fades must be 0-5 seconds.');
+    if (m.scoreId !== null && (typeof m.scoreId !== 'string' || !/^[0-9a-f-]{36}$/.test(m.scoreId))) fail('Choose a score for the music.');
+    if (m.enabled && !m.scoreId) fail('Choose a score before switching music on.');
+    m.levelLufs = Math.round(m.levelLufs * 10) / 10;
+  }
+  if (input.sfx !== undefined) {
+    const x = out.sfx = block(input.sfx, SFX_DEFAULTS, 'Sound effects');
+    if (!DENSITIES.includes(x.density)) fail(`Sound-effect density must be one of: ${DENSITIES.join(', ')}.`);
+    if (!Number.isFinite(x.levelDb) || x.levelDb < -30 || x.levelDb > -3) fail('The sound-effect level must be -30 to -3 dB peak.');
+    x.levelDb = Math.round(x.levelDb * 10) / 10;
+  }
   if (out.schema !== SCHEMA) fail('Unsupported audio settings version.');
   if (!['source', 'normalize'].includes(out.mode)) fail('Choose original levels or normalized narration.');
   for (const [key, min, max] of [['targetLufs', -24, -14], ['truePeakDb', -6, -1]]) {
@@ -69,4 +96,6 @@ function qc({stderr, stream, expectedSeconds, config}) {
   return {schema: SCHEMA, settings: s, ...m, durationSeconds: Number.isFinite(duration) ? duration : null, sampleRate, channels, silenceRatio, checks, passed: checks.every(check => check.passed)};
 }
 
-module.exports = {SCHEMA, DEFAULTS, REQUIRED_FILTERS, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};
+const mixes = config => !!(config?.music?.enabled || (config?.sfx?.enabled && config.sfx.density !== 'none'));
+
+module.exports = {SCHEMA, DEFAULTS, MUSIC_DEFAULTS, SFX_DEFAULTS, MIX_FILTERS, REQUIRED_FILTERS, mixes, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};

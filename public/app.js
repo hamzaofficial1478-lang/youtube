@@ -92,7 +92,7 @@ const productionRooms=[
   {id:'scene',number:'04',name:'Scene & Visual Room',status:'live',summary:'Scenes, shots and licensed visuals'},
   {id:'editing',number:'05',name:'Editing Room',status:'live',summary:'Editing brain, critic, edit renders'},
   {id:'captions',number:'06',name:'Captions & Localization Room',status:'active',summary:'Captions live in Room 05; languages next'},
-  {id:'audio',number:'07',name:'Audio Room',status:'live',summary:'Narration levels and listening review'},
+  {id:'audio',number:'07',name:'Audio Room',status:'live',summary:'Narration, music score and sound effects'},
   {id:'qc',number:'08',name:'Review & QC Room',status:'live',summary:'Timecoded review and the verdict'},
   {id:'packaging',number:'09',name:'Packaging Room',status:'live',summary:'Titles, thumbnails, description, disclosure'},
   {id:'render',number:'10',name:'Render & Recovery Room',status:'locked',summary:'Deterministic final artifacts'}

@@ -14,6 +14,7 @@ const VS = require('./visual-sources');
 const Audio = require('./audio');
 const Review = require('./review');
 const Sk = require('./sketch');
+const M = require('./music');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
@@ -267,6 +268,28 @@ class RenderRoom {
         audioCommands.push({step: 'finish narration', args});
         narrationFile = audioFile;
         audioInfo = {settings: config, source: measured};
+        // Music and sound effects (P08c): every file is checked against its checksum, laid under or over the
+        // finished voice by one filter graph, then the whole mix is brought back to the loudness target.
+        const soundtrack = scope.edit.soundtrack;
+        if (soundtrack && (soundtrack.music.length || soundtrack.sfx.length)) {
+          const files = [...soundtrack.music, ...soundtrack.sfx].map(item => {
+            const file = this.localFile(item.relativePath);
+            requireValue(fs.existsSync(file) && R.fileSha256(file) === item.sha256, 'A generated music or sound-effect file is missing or changed.', 409);
+            return file;
+          });
+          const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx, settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS}});
+          fs.writeFileSync(path.join(work, 'mix-graph.txt'), graph);
+          const mixed = path.join(work, 'mix.wav'), mixArgs = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', narrationFile, ...files.flatMap(file => ['-i', file]), '-filter_complex_script', 'mix-graph.txt', '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s24le', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-y', mixed];
+          this.progress(job.id, `mixing ${soundtrack.music.length} music cue(s) and ${soundtrack.sfx.length} sound effect(s)`, 0, total);
+          await exec('mix music and effects', job.paths.ffmpeg, mixArgs, Math.max(120000, scope.narration.durationSeconds * 2000), work);
+          audioCommands.push({step: 'mix music and effects', args: mixArgs.map(arg => (path.isAbsolute(arg) ? path.basename(arg) : arg)), graphSha256: createHash('sha256').update(graph).digest('hex')});
+          const mixScan = Audio.analysisArgs(mixed, config), mixMeasured = Audio.measurement((await exec('measure mix', job.paths.ffmpeg, mixScan, Math.max(120000, scope.narration.durationSeconds * 1000))).stderr);
+          const finished = path.join(work, 'soundtrack.wav'), finishArgs = Audio.finishArgs(mixed, finished, {...config, mode: 'normalize'}, mixMeasured);
+          await exec('finish mix', job.paths.ffmpeg, finishArgs, Math.max(120000, scope.narration.durationSeconds * 1000));
+          audioCommands.push({step: 'finish mix', args: finishArgs.map(arg => (arg === mixed || arg === finished ? path.basename(arg) : arg))});
+          narrationFile = finished;
+          audioInfo.mix = {music: soundtrack.music.map(item => ({cueId: item.cueId, start: item.start, end: item.end, sha256: item.sha256})), sfx: soundtrack.sfx.map(item => ({kind: item.kind, seconds: item.seconds, reason: item.reason, sha256: item.sha256})), measured: mixMeasured};
+        }
       }
       const shots = scope.shots.map(shot => {
         const file = this.localFile(shot.relativePath);

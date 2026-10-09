@@ -222,7 +222,10 @@ document.getElementById('edit-form').addEventListener('submit', event => {
       if (form.elements.reset?.checked) ops.push({type: 'set-caption', groupId: data.groupId, reset: true});
       else if (form.elements.caption.value !== form.elements.caption.defaultValue) ops.push({type: 'set-caption', groupId: data.groupId, text: value('caption')});
     } else if (kind === 'audio') {
-      ops.push({type: 'set-audio', settings: {mode: value('audioMode'), targetLufs: Number(value('targetLufs')), truePeakDb: Number(value('truePeakDb'))}});
+      const musicOn = !!form.elements.musicEnabled?.checked && !!data.scoreId;
+      ops.push({type: 'set-audio', settings: {mode: value('audioMode'), targetLufs: Number(value('targetLufs')), truePeakDb: Number(value('truePeakDb')),
+        music: {enabled: musicOn, levelLufs: Number(value('musicLevel')), duck: value('musicDuck'), fadeSeconds: Number(value('musicFade')), scoreId: musicOn ? data.scoreId : null},
+        sfx: {enabled: !!form.elements.sfxEnabled?.checked, density: value('sfxDensity'), levelDb: Number(value('sfxLevel'))}}});
     } else if (kind === 'graphic-add') {
       ops.push({type: 'add-graphic', template: value('template'), startSeconds: Number(value('start')), seconds: Number(value('seconds')), title: value('title'), accent: value('accent') || undefined, lines: value('lines').split('\n').map(line => line.trim()).filter(Boolean)});
     } else if (kind === 'graphic') {

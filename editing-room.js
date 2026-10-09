@@ -318,8 +318,10 @@ class EditingRoom {
       try { Sk.validate(state.inputs.assets[clip.shotId].sketch, {primary: engine, lenient: true}); } catch (error) { throw new InputError(`${clip.label} drawing: ${error.message} Plan or draw this shot again.`, 409); }
       drawings[clip.id] = {sketch: state.inputs.assets[clip.shotId].sketch};
     }
+    // Music and sound effects named by the audio settings (P08c), with their files, times and levels.
+    const soundtrack = payload.audio && Audio.mixes(Audio.settings(payload.audio)) ? (() => { requireValue(this.soundtrack, 'Music and sound effects are not available in this program.', 409); return this.soundtrack.soundtrackFor({content, timeline: payload, config: Audio.settings(payload.audio), drawings, engine}); })() : null;
     if (Object.keys(drawings).length) requireValue(this.renders.latestReadiness()?.motion?.passed === true, 'Drawn shots are drawn in a local browser. Run the readiness check again (Room 05); it must find Microsoft Edge or Google Chrome.', 409);
-    return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, drawings, engine, criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
+    return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, drawings, engine, ...(soundtrack ? {soundtrack} : {}), criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
   }
 
   isLatest(revisionId) {
