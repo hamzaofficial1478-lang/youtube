@@ -144,6 +144,19 @@ Rather than presenting untested upstream features as ready, the first release re
 - No code copied. Restated as 17 draft skills in `skills/hyperframes.json`; applied in our own code as smooth easing in the canvas templates, the caption rail, caption grouping and the caption keep-out band.
 - Not used: the HTML/GSAP renderer, its CLI and plugin, the Web Audio effect graph. P08 will rebuild the voiceover carve with FFmpeg filters.
 
+### heygen-com/hyperframes, deep read and vendored recipes (0.25)
+
+- Source: <https://github.com/heygen-com/hyperframes>, read again at `5ec2dd2e121f25b45f3cc642504757970ed41027` (2026-10-09). License: Apache-2.0.
+- Copied unchanged: `skills/hyperframes-animation/blueprints/*.md` (22), `rules/*.md` (48), `blueprints-index.md` and `rules-index.md` into `vendor/hyperframes/`, with LICENSE and a NOTICE naming the revision. `atelier.js` reads them; Claude receives only the cited ones.
+- Rebuilt in our own code: the composition format and the frame-worker contract (`atelier.js`), the seek runtime (`atelier-runtime.js`), deterministic frame capture (`motion.js`). Read: `faceless-explainer` (story and visual design, cut catalog, frame worker), `hyperframes-core`, `hyperframes-animation`. Details in `research/openmontage-and-hyperframes-brains.md`.
+- Not used: its CLI, studio, registry, Remotion bridge, network fetching and audio graph.
+- New dependency: `gsap` 3.15.0 (exact pin; GreenSock standard no-charge license, including the bonus plugins), inlined into the local render page from `node_modules`.
+
+### calesthio/OpenMontage, deep read (0.25)
+
+- Read again at `9327439db69021ab4b0e2776729bf3b58fdb5a87` (2026-10-03). AGPL-3.0: nothing copied.
+- Its method restated in our own code: taste direction (design read, three dials, signature device) as the atelier art direction; bespoke composition as the atelier engine; the five-aspect scene checklist and scene distinctness in the scene-plan prompt; reviewer plus repair-only-what-failed for frames.
+
 ### bradautomates/claude-video (0.14.1)
 
 - Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.

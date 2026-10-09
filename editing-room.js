@@ -67,7 +67,7 @@ class EditingRoom {
     for (const item of snapshot.shots) {
       requireValue(planned.has(item.shotId), `${item.label} is missing from the approved plan.`, 409);
       const row = this.scenes.assetRow(item.assetId), probe = JSON.parse(row.probe);
-      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(row.origin === 'drawn' ? {sketch: JSON.parse(row.rights).sketch} : {})};
+      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(row.origin === 'drawn' ? (rights => (rights.composition ? {composition: rights.composition} : {sketch: rights.sketch}))(JSON.parse(row.rights)) : {})};
       files[item.shotId] = row.relative_path;
     }
     const styleRow = this.styles.revisionRow(base.manifestRow.style_revision_id);
@@ -316,7 +316,9 @@ class EditingRoom {
     // Drawn shots (P06d) are drawn again at render time for their exact hold, timed to the narration's words.
     const engine = E.primaryEngine(state.inputs.spec), drawings = {};
     for (const clip of payload.clips.filter(item => state.inputs.assets[item.shotId].origin === 'drawn')) {
-      try { Sk.validate(state.inputs.assets[clip.shotId].sketch, {primary: engine, lenient: true}); } catch (error) { throw new InputError(`${clip.label} drawing: ${error.message} Plan or draw this shot again.`, 409); }
+      // An atelier shot (P06h) is rendered again from its designed composition, timed onto the real words.
+      if (state.inputs.assets[clip.shotId].composition) { drawings[clip.id] = {composition: state.inputs.assets[clip.shotId].composition}; continue; }
+      try { Sk.validate(state.inputs.assets[clip.shotId].sketch, {primary: E.ENGINES[engine]?.draws ? engine : 'motion', lenient: true}); } catch (error) { throw new InputError(`${clip.label} drawing: ${error.message} Plan or draw this shot again.`, 409); }
       drawings[clip.id] = {sketch: state.inputs.assets[clip.shotId].sketch};
     }
     // Music and sound effects named by the audio settings (P08c), with their files, times and levels.

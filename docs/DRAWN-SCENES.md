@@ -1,4 +1,4 @@
-# Drawn scenes: the stickman, hand-drawn and motion-graphics engines (P06c 0.19, P06d 0.20)
+# Drawn scenes: the stickman, hand-drawn, motion-graphics and atelier engines (P06c 0.19 to P06h 0.25)
 
 The program draws these shots itself, locally and for free. No stock footage is used. The editing brain cuts the drawn shots like footage.
 
@@ -171,3 +171,27 @@ From a frame-by-frame review of the live lightning demo (fresh Claude plan, 2026
 - **Readable labels.** Labels on characters and objects are white chips with an outline, kept inside the frame.
 - **Danger without pink faces.** The danger mood pulses at the edges and keeps the middle clear.
 - **Marks find their target.** An underline, circle, cross, check or spotlight without a target marks the nearest drawing or words.
+
+## 10. Drawings land on the voice (0.24.1)
+
+From the owner's review of the v3 demo (2026-10-10: "the voice was a bit fast, the scenes a bit late"):
+
+- **Measured word times.** ElevenLabs narration is requested with timestamps (`/with-timestamps`); the character alignment becomes measured word times (`voice.js` `spokenWords`, inline `[tags]` skipped). Captions, cue cuts and drawn shots use them; the word-share estimate is only the fallback and is labelled so.
+- **Lead, not lag.** A cued drawing starts `min(0.3, 0.08 + 0.45 x its draw-on time)` before its word, pose changes (`then`) 0.1 s before, focus moves 0.15 s before, and cue cuts land two frames ahead. Drawing-on is faster outside the hand-drawn finish.
+- **Staging.** Two characters far apart with nothing between them stand closer (storm scenes). A character on screen in the clip before stays across the cut, also for plans made before this release (`Sk.carry` at render), so a room no longer shows empty before its character appears.
+
+## 11. Atelier: shots designed from scratch by Claude (P06h, 0.25.0)
+
+Owner request (2026-10-09): take how OpenMontage and HyperFrames work, run it through Claude, and make the program able to edit in any style, not a fixed set. Research: [research/openmontage-and-hyperframes-brains.md](research/openmontage-and-hyperframes-brains.md).
+
+**What it is.** A fifth engine (`engines.js` `atelier`, `composes: true`). For a beat the drawing vocabulary does not serve (kinetic type, a number that must hit, a diagram or chart assembling, an abstract metaphor, a comparison, a list, a title), Claude plans the shot as a `frame` instead of a sketch. Any drawn style can use it for such beats; the new launch style **Atelier · designed per video** (`adapter: atelier`) makes it the main look.
+
+**How it runs.**
+
+1. **Plan (one Claude call per part, as before).** When a shot has a frame, the plan also carries one art direction (`direction`: read, three dials, palette, fonts, motion grammar, one signature device, things to avoid; OpenMontage taste profile). Frames name a vendored blueprint or `compose`, a posture, the focal point, beats tied to words, up to four motion rules, the persuasion move and the story beat. Lenient repair with named notes (`At.validateDirection`, `At.validateFrame`).
+2. **Compose (one small Claude call per frame, after the review).** `scene-room.composeFrames` sends the frame worker contract (`At.CONTRACT`) and a packet with only that shot: its words and times, its neighbours, the art direction and the full text of its blueprint and cited rules. The answer must be one HyperFrames-style `<template>` with one paused GSAP timeline at `window.__timelines[id]`. `At.validateComposition` rejects randomness, clocks, timers, network, outside media, storage, eval, infinite repeats and `play()`; the local browser then loads it and audits text off the frame or in the caption band. One retry with the findings; after that the shot keeps a free drawing from its words. Each call reserves its own tokens (`kind atelier_frame`).
+3. **Draw (Room 04)** and **render** use the same local Edge as the drawn engines: a fresh page per composition, a strict CSP, GSAP 3.15 inlined from `node_modules`, `atelier-runtime.js` seeking clips and the timeline frame by frame, lossless PNG. At render the timeline is warped (`At.warp`) so each designed moment lands on the narrator's actual word.
+
+**Settings (Room 04).** `composeFrames` (on), `composeTokenLimit` (40,000 per frame answer, byte-counted), `plannerTokenLimit` now 60,000 because the atelier guide adds about 6.6k characters when generated graphics are allowed.
+
+**Limits.** People stay in the drawn engines (a composition has no cast). Every atelier shot costs one Claude call. Fonts are limited to the fonts installed on this PC. Compositions are checked for safety and layout, not for taste: the owner still judges them at the visual approval and the edit verdict.

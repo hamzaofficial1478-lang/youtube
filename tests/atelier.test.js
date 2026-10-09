@@ -1,0 +1,81 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const A = require('../atelier');
+const {MotionRenderer, findBrowser} = require('../motion');
+
+const frameId = 's04a';
+const composition = (script, extra = '') => `<template><div id="root" data-composition-id="${frameId}" data-width="1920" data-height="1080" data-duration="3"><div id="${frameId}-bg" class="clip" data-start="0" data-duration="3"></div><div id="${frameId}-hero">45</div>${extra}<style>#${frameId}-bg{position:absolute;inset:0;background:#10131A}#${frameId}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>${script}</script></div></template>`;
+const timeline = `const tl = gsap.timeline({paused: true}); tl.fromTo('#${frameId}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 1, ease: 'power3.out'}, 1); window.__timelines["${frameId}"] = tl;`;
+
+test('a composition passes only when it keeps the contract: one registered paused timeline, nothing from outside, nothing random', () => {
+  const size = {frameId, width: 1920, height: 1080, duration: 3};
+  const ok = A.validateComposition(`Sure:\n${composition(timeline)}\nDone.`, size);
+  assert.deepEqual(ok.issues, []);
+  assert.ok(ok.html.startsWith('<div id="root"'), 'only the template content is kept');
+  for (const [bad, pattern] of [
+    [timeline.replace('window.__timelines', 'window.__other'), /Register the timeline/],
+    [`${timeline} const r = Math.random();`, /Math\.random/],
+    [`${timeline} fetch('https://example.com');`, /network/],
+    [`${timeline} setTimeout(() => {}, 10);`, /timers/],
+    [`${timeline} tl.play();`, /plays the timeline/],
+    [timeline.replace("ease: 'power3.out'}", "ease: 'power3.out', repeat: -1}"), /repeats forever/],
+  ]) assert.match(A.validateComposition(composition(bad), size).issues.join(' '), pattern);
+  assert.match(A.validateComposition(composition(timeline, '<img src="https://x.test/a.png">'), size).issues.join(' '), /outside/);
+  assert.match(A.validateComposition(composition(timeline, '<style>#x{transition: opacity 1s}</style>'), size).issues.join(' '), /CSS transitions/);
+  assert.match(A.validateComposition(composition(timeline, '<style>#x{font-family: "Comic Neue", sans-serif}</style>'), size).warnings.join(' '), /Comic Neue/);
+  assert.deepEqual(A.validateComposition('no template here', size).issues, ['The answer is not one <template>...</template> fragment.']);
+});
+
+test('the plan side: frames and the art direction are repaired with named notes; the catalog and packets come from the vendored recipes', () => {
+  const {blueprints, rules} = A.loadCatalog();
+  assert.ok(blueprints.length >= 20 && rules.length >= 40);
+  const warnings = [];
+  const frame = A.validateFrame({blueprint: 'made-up', beats: [{at: 'four million', show: 'the counter lands'}], motions: ['counting-dynamic-scale', 'nope']}, {warn: message => warnings.push(message)});
+  assert.deepEqual([frame.blueprint, frame.posture, frame.motions], ['compose', 'compose', ['counting-dynamic-scale']]);
+  assert.equal(warnings.length, 2);
+  assert.throws(() => A.validateFrame({blueprint: 'compose', beats: []}), /needs beats/);
+  assert.throws(() => A.validateFrame({blueprint: 'made-up', beats: [{show: 'x'}]}, {lenient: false}), /not in the catalog/);
+  const direction = A.validateDirection({read: 'Calm, precise money history with numbers you can hold', dials: {variance: 3, motion: 12, density: 4}, palette: {canvas: '#101010', ink: 'white', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Impact', body: 'Inter'}}, {warn: message => warnings.push(message)});
+  assert.deepEqual([direction.dials.motion, direction.palette.ink, direction.fonts.display, direction.fonts.body], [5, '#1F1F1F', 'Impact', 'Segoe UI']);
+  // The packet carries only this shot's blueprint and cited recipes.
+  const [system, user] = A.composeMessages({frameId, width: 1920, height: 1080, duration: 3, frame: A.validateFrame({blueprint: 'dataviz-countup', beats: [{show: 'count'}], motions: ['counting-dynamic-scale']}), direction, words: [{text: 'nearly', start: 0.2}]});
+  assert.match(system.content, /MOTION DOCTRINE[\s\S]*Never front-load/);
+  assert.match(user.content, /## Selected blueprint: dataviz-countup[\s\S]*## Selected motion rule: counting-dynamic-scale/);
+  assert.equal(user.content.includes('## Selected motion rule: svg-path-draw'), false);
+  assert.ok(user.content.length < 16000, 'the packet stays small');
+});
+
+test('time follows the voice: reveals planned on a word land on that word when the narrator says it later', () => {
+  const anchors = A.warp({planned: [{text: 'nearly', start: 0.5}, {text: 'four', start: 1.0}, {text: 'million', start: 1.5}], actual: [{text: 'nearly', start: 0.8}, {text: 'four', start: 1.6}, {text: 'million', start: 2.2}], composed: 3, hold: 3.6});
+  assert.equal(A.warpAt(anchors, 1.6), 1, 'the narrator says "four" at 1.6 s; the composition shows its "four" moment');
+  assert.equal(A.warpAt(anchors, 0), 0);
+  assert.equal(A.warpAt(anchors, 3.6), 3);
+  let previous = -1;
+  for (let t = 0; t <= 3.6; t += 0.1) { const at = A.warpAt(anchors, t); assert.ok(at >= previous); previous = at; }
+});
+
+test('the local browser renders a composition identically twice, follows the warp and reports broken scripts and text off the frame', {skip: findBrowser() ? false : 'No Edge or Chrome on this machine'}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atelier-'));
+  const renderer = new MotionRenderer();
+  t.after(async () => { await renderer.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+  await renderer.start();
+  const html = A.validateComposition(composition(timeline), {frameId, width: 1920, height: 1080, duration: 3}).html;
+  const base = {html, frameId, width: 1920, height: 1080, scale: 0.25, canvas: '#10131A', duration: 3, fps: 4};
+  const one = await renderer.renderComposition({...base, outDir: path.join(dir, 'a')}), two = await renderer.renderComposition({...base, outDir: path.join(dir, 'b')});
+  assert.deepEqual([one.frames, one.sha256], [12, two.sha256]);
+  // Before 1 s the hero is invisible; with a warp that maps 0 s to 2 s it is already there.
+  const early = fs.readFileSync(path.join(dir, 'a', 'f00000.png'));
+  const warped = await renderer.renderComposition({...base, duration: 0.25, warp: [[0, 2], [1, 3]], outDir: path.join(dir, 'c')});
+  assert.ok(warped.frames === 1 && !fs.readFileSync(path.join(dir, 'c', 'f00000.png')).equals(early));
+  // A script error is reported instead of rendering a blank shot; text pushed off the frame is found.
+  const broken = await renderer.loadComposition({...base, html: html.replace('window.__timelines', 'undefinedThing.x; window.__timelines')});
+  assert.equal(broken.ready, false);
+  assert.match(broken.errors.join(' '), /undefinedThing/);
+  const wide = A.validateComposition(composition(timeline.replace('y: 0, duration', 'x: 1400, y: 0, duration')), {frameId, width: 1920, height: 1080, duration: 3}).html;
+  await renderer.loadComposition({...base, html: wide});
+  assert.match((await renderer.auditComposition([2.5])).join(' '), /runs off the frame/);
+});

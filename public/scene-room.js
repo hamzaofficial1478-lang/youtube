@@ -8,6 +8,13 @@ const SCENE_PURPOSE = {hook: 'Hook', context: 'Context', explain: 'Explain', exa
 const SCENE_JOB = {queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Done', 'green'], failed: ['Failed', 'gray'], interrupted: ['Interrupted · cost unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Hourly cap reached', 'orange'], blocked_budget: ['Over budget', 'orange'], quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange']};
 // What was already fixed before the owner sees the plan: shots Claude's continuity review redrew, and the
 // continuity the program mended.
+// The video's art direction (atelier shots design to it) and how the designs went.
+const sceneDirection = plan => {
+  const d = plan.direction;
+  if (!d) return '';
+  const swatch = color => `<span class="swatch-chip">${esc(color)}</span>`;
+  return `<details class="scene-warnings"><summary>Art direction · ${esc(d.read.slice(0, 80))}${d.read.length > 80 ? '…' : ''}</summary><ul class="intel-list"><li><b>Feel:</b> ${esc(d.read)}</li><li><b>Dials:</b> variety ${d.dials.variance}/10 · motion ${d.dials.motion}/10 · density ${d.dials.density}/10</li><li><b>Palette:</b> ${['canvas', 'ink', 'accent', 'support'].map(key => `${key} ${swatch(d.palette[key])}`).join(' ')}</li><li><b>Type:</b> ${esc(d.fonts.display)} / ${esc(d.fonts.body)} · <b>Motion:</b> ${esc(d.motion)}</li>${d.signature ? `<li><b>Signature:</b> ${esc(d.signature)}</li>` : ''}${d.avoid.length ? `<li><b>Avoid:</b> ${esc(d.avoid.join('; '))}</li>` : ''}${plan.compose ? `<li><b>Designed by Claude:</b> ${plan.compose.designed} of ${plan.compose.shots} atelier shots (${plan.compose.tokens.toLocaleString()} tokens)${plan.compose.notes.length ? ` · ${esc(plan.compose.notes.join(' '))}` : ''}</li>` : ''}</ul></details>`;
+};
 const sceneFixes = plan => {
   const fixed = [...(plan.review?.changes || []).map(item => `<li><b>${esc(item.label)}</b> redrawn by Claude's continuity review: ${esc(item.reason)}</li>`), ...(plan.continuity || []).map(item => `<li><b>${esc(item.label)}</b> ${esc(item.fix)} (fixed by the program)</li>`)];
   return (fixed.length ? `<details class="scene-warnings"><summary>${fixed.length} fixed before you saw it</summary><ul class="intel-list">${fixed.join('')}</ul></details>` : '') + (plan.review?.notes?.length ? `<p class="inline-warning">${esc(plan.review.notes.join(' '))}</p>` : '');
@@ -85,7 +92,7 @@ function scenePlanCard(content, manifest) {
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
-    ${sceneFixes(manifest.plan)}
+    ${sceneDirection(manifest.plan)}${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
     ${manifest.plan.cast?.length ? `<p class="muted"><strong>Cast:</strong> ${manifest.plan.cast.map(member => esc(`${member.name}${member.role ? ` (${member.role})` : ''}`)).join(' · ')}</p>` : ''}
     <p class="hint">${esc(manifest.plan.timing.note)} Every edit creates a new revision; untouched shots keep their IDs and visuals.</p>
@@ -111,11 +118,15 @@ function sceneShotCard(content, manifest, scene, shot) {
   return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
-      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? sceneSketchSummary(shot.sketch, manifest.plan.cast) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
+      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? (shot.frame ? sceneFrameSummary(shot.frame) : sceneSketchSummary(shot.sketch, manifest.plan.cast)) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
       ${failed ? `<p class="inline-warning">${esc(failed.error || failed.status)}</p>` : ''}
       <div class="shot-actions">${editable ? action(asset ? 'Change' : 'Find visual', 'scene-shot-open', shot.id, asset ? 'secondary' : 'primary') + action('Edit', 'scene-shot-edit', shot.id, 'text-button') + (scene.shots.length > 1 ? action('Remove', 'scene-shot-remove', shot.id, 'text-button danger') : '') : ''}${count ? `<small class="muted">${count} result${count === 1 ? '' : 's'}</small>` : ''}</div></div></div>`;
 }
 
+// What an atelier shot (designed by Claude) shows, in words: "Atelier · dataviz-countup · the number · 3 beats".
+function sceneFrameSummary(frame) {
+  return ['Atelier', frame.blueprint !== 'compose' ? `${frame.blueprint} (${frame.posture})` : 'composed freely', frame.focal, `${frame.beats.length} beat${frame.beats.length === 1 ? '' : 's'}`, frame.html ? 'designed' : 'not designed yet: drawn from its words'].filter(Boolean).join(' · ');
+}
 // What a drawn shot shows, in words: "Stickman · storm set · Max (scared, cower) · bolt · “5x hotter” · flash".
 function sceneSketchSummary(sketch, cast = []) {
   if (!sketch) return 'Drawn from the narration';
@@ -199,6 +210,8 @@ function sceneAction(command, id, button) {
       <label>Scene planner token limit<input name="plannerTokenLimit" type="number" min="8000" max="120000" step="1000" required value="${settings.plannerTokenLimit}"></label>
       <label class="check"><input name="continuityReview" type="checkbox" ${settings.continuityReview !== false ? 'checked' : ''}> Continuity review: Claude checks every drawn shot against its own words and its neighbours, and redraws what does not fit (one more answer per part)</label>
       <label>Continuity review token limit (per answer)<input name="reviewTokenLimit" type="number" min="20000" max="200000" step="1000" required value="${settings.reviewTokenLimit || 70000}"></label>
+      <label class="check"><input name="composeFrames" type="checkbox" ${settings.composeFrames !== false ? 'checked' : ''}> Atelier shots: Claude designs the shots the plan marks as atelier (kinetic type, numbers, diagrams, metaphors), one answer per shot, each reserved on its own</label>
+      <label>Atelier shot token limit (per shot)<input name="composeTokenLimit" type="number" min="12000" max="150000" step="1000" required value="${settings.composeTokenLimit || 40000}"></label>
       <label>Pexels requests per hour<input name="pexelsCap" type="number" min="0" max="200" required value="${quota.pexelsHourlyRequestCap}"><span class="hint">Pexels allows 200/hour by default.</span></label>
       <label>Pixabay requests per hour<input name="pixabayCap" type="number" min="0" max="6000" required value="${quota.pixabayHourlyRequestCap}"><span class="hint">Pixabay allows 100 per minute.</span></label>
     </div><p class="hint">Prices are your own estimates for the chosen model; check current OpenAI pricing. The budget is reserved before every image and an interrupted image stays counted.</p>`, 'Save settings', {familyId: id, revision: settings.revision, quotaRevision: quota.revision});
@@ -269,7 +282,7 @@ document.getElementById('scene-form').addEventListener('submit', event => {
     if (kind === 'plan-claude') { await api(`/api/content/${data.contentId}/scene-plans`, {mode: 'claude', requestedBy: person, contentRevision: content.contentRevision, connector: sceneConnectorRef(value('connector'))}); message = 'Claude scene plan queued.'; return; }
     if (kind === 'settings') {
       const cents = Math.round(Number(value('budget')) * 100);
-      await api(`/api/families/${data.familyId}/visual-settings`, {revision: data.revision, monthlyBudgetCents: cents, imageModel: value('imageModel'), imageQuality: value('imageQuality'), imageFormat: value('imageFormat'), priceCents: {low: Number(value('low')), medium: Number(value('medium')), high: Number(value('high'))}, stockOrder: value('stockOrder').split(','), perSearch: Number(value('perSearch')), plannerTokenLimit: Number(value('plannerTokenLimit')), continuityReview: !!form.elements.continuityReview?.checked, reviewTokenLimit: Number(value('reviewTokenLimit'))});
+      await api(`/api/families/${data.familyId}/visual-settings`, {revision: data.revision, monthlyBudgetCents: cents, imageModel: value('imageModel'), imageQuality: value('imageQuality'), imageFormat: value('imageFormat'), priceCents: {low: Number(value('low')), medium: Number(value('medium')), high: Number(value('high'))}, stockOrder: value('stockOrder').split(','), perSearch: Number(value('perSearch')), plannerTokenLimit: Number(value('plannerTokenLimit')), continuityReview: !!form.elements.continuityReview?.checked, reviewTokenLimit: Number(value('reviewTokenLimit')), composeFrames: !!form.elements.composeFrames?.checked, composeTokenLimit: Number(value('composeTokenLimit'))});
       await api('/api/quota-settings', {revision: data.quotaRevision, pexelsHourlyRequestCap: Number(value('pexelsCap')), pixabayHourlyRequestCap: Number(value('pixabayCap'))});
       return;
     }

@@ -25,6 +25,11 @@ const BROWSER_CANDIDATES = [
 ].filter(Boolean);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 const sha256 = value => createHash('sha256').update(value).digest('hex');
+// gsap 3.15 and the plugins atelier compositions may use (npm package `gsap`, standard no-charge licence).
+const GSAP_FILES = ['gsap', 'SplitText', 'DrawSVGPlugin', 'MorphSVGPlugin', 'MotionPathPlugin', 'CustomEase', 'TextPlugin', 'ScrambleTextPlugin'].map(name => path.join(__dirname, 'node_modules', 'gsap', 'dist', `${name}.min.js`));
+let gsapSource = null;
+const gsapScript = () => (gsapSource ??= GSAP_FILES.map(file => fs.readFileSync(file, 'utf8')).join(';\n').replace(/<\/script/gi, '<\\/script'));
+const warpTime = (anchors, t) => require('./atelier').warpAt(anchors, t);
 
 function findBrowser() { return BROWSER_CANDIDATES.find(file => { try { return fs.statSync(file).isFile(); } catch { return false; } }) || null; }
 
@@ -102,6 +107,7 @@ class MotionRenderer {
   // previews only). Returns the frame count, the frame pattern and a hash of all frames.
   async render({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
     if (!this.injected) {
+      if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
@@ -124,6 +130,7 @@ class MotionRenderer {
   // One frame as PNG bytes, for checks.
   async frame({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, t}) {
     if (!this.injected) {
+      if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
@@ -131,6 +138,49 @@ class MotionRenderer {
     await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, vertical, width, height, fps, duration})})`);
     const url = await this.evaluate(`MOTION.renderFrame(${t}) && document.getElementById('stage').toDataURL('image/png')`);
     return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+  }
+  // ---------------------------------------------------------------- atelier compositions (P06h)
+  // Each composition gets a fresh page (its own globals), a strict content policy (nothing outside the page can
+  // load), gsap and the atelier runtime; then it is seeked frame by frame and captured as PNG. `warp` maps the
+  // render time onto the composition's own time (atelier.warp), so reveals land on the narrator's words.
+  // A fresh blank page: new globals, nothing left from the last composition or template.
+  async blank() {
+    await this.send('Runtime.evaluate', {expression: 'window.__previous = 1'});
+    await this.send('Page.navigate', {url: 'about:blank'});
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const state = (await this.send('Runtime.evaluate', {expression: 'typeof window.__previous + document.readyState', returnByValue: true})).result.value;
+      if (state === 'undefinedcomplete') break;
+      await sleep(20);
+    }
+    this.injected = false;
+  }
+  async loadComposition({html, frameId, width, height, scale = 1, canvas = '#FFFFFF', duration}) {
+    await this.blank();
+    this.dirty = true;
+    await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: scale, mobile: false});
+    const page = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:">`
+      + `<style>html,body{margin:0;padding:0;width:${width}px;height:${height}px;overflow:hidden;background:${/^#[0-9a-f]{6}$/i.test(canvas) ? canvas : '#FFFFFF'}}[data-composition-id]{position:relative;width:${width}px;height:${height}px;overflow:hidden}</style>`
+      + `<script>${gsapScript()}</script><script>${fs.readFileSync(path.join(__dirname, 'atelier-runtime.js'), 'utf8')}</script></head><body>${html}<script>__atelier.init(${JSON.stringify(frameId)}, ${Number(duration)}, ${width}, ${height})</script></body></html>`;
+    await this.evaluate(`document.open(); document.write(${JSON.stringify(page)}); document.close(); true`);
+    await this.evaluate('document.fonts.ready.then(() => true)');
+    return this.evaluate('__atelier.status()');
+  }
+  // Layout findings at the given composition times: text off the frame, text in the caption band.
+  async auditComposition(times) { return this.evaluate(`__atelier.audit(${JSON.stringify(times)})`); }
+  async renderComposition({html, frameId, width, height, scale = 1, canvas, duration, fps, outDir, warp = null, onFrame = () => {}}) {
+    const status = await this.loadComposition({html, frameId, width, height, scale, canvas, duration});
+    if (!status.ready) throw new InputError(`The composition did not start: ${status.errors[0] || 'no timeline was registered'}.`, 422);
+    fs.mkdirSync(outDir, {recursive: true});
+    const frames = Math.max(1, Math.round(duration * fps)), hash = createHash('sha256');
+    for (let index = 0; index < frames; index++) {
+      const t = index / fps, at = warp ? warpTime(warp, t) : t;
+      await this.evaluate(`__atelier.seek(${at})`);
+      const bytes = Buffer.from((await this.send('Page.captureScreenshot', {format: 'png', fromSurface: true})).data, 'base64');
+      hash.update(bytes);
+      fs.writeFileSync(path.join(outDir, `f${String(index).padStart(5, '0')}.png`), bytes);
+      onFrame(index + 1, frames);
+    }
+    return {frames, sha256: hash.digest('hex'), pattern: 'f%05d.png', errors: (await this.evaluate('__atelier.status()')).errors};
   }
   async close() {
     try { this.socket?.close(); } catch { /* already closed */ }

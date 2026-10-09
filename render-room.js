@@ -15,6 +15,8 @@ const Audio = require('./audio');
 const Review = require('./review');
 const Sk = require('./sketch');
 const M = require('./music');
+const At = require('./atelier');
+const E = require('./engines');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
@@ -117,7 +119,7 @@ class RenderRoom {
       approvalRow = this.db.prepare('SELECT * FROM visual_approvals WHERE id=?').get(visual.approvalId);
       spec = JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec);
       // Drawn styles (P06c) render through the montage assembler: their shots are clips the program drew itself.
-      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
+      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
       if (voice?.ready && manifestRow.voice_approval_id !== voice.approvalId) blockers.push('The approved narration differs from the one the scene plan was timed with.');
     }
     return {family, visual, voice, spec, manifestRow, approvalRow, blockers, ready: !blockers.length};
@@ -328,10 +330,18 @@ class RenderRoom {
             const index = tl.clips.findIndex(item => item.id === clipId), clip = tl.clips[index], extra = index < tl.clips.length - 1 ? tl.joins[index].frames : 0;
             const start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
             const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3)}));
-            const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: scope.edit.engine, lenient: true});
             const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
-            const drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
+            let drawn;
+            if (drawing.composition) {
+              // Atelier shot: the composition, seeked so each reveal lands on the narrator's actual word.
+              const comp = drawing.composition, canvas = scope.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
+              const warp = At.warp({planned: comp.words || [], actual: words, composed: comp.composedSeconds, hold: seconds});
+              drawn = await renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, outDir: path.join(work, folder)});
+            } else {
+            const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: E.ENGINES[scope.edit.engine]?.draws ? scope.edit.engine : 'motion', lenient: true});
+            drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
               vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
+            }
             const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
             const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});
             logs.push({step: `encode ${clip.label}`, ok: true, stderr: R.tail(out.stderr)});

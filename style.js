@@ -48,6 +48,11 @@ const RENDERERS = {
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
+  atelier: {
+    name: 'Atelier compositions', milestone: 'P06h', status: 'not_implemented',
+    note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
+    supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
+  },
   'cinematic-hybrid': {
     name: 'Cinematic hybrid', milestone: 'P05+', status: 'not_implemented',
     note: 'Generated or stock video shots with continuity rules and a strict proxy-review loop.',
@@ -63,7 +68,7 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v3';
+const LAUNCH_VERSION = 'Launch library v4';
 const LAUNCH_PROFILES = [
   {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
@@ -117,6 +122,24 @@ const LAUNCH_PROFILES = [
     audio: {musicMoods: ['energetic', 'electronic', 'driving'], duckingDb: -16, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'motion-graphics'},
     qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
+    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
+  }},
+  {key: 'atelier', upgrade: 'Launch library v4 (0.25): new. Every shot is designed for its video by Claude (HyperFrames method), so no two videos share a look.', spec: {
+    name: 'Atelier · designed per video',
+    summary: 'Every shot is designed from scratch for its video: an art direction made for the topic, then kinetic type, diagrams, charts and visual metaphors built on the narrator\'s words.',
+    bestFit: ['Explainers on any topic', 'Data and concept stories', 'Fast hooks and Shorts', 'Brand-free, distinctive channels'],
+    formats: ['long-form', 'shorts'],
+    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
+    pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 6, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 6},
+    transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom', 'wipe'], default: 'cut', maxDurationMs: 500},
+    motion: {cameraMoves: ['static', 'zoom', 'pan', 'parallax', 'tracking'], intensity: 60, easing: 'ease-in-out'},
+    typography: {headingFont: 'Bahnschrift', bodyFont: 'Segoe UI', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    palette: {background: '#F7F4EE', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
+    captions: {mode: 'burned-in', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['modern', 'curious', 'driving'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
+    renderer: {adapter: 'atelier'},
+    qc: {maxBlackSeconds: 0.3, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
   {key: 'documentary-montage', upgrade: 'Launch library v3 (0.21): drawn explainer cutaways (hand-drawn, motion graphics or stick figures) are available beside the footage; Claude decides where they help, with its reason.', spec: {

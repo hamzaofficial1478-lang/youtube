@@ -391,7 +391,7 @@ class SoundtrackRoom {
     }
     if (config.sfx?.enabled && config.sfx.density !== 'none') {
       const words = (timeline.captions?.groups || []).flatMap(group => group.words);
-      const clips = timeline.clips.filter(clip => drawings[clip.id]).map(clip => {
+      const clips = timeline.clips.filter(clip => drawings[clip.id]?.sketch).map(clip => {
         const start = clip.start / timeline.fps, seconds = clip.frames / timeline.fps, sketch = Sk.validate(drawings[clip.id].sketch, {primary: engine, lenient: true});
         return {label: clip.label, start, seconds, sketch, times: Sk.timing(sketch, words.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: word.start - start})))};
       });

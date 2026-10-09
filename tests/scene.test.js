@@ -86,7 +86,8 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
       if (target.pathname === '/v1/toolsets') return json([]);
       if (isClaudeMessages(url)) {
         if (failChat) throw new Error('socket hang up');
-        const body = JSON.parse(options.body), input = JSON.parse(body.messages[0].content);
+        // The frame worker's request is a JSON packet followed by recipe text; it arrives as {raw}.
+        const body = JSON.parse(options.body), input = (() => { try { return JSON.parse(body.messages[0].content); } catch { return {raw: body.messages[0].content, system: body.system}; } })();
         const plan = typeof claudePlan === 'function' ? claudePlan(input) : claudePlan;
         return (body.stream ? claudeStream : claudeMessage)(plan, {input_tokens: claudeUsage.prompt_tokens, output_tokens: claudeUsage.completion_tokens});
       }
@@ -110,7 +111,7 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
   };
   const ids = {pexels: make('pexels'), pixabay: make('pixabay'), openai: make('openai'), claude: make('claude')};
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
-  const family = store.saveFamily({name: 'Money History', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format, monthlyTokenLimit: 500000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['@CoinOrigins']});
+  const family = store.saveFamily({name: 'Money History', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format, monthlyTokenLimit: 2000000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['@CoinOrigins']});
   let content = store.saveContent({familyId: family.id, title: 'How promises became money', kind: 'fiction', angle: 'Follow invented market towns as they learn to record trust.', hook, script: scriptText, targetMinutes, sources: [], rightsConfirmed: true});
   store.reviewContent(content.id, {revision: content.revision, action: 'submit'});
   content = store.reviewContent(content.id, {revision: content.revision, action: 'approve'});
@@ -557,4 +558,57 @@ test('HTTP routes need the local token and serve the scene state, previews and t
   assert.equal((await send('/api/scene-shots/search', {}, 'bad')).status, 403);
   assert.equal((await send('/api/scene-shots/search', {requestedBy: 'Owner', capabilityId: 'pexels-photo', connector: {id: 'x', revision: 1}})).status, 409);
   assert.ok(sceneRoom);
+});
+
+test('atelier shots: Claude plans an art direction and frames, a frame worker designs each, the program checks it and Room 04 draws it', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
+  const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#10131A}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
+  const asked = [], frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the number', roles: 'number = foreground subject', beats: [{show: 'the number counts up in the centre'}], motions: ['counting-dynamic-scale', 'not-a-rule'], type: 'evidence', persuasion: 'worked example', beat: `surprise ${n}`});
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw) {
+      const packet = JSON.parse(input.raw.split('\n\n')[0]), retry = input.raw.includes('failed these checks');
+      asked.push(`${packet.frameId}${retry ? ':retry' : ''}`);
+      if (packet.frameId === 's01b' && !retry) return '<template><div data-composition-id="s01b"><script>const x = Math.random();</script></div></template>';
+      if (packet.frameId === 's02a') return 'Here is a sketch of my idea, not a composition.';
+      return good(packet.frameId);
+    }
+    const all = input.sentences, half = Math.ceil(all.length / 2);
+    const scenes = [[all[0].n, all[half - 1].n], [all[half].n, all.at(-1).n]].map(([start, end], k) => ({sentenceStart: start, sentenceEnd: end, purpose: k ? 'explain' : 'hook', direction: 'Make the numbers land.', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'zoom', notes: '', frame: frame(k * 2 + 1)}, k ? {source: 'generated-graphics', query: '', prompt: '', motion: 'zoom', notes: 'A human reaction.', sketch: {engine: 'stickman', set: 'bank', elements: [{kind: 'figure', who: 'c1', pose: 'shock', x: 0.4, y: 0.8}]}} : {source: 'generated-graphics', query: '', prompt: '', motion: 'zoom', notes: '', frame: frame(2)}]}));
+    return {summary: 'Numbers that hit.', cast: [{id: 'c1', name: 'Ava', role: 'the viewer', look: {hair: 'bun'}}], scenes,
+      direction: {read: 'Money history told plainly, where every number lands like a fact you can hold.', dials: {variance: 4, motion: 5, density: 3}, palette: {canvas: '#10131A', ink: '#F7F4EE', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Comic Neue'}, motion: 'power3 settles, reveals on the voice', signature: 'one counting ring', avoid: ['purple gradients']}};
+  }});
+  const {room, content, ids, store, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false});
+  narrate(40);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  const system = network.calls.find(call => call.path === '/v1/messages').body.system;
+  assert.match(system, /SCENE CRAFT[\s\S]*ATELIER SHOTS[\s\S]*dataviz-countup/, 'the planner reads the scene craft and the atelier catalog');
+  // One frame worker answer per atelier shot; a failed check is asked again once with its findings.
+  assert.deepEqual(asked.slice(0, 5), ['s01a', 's01b', 's01b:retry', 's02a', 's02a:retry']);
+  const manifest = latestManifest(room, content.id), byLabel = Object.fromEntries(shots(manifest).map(shot => [shot.label, shot]));
+  assert.equal(manifest.plan.direction.fonts.body, 'Segoe UI', 'a font that is not installed falls back, with a named warning');
+  assert.ok(manifest.warnings.some(item => /Comic Neue/.test(item)) && manifest.warnings.some(item => /not-a-rule/.test(item)));
+  assert.deepEqual(byLabel.S01A.frame.motions, ['counting-dynamic-scale']);
+  assert.match(byLabel.S01A.frame.html, /data-composition-id="s01a"/);
+  assert.ok(byLabel.S01B.frame.html, 'fixed on the second answer');
+  assert.equal(byLabel.S02A.frame.html, undefined);
+  assert.ok(byLabel.S02A.sketch, 'a shot whose design failed is drawn from its words');
+  assert.ok(byLabel.S02B.sketch && !byLabel.S02B.frame, 'a drawn shot can sit beside atelier shots');
+  const atelierShots = shots(manifest).filter(shot => shot.frame).length;
+  assert.deepEqual([manifest.plan.compose.shots, manifest.plan.compose.designed], [atelierShots, atelierShots - 1]);
+  assert.ok(manifest.plan.compose.notes.some(item => /^S02A: the composition did not pass its checks/.test(item)));
+  const frames = store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='atelier_frame'").all();
+  assert.deepEqual([frames.length, frames.every(row => row.status === 'settled')], [asked.length, true], 'each answer is reserved and settled on its own');
+  // Room 04 draws the designed shots from their compositions (and the others from their sketches).
+  approvePlan(room, manifest);
+  const drawCount = shots(manifest).filter(shot => shot.source === 'generated-graphics').length;
+  assert.equal(room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, drawCount);
+  for (let k = 0; k < drawCount; k++) assert.equal((await room.processNextVisual())?.status, 'completed');
+  const asset = store.db.prepare("SELECT rights, probe FROM visual_assets WHERE origin='drawn' AND shot_id=?").get(byLabel.S01A.id);
+  assert.equal(JSON.parse(asset.rights).basis, 'own-composition');
+  assert.ok(JSON.parse(asset.probe).durationSeconds > 0.5);
+  // Redrawing the same design is skipped.
+  assert.throws(() => room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}), /already shows its current drawing/);
 });
