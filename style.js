@@ -63,9 +63,9 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v2';
+const LAUNCH_VERSION = 'Launch library v3';
 const LAUNCH_PROFILES = [
-  {key: 'stickman-sketch-explainer', upgrade: 'Launch library v2 (0.20): the stickman engine. Drawn shots are the only source (stock and AI images do not pair with stick figures), faster energetic pacing, a richer motion layer and sound accents.', spec: {
+  {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
     summary: 'Cartoon stick characters with distinct looks, expressions and gestures act every line inside built sets, with kinetic words and effects on the narrator\'s words; energetic, word-timed and never still.',
     bestFit: ['Educational explainers', 'Business and money concepts', 'Psychology and how-it-works'],
@@ -77,13 +77,13 @@ const LAUNCH_PROFILES = [
     typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['upbeat', 'curious', 'playful'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'ffmpeg-sketch'},
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'hand-drawn-canvas', upgrade: 'Launch library v2 (0.20): the hand-drawn engine. Drawn shots only (footage and AI images do not pair with ink drawings; stick figures do not either), with inked motion graphics as the partner.', spec: {
+  {key: 'hand-drawn-canvas', upgrade: 'Launch library v3 (0.21): the hand-drawn engine. Drawn shots lead; photos and AI images stay available and Claude decides when the story needs one, with its reason.', spec: {
     name: 'Hand-drawn Canvas',
     summary: 'Ink illustrations and ink figures drawn line by line on paper, with a living line, washed colour and inked motion graphics, for storytelling and essays.',
     bestFit: ['Storytelling', 'Video essays', 'Artistic education'],
@@ -95,13 +95,13 @@ const LAUNCH_PROFILES = [
     typography: {headingFont: 'Caveat', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#F6F0E4', primary: '#2B2B2B', accent: '#B5473A', text: '#2B2B2B'},
     captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'ai-image', 'archival-public-domain'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['warm', 'reflective', 'acoustic'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
     renderer: {adapter: 'canvas-frames'},
     qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'motion-graphics', upgrade: 'Launch library v2 (0.20): the motion-graphics engine draws its own shots, with stick-figure moments and stock plates as partners.', spec: {
+  {key: 'motion-graphics', upgrade: 'Launch library v3 (0.21): the motion-graphics engine draws its own shots; Claude decides when a stick figure, an ink sketch or stock footage serves a line better.', spec: {
     name: 'Motion Graphics',
     summary: 'Fast, text-safe animated graphics with stable scene IDs; built for strong hooks, workflows and product concepts.',
     bestFit: ['Fast hooks and Shorts', 'Workflows and tutorials', 'Tech and product concepts'],
@@ -119,7 +119,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'documentary-montage', upgrade: 'Launch library v2 (0.20): hand-drawn and motion-graphics explainer cutaways join the footage as partners (drawn by the program, free).', spec: {
+  {key: 'documentary-montage', upgrade: 'Launch library v3 (0.21): drawn explainer cutaways (hand-drawn, motion graphics or stick figures) are available beside the footage; Claude decides where they help, with its reason.', spec: {
     name: 'Documentary Montage',
     summary: 'Evidence-led stock and archival shots with per-shot provenance, restrained Ken Burns motion, maps and readable labels; chronology follows the narration.',
     bestFit: ['History and culture', 'Finance and economics stories', 'Sourced factual essays'],

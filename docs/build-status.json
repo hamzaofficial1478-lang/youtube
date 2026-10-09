@@ -1,5 +1,5 @@
 {
-  "version": "0.20.0",
+  "version": "0.21.0",
   "updated": "2026-10-08",
   "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music sourcing is deferred. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
@@ -290,6 +290,13 @@
           "evidence": "0.20.0 (2026-10-09): engines.js primary/partner matrix with written refusals (stickman never joins hand-drawn); sketch.js cast with looks, 40 poses, 26 expressions, 15 emotes, about 125 props, 25 sets, moods, 25 motion effects, 9 kinetic text styles, cues on words, lenient repair of Claude drawings with named warnings; browser engine in six drawn-*.js files (pure functions of time, catalog equal to the vocabulary); Room 04 720p previews; renders redraw drawn shots on the captions' word times with three browsers and JPEG frames; the brain cuts on cue words and never trims drawn clips; launch library v2 drafts for unrevised launch profiles. Demo: Claude planned the 39.5 s lightning script in 18 cued shots with a cast of two (105 s, 14,569 tokens, no warnings), previews drawn in 276 s, render at 1080p in 150 s (489 s before the speed-up), every check passing; frame review found and fixed a counter hidden behind its burst, a title card over a drawn shot, false hidden-cut flags on drawn flashes, characters and a stamp cropped during zooms, and a slow ink reveal. Full suite 220/220 passed, 0 skipped (263 s)."
         },
         {
+          "id": "P06e",
+          "title": "Engine reasoning, unlimited cast and the continuity review",
+          "status": "testing",
+          "remaining": "Not yet judged by the owner on a full video; hand-drawn and motion-graphics styles still to be upgraded and tested end to end (owner order: stickman first). Families need monthly token limits large enough for the review reservation (about 110,000 tokens per plan part).",
+          "evidence": "0.21.0 (2026-10-09): engines.js now describes strengths, risks and usual mixes and nothing is forbidden in code (owner instruction: reasoning, not hard-coded rules); shots that leave the main look need a reason in their notes; launch library v3 restores photos/footage/AI images to drawing styles as options; the cast takes every character the script needs (sanity bound 40); scenes carry a setting; Sk.continuity notes place jumps and screen-direction flips; the continuity review (second Claude answer per part, own token limit) redraws shots that do not match their words. Real Claude test on the 39.5 s demo: the review changed 4 of 18 shots with reasons (a stamp naming the sun before it was spoken, a stamp cropped by a zoom, a picture that did not match 'hear it', a character jumping sides), 43,222 tokens for plan and review. Drawn frames back to lossless PNG."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -421,5 +428,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Engines that work together"
+  "milestone": "Engine reasoning and continuity review"
 }

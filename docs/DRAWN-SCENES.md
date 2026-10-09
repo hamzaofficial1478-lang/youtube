@@ -11,39 +11,35 @@ The program draws these shots itself, locally and for free. No stock footage is 
   - an energetic pace;
   - engines that work together.
 
-## 1. Engines and how they work together (`engines.js`)
+## 1. Engines and how they work together (`engines.js`, reasoning since 0.21)
 
 There are four engines:
 
-| Engine | What it makes | Finish |
-|---|---|---|
-| `montage` | Stock and archival footage, photos, AI images and AI video | none (footage) |
-| `stickman` | Cartoon stick characters acting each line inside built sets | `cartoon`: bold clean outlines, flat colour |
-| `handdrawn` | Ink illustrations and ink figures drawn line by line on paper | `ink`: doubled wobbly line that "boils", washed colour, paper grain |
-| `motion` | Flat icons, kinetic words, counters, effects, diagrams | `flat`: filled shapes, glow, snappy easing |
+| Engine | Best for | Watch out | Finish |
+|---|---|---|---|
+| `montage` | Real places, people, events and products; evidence and atmosphere | It cannot show mechanisms or numbers; generic B-roll under abstract lines feels lazy | none (footage) |
+| `stickman` | People and situations acted out: emotions, mistakes, reactions, humour, cause and effect | A cartoon tone can undercut a grave subject | `cartoon` |
+| `handdrawn` | Storytelling, history, essays and how-it-works sketches with a crafted feel | A calmer rhythm; it can look like a different film beside cartoon figures | `ink` |
+| `motion` | Numbers, comparisons, lists, processes, timelines, kinetic words | It can feel cold without a person or place; long runs read as slides | `flat` |
 
-A style's renderer sets its **primary** engine:
+A style's renderer sets the video's **main look**. **Nothing is forbidden in code.** The owner's instruction (2026-10-09) was that combining engines is a matter of reasoning, not hard-coded rules. So the scene planner reads:
 
-- `ffmpeg-sketch` → stickman;
-- `canvas-frames` → handdrawn;
-- `motion-graphics` → motion;
-- the montage renderers → montage.
+- each engine's strengths and risks;
+- how engines usually mix: for example, motion graphics inside a stick scene usually help, while ink and cartoon drawings usually look unfinished together unless one is clearly a different layer.
 
-Partners join the primary engine in fixed roles:
+Claude then decides per video and per shot. A shot that leaves the main look must say why in its notes; the plan warns when the reason is missing. The style's own visual sources (Room 03, the owner's choice) are the only limit. Any drawing engine may draw any drawn shot.
 
-| Primary | Works with | Never with (reason kept in code) |
-|---|---|---|
-| Stickman | motion: the layer inside every stick scene, plus full motion shots for numbers and lists (at most 25% of shots) | handdrawn (two drawing languages); montage (footage or painted AI images break the cartoon look) |
-| Hand-drawn | motion: inked counters, highlights, circles and diagrams | stickman (**owner rule**); montage |
-| Motion | stickman (character moments), montage (stock plates) | handdrawn |
-| Documentary | motion (titles, stats, charts and motion explainers), handdrawn (ink explainer cutaways, up to 30%) | stickman (credibility) |
+**Continuity and script match (0.21).**
 
-The scene planner only offers sources the primary engine pairs with. For example:
-
-- An older Stickman style that still allows AI images now plans drawings only.
-- The planner records why it left a source out.
-
-This answers the owner's question about the first demo: Claude picked an AI image there only because the old Stickman style allowed it.
+- A scene may carry a `setting` (place and mood). Its drawn shots stay there unless one names another place.
+- The planning guide requires:
+  - every shot to show exactly what its own words say, when they are said;
+  - one place per part of the story;
+  - screen direction kept across shots;
+  - props kept while they are discussed.
+- The program notes place jumps inside a scene and characters who flip sides without walking (graphic inserts excepted).
+- With **Continuity review** on (the default, for drawing styles), a second Claude answer per part reads every drawn shot with its exact spoken words, its neighbours and the program's notes. It replaces the drawings that do not match, and its report and per-shot reasons are kept in the plan.
+  - The review has its own token limit per answer (default 70,000, byte-counted), reserved with the plan.
 
 ## 2. A drawn shot (`sketch.js`, closed vocabulary)
 

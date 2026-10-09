@@ -290,7 +290,8 @@ class RenderRoom {
         if (drawings.length) {
           const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], tl = scope.edit.timeline, fps = Math.min(tl.fps, R.PRESETS.proxy.maxFps);
           const spec = scope.style.spec, spoken = (tl.captions?.groups || []).flatMap(group => group.words);
-          // Up to three local browsers draw shots side by side (each frame stays a pure function of its shot).
+          // Lossless PNG frames, drawn by up to three local browsers side by side (each frame stays a pure function of
+          // its shot, so parallel drawing changes nothing in the picture).
           const renderers = Array.from({length: Math.max(1, Math.min(3, Math.floor(os.cpus().length / 2), drawings.length))}, () => new MotionRenderer({browser: this.browser}));
           this.current.handle = {kill: () => { renderers.forEach(item => item.close()); }};
           let next = 0, finished = 0;
@@ -302,8 +303,8 @@ class RenderRoom {
             const sketch = Sk.validate(drawing.sketch, {primary: scope.edit.engine, lenient: true});
             const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
             const drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
-              vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder), format: 'jpeg'});
-            const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '16', '-pix_fmt', 'yuv420p', '-an', '-y', file];
+              vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
+            const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
             const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});
             logs.push({step: `encode ${clip.label}`, ok: true, stderr: R.tail(out.stderr)});
             fs.rmSync(path.join(work, folder), {recursive: true, force: true});

@@ -320,6 +320,8 @@ test('a long script is planned in parts: each part covers its own sentences, and
 test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings repaired or named, and the program draws the shot itself', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
   const drawing = n => ({engine: 'stickman', set: 'bank', camera: 'push', elements: [{kind: 'figure', who: 'c1', pose: n % 2 ? 'point' : 'think', expression: 'excited', x: 0.3, y: 0.8}, {kind: 'prop', prop: n === 99 ? 'dragon' : 'coin', x: 0.65, y: 0.4, accent: true}, {kind: 'text', text: `Market ${n}`, style: 'title'}]});
   const network = fakeNetwork({claudePlan: input => {
+    // The continuity review reads the drafted shots with their words and redraws the ones that do not match.
+    if (input.scenes) return {report: 'S01A now shows Ava reacting to the coin as it is named.', changes: input.scenes.some(scene => scene.label === 'S01') ? [{label: 'S01A', reason: 'Ava reacts on the word.', sketch: {...drawing(1), elements: drawing(1).elements.map(el => (el.kind === 'figure' ? {...el, expression: 'shocked'} : el))}}, {label: 'S99Z', reason: 'Not a shot.'}] : []};
     const scenes = [];
     // Parts of 16 sentences, planned in scenes of up to 8.
     const first = input.sentences[0].n, last = input.sentences.at(-1).n;
@@ -342,11 +344,17 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
   const job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);
   const system = network.calls.find(call => call.path === '/v1/messages').body.system;
-  assert.match(system, /ENGINES\. This video's primary engine is stickman[\s\S]*Never use montage here[\s\S]*BUILD EVERY SHOT LIKE A SCENE/);
+  assert.match(system, /ENGINES\. This video's main look is Stickman animation \(stickman\)[\s\S]*What usually happens when engines mix[\s\S]*BUILD EVERY SHOT LIKE A SCENE/);
+  // The review is a second pass with each shot's own words; its redraws land in the plan with their reasons.
+  const reviewCall = network.calls.filter(call => call.path === '/v1/messages').find(call => /continuity supervisor/.test(call.body.system));
+  assert.ok(JSON.parse(reviewCall.body.messages[0].content).scenes[0].shots[0].words.length > 0, 'the review sees the words of each shot');
   assert.match(system, /"cast": \[characters\]/);
   let plan = latestManifest(room, content.id);
   assert.deepEqual(plan.plan.cast.map(item => [item.id, item.name, item.look.hair, item.look.outfit]), [['c1', 'Ava', 'bun', 'suit']]);
   assert.equal(plan.plan.scenes[0].shots[0].sketch.elements[0].look.hair, 'bun', 'every shot draws the character with the same look');
+  assert.equal(plan.plan.scenes[0].shots[0].sketch.elements[0].expression, 'shocked', 'the review redrew S01A');
+  assert.deepEqual(plan.plan.review.changes, [{label: 'S01A', reason: 'Ava reacts on the word.'}]);
+  assert.match(plan.plan.review.report, /Ava reacting to the coin/);
   assert.ok(plan.warnings.some(item => /^S02B drawing: Element 2: "dragon" is not in the prop library/.test(item)), plan.warnings.join(' | '));
   assert.deepEqual(plan.plan.scenes[1].shots[1].sketch.elements.map(el => el.kind), ['figure', 'text']);
   // A shot with a cue starts when its words are spoken, not at an even split of the scene.

@@ -40,7 +40,8 @@ const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp'
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars']);
 const PROP_MOTIONS = Object.freeze(['auto', 'spin', 'pulse', 'float', 'shake', 'bounce', 'swing', 'none']);
 const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
-const MAX_ELEMENTS = 12, MAX_CAST = 6, MAX_THEN = 3, MAX_FOCUS = 3;
+// The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
+const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
 const VERSION = 'drawn-scene/5';
 
@@ -119,8 +120,8 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('A drawn scene must be an object.');
   if (!Array.isArray(raw.elements) || !raw.elements.length) fail(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
   if (raw.elements.length > MAX_ELEMENTS) c.problem(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
-  const engines = E.drawEngines(primary).length ? E.drawEngines(primary) : ['motion'];
-  const engine = raw.engine === undefined ? engines[0] : engines.includes(raw.engine) ? raw.engine : c.problem(`This video draws with ${engines.join(' or ')}, not ${raw.engine}.`, engines[0]);
+  const engines = E.drawEngines(primary);
+  const engine = raw.engine === undefined ? engines[0] : engines.includes(raw.engine) ? raw.engine : c.problem(`Engine must be one of: ${engines.join(', ')}.`, engines[0]);
   const castMap = new Map(cast.map(item => [item.id, item]));
   const count = Math.min(raw.elements.length, MAX_ELEMENTS);
   const ref = (value, label) => {
@@ -192,6 +193,32 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   return {engine, set: c.pick(raw.set, SETS, 'Set', 'none'), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
+// A scene's setting: the place and feeling its drawn shots share unless a shot names another.
+function validateSetting(raw, {strict = false} = {}) {
+  const c = checker({lenient: !strict});
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return c.problem('A setting must be an object with a set and a mood.', {set: 'none', mood: 'normal'});
+  return {set: c.pick(raw.set, SETS, 'Setting set', 'none'), mood: c.pick(raw.mood, MOODS, 'Setting mood', 'normal')};
+}
+
+// Continuity notes across neighbouring drawn shots: a change of place inside one scene, and a character who
+// jumps to the other side of the screen and turns round without walking there. Warnings for the owner and
+// the continuity review; the drawing itself is never changed here.
+function continuity(shots, cast = []) {
+  const notes = [], name = id => cast.find(item => item.id === id)?.name || id;
+  for (let k = 1; k < shots.length; k++) {
+    const a = shots[k - 1], b = shots[k];
+    if (!a.sketch || !b.sketch || a.sceneId !== b.sceneId) continue;
+    // A graphic beat in another engine (or an abstract backdrop) is a deliberate insert, not a change of place.
+    const insert = a.sketch.engine !== b.sketch.engine || [a.sketch.set, b.sketch.set].includes('abstract');
+    if (!insert && a.sketch.set !== 'none' && b.sketch.set !== 'none' && a.sketch.set !== b.sketch.set) notes.push(`${b.label} moves from the ${a.sketch.set} to the ${b.sketch.set} inside one scene; keep the place unless the words move.`);
+    for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who)) {
+      const before = a.sketch.elements.find(el => el.kind === 'figure' && el.who === fig.who);
+      if (before && (before.x < 0.5) !== (fig.x < 0.5) && before.facing !== fig.facing) notes.push(`${name(fig.who)} jumps to the other side of the screen and turns round between ${a.label} and ${b.label}.`);
+    }
+  }
+  return notes;
+}
+
 // ---------------------------------------------------------------- timing on the narrator's words
 
 const tokens = value => String(value).toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').match(/[\p{L}\p{N}]+/gu) || [];
@@ -237,7 +264,7 @@ const MOOD_EXPRESSION = {shock: 'shocked', think: 'thinking', point: 'excited', 
 
 // A deliberate, honest scene from the shot's narration: a set, the narrator character acting the line, up to two
 // props it mentions (alive on their own), its number as a counter, and a motion accent on a hook.
-function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = []} = {}) {
+function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null} = {}) {
   const lower = ` ${String(narration).toLowerCase()} `;
   const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(shotIndex % 2 ? 1 : 0).slice(0, 2);
   if (!props.length) props.push(purpose === 'hook' ? 'exclamation' : 'lightbulb');
@@ -251,8 +278,8 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
   if (purpose === 'hook') elements.splice(first, 0, {kind: 'fx', effect: 'burst', on: first + 2});
   const words = clean(onScreenText, 40) || number || '';
   if (words) elements.push({kind: 'text', text: words, x: 0.5, y: 0.15, size: number && !onScreenText ? 'l' : 'm', style: number && !onScreenText ? 'counter' : 'title', accent: true});
-  const set = engine === 'motion' ? 'abstract' : SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || 'none';
-  return validate({engine, set, camera: purpose === 'hook' ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
+  const set = setting?.set || (engine === 'motion' ? 'abstract' : SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || 'none');
+  return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : {}), camera: purpose === 'hook' ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
 }
 
 // ---------------------------------------------------------------- Claude's guide
@@ -262,8 +289,9 @@ function promptGuide(primary = 'stickman') {
   const engines = E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
-    'Return a top-level "cast" (the same characters return across the whole video; 1-6): [{"id": "c1", "name": up to 24 chars, "role": up to 60 chars, "look": {' + Object.entries(LOOK).map(([key, values]) => `"${key}": ${list(values)}`).join(', ') + '}}].',
+    'Return a top-level "cast": every character the script needs (one, ten or more; the same characters return across the whole video): [{"id": "c1", "name": up to 24 chars, "role": up to 60 chars, "look": {' + Object.entries(LOOK).map(([key, values]) => `"${key}": ${list(values)}`).join(', ') + '}}].',
     'Design looks that tell the viewer who someone is at a glance: the narrator or "you" (an everyman), experts (glasses, lab-coat), rich people (suit, top-hat), workers (hard-hat), villains or a problem personified (body "creature": a dark blob with red eyes), machines (body "robot"). Give every character a distinct hair, colour or accessory. Never copy a real person or another channel\'s characters.',
+    'Each scene may give a "setting": {"set", "mood"} - the place and feeling of that part of the story. Its drawn shots stay there unless their own sketch names another set.',
     'For each drawn shot return "cue": the first words spoken when this shot starts (the picture changes on them), and "sketch":',
     `{"engine": ${list(engines)}, "set": ${list(SETS)}, "mood": ${list(MOODS)}, "camera": ${list(CAMERAS)}, "transition": ${list(TRANSITIONS)}, "focus"?: [{"at": words, "x": 0-1, "y": 0-1, "zoom": 1-2.5}] (max ${MAX_FOCUS}), "elements": [1-${MAX_ELEMENTS}, back to front]}`,
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
@@ -273,6 +301,8 @@ function promptGuide(primary = 'stickman') {
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
+    'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
+    'CONTINUITY: plan the world first. Each part of the story has one place that matches what the narration describes; shots stay in it while the narration stays there and change place only when the words move. Keep each character on the same side of the screen and facing the same way across neighbouring shots unless they move; keep introduced props while they are still discussed; return to an earlier place when the story returns to its topic. A new place or a new layout needs a reason in the words.',
     'PACING: match the genre. Energetic explainers and listicles change the picture every 1.5-3 seconds (a new shot or a new beat) and use whip, zoom and pop openings at section changes; calm or serious topics hold longer with slow pushes. Never let a frame sit still: every shot has something that moves.',
     'MOTION SHOTS (engine motion): one hero element at size xl and the number or word big (size l or xl), filling the frame; no empty half-frame.',
     'COMPOSITION: feet on the ground line (y 0.8); text in the top third; keep the bottom 18% clear for captions; never cover a face with text; use size xl and focus zoom for reaction close-ups; alternate left/right/centre layouts and sets, never the same composition twice in a row; at most 3-4 things arriving at once. Words on screen come from the narration.',
@@ -280,4 +310,4 @@ function promptGuide(primary = 'stickman') {
   ].join('\n');
 }
 
-module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, timing, matchPhrase, fromText, promptGuide};
+module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, timing, matchPhrase, fromText, promptGuide};

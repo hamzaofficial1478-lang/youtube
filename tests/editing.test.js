@@ -777,7 +777,7 @@ test('documentary partners: hand-drawn cutaways are drawn again at render time o
     manifest = scenes.editManifest(manifest.id, {op: 'update-shot', shotId: shot.id, source: 'generated-graphics', createdBy: 'Owner', expectedRevision: manifest.revision,
       sketch: {engine: k ? 'motion' : 'handdrawn', set: 'none', elements: [{kind: 'prop', prop: k ? 'pie-chart' : 'map', x: 0.5, y: 0.45, size: 'xl'}, {kind: 'text', text: k ? '1 in 4' : 'Trade routes', style: k ? 'counter' : 'title', x: 0.5, y: 0.15}]}});
   }
-  assert.throws(() => scenes.editManifest(manifest.id, {op: 'update-shot', shotId: targets[0].id, sketch: {engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, createdBy: 'Owner', expectedRevision: manifest.revision}), /draws with motion or handdrawn/, 'stick figures never join a documentary');
+  assert.ok(manifest.warnings.some(item => /leaves the main montage look without a reason/.test(item)), 'a drawn cutaway in a documentary asks for its reason');
   scenes.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', confirmations: {coverageReviewed: true, directionReviewed: true}});
   // Drawn previews first, then stock stills for the rest of the board.
   assert.equal(scenes.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, 2);

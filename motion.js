@@ -98,8 +98,8 @@ class MotionRenderer {
     if (result.exceptionDetails) throw new InputError(`Motion template error: ${result.exceptionDetails.exception?.description?.split('\n')[0] || result.exceptionDetails.text}`, 502);
     return result.result.value;
   }
-  // Renders one graphic to numbered frames (f00000.png ...; JPEG for opaque drawn shots, three times faster to
-  // capture than PNG). Returns the frame count, the frame pattern and a hash of all frames.
+  // Renders one graphic to numbered lossless PNG frames (f00000.png ...; `format: 'jpeg'` exists for quick
+  // previews only). Returns the frame count, the frame pattern and a hash of all frames.
   async render({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
     if (!this.injected) {
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});

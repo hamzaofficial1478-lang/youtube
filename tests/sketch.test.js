@@ -18,7 +18,7 @@ test('a drawn shot uses the closed vocabulary; positions stay inside the frame a
     [{elements: []}, /1-12 elements/], [{elements: Array(13).fill({kind: 'prop', prop: 'sun'})}, /1-12 elements/], [{elements: [{kind: 'prop', prop: 'dragon'}]}, /prop must be one of/],
     [{elements: [{kind: 'figure', pose: 'moonwalk'}]}, /pose must be one of/], [{elements: [{kind: 'video'}]}, /kind must be/], [{elements: [{kind: 'text', text: ''}]}, /needs text/],
     [{elements: [{kind: 'arrow', from: [0.1]}]}, /from must be a point/], [{set: 'volcano-lair', elements: [{kind: 'prop', prop: 'sun'}]}, /Set must be one of/], [[], /must be an object/],
-    [{engine: 'handdrawn', elements: [{kind: 'prop', prop: 'sun'}]}, /draws with stickman or motion, not handdrawn/],
+    [{engine: 'claymation', elements: [{kind: 'prop', prop: 'sun'}]}, /Engine must be one of: stickman, handdrawn, motion/],
   ]) assert.throws(() => Sk.validate(raw), pattern);
 });
 
@@ -31,14 +31,16 @@ test('Claude\'s near-misses are repaired with a warning; the owner\'s own edits 
   assert.equal(warnings.length, 3);
   assert.match(warnings.join(' '), /"dragon" is not in the prop library[\s\S]*pose must be one of[\s\S]*ghost, who is not in the cast/);
   assert.throws(() => Sk.validate({elements: [{kind: 'prop', prop: 'dragon'}]}, {lenient: true}), /at least one element/, 'nothing drawable is still an error');
-  // A footage video draws its partner cutaways with the hand-drawn or motion engine, never stick figures.
-  assert.equal(Sk.validate({engine: 'handdrawn', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'handdrawn');
-  assert.throws(() => Sk.validate({engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}), /draws with motion or handdrawn/);
+  // Any drawing engine may draw a shot in any video; Claude decides and says why (engines.js).
+  assert.equal(Sk.validate({engine: 'handdrawn', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'stickman'}).engine, 'handdrawn');
+  assert.equal(Sk.validate({engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'stickman');
+  assert.equal(Sk.validate({elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'stickman', 'drawn shots in a footage video default to the first drawing engine');
 });
 
 test('the cast is validated once and characters keep their looks', () => {
   assert.deepEqual(cast.map(item => [item.id, item.name, item.look.body, item.look.hair]), [['c1', 'Max', 'stick', 'spiky'], ['boss', 'The Boss', 'creature', 'messy']]);
-  assert.equal(Sk.validateCast(Array(9).fill(0).map((_, k) => ({id: `c${k}`}))).length, Sk.MAX_CAST);
+  assert.equal(Sk.validateCast(Array(12).fill(0).map((_, k) => ({id: `c${k}`}))).length, 12, 'as many characters as the script needs');
+  assert.equal(Sk.validateCast(Array(45).fill(0).map((_, k) => ({id: `c${k}`}))).length, Sk.MAX_CAST, 'a sanity bound only');
   assert.throws(() => Sk.validateCast([{id: 'a'}, {id: 'a'}]), /repeats the id a/);
   assert.throws(() => Sk.validateCast([{look: {hair: 'dreadlocks-of-fire'}}]), /hair must be one of/);
 });
@@ -72,7 +74,19 @@ test('Claude reads the whole vocabulary, the scene-building rules and the layout
   assert.match(guide, /BUILD EVERY SHOT LIKE A SCENE/);
   assert.match(guide, /keep the bottom 18% clear for captions/);
   assert.match(guide, /Never copy a real person or another channel's characters/);
-  assert.match(guide, /"engine": stickman\|motion/);
-  assert.match(Sk.promptGuide('montage'), /"engine": motion\|handdrawn/);
+  assert.match(guide, /"engine": stickman\|handdrawn\|motion/);
+  assert.match(guide, /SCRIPT MATCH: every shot shows exactly what its own words say/);
+  assert.match(guide, /CONTINUITY: plan the world first/);
+  assert.match(guide, /every character the script needs \(one, ten or more/);
   assert.match(Sk.VERSION, /^drawn-scene\/\d+$/);
+});
+
+test('a scene setting is shared by its shots, and continuity notes catch place jumps and screen-direction flips', () => {
+  assert.deepEqual(Sk.validateSetting({set: 'bank', mood: 'tense'}), {set: 'bank', mood: 'tense'});
+  assert.deepEqual(Sk.validateSetting({set: 'moon-base'}), {set: 'none', mood: 'normal'}, 'repaired for Claude');
+  assert.throws(() => Sk.validateSetting({set: 'moon-base'}, {strict: true}), /Setting set must be one of/);
+  const shot = (label, sceneId, set, x, facing) => ({label, sceneId, sketch: Sk.validate({set, elements: [{kind: 'figure', who: 'c1', x, facing}]}, {cast})});
+  const notes = Sk.continuity([shot('S01A', 'a', 'bank', 0.3, 'right'), shot('S01B', 'a', 'desert', 0.7, 'left'), shot('S02A', 'b', 'space', 0.3, 'right')], cast);
+  assert.deepEqual(notes, ['S01B moves from the bank to the desert inside one scene; keep the place unless the words move.', 'Max jumps to the other side of the screen and turns round between S01A and S01B.'], 'a new scene may move');
+  assert.equal(Sk.fromText('Money talk.', {setting: {set: 'bank', mood: 'money'}}).set, 'bank');
 });
