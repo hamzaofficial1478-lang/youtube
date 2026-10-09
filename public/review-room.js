@@ -47,12 +47,12 @@ function qcView(report, job) {
   const player = report.videoUrl ? `<div class="render-player"><video id="qc-video" controls preload="metadata" src="${esc(report.videoUrl)}"></video><div class="render-facts">${checks}<p class="hint">Click any time, frame or sentence to jump the player there.</p></div></div>` : checks;
   const issues = report.findings.length ? `<div class="qc-issues">${report.findings.map((item, index) => {
     const [severity, tone] = QC_SEVERITY[item.severity] || [item.severity, 'gray'];
-    return `<div class="qc-issue"><div class="qc-issue-time">${item.at === null ? '<span class="muted">whole video</span>' : qcSeek(item.at)}${item.frame ? qcScanThumb(report.scan, item.frame.id) : ''}</div><div><div class="card-top">${badge(severity, tone)}<span class="muted">${esc(QC_SOURCE[item.source] || item.source)}${item.label ? ` · ${esc(item.label)}` : ''}</span></div><p>${esc(item.message)}</p>${item.fix ? `<p class="hint">${esc(item.fix)}</p>` : ''}</div><div>${!blocked && item.repair?.command ? action(esc(item.repair.label), 'qc-repair', `f${index}`, 'secondary') : ''}</div></div>`;
+    return `<div class="qc-issue"><div class="qc-issue-time">${item.at === null ? '<span class="muted">whole video</span>' : qcSeek(item.at)}${item.frame ? qcScanThumb(report.scan, item.frame.id) : ''}</div><div><div class="card-top">${badge(severity, tone)}<span class="muted">${esc(QC_SOURCE[item.source] || item.source)}${item.label ? ` · ${esc(item.label)}` : ''}</span></div><p>${esc(item.message)}</p>${item.moments ? `<p class="qc-moments">${item.moments.map(moment => qcSeek(moment.at)).join(' ')}</p>` : ''}${item.fix ? `<p class="hint">${esc(item.fix)}</p>` : ''}</div><div>${!blocked && item.repair?.command ? action(esc(item.repair.label), 'qc-repair', `f${index}`, 'secondary') : ''}</div></div>`;
   }).join('')}</div>` : '<p class="muted">No issues: every check passed and the editor and caption checks found nothing.</p>';
   const sheets = [report.sheets?.hook && qcSheet(report.sheets.hook, `The hook · one frame every ${report.sheets.hook.everySeconds} s for the first ${report.sheets.hook.seconds} s`), report.sheets?.overview && (report.sheets.overview.frames > 60 ? `<details class="scene-history"><summary>Whole video · ${report.sheets.overview.frames} frames, one every ${report.sheets.overview.everySeconds} s</summary>${qcSheet(report.sheets.overview, 'Whole video')}</details>` : qcSheet(report.sheets.overview, `Whole video · one frame every ${report.sheets.overview.everySeconds} s`))].filter(Boolean).join('');
   return `<section class="production-card">${head}${blockers}${kpis}${player}</section>
     ${qcScanCard(report, job)}
-    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">ISSUES · IN TIME ORDER</span><h2>What to look at</h2></div></div>${issues}</section>
+    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">ISSUES · IN TIME ORDER</span><h2>What to look at</h2></div></div>${report.autoFixes?.length ? `<details class="scene-warnings"><summary>Fixed automatically by the editing brain · ${report.autoFixes.length}</summary><ul class="intel-list">${report.autoFixes.map(item => `<li><b>${esc(item.message)}</b> ${esc(item.fix)}</li>`).join('')}</ul></details>` : ''}${issues}</section>
     ${sheets ? `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">CONTACT SHEETS</span><h2>Frames with their times</h2></div></div>${sheets}</section>` : ''}
     ${report.timeline ? qcTimeline(report) : ''}
     <section class="production-card"><div class="production-card-head"><div><span class="micro-label">YOUR VERDICT</span><h2>Style proof</h2></div></div>${qcVerdictBlock(report, job)}<details class="scene-history"><summary>What this review does not check</summary><ul class="hint">${report.notChecked.map(line => `<li>${esc(line)}</li>`).join('')}</ul></details></section>`;
@@ -145,7 +145,7 @@ function qcAction(command, id) {
     const item = id.startsWith('b') ? report.blockers[Number(id.slice(1))] : report.findings[Number(id.slice(1))];
     const repair = item?.repair;
     if (!repair) return toast('No repair link for this item.', true);
-    productionRoom = repair.room === 'audio' ? 'audio' : 'editing';
+    productionRoom = ['audio', 'voice'].includes(repair.room) ? repair.room : 'editing';
     render();
     if (!repair.command) return;
     if (repair.command === 'audio-settings') return audioAction('audio-settings', report.editRevision?.id);

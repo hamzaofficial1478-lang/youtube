@@ -77,10 +77,15 @@ function editStrip(tl) {
   return `<div class="edit-strip"><svg viewBox="0 0 ${W} 82" role="img" aria-label="Edit timeline: ${tl.clips.length} clips over ${renderClock(tl.narrationSeconds)}">${scenes}${clips}${joins}${graphics}${markers}</svg><div class="edit-legend"><span class="still">Still with camera move</span><span class="video">Moving clip</span><span class="hero">Hero shot</span><span class="graphic">Graphic</span><span class="marker">Retention marker</span><small>Click a clip or graphic to change it.</small></div></div>`;
 }
 
+// What the brain already fixed in its draft, so the owner sees it and can change it back.
+function editAutoFixes(edit) {
+  const fixed = edit.autoFixes || [];
+  return fixed.length ? `<details class="scene-warnings"><summary>Fixed automatically by the editing brain · ${fixed.length}</summary><ul class="intel-list">${fixed.map(item => `<li><b>${esc(item.message)}</b> ${esc(item.fix)}</li>`).join('')}</ul><p class="hint">Each change is already in the edit; change any clip back if you prefer it.</p></details>` : '';
+}
 function editFindings(edit, stale) {
   const findings = edit.findings || [];
-  if (!findings.length) return '<h3 class="intel-subhead">Editor\'s critique</h3><p class="muted">No findings. The edit follows every rule the critic checks.</p>';
-  return `<h3 class="intel-subhead">Editor's critique · ${findings.length} finding${findings.length === 1 ? '' : 's'}</h3><div class="edit-findings">${findings.map((item, index) => {
+  if (!findings.length) return `${editAutoFixes(edit)}<h3 class="intel-subhead">Editor's critique</h3><p class="muted">Nothing left to fix. The edit follows every rule the critic checks.</p>`;
+  return `${editAutoFixes(edit)}<h3 class="intel-subhead">Editor's critique · ${findings.length} finding${findings.length === 1 ? '' : 's'} left</h3><p class="hint">What is left needs new visuals, a new narration or your taste, so the brain did not change it by itself.</p><div class="edit-findings">${findings.map((item, index) => {
     const [label, color] = EDIT_SEVERITY[item.severity] || [item.severity, 'gray'];
     return `<div class="edit-finding ${esc(item.severity)}"><div>${badge(label, color)} ${editSkill(item)}</div><p><b>${esc(item.message)}</b><br>${esc(item.fix)}${item.route === 'script' ? ' <span class="muted">(fix it in the script)</span>' : ''}</p>${item.op && !stale ? action('Apply this fix', 'tl-fix', String(index), 'secondary') : ''}</div>`;
   }).join('')}</div>`;

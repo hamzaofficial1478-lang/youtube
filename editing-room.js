@@ -181,9 +181,10 @@ class EditingRoom {
       const analysis = await this.pauses(inputs);
       await this.measureCuts(inputs);
       const {alignment, edit} = this.brainInput(inputs, analysis);
-      const payload = B.autoEdit(edit);
+      // The brain fixes what its own critic can fix before the owner sees the draft, and lists each fix.
+      const {timeline: payload, fixed} = B.autoFix(B.autoEdit(edit), inputs.spec);
       const skills = this.skillsInForce(inputs.family.id);
-      const meta = {timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA};
+      const meta = {timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
       return this.store.transaction(() => {
         const fresh = this.inputs(this.store.content(contentId));
         requireValue(fresh.ready && fresh.scopeHash === inputs.scopeHash, 'The inputs changed while the edit was being prepared. Try again.', 409);
@@ -194,7 +195,7 @@ class EditingRoom {
           timeline = this.timelineRow(id);
         }
         const parent = this.latestRow(timeline.id) || null;
-        const row = this.insertRevision({timeline, payload, parent, actor: 'brain', note: parent ? 'Fresh edit from the editing brain (replaces the earlier draft).' : 'First edit from the editing brain.', createdBy: by, meta, ops: [{type: 'auto-edit'}], receipt: {clips: payload.clips.length, graphics: payload.graphics.length}});
+        const row = this.insertRevision({timeline, payload, parent, actor: 'brain', note: `${parent ? 'Fresh edit from the editing brain (replaces the earlier draft)' : 'First edit from the editing brain'}${fixed.length ? `; it fixed ${fixed.length} of its own finding${fixed.length === 1 ? '' : 's'}` : ''}.`, createdBy: by, meta, ops: [{type: 'auto-edit'}], receipt: {clips: payload.clips.length, graphics: payload.graphics.length}});
         if (skills.length) this.store.skillRuntime?.recordUsage({jobId: row.id, familyId: inputs.family.id, room: 'editing', taskKey: 'editing.plan', brief: {revisionIds: skills.map(item => item.revisionId), skillIds: skills.map(item => item.id), injectedBytes: 0, dropped: 0}});
         this.store.event(`Editing brain drafted edit r${row.revision} for "${content.title}" (${payload.clips.length} clips, ${alignment.method})`);
         return this.publicRevision(row, {detail: true});
@@ -373,7 +374,7 @@ class EditingRoom {
     const timelineRow = this.timelineRow(row.timeline_id), latest = this.latestRow(timelineRow.id);
     const payload = JSON.parse(row.payload), review = JSON.parse(row.critique);
     const out = {id: row.id, timelineId: row.timeline_id, contentId: timelineRow.content_id, revision: row.revision, latest: latest.id === row.id, actor: row.actor, note: row.note, createdBy: row.created_by, createdAt: row.created_at, payloadHash: row.payload_hash,
-      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null};
+      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || []};
     if (!detail) return out;
     const approved = new Set((payload.meta?.skills || []).map(item => item.id));
     const withSkill = item => ({...item, skillApproved: item.skill ? approved.has(item.skill) : null});

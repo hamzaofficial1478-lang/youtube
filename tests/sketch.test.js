@@ -89,4 +89,17 @@ test('a scene setting is shared by its shots, and continuity notes catch place j
   const notes = Sk.continuity([shot('S01A', 'a', 'bank', 0.3, 'right'), shot('S01B', 'a', 'desert', 0.7, 'left'), shot('S02A', 'b', 'space', 0.3, 'right')], cast);
   assert.deepEqual(notes, ['S01B moves from the bank to the desert inside one scene; keep the place unless the words move.', 'Max jumps to the other side of the screen and turns round between S01A and S01B.'], 'a new scene may move');
   assert.equal(Sk.fromText('Money talk.', {setting: {set: 'bank', mood: 'money'}}).set, 'bank');
+  // The story moving there is not a jump: the shot's own words or its notes go to the new place; an abstract
+  // backdrop is a close-up beat.
+  const words = (item, value) => ({...item, words: value});
+  assert.deepEqual(Sk.continuity([shot('S02A', 'b', 'nature', 0.3, 'right'), words(shot('S02B', 'b', 'beach', 0.3, 'right'), 'melt sand into glass')], cast), []);
+  assert.deepEqual(Sk.continuity([shot('S02A', 'b', 'nature', 0.3, 'right'), {...shot('S02B', 'b', 'beach', 0.3, 'right'), notes: 'Cut to the beach: where the bolt lands.'}], cast), []);
+  assert.deepEqual(Sk.continuity([shot('S03A', 'c', 'storm', 0.3, 'right'), shot('S03B', 'c', 'abstract', 0.3, 'right'), shot('S03C', 'c', 'storm', 0.3, 'right')], cast), []);
+  // What is left is mended on Claude's and the free plans: the place stays, the facing holds.
+  const jumpy = [shot('S01A', 'a', 'bank', 0.3, 'right'), words(shot('S01B', 'a', 'desert', 0.7, 'left'), 'and nobody noticed'), shot('S01C', 'a', 'bank', 0.3, 'right')];
+  const fixes = Sk.mend(jumpy, cast);
+  assert.deepEqual(fixes.map(item => item.label), ['S01B', 'S01B']);
+  assert.match(fixes[0].fix, /Kept the bank/);
+  assert.deepEqual([jumpy[1].sketch.set, jumpy[1].sketch.elements[0].facing], ['bank', 'right']);
+  assert.deepEqual(Sk.continuity(jumpy, cast), [], 'nothing left to note once mended');
 });

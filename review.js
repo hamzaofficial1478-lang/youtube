@@ -18,7 +18,7 @@ const CAPTION_FIX = {
   'caption-words': 'Draft a fresh edit so the captions are rebuilt from the narration.',
   'caption-overlap': 'Draft a fresh edit so the captions are rebuilt from the narration.',
   'caption-edited': 'Play this moment and check the corrected words still match what is said, or reset the caption.',
-  'caption-too-fast': 'Shorten the caption’s wording, or slow that phrase in the narration.',
+  'caption-too-fast': 'Captions show exactly what is said, so they cannot be slower than the voice. Slow those lines in the voice direction (Voice Room) and make the narration again, or keep the pace if it is the style.',
   'caption-too-long': 'Split the thought into a shorter caption.',
 };
 // Kept honest on the page: what this review does not measure.
@@ -68,11 +68,19 @@ function build({render, result = null, integrity = [], edit = null, findings: ed
   });
   // 3. Captions, caption by caption; with the narration's sentences the check also proves every word is shown once.
   if (edit?.captions?.enabled) {
-    const groups = new Map(edit.captions.groups.map(group => [group.id, group]));
+    const groups = new Map(edit.captions.groups.map(group => [group.id, group])), fast = [];
     for (const issue of Cap.lintCaptions(edit.captions, cues ? {sentences: cues} : {})) {
       const group = groups.get(issue.groupId);
+      // Fast captions share one cause, the voice's pace: one item with every moment, not one per caption.
+      if (issue.kind === 'caption-too-fast' && group) { fast.push(group); continue; }
       items.push({severity: issue.severity, source: 'captions', code: issue.kind, at: group ? group.start : null, until: group ? group.end : null, label: group ? `“${group.text}”` : null, message: issue.message, fix: CAPTION_FIX[issue.kind] || null,
         repair: group ? {room: 'editing', command: 'tl-caption', id: group.id, label: 'Correct the caption'} : toEditing});
+    }
+    if (fast.length) {
+      const rate = group => group.lines.join(' ').length / Math.max(0.01, group.end - group.start), top = Math.round(Math.max(...fast.map(rate)));
+      items.push({severity: 'suggestion', source: 'captions', code: 'caption-too-fast', at: fast[0].start, until: fast.at(-1).end, label: `${fast.length} caption${fast.length === 1 ? '' : 's'}`,
+        message: `The narrator speaks faster than a comfortable reading speed in ${fast.length} place${fast.length === 1 ? '' : 's'} (up to ${top} characters a second; about 20 reads comfortably), at ${fast.slice(0, 6).map(group => clockOf(group.start)).join(', ')}${fast.length > 6 ? ' and more' : ''}.`,
+        fix: CAPTION_FIX['caption-too-fast'], moments: fast.map(group => ({at: group.start, text: group.text})), repair: {room: 'voice', label: 'Open the Voice Room'}});
     }
   }
   // 4. Claude's frame scan of this render: review notes on what the frames show, each with its own frame.
@@ -110,6 +118,7 @@ function build({render, result = null, integrity = [], edit = null, findings: ed
     scan: scan ? {id: scan.id, status: scan.status, complete: scan.complete, frames: scan.frames, findings: scan.findings.length, batches: scan.batches, error: scan.error, model: scan.model, createdBy: scan.createdBy, updatedAt: scan.updatedAt, geometry: scan.geometry, sheets: scan.sheets} : null, notChecked: NOT_CHECKED};
 }
 const capital = value => value.charAt(0).toUpperCase() + value.slice(1);
+const clockOf = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(1).padStart(4, '0')}`;
 function count(items) {
   const counts = {critical: 0, suggestion: 0, nitpick: 0};
   for (const item of items) counts[item.severity] += 1;

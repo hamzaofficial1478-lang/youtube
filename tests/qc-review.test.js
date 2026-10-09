@@ -102,6 +102,15 @@ test('one timecoded list: failed checks per moment, the critic with its fixes, c
   const corrected = report.findings.find(item => item.code === 'caption-edited');
   assert.deepEqual([corrected.at, corrected.repair.command, corrected.repair.id], [captions.groups[1].start, 'tl-caption', captions.groups[1].id]);
   assert.equal(report.findings.find(item => item.code === 'caption-words').severity, 'critical', 'with the narration sentences the review proves every word is captioned once');
+  // Captions faster than reading speed share one cause, the voice: one item with every moment, sent to the Voice Room.
+  const rushed = structuredClone(captions);
+  for (const group of rushed.groups.slice(0, 3)) group.end = group.start + 0.4;
+  const fastReport = Review.build({render: render(), result: result(passing), edit: {...timeline, captions: rushed}, findings: [], urls: {}});
+  const fast = fastReport.findings.filter(item => item.code === 'caption-too-fast');
+  assert.equal(fast.length, 1);
+  assert.equal(fast[0].moments.length, 3);
+  assert.deepEqual([fast[0].label, fast[0].repair], ['3 captions', {room: 'voice', label: 'Open the Voice Room'}]);
+  assert.match(fast[0].fix, /cannot be slower than the voice/);
   assert.deepEqual(report.counts, {critical: report.findings.filter(item => item.severity === 'critical').length, suggestion: 2, nitpick: 1});
   const timed = report.findings.filter(item => item.at !== null).map(item => item.at);
   assert.deepEqual(timed, [...timed].sort((a, b) => a - b), 'sorted by time, untimed last');

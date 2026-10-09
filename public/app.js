@@ -12,11 +12,14 @@ const modelName=id=>state.ai?.models?.[id]||id||'Claude';
 const viewNames={overview:'Overview',families:'Channel families',research:'Research briefs',competitors:'Competitors',niches:'Niche Factory',studio:'Content studio',production:'Production panel',skills:'Skills',connections:'Connections',progress:'Build progress'};
 let state, familyFilter='', researchFamily='', productionFamily='', productionRoom='voice', selectedEvidence=new Set(), toastTimer, channelResult=null, channelQuery='', researchError='', researchPending=false, selectedConnector='';
 function toast(message,error=false){const el=$('#toast');el.textContent=message;el.classList.toggle('error',error);el.hidden=false;clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.hidden=true,6000);}
+// A stopped program reaches the browser as a bare network error ("Failed to fetch"); say what happened instead.
+const OFFLINE='The Control Room program is not running, so nothing was saved. Start it again with "Start Control Room", then try once more.';
+async function reach(url,options){try{return await fetch(url,options);}catch{throw new Error(OFFLINE);}}
 async function api(url,body,method='POST'){
-  const response=await fetch(url,{method,headers:body?{'Content-Type':'application/json','X-Local-Token':state.token}:{},body:body?JSON.stringify(body):undefined});
+  const response=await reach(url,{method,headers:body?{'Content-Type':'application/json','X-Local-Token':state.token}:{},body:body?JSON.stringify(body):undefined});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed.');return data;
 }
-async function refresh(){const response=await fetch('/api/state');if(!response.ok)throw new Error('The local program is unavailable. Restart it and refresh.');state=await response.json();render();}
+async function refresh(){const response=await reach('/api/state');if(!response.ok)throw new Error('The local program is unavailable. Restart it and refresh.');state=await response.json();render();}
 function badge(label,color='gray'){return `<span class="chip ${color}">${esc(label)}</span>`;}
 function action(label,command,id='',className='secondary'){return `<button class="button ${className}" data-action="${command}" data-id="${esc(id)}">${label}</button>`;}
 // Craft check (youtube-agent-skill heuristics, English only). Advice beside a draft; it never blocks approval.
@@ -262,5 +265,8 @@ $('#setup-form').addEventListener('submit',async event=>{event.preventDefault();
     const tested=await api(`/api/connectors/${connector.id}/test`,{revision:connector.revision});await refresh();$('#setup-dialog').close();toast(tested.result?.message||'Claude is connected.');}
   catch(e){error.textContent=`${e.message} The connection was kept; you can fix it and test again here or in Connections.`;error.hidden=false;result.textContent='';await refresh().catch(()=>{});}
   finally{submit.disabled=false;}});
+// Says at once when the program stops (before a form is filled in) and reloads the workspace when it is back.
+let programOffline=false;
+setInterval(async()=>{let up=false;try{up=(await fetch('/api/health',{cache:'no-store'})).ok;}catch{}if(up!==programOffline)return;programOffline=!up;$('#offline-banner').hidden=up;if(up)refresh().catch(()=>{});},4000);
 refresh().then(openSetupIfNeeded).catch(e=>{$('#main').textContent=e.message;toast(e.message,true);});
 setInterval(()=>{const audioPlaying=[...document.querySelectorAll('audio')].some(audio=>!audio.paused&&!audio.ended);if(!audioPlaying&&(state?.jobs.some(j=>['queued','running'].includes(j.status))||state?.researchJobs.some(j=>['queued','running'].includes(j.status))||state?.voiceJobs.some(j=>['queued','running'].includes(j.status))||(typeof intelBusy==='function'&&intelBusy())||(typeof sceneBusy==='function'&&sceneBusy())||(typeof renderBusy==='function'&&renderBusy())||state?.frameScans?.active>0||state?.packaging?.busy)&&!document.querySelector('dialog[open]')&&location.hash!=='#connections')refresh().catch(()=>{});},1500);

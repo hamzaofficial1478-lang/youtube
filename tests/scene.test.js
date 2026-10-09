@@ -1,6 +1,6 @@
 'use strict';
 const test = require('node:test');
-const {claudeMessage, isClaudeMessages} = require('./fake-claude');
+const {claudeMessage, claudeStream, isClaudeMessages} = require('./fake-claude');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -88,7 +88,7 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
         if (failChat) throw new Error('socket hang up');
         const body = JSON.parse(options.body), input = JSON.parse(body.messages[0].content);
         const plan = typeof claudePlan === 'function' ? claudePlan(input) : claudePlan;
-        return claudeMessage(plan, {input_tokens: claudeUsage.prompt_tokens, output_tokens: claudeUsage.completion_tokens});
+        return (body.stream ? claudeStream : claudeMessage)(plan, {input_tokens: claudeUsage.prompt_tokens, output_tokens: claudeUsage.completion_tokens});
       }
     }
     throw new Error(`Unexpected request to ${url}`);
@@ -259,6 +259,10 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed');
   assert.equal(job.attempts, 2);
+  // Where the tokens went: what Claude read, and its output split into the answer and its thinking.
+  const {read, answer, thinking} = job.quality.tokens;
+  assert.deepEqual([read, answer + thinking], [9000, 4000]);
+  assert.ok(answer > 0 && answer <= 4000);
   const draft = latestManifest(room, content.id);
   assert.equal(draft.source, 'claude');
   assert.match(draft.issues.join(' '), /names a competitor \("coinorigins"\)/);

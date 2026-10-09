@@ -136,6 +136,21 @@ test('the critic names the boring, lazy and amateur choices with a fix', () => {
   assert.ok(bad.slideshow.score > review.slideshow.score);
   assert.ok(bad.findings.some(item => item.code === 'static-too-long' && item.severity === 'critical'));
   assert.ok(bad.findings.some(item => item.code === 'equal-holds'));
+  // The brain fixes what it can by itself, says what it did, and leaves the rest listed.
+  const {timeline: fixed, fixed: done} = B.autoFix(edit, SPEC);
+  assert.ok(done.some(item => item.code === 'hook-static'));
+  const after = B.critique(fixed, SPEC).findings;
+  assert.equal(after.some(item => item.code === 'hook-static'), false);
+  assert.ok(after.some(item => item.code === 'clip-freeze'), 'a too-short clip needs a new visual, so it stays listed');
+  assert.match(fixed.clips.find(clip => clip.id === 'cl_b').reason, /^Changed by the editing brain: /);
+  assert.deepEqual(B.autoFix(fixed, SPEC).fixed, [], 'nothing is fixed twice');
+  // Overused soft transitions inside scenes become cuts; section breaks keep theirs.
+  const soft = structuredClone(fixed);
+  soft.joins = soft.joins.map(join => ({...join, type: 'crossfade', frames: 6}));
+  const calmer = B.autoFix(soft, SPEC);
+  assert.ok(calmer.fixed.some(item => item.code === 'transition-overuse'));
+  assert.equal(B.critique(calmer.timeline, SPEC).findings.some(item => item.code === 'transition-overuse'), false);
+  assert.ok(calmer.timeline.joins.every((join, k) => join.type === 'cut' || calmer.timeline.clips[k].sceneId !== calmer.timeline.clips[k + 1].sceneId));
 });
 
 test('owner edits are checked before anything changes, and scene repair touches one scene', () => {

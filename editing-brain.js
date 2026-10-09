@@ -636,7 +636,10 @@ function critique(timeline, spec) {
       {clipId: clip.id, at: clip.start, ...(pick.moved ? {op: {type: 'set-in', clipId: clip.id, seconds: pick.inSeconds}} : {}), skill: SKILL.trim}));
   }
   const limit = spec.pacing.maxStaticHoldSeconds || 8;
-  if (secs(longestUnchanged) > Math.max(limit, 8)) findings.push(finding('suggestion', 'long-unchanged', `Nothing changes on screen for ${secs(longestUnchanged).toFixed(1)} s from ${clock(longestAt / fps)}.`, 'Add a shot or a graphic in that stretch, or split the hold.', {at: longestAt, skill: SKILL.breathing}));
+  // A graphic the brain proposed inside a stretch can break it up (only the script's own data is proposed).
+  const proposedIn = (from, to) => timeline.graphics.find(graphic => graphic.status === 'proposed' && graphic.start >= from && graphic.start < to && !accepted.some(item => graphic.start < item.start + item.frames && item.start < graphic.start + graphic.frames));
+  const acceptIn = (from, to) => { const graphic = proposedIn(from, to); return graphic ? {graphicId: graphic.id, op: {type: 'set-graphic', graphicId: graphic.id, status: 'accepted'}} : {}; };
+  if (secs(longestUnchanged) > Math.max(limit, 8)) findings.push(finding('suggestion', 'long-unchanged', `Nothing changes on screen for ${secs(longestUnchanged).toFixed(1)} s from ${clock(longestAt / fps)}.`, 'Add a shot or a graphic in that stretch, or split the hold.', {at: longestAt, skill: SKILL.breathing, ...acceptIn(longestAt, longestAt + longestUnchanged)}));
   // Rhythm (skill editing.change-cadence / review.boring-lazy-amateur-tells).
   for (let k = 2; k < clips.length; k++) {
     const trio = holds.slice(k - 2, k + 1);
@@ -646,7 +649,10 @@ function critique(timeline, spec) {
   for (let k = 1; k < clips.length; k++) {
     const a = clips[k - 1], b = clips[k];
     if (a.assetId === b.assetId && !(a.part === 'wide' && b.part === 'detail')) findings.push(finding('critical', 'repeat-adjacent', `${a.label} and ${b.label} show the same visual back to back.`, 'Pick a different visual for one of them in Room 04.', {clipId: b.id, at: b.start, skill: SKILL.adjacency}));
-    if (a.move && b.move && a.move.kind === b.move.kind && a.move.kind !== 'static') findings.push(finding('nitpick', 'same-move', `${a.label} and ${b.label} move the camera the same way (${a.move.kind}).`, 'Change one of the two camera moves.', {clipId: b.id, at: b.start, skill: SKILL.stills}));
+    if (a.move && b.move && a.move.kind === b.move.kind && a.move.kind !== 'static') {
+      const other = b.mediaType === 'image' ? allowedMoves(spec, b.planned, b.plannedSource).find(kind => kind !== a.move.kind && kind !== clips[k + 1]?.move?.kind && kind !== 'static') : null;
+      findings.push(finding('nitpick', 'same-move', `${a.label} and ${b.label} move the camera the same way (${a.move.kind}).`, other ? `Give ${b.label} a ${other} instead.` : 'Change one of the two camera moves.', {clipId: b.id, at: b.start, ...(other ? {op: {type: 'set-move', clipId: b.id, kind: other}} : {}), skill: SKILL.stills}));
+    }
   }
   let run = 0;
   clips.forEach((clip, index) => {
@@ -654,20 +660,26 @@ function critique(timeline, spec) {
     if (run === 5) findings.push(finding('suggestion', 'still-run', `Five stills in a row end at ${clip.label}, with no moving footage between them.`, 'Swap one of them for a stock video clip in Room 04.', {clipId: clip.id, at: clips[index - 4].start, skill: SKILL.tells}));
   });
   // Transitions (skill editing.transition-grammar).
-  if (transitionTypes.size > 3) findings.push(finding('suggestion', 'transition-variety', `The edit uses ${transitionTypes.size} transition types; keep to two or three.`, 'Turn the least meaningful transitions into hard cuts.', {skill: SKILL.transitions}));
-  if (nonCut.length > Math.max(1, Math.floor(timeline.narrationSeconds / 45)) + 1) findings.push(finding('suggestion', 'transition-overuse', `${nonCut.length} soft transitions in ${clock(timeline.narrationSeconds)} make the edit feel decorative.`, 'Keep soft transitions for section breaks and turns only.', {skill: SKILL.transitions}));
+  // The least meaningful soft transition: one inside a scene first, then a section break that is not a turn.
+  const soft = timeline.joins.map((join, k) => ({join, k})).filter(({join, k}) => join.type !== 'cut' && clips[k + 1]);
+  const purposeOf = clip => timeline.scenes.find(scene => scene.id === clip.sceneId)?.purpose;
+  const least = soft.find(({k}) => clips[k].sceneId === clips[k + 1].sceneId) || soft.find(({k}) => purposeOf(clips[k + 1]) !== 'turn');
+  const toCut = least ? {op: {type: 'set-transition', clipId: clips[least.k].id, transition: 'cut'}} : {};
+  if (transitionTypes.size > 3) findings.push(finding('suggestion', 'transition-variety', `The edit uses ${transitionTypes.size} transition types; keep to two or three.`, 'Turn the least meaningful transitions into hard cuts.', {skill: SKILL.transitions, ...toCut}));
+  if (nonCut.length > Math.max(1, Math.floor(timeline.narrationSeconds / 45)) + 1) findings.push(finding('suggestion', 'transition-overuse', `${nonCut.length} soft transitions in ${clock(timeline.narrationSeconds)} make the edit feel decorative.`, 'Keep soft transitions for section breaks and turns only.', {skill: SKILL.transitions, ...toCut}));
   // Pattern interrupts and retention (skills editing.pattern-interrupt-schedule, editing.retention-curve-defense).
   const treatment = [0, ...clips.slice(1).filter((clip, k) => clip.mediaType !== clips[k].mediaType || clip.sceneId !== clips[k].sceneId || clip.part === 'detail').map(clip => clip.start), ...accepted.map(graphic => graphic.start), ...timeline.joins.map((join, k) => (join.type !== 'cut' ? clips[k + 1].start : null)).filter(value => value !== null)].sort((a, b) => a - b);
   for (let k = 1; k <= treatment.length; k++) {
     const from = treatment[k - 1], to = k < treatment.length ? treatment[k] : timeline.totalFrames;
-    if (secs(to - from) > 30) { findings.push(finding('suggestion', 'interrupt-gap', `No change of treatment for ${secs(to - from).toFixed(0)} s from ${clock(from / fps)}: same kind of shot, no graphic, no transition.`, 'Switch between stills and footage there, or accept a proposed graphic.', {at: from, skill: SKILL.interrupts})); break; }
+    if (secs(to - from) > 30) { findings.push(finding('suggestion', 'interrupt-gap', `No change of treatment for ${secs(to - from).toFixed(0)} s from ${clock(from / fps)}: same kind of shot, no graphic, no transition.`, 'Switch between stills and footage there, or accept a proposed graphic.', {at: from, skill: SKILL.interrupts, ...acceptIn(from, to)})); break; }
   }
   if (timeline.narrationSeconds > 150 && !timeline.markers.some(marker => marker.kind === 'first-payoff' && marker.frame <= 120 * fps)) findings.push(finding('suggestion', 'late-payoff', 'No evidence or example scene starts before 2:00; viewers leave in the 2:00-3:00 valley without a first payoff.', 'Move a concrete example earlier in the script.', {skill: SKILL.retention, route: 'script'}));
   if (timeline.narrationSeconds > 240 && !timeline.markers.some(marker => marker.kind === 're-hook')) findings.push(finding('suggestion', 'no-rehook', 'The video runs past 4 minutes without a turn scene to re-hook the viewer.', 'Add a turn ("but the stranger part is still ahead") around 2:00 and every 3-4 minutes.', {skill: SKILL.retention, route: 'script'}));
   // Graphics (skills motion.graphic-type-selector, editing.text-dwell-formula).
   for (const graphic of accepted) {
     const text = graphic.lines.join(' '), need = CANVAS_TEMPLATES.includes(graphic.template) ? canvasMinimumSeconds(graphic.template, graphic.lines.length) : graphicDwellSeconds(text);
-    if (secs(graphic.frames) + 0.05 < need * 0.85) findings.push(finding('suggestion', 'graphic-short', `The ${graphic.template} "${text.slice(0, 40)}" is on screen ${secs(graphic.frames).toFixed(1)} s; it needs about ${need.toFixed(1)} s to read.`, 'Lengthen it or cut words.', {graphicId: graphic.id, at: graphic.start, skill: SKILL.dwell}));
+    const room = Math.min(timeline.totalFrames, ...accepted.filter(item => item.start > graphic.start).map(item => item.start)) - graphic.start, want = Math.ceil(need * fps);
+    if (secs(graphic.frames) + 0.05 < need * 0.85) findings.push(finding('suggestion', 'graphic-short', `The ${graphic.template} "${text.slice(0, 40)}" is on screen ${secs(graphic.frames).toFixed(1)} s; it needs about ${need.toFixed(1)} s to read.`, 'Lengthen it or cut words.', {graphicId: graphic.id, at: graphic.start, ...(want <= room ? {op: {type: 'set-graphic', graphicId: graphic.id, seconds: round(want / fps, 3)}} : {}), skill: SKILL.dwell}));
   }
   // Captions (skills editing.caption-spec, timeline.caption-qc-rules, captions.keep-out-band).
   if (timeline.captions && !timeline.captions.enabled) findings.push(finding('suggestion', 'captions-off', 'Captions are switched off. Most viewers start a video muted, and captions keep them through the opening.', 'Switch the captions back on.', {op: {type: 'set-captions', enabled: true}, skill: Cap.SKILL.spec}));
@@ -677,7 +689,7 @@ function critique(timeline, spec) {
     const edited = issues.filter(item => item.kind === 'caption-edited');
     if (edited.length) findings.push(finding('nitpick', 'captions-edited', `${edited.length} caption${edited.length === 1 ? ' was' : 's were'} corrected by hand and no longer match${edited.length === 1 ? 'es' : ''} the narration word for word (${edited.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'Check each one reads right while the narration plays, or reset it to the narration\'s words.', {skill: Cap.SKILL.qc}));
     const fast = issues.filter(item => item.kind === 'caption-too-fast');
-    if (fast.length) findings.push(finding('nitpick', 'captions-fast', `${fast.length} caption${fast.length === 1 ? '' : 's'} pass${fast.length === 1 ? 'es' : ''} faster than 20 characters a second (${fast.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'This follows the narration pace; a slower voice pace or fewer words in that phrase fixes it.', {skill: Cap.SKILL.qc}));
+    if (fast.length) findings.push(finding('nitpick', 'captions-fast', `${fast.length} caption${fast.length === 1 ? '' : 's'} pass${fast.length === 1 ? 'es' : ''} faster than 20 characters a second (${fast.slice(0, 3).map(item => item.groupId).join(', ')}).`, 'Captions show exactly what is said, so they follow the voice: slow those lines in the voice direction (Voice Room) and make the narration again, or keep the pace if it is the style.', {skill: Cap.SKILL.qc}));
     const windows = Cap.clearWindows(timeline, CAPTION_CLEARS);
     if (windows.length) {
       const share = Cap.visibleGroups(timeline.captions, windows).length / Math.max(1, timeline.captions.groups.length);
@@ -723,6 +735,33 @@ function findClip(timeline, id) { const index = timeline.clips.findIndex(clip =>
 
 // Applies one owner edit to a copy of the timeline and returns {timeline, receipt}. Every op is checked
 // fully before anything changes; a failed check changes nothing (skill timeline.operation-contract-and-receipts).
+// The fixes the editing brain makes itself when it drafts an edit (owner decision 2026-10-09: apply what the
+// program can fix, then show what it did). One fix at a time, checking again after each (one fix can make
+// another unnecessary); each fix is tried once. Findings that need new visuals, a new narration or the owner's
+// taste stay listed. Returns {timeline, fixed: [{code, severity, message, fix}]}.
+const AUTO_FIXES = Object.freeze(['hook-static', 'static-too-long', 'hidden-cut', 'captions-off', 'same-move', 'graphic-short', 'transition-variety', 'transition-overuse', 'long-unchanged', 'interrupt-gap']);
+function autoFix(source, spec, {limit = 60} = {}) {
+  let timeline = source;
+  const fixed = [], tried = new Set();
+  for (let step = 0; step < limit; step++) {
+    const item = critique(timeline, spec).findings.find(entry => entry.op && AUTO_FIXES.includes(entry.code) && !tried.has(JSON.stringify(entry.op)));
+    if (!item) break;
+    tried.add(JSON.stringify(item.op));
+    let result;
+    try { result = applyOp(timeline, item.op, {spec}); } catch { continue; }
+    timeline = result.timeline;
+    const why = `Changed by the editing brain: ${item.message}`;
+    for (const id of result.receipt.changed) {
+      const clip = timeline.clips.find(entry => entry.id === id), graphic = timeline.graphics.find(entry => entry.id === id);
+      if (clip) for (const key of ['reason', 'moveReason', 'trimReason']) if (/by the owner/.test(clip[key] || '')) clip[key] = why;
+      if (graphic) graphic.reason = `${graphic.reason || ''} ${why}`.trim();
+      if (String(id).startsWith('join-after:')) { const index = timeline.clips.findIndex(entry => `join-after:${entry.id}` === id); if (index >= 0) timeline.joins[index].reason = why; }
+    }
+    fixed.push({code: item.code, severity: item.severity, message: item.message, fix: item.fix});
+  }
+  return {timeline, fixed};
+}
+
 function applyOp(source, op, {spec} = {}) {
   if (!op || typeof op !== 'object' || !OP_TYPES.includes(op.type)) throw opError(`Choose one of: ${OP_TYPES.join(', ')}.`);
   const timeline = structuredClone(source), fps = timeline.fps, receipt = {type: op.type, changed: []};
@@ -953,6 +992,6 @@ const timelineHash = timeline => createHash('sha256').update(JSON.stringify(time
 module.exports = {
   SCHEMA, PURPOSE_REGISTER, MOVES, TRANSITIONS, GRAPHIC_TEMPLATES, CANVAS_TEMPLATES, OP_TYPES, SKILL, CAPTION_CLEARS,
   canvasData, canvasMinimumSeconds, parseValue, parseYear, finishFor,
-  pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, applyOp, spliceScene, validateTimeline, cleanWindow,
+  pausesFromSilence, alignSentences, allocate, autoEdit, proposeGraphics, accentOf, critique, AUTO_FIXES, autoFix, applyOp, spliceScene, validateTimeline, cleanWindow,
   graphicsAss, timelineHash, shortHash, graphicDwellSeconds,
 };

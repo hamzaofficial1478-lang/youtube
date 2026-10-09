@@ -6,7 +6,19 @@
 let sceneContentId = '', sceneShot = null, scenePoll = null;
 const SCENE_PURPOSE = {hook: 'Hook', context: 'Context', explain: 'Explain', example: 'Example', evidence: 'Evidence', turn: 'Turn', recap: 'Recap', close: 'Close', 'call-to-action': 'Call to action'};
 const SCENE_JOB = {queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Done', 'green'], failed: ['Failed', 'gray'], interrupted: ['Interrupted · cost unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Hourly cap reached', 'orange'], blocked_budget: ['Over budget', 'orange'], quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange']};
+// What was already fixed before the owner sees the plan: shots Claude's continuity review redrew, and the
+// continuity the program mended.
+const sceneFixes = plan => {
+  const fixed = [...(plan.review?.changes || []).map(item => `<li><b>${esc(item.label)}</b> redrawn by Claude's continuity review: ${esc(item.reason)}</li>`), ...(plan.continuity || []).map(item => `<li><b>${esc(item.label)}</b> ${esc(item.fix)} (fixed by the program)</li>`)];
+  return (fixed.length ? `<details class="scene-warnings"><summary>${fixed.length} fixed before you saw it</summary><ul class="intel-list">${fixed.join('')}</ul></details>` : '') + (plan.review?.notes?.length ? `<p class="inline-warning">${esc(plan.review.notes.join(' '))}</p>` : '');
+};
 const sceneJobBadge = status => { const [label, color] = SCENE_JOB[status] || [status, 'gray']; return badge(label, color); };
+// Where a plan's tokens went: what Claude read, its thinking before it answers, and the answer (estimated).
+const sceneTokenSplit = job => {
+  const t = job.quality?.tokens;
+  if (t) return ` (read ${t.read.toLocaleString()} · thought about ${t.thinking.toLocaleString()} · answered about ${t.answer.toLocaleString()})`;
+  return Number.isSafeInteger(job.usage?.prompt) && Number.isSafeInteger(job.usage?.completion) ? ` (read ${job.usage.prompt.toLocaleString()} · wrote ${job.usage.completion.toLocaleString()}, thinking and answer together)` : '';
+};
 const SCENE_PROVIDER = {pexels: 'Pexels', pixabay: 'Pixabay', openai: 'OpenAI'};
 const sceneProvider = value => SCENE_PROVIDER[value] || value;
 const sceneClock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
@@ -49,7 +61,7 @@ function sceneRoomView(family) {
 
 function sceneInputsCard(content) {
   const inputs = content.inputs, row = (ok, title, detail) => `<div class="handoff-record"><span>${ok ? '✓' : '○'}</span><div><strong>${title}</strong><p>${detail}</p></div></div>`;
-  const planJobs = content.planJobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} Claude plan · ${esc(date(job.createdAt))}</strong><small>Attempt ${job.attempts}/3${job.usage?.total ? ` · ${job.usage.total.toLocaleString()} tokens` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'scene-plan-retry', job.id, 'text-button') : ''}</div>`).join('');
+  const planJobs = content.planJobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} Claude plan · ${esc(date(job.createdAt))}</strong><small>Attempt ${job.attempts}/3${job.usage?.total ? ` · ${job.usage.total.toLocaleString()} tokens${sceneTokenSplit(job)}` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'scene-plan-retry', job.id, 'text-button') : ''}</div>`).join('');
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">INPUTS & GATE</span><h2>Locked inputs</h2></div>${badge(inputs.ready ? 'Ready' : 'Blocked', inputs.ready ? 'green' : 'gray')}</div>
     ${row(content.contentState === 'approved', `Approved script v${content.contentRevision}`, esc(content.title))}
     ${row(inputs.voice.ready, 'Approved narration', inputs.voice.ready ? `${sceneClock(inputs.voice.durationSeconds)} · timing source for every scene` : esc(inputs.voice.blocker || 'Approve a narration in the Voice Room.'))}
@@ -73,6 +85,7 @@ function scenePlanCard(content, manifest) {
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
+    ${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
     ${manifest.plan.cast?.length ? `<p class="muted"><strong>Cast:</strong> ${manifest.plan.cast.map(member => esc(`${member.name}${member.role ? ` (${member.role})` : ''}`)).join(' · ')}</p>` : ''}
     <p class="hint">${esc(manifest.plan.timing.note)} Every edit creates a new revision; untouched shots keep their IDs and visuals.</p>
@@ -227,7 +240,7 @@ function sceneAction(command, id, button) {
       <label class="checkbox-label"><input type="checkbox" name="costConfirmed">I confirm the estimated cost for these images.</label>`, 'Generate', {manifestId: id});
   }
   if (command === 'scene-approve') {
-    return fetch(`/api/scene-manifests/${id}/board`).then(response => response.json()).then(board => {
+    return reach(`/api/scene-manifests/${id}/board`).then(response => response.json()).then(board => {
       if (board.error) throw new Error(board.error);
       const disclose = board.aiPolicy === 'review-per-asset' && board.ai.length;
       sceneDialog('approve', 'Approve the visual board', 'HUMAN APPROVAL GATE', `${board.blockers.length ? `<div class="checks"><strong>Blocked</strong>${intelList(board.blockers)}</div>` : ''}
@@ -320,7 +333,7 @@ async function sceneShotRender() {
   const jobs = content.jobs.filter(job => job.shotId === sceneShot.shotId).slice(0, 6);
   document.getElementById('shot-jobs').innerHTML = jobs.length ? `<div class="history-list">${jobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} ${esc(job.kind)} · ${esc(job.capabilityId)}</strong><small>${esc(date(job.createdAt))} · attempt ${job.attempts}/3${job.result?.cached ? ' · from 24-hour cache' : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'blocked_quota', 'blocked_budget', 'stale'].includes(job.status) && job.attempts < 3 ? `<button type="button" class="button text-button" data-scene-act="retry" data-id="${esc(job.id)}">Retry deliberately</button>` : ''}</div>`).join('')}</div>` : '';
   try {
-    const response = await fetch(`/api/scene-candidates?contentId=${encodeURIComponent(sceneShot.contentId)}&shotId=${encodeURIComponent(sceneShot.shotId)}`);
+    const response = await reach(`/api/scene-candidates?contentId=${encodeURIComponent(sceneShot.contentId)}&shotId=${encodeURIComponent(sceneShot.shotId)}`);
     const candidates = await response.json();
     if (!response.ok) throw new Error(candidates.error);
     document.getElementById('shot-results').innerHTML = candidates.length ? candidates.map(item => `<div class="candidate">${item.preview ? `<img src="${esc(item.preview)}" alt="${esc(item.title)}" loading="lazy">` : '<span class="shot-empty">No preview</span>'}<div><strong>${esc(item.title)}</strong><small>${esc(item.providerName)} · ${item.width && item.height ? `${item.width}×${item.height}` : 'size unknown'}${item.durationSeconds ? ` · ${sceneSeconds(item.durationSeconds)}` : ''}</small><small>${item.author ? `by ${esc(item.author)} · ` : ''}<a href="${esc(item.license.url)}" target="_blank" rel="noopener noreferrer">${esc(item.license.name)}</a>${item.pageUrl ? ` · <a href="${esc(item.pageUrl)}" target="_blank" rel="noopener noreferrer">Source ↗</a>` : ''}</small><small class="muted">“${esc(item.query)}” · #${item.rank}</small></div><button type="button" class="button secondary" data-scene-act="import" data-id="${esc(item.id)}">Use this</button></div>`).join('') : '<p class="muted">No results yet. Search a stock library above.</p>';

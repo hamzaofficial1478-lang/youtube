@@ -98,3 +98,7 @@ you only check the moments it, the render checks, the editor and the caption che
 - **Automatic**: the owner can switch on "scan every new render" per family, with a named setting. Each scan still reserves tokens and stops at the monthly limit.
 - **In the review**: findings are listed as "Claude frame scan", with their frame thumbnail and a repair link (the clip, the caption or the graphic at that moment). They are notes to check, not an approval.
 - **Verdict**: once a render has a completed scan, the owner may confirm "I checked every moment Claude and the checks flagged" instead of "I watched the whole render" (owner decision, 2026-10-08). The narration listening confirmation stays mandatory for a narration finish. Blockers still cannot be accepted.
+
+## 5. One item per cause (0.23.1)
+
+Captions faster than about 20 characters a second share one cause, the narrator's pace: captions show exactly what is said, so they cannot be slower than the voice. Room 08 lists them as one item with every moment as a button and a link to the Voice Room (slow those lines in the voice direction and make the narration again, or keep the pace if it is the style). The fixes the editing brain already made are listed above the issues.

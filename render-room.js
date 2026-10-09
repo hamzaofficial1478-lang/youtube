@@ -576,14 +576,16 @@ class RenderRoom {
   qcReport(id) {
     const row = this.row(id), job = this.publicJob(row), scope = JSON.parse(row.scope), result = row.result ? JSON.parse(row.result) : null;
     const integrity = result ? ['video', 'sheet', 'manifest', 'audio', 'hook'].filter(kind => result[kind]).map(kind => { try { this.file(id, kind); return {kind, ok: true}; } catch (error) { return {kind, ok: false, reason: error.message}; } }) : [];
-    let findings = [], cues = null;
+    let findings = [], cues = null, autoFixes = [];
     if (scope.edit && this.editing) {
-      findings = JSON.parse(this.editing.revisionRow(scope.edit.revisionId).critique).findings;
+      const revision = this.editing.revisionRow(scope.edit.revisionId);
+      findings = JSON.parse(revision.critique).findings;
+      autoFixes = JSON.parse(revision.payload).meta?.autoFixes || [];
       if (job.current) cues = this.editing.cues(this.editing.inputs(this.store.content(row.content_id)));
     }
     const scan = this.frameScanner?.latestFor(row.id) || null;
     return {...Review.build({render: {id: row.id, status: row.status, current: job.current, review: job.review}, result, integrity, edit: scope.edit?.timeline || null, findings, cues, urls: {sheet: job.result?.sheetUrl, hook: job.result?.hookUrl}, scan}),
-      contentId: row.content_id, editRevision: scope.edit ? {id: scope.edit.revisionId, revision: scope.edit.revision} : null, videoUrl: job.result?.videoUrl || null, audio: !!scope.edit?.timeline.audio};
+      contentId: row.content_id, autoFixes, editRevision: scope.edit ? {id: scope.edit.revisionId, revision: scope.edit.revision} : null, videoUrl: job.result?.videoUrl || null, audio: !!scope.edit?.timeline.audio};
   }
   file(id, kind) {
     const row = this.row(id);

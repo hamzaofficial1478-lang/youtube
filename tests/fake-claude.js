@@ -30,7 +30,15 @@ const claudeModel = url => new Response(JSON.stringify({id: String(url).split('/
 function claudeFetch(reply, calls = []) {
   return async (url, init = {}) => {
     if (isClaudeModel(url)) return claudeModel(url);
-    if (isClaudeMessages(url)) { const body = JSON.parse(init.body); calls.push({url: String(url), body, headers: init.headers}); return reply(body, calls.length); }
+    if (isClaudeMessages(url)) {
+      const body = JSON.parse(init.body);
+      calls.push({url: String(url), body, headers: init.headers});
+      const response = await reply(body, calls.length);
+      // Like the real API: a streamed request gets the same answer as server-sent events.
+      if (!body.stream || !response.ok || !String(response.headers.get('content-type')).includes('application/json')) return response;
+      const message = await response.json();
+      return claudeStream(message.content.map(part => part.text || '').join(''), message.usage, {model: message.model, stop: message.stop_reason});
+    }
     throw new Error(`Unexpected request to ${url}`);
   };
 }

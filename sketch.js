@@ -203,20 +203,45 @@ function validateSetting(raw, {strict = false} = {}) {
 // Continuity notes across neighbouring drawn shots: a change of place inside one scene, and a character who
 // jumps to the other side of the screen and turns round without walking there. Warnings for the owner and
 // the continuity review; the drawing itself is never changed here.
-function continuity(shots, cast = []) {
-  const notes = [], name = id => cast.find(item => item.id === id)?.name || id;
+// Words that take a story to each place: a shot may change place when its own words (or its notes) go there.
+const PLACE_WORDS = Object.freeze({room: ['room'], office: ['office', 'desk', 'boss', 'meeting'], home: ['home', 'house', 'sofa', 'couch'], bedroom: ['bed', 'bedroom', 'sleep', 'asleep'],
+  kitchen: ['kitchen', 'cook', 'fridge', 'oven', 'meal'], classroom: ['class', 'classroom', 'school', 'teacher', 'student', 'lesson'], lab: ['lab', 'laboratory', 'experiment', 'scientist'],
+  hospital: ['hospital', 'doctor', 'nurse', 'patient'], bank: ['bank', 'loan', 'vault', 'savings'], shop: ['shop', 'store', 'buy', 'customer'], street: ['street', 'sidewalk', 'corner'],
+  city: ['city', 'town', 'building', 'downtown'], road: ['road', 'car', 'drive', 'highway', 'traffic'], park: ['park', 'bench', 'playground'], nature: ['nature', 'tree', 'forest', 'field', 'grass', 'wild'],
+  mountains: ['mountain', 'hill', 'peak', 'climb'], desert: ['desert', 'dune', 'sand'], beach: ['beach', 'sand', 'shore', 'coast', 'sea'], ocean: ['ocean', 'sea', 'ship', 'boat', 'wave', 'underwater'],
+  night: ['night', 'midnight', 'moon'], space: ['space', 'planet', 'earth', 'orbit', 'satellite'], storm: ['storm', 'lightning', 'thunder', 'rain', 'cloud', 'bolt'], stage: ['stage', 'show', 'audience', 'crowd']});
+// Continuity between neighbouring drawn shots of one scene: [{kind, shot, previous, figure?, message}].
+// shots: [{label, sceneId, sketch, words?, notes?}] in order. A graphic beat in another engine or on an abstract
+// backdrop is a deliberate insert, not a change of place; a change of place the shot's words or notes go to is
+// the story moving.
+function continuityIssues(shots, cast = []) {
+  const issues = [], name = id => cast.find(item => item.id === id)?.name || id;
+  const goesThere = (shot, set) => { const said = tokens(`${shot.words || ''} ${shot.notes || ''}`); return [set, ...(PLACE_WORDS[set] || [])].some(word => said.some(token => sameWord(token, word))); };
   for (let k = 1; k < shots.length; k++) {
     const a = shots[k - 1], b = shots[k];
     if (!a.sketch || !b.sketch || a.sceneId !== b.sceneId) continue;
-    // A graphic beat in another engine (or an abstract backdrop) is a deliberate insert, not a change of place.
     const insert = a.sketch.engine !== b.sketch.engine || [a.sketch.set, b.sketch.set].includes('abstract');
-    if (!insert && a.sketch.set !== 'none' && b.sketch.set !== 'none' && a.sketch.set !== b.sketch.set) notes.push(`${b.label} moves from the ${a.sketch.set} to the ${b.sketch.set} inside one scene; keep the place unless the words move.`);
+    if (!insert && a.sketch.set !== 'none' && b.sketch.set !== 'none' && a.sketch.set !== b.sketch.set && !goesThere(b, b.sketch.set)) issues.push({kind: 'place', shot: b, previous: a, message: `${b.label} moves from the ${a.sketch.set} to the ${b.sketch.set} inside one scene; keep the place unless the words move.`});
     for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who)) {
       const before = a.sketch.elements.find(el => el.kind === 'figure' && el.who === fig.who);
-      if (before && (before.x < 0.5) !== (fig.x < 0.5) && before.facing !== fig.facing) notes.push(`${name(fig.who)} jumps to the other side of the screen and turns round between ${a.label} and ${b.label}.`);
+      if (before && (before.x < 0.5) !== (fig.x < 0.5) && before.facing !== fig.facing) issues.push({kind: 'side', shot: b, previous: a, figure: fig, before, message: `${name(fig.who)} jumps to the other side of the screen and turns round between ${a.label} and ${b.label}.`});
     }
   }
-  return notes;
+  return issues;
+}
+const continuity = (shots, cast = []) => continuityIssues(shots, cast).map(issue => issue.message);
+// Fixes what continuity finds, in order (a fixed shot is the next shot's neighbour): the place stays the scene's
+// place, and a character who changes sides keeps facing the same way (screen direction holds). Changes the
+// given sketches; returns [{label, fix}]. Used on Claude's and the free plans, never on the owner's own edits.
+function mend(shots, cast = []) {
+  const fixes = [], name = id => cast.find(item => item.id === id)?.name || id;
+  for (let k = 1; k < shots.length; k++) {
+    for (const issue of continuityIssues(shots.slice(k - 1, k + 1), cast)) {
+      if (issue.kind === 'place') { fixes.push({label: issue.shot.label, fix: `Kept the ${issue.previous.sketch.set}: its words do not move the story to the ${issue.shot.sketch.set}.`}); issue.shot.sketch.set = issue.previous.sketch.set; }
+      else { issue.figure.facing = issue.before.facing; fixes.push({label: issue.shot.label, fix: `${name(issue.figure.who)} keeps facing ${issue.before.facing} after changing sides, so the direction on screen holds.`}); }
+    }
+  }
+  return fixes;
 }
 
 // ---------------------------------------------------------------- timing on the narrator's words
@@ -311,4 +336,4 @@ function promptGuide(primary = 'stickman') {
   ].join('\n');
 }
 
-module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, timing, matchPhrase, fromText, promptGuide};
+module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, timing, matchPhrase, fromText, promptGuide};

@@ -153,3 +153,7 @@ See the BUILD-PROGRESS entry for 0.20.0: plan tokens, draw and render times, and
   - maps with real geography;
   - sound effects (music and SFX sourcing is deferred by the owner).
 - **Not tested:** Shorts (vertical) drawn shots beyond automatic tests; ElevenLabs narration with drawn shots.
+
+## 8. Continuity that fixes itself (0.23.1)
+
+A change of place inside a scene is not a jump when the shot's own words or its notes go there (`PLACE_WORDS`: "sand" takes a shot to the beach or the desert, "lightning" to the storm), and a cut to an abstract backdrop is a close-up beat. The continuity review may keep a move by giving the reason in the shot's notes. What is still left on Claude's and the free plans is mended by `Sk.mend`: the shot keeps the scene's place, and a character who changes sides keeps facing the same way. The fixes are listed on the plan ("fixed before you saw it", with the shots Claude's review redrew). The owner's own edits are only checked, never changed. Older plans show their continuity notes by today's rules.

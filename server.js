@@ -272,5 +272,9 @@ if(require.main===module){
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
   server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room ${APP_VERSION}\nOpen http://127.0.0.1:${port}\nLocal planning, review-only research, bounded reasoning, human-controlled voice auditions and the style library. Publishing is not enabled.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());
+  // One unexpected error in a background job must not stop the whole program (the page would only say
+  // "Failed to fetch"); it is written to data/server-error.log and every job keeps its own recorded state.
+  process.on('unhandledRejection',error=>console.error(`${new Date().toISOString()} Unhandled background error (the program keeps running):`,error?.stack||error));
+  process.on('uncaughtException',error=>console.error(`${new Date().toISOString()} Unexpected error (the program keeps running):`,error?.stack||error));
 }
 module.exports={createApp};
