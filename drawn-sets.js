@@ -55,7 +55,8 @@
     const vignette = (color, a) => { const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75); g.addColorStop(0, K.alpha(color, 0)); g.addColorStop(1, K.alpha(color, a)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); };
     switch (name) {
       case 'tense': vignette('#B00000', 0.22 + 0.06 * Math.sin(t * 3)); break;
-      case 'danger': ctx.fillStyle = K.alpha('#FF2020', 0.06 + 0.07 * (0.5 + 0.5 * Math.sin(t * 2 * TAU))); ctx.fillRect(0, 0, W, H); vignette('#C00000', 0.28); break;
+      // Danger pulses at the edges; the middle stays clear so characters keep their own colours.
+      case 'danger': ctx.fillStyle = K.alpha('#FF2020', 0.015 + 0.025 * (0.5 + 0.5 * Math.sin(t * 2 * TAU))); ctx.fillRect(0, 0, W, H); vignette('#C00000', 0.3 + 0.08 * Math.sin(t * 2 * TAU)); break;
       case 'dark': ctx.fillStyle = 'rgba(10,12,30,0.28)'; ctx.fillRect(0, 0, W, H); vignette('#000000', 0.45); break;
       case 'happy': { ctx.save(); ctx.globalAlpha = 0.1; ctx.fillStyle = C.yellow; for (let k = 0; k < 10; k++) { const a = t * 0.1 + k * TAU / 10; ctx.beginPath(); ctx.moveTo(W / 2, -H * 0.1); ctx.lineTo(W / 2 + Math.cos(a) * W * 1.5, -H * 0.1 + Math.abs(Math.sin(a)) * H * 1.5); ctx.lineTo(W / 2 + Math.cos(a + 0.12) * W * 1.5, -H * 0.1 + Math.abs(Math.sin(a + 0.12)) * H * 1.5); ctx.fill(); } ctx.restore(); break; }
       case 'dream': { vignette('#FFFFFF', 0.55); for (let k = 0; k < 12; k++) { const x = ((k * 0.13 + t * 0.01) % 1) * W, y = ((k * 0.29 + 0.5 * Math.sin(t * 0.3 + k)) % 1 + 1) % 1 * H, s = 6 * K.u * (0.5 + 0.5 * Math.sin(t * 3 + k)); K.render([{pts: K.frame(x, y, s).star(0, 0, 1, 0.3, 4), fill: '#FFFFFF', stroke: false}]); } break; }

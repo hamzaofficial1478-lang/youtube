@@ -5,7 +5,8 @@
 // faces in the spirit of explainer stick-figure animation, drawn from our own geometry (no copied character).
 (function () {
   const K = window.DK, C = K.COL, TAU = Math.PI * 2, D = Math.PI / 180;
-  K.FIGURE_SIZE = {s: 300, m: 420, l: 540, xl: 720};
+  // Characters carry the shot: a medium figure stands over 40% of the frame height.
+  K.FIGURE_SIZE = {s: 330, m: 470, l: 600, xl: 780};
 
   // ------------------------------------------------------------ poses
   // Angles in degrees from hanging straight down, positive towards the way the figure faces (90 = forward,

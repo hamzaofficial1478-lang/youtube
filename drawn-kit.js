@@ -142,5 +142,12 @@
     ctx.restore();
     return width * fit;
   };
+  // A label that reads over any set: the words on a white rounded chip, kept inside the frame.
+  K.pill = (value, x, y, size, {color = K.PAL.ink} = {}) => {
+    const {ctx, u} = K, w = K.measure(value, size, {weight: 800}) + size * 0.9, h = size * 1.45, px = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, x));
+    ctx.save(); ctx.fillStyle = K.alpha('#FFFFFF', 0.94); ctx.strokeStyle = K.alpha(K.PAL.ink, 0.85); ctx.lineWidth = Math.max(2 * u, size * 0.06);
+    ctx.beginPath(); ctx.roundRect(px - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.stroke(); ctx.restore();
+    K.text(value, px, y, size, {color, outline: false});
+  };
   K.measure = (value, size, opts = {}) => { K.ctx.save(); K.ctx.font = K.font(size, opts); const w = K.ctx.measureText(value).width; K.ctx.restore(); return w; };
 }());

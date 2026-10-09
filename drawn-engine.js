@@ -13,6 +13,7 @@
   const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, none: 0};
   const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch']);
   const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse']);
+  const MARKS = new Set(['underline', 'circle', 'cross', 'check', 'spotlight']);
   let D, P, LAYOUT, layerCanvas, layerCtx, lastKey = null;
 
   // ------------------------------------------------------------ layout and timing (once per shot)
@@ -39,7 +40,9 @@
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
       if (el.kind !== 'text') return null;
-      const size = textSize(el), width = Math.min(K.W - 2 * K.M, K.measure(el.text, size) * 1.08), half = width / 2;
+      // Words always fit inside the frame, even at the camera's closest zoom: a long line gets a smaller font.
+      const base = textSize(el), safe = (K.W - 2 * K.M) / 1.12, natural = K.measure(el.text, base, {weight: 800}) * 1.08;
+      const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
       const x = el.style === 'headline' ? K.W / 2 : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
       const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
       const limit = 0.8 * K.H - size * 0.6;
@@ -58,6 +61,14 @@
       const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] ?? ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
       return {ts, te, enter: !item.enter || item.enter === 'auto' ? autoEnter(item, engine) : item.enter, steps, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
     });
+    // A shot never opens on an empty frame: when nothing would be on screen for the first 0.6 s, the first
+    // character (or else the first thing) is there from the start.
+    const shownIdx = d.elements.map((item, i) => i).filter(i => !['fx', 'arrow'].includes(d.elements[i].kind));
+    if (shownIdx.length && Math.min(...shownIdx.map(i => el[i].ts)) > 0.6) el[shownIdx.find(i => d.elements[i].kind === 'figure') ?? shownIdx.reduce((a, b) => (el[b].ts < el[a].ts ? b : a))].ts = 0.05;
+    // A lone object on a plain backdrop gets a stage: a lit disc with slow rays behind it, so it never reads as a
+    // still icon pasted on a page.
+    const props = d.elements.map((item, i) => i).filter(i => d.elements[i].kind === 'prop' && !['cloud', 'rainbow'].includes(d.elements[i].prop));
+    const stage = !d.elements.some(item => item.kind === 'figure') && (!d.set || ['abstract', 'none'].includes(d.set)) && props.length && props.length <= 2 ? props.reduce((a, b) => (est[b].r > est[a].r ? b : a)) : null;
     const focus = (d.focus || []).map((item, k) => ({...item, t: times.focus?.[k] ?? dur * (k + 1) / ((d.focus || []).length + 1)})).sort((a, b) => a.t - b.t);
     const impulses = [];
     d.elements.forEach((item, i) => {
@@ -66,7 +77,7 @@
       if (item.kind === 'prop' && el[i].enter === 'drop' && ['l', 'xl'].includes(item.size)) impulses.push({kind: 'shake', t: el[i].ts + ENTER_SECONDS.drop, amount: 0.5});
       if (item.kind === 'fx' && item.effect === 'flash') impulses.push({kind: 'punch', t: el[i].ts, amount: 0.5});
     });
-    return {est, textAt, el, focus, impulses, anchors: []};
+    return {est, textAt, el, focus, impulses, stage, anchors: []};
   }
 
   // ------------------------------------------------------------ camera
@@ -101,15 +112,25 @@
       case 'slide-up': oy += (1 - ease.outCubic(q(0.26))) * H; break;
       default: break;
     }
-    const half = W / (2 * Z), halfH = H / (2 * Z);
-    // A zoom, punch or focus never crops the characters: the view slides to keep them (or at least their heads) in.
     const shown = kind => D.elements.map((el, i) => (el.kind === kind && t >= LAYOUT.el[i].ts && (LAYOUT.el[i].te === null || t < LAYOUT.el[i].te) ? LAYOUT.est[i] : null)).filter(Boolean);
     const people = shown('figure'), words = shown('text');
+    // Words on screen are never cropped, and neither are the faces with them: the camera does not zoom closer
+    // than the words and the characters' heads fit together.
+    if (words.length) {
+      const boxes = [...words.map(b => b.box), ...people.map(p => [p.head[0] - p.head[2] * 1.9, p.head[1] - p.head[2] * 1.5, p.head[0] + p.head[2] * 1.9, p.head[1] + p.head[2] * 1.4])];
+      const spanW = Math.max(...boxes.map(b => b[2])) - Math.min(...boxes.map(b => b[0])) + 0.04 * W;
+      const spanH = Math.max(...boxes.map(b => b[3])) - Math.min(...boxes.map(b => b[1])) + 0.04 * H;
+      Z = Math.max(1, Math.min(Z, W / spanW, H / spanH));
+    }
+    const half = W / (2 * Z), halfH = H / (2 * Z);
+    // A zoom, punch or focus never crops the characters: the view slides to keep them (or at least their heads) in.
     if ((people.length || words.length) && Z > 1.001) {
       const margin = 0.02 * W, fit = (boxes, [from, to], size) => (boxes.length && to - from <= size ? [from, to] : null);
       const span = boxes => [Math.min(...boxes.map(b => b[0])) - margin, Math.max(...boxes.map(b => b[1])) + margin];
-      const heads = people.map(p => [p.head[0] - p.head[2] * 1.3, p.head[0] + p.head[2] * 1.3]);
-      const xs = fit([...people, ...words], span([...people, ...words].map(p => [p.box[0], p.box[2]])), 2 * half) || fit(people, people.length ? span(people.map(p => [p.box[0], p.box[2]])) : [0, 0], 2 * half) || fit(heads, heads.length ? span(heads) : [0, 0], 2 * half);
+      const heads = people.map(p => [p.head[0] - p.head[2] * 1.9, p.head[0] + p.head[2] * 1.9]);
+      // Everything if it fits; else the words with the faces, the words alone, the characters, their faces.
+      const wordSpans = words.map(p => [p.box[0], p.box[2]]);
+      const xs = fit([...people, ...words], span([...people, ...words].map(p => [p.box[0], p.box[2]])), 2 * half) || fit(words, words.length ? span([...wordSpans, ...heads]) : [0, 0], 2 * half) || fit(words, words.length ? span(wordSpans) : [0, 0], 2 * half) || fit(people, people.length ? span(people.map(p => [p.box[0], p.box[2]])) : [0, 0], 2 * half) || fit(heads, heads.length ? span(heads) : [0, 0], 2 * half);
       if (xs) cur.x = Math.min(xs[0] + half, Math.max(xs[1] - half, cur.x));
       const tops = [...people.map(p => p.head[1] - p.head[2] * 1.4), ...words.map(p => p.box[1] - margin)], bottoms = [...people.map(p => p.box[3]), ...words.map(p => p.box[3])];
       const top = Math.min(...tops), bottom = Math.max(...bottoms);
@@ -155,27 +176,37 @@
     }
     return {x, facing, pose, A, expression: cur.expression, emote: cur.emote};
   }
+  // A soft contact shadow keeps feet and objects on the ground (not on the hand-drawn ink finish).
+  function shadow(x, y, rx) {
+    if (K.FIN === 'ink' || rx <= 0) return;
+    const {ctx} = K;
+    ctx.save(); ctx.fillStyle = K.alpha('#000000', K.DARK ? 0.28 : 0.13); ctx.beginPath(); ctx.ellipse(x, y, rx, rx * 0.16, 0, 0, TAU); ctx.fill(); ctx.restore();
+  }
   function drawFigure(el, i, t, local, p) {
     const s = figureState(el, i, t), pose = K.POSE[s.pose] || {};
+    if (!['lie', 'sleep', 'fall'].includes(s.pose)) shadow(s.x * K.W, el.y * K.H, 0.24 * figureH(el) * (1 - Math.min(0.5, Math.max(0, s.A.lift || 0) * 3)) * p);
     const a = K.drawFigure({x: s.x * K.W, y: el.y * K.H, dir: s.facing === 'left' ? -1 : 1, size: el.size, A: s.A, pose: s.pose, expression: s.expression, emote: s.emote, talk: !!pose.talk, holds: el.holds, tl: local, seed: LAYOUT.el[i].seed, look: el.look, engine: D.engine}, p);
     LAYOUT.anchors[i] = {center: [(a.box[0] + a.box[2]) / 2, (a.box[1] + a.box[3]) / 2], r: (a.box[2] - a.box[0]) / 2, box: a.box, head: a.head};
-    if (el.label && p >= 1) K.text(el.label, a.head[0], a.head[1] - a.head[2] * 1.6, 40 * K.u, {color: K.PAL.ink});
+    if (el.label && p >= 1) K.pill(el.label, a.head[0], a.head[1] - a.head[2] * 1.7, 46 * K.u);
   }
   function drawProp(el, i, t, local, p) {
     const s = propS(el), [cx, cy] = LAYOUT.est[i].center, {ctx} = K;
+    // A prop on the ground stays put (with its shadow); one in the air breathes gently, so nothing sits dead still.
+    const grounded = cy + 0.45 * s >= (K.GROUND - 0.05) * K.H, m = el.motion === 'auto' ? (grounded ? 'none' : 'idle') : el.motion;
+    if (grounded) shadow(cx, Math.min(cy + 0.47 * s, K.GROUND * K.H + 0.02 * K.H), 0.36 * s * p);
     ctx.save();
-    const m = el.motion;
+    if (m === 'idle') { const ph = LAYOUT.el[i].seed % 7; ctx.translate(0, Math.sin(local * 1.9 + ph) * 0.03 * s); ctx.translate(cx, cy); ctx.rotate(Math.sin(local * 1.3 + ph) * 0.045); ctx.translate(-cx, -cy); }
     if (m === 'spin') { ctx.translate(cx, cy); ctx.rotate(local * 1.6); ctx.translate(-cx, -cy); }
     if (m === 'pulse') { const z = 1 + 0.08 * Math.sin(local * 5); ctx.translate(cx, cy); ctx.scale(z, z); ctx.translate(-cx, -cy); }
     if (m === 'float') ctx.translate(0, Math.sin(local * 2) * 0.05 * s);
     if (m === 'shake') ctx.translate(Math.sin(local * 40) * 0.02 * s, 0);
     if (m === 'bounce') ctx.translate(0, -Math.abs(Math.sin(local * 4)) * 0.12 * s);
     if (m === 'swing') { ctx.translate(cx, cy - 0.45 * s); ctx.rotate(Math.sin(local * 3) * 0.25); ctx.translate(-cx, -(cy - 0.45 * s)); }
-    const frame = K.frame(cx, cy, s, 1), g = {tl: m === 'none' ? 0 : local, seed: LAYOUT.el[i].seed, label: el.label};
+    const frame = K.frame(cx, cy, s, 1), g = {tl: el.motion === 'none' ? 0 : local, seed: LAYOUT.el[i].seed, label: el.label};
     K.render(K.PROPS[el.prop](frame, g), p, LAYOUT.el[i].seed);
     ctx.restore();
     LAYOUT.anchors[i] = LAYOUT.est[i];
-    if (el.label && el.prop !== 'sign' && p >= 1) K.text(el.label, cx, cy - 0.58 * s, 40 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
+    if (el.label && el.prop !== 'sign' && p >= 1) K.pill(el.label, cx, cy - 0.62 * s, 46 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
   }
   const NUMBER = /(-?\d[\d,]*(?:\.\d+)?)/;
   function drawText(el, i, t, local, p) {
@@ -261,6 +292,13 @@
   // ------------------------------------------------------------ the motion layer
   function fxTarget(el, i) {
     if (el.on) { const a = anchorOf(el.on, null); if (a) { const box = a.box || [a.center[0] - a.r, a.center[1] - a.r, a.center[0] + a.r, a.center[1] + a.r]; return {cx: (box[0] + box[2]) / 2, cy: (box[1] + box[3]) / 2, w: box[2] - box[0], h: box[3] - box[1], head: a.head}; } }
+    // Without a target, a marking effect marks the nearest drawing or words it was placed on.
+    if (MARKS.has(el.effect)) {
+      const x = el.x * K.W, y = el.y * K.H;
+      let best = 0, far = 0.2 * Math.hypot(K.W, K.H);
+      D.elements.forEach((item, k) => { if (k === i || ['fx', 'arrow'].includes(item.kind) || !LAYOUT.est[k]) return; const dd = Math.hypot(LAYOUT.est[k].center[0] - x, LAYOUT.est[k].center[1] - y); if (dd < far) { far = dd; best = k + 1; } });
+      if (best) return fxTarget({...el, on: best}, i);
+    }
     const s = FX_SIZE[el.size || 'm'] * K.u;
     return {cx: el.x * K.W, cy: el.y * K.H, w: s * 1.4, h: s * 1.4};
   }
@@ -310,6 +348,18 @@
   }
 
   // ------------------------------------------------------------ the frame
+  function drawStage(t) {
+    const i = LAYOUT.stage, tm = LAYOUT.el[i];
+    if (i === null || t < tm.ts) return;
+    const q = ease.outCubic(clamp01((t - tm.ts) / 0.5)), [cx, cy] = LAYOUT.est[i].center, r = LAYOUT.est[i].r * 2.2 * q, {ctx} = K;
+    ctx.save();
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, K.alpha(K.PAL.accent, 0.28)); g.addColorStop(0.6, K.alpha(K.PAL.accent, 0.1)); g.addColorStop(1, K.alpha(K.PAL.accent, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = K.alpha(K.PAL.accent, 0.07);
+    for (let k = 0; k < 12; k++) { const a = t * 0.22 + k * TAU / 12; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r * 1.7, a, a + TAU / 28); ctx.closePath(); ctx.fill(); }
+    ctx.restore();
+  }
   function drawElement(el, i, t) {
     const tm = LAYOUT.el[i];
     if (t < tm.ts) return;
@@ -370,6 +420,7 @@
     }
     // Backdrop effects (a burst, a glow, speed lines, rings) sit behind everything else, so they never hide a word.
     ctx.save(); applyCamera(ctx, cam, 1);
+    if (LAYOUT.stage !== null) drawStage(t);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();

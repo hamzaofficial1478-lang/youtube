@@ -279,9 +279,17 @@ function aiScenes(raw, ids = true) {
   object(raw, 'Claude plan');
   const keys = Object.keys(raw);
   requireValue(keys.every(key => ['summary', 'scenes', 'cast'].includes(key)) && Array.isArray(raw.scenes), 'Claude returned a plan with unexpected fields.');
-  const asText = (value, label, max) => { requireValue(typeof value === 'string' && value.length <= max, `Claude returned an invalid ${label}.`); return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').trim(); };
+  // Descriptive text (summary, directions, notes, queries, prompts) that runs long is trimmed at a word, never a
+  // reason to throw away the whole plan; text the viewer reads stays strict.
+  const asText = (value, label, max, trim = false) => {
+    requireValue(typeof value === 'string' && (trim || value.length <= max), `Claude returned an invalid ${label}.`);
+    const text = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').trim();
+    if (text.length <= max) return text;
+    const cut = text.slice(0, max - 1), at = cut.lastIndexOf(' ');
+    return `${(at > max * 0.6 ? cut.slice(0, at) : cut).replace(/[\s,;:.–—-]+$/, '')}…`;
+  };
   return {
-    summary: raw.summary === undefined ? '' : asText(raw.summary, 'summary', 600),
+    summary: raw.summary === undefined ? '' : asText(raw.summary, 'summary', 600, true),
     cast: Array.isArray(raw.cast) ? raw.cast : [],
     scenes: raw.scenes.map(scene => {
       object(scene, 'Claude scene');
@@ -289,12 +297,12 @@ function aiScenes(raw, ids = true) {
       requireValue(Array.isArray(scene.shots), 'Claude returned a scene without shots.');
       return {
         id: ids ? shortId('sc') : undefined, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, purpose: scene.purpose,
-        direction: asText(scene.direction ?? '', 'direction', 600), onScreenText: asText(scene.onScreenText ?? '', 'on-screen text', 140),
+        direction: asText(scene.direction ?? '', 'direction', 600, true), onScreenText: asText(scene.onScreenText ?? '', 'on-screen text', 140),
         ...(scene.setting && typeof scene.setting === 'object' && !Array.isArray(scene.setting) ? {setting: {set: scene.setting.set, mood: scene.setting.mood}} : {}),
         shots: scene.shots.map(shot => {
           object(shot, 'Claude shot');
           requireValue(Object.keys(shot).every(key => ['source', 'query', 'prompt', 'motion', 'notes', 'sketch', 'cue'].includes(key)), 'Claude returned a shot with unexpected fields.');
-          return {id: shortId('sh'), source: shot.source, query: asText(shot.query ?? '', 'search query', 100), prompt: asText(shot.prompt ?? '', 'image prompt', 1500), motion: shot.motion, notes: asText(shot.notes ?? '', 'shot note', 500), ...(shot.cue !== undefined && String(shot.cue).trim() ? {cue: asText(String(shot.cue), 'cue', 80)} : {}), ...(shot.sketch !== undefined ? {sketch: shot.sketch} : {})};
+          return {id: shortId('sh'), source: shot.source, query: asText(shot.query ?? '', 'search query', 100, true), prompt: asText(shot.prompt ?? '', 'image prompt', 1500, true), motion: shot.motion, notes: asText(shot.notes ?? '', 'shot note', 500, true), ...(shot.cue !== undefined && String(shot.cue).trim() ? {cue: asText(String(shot.cue), 'cue', 80)} : {}), ...(shot.sketch !== undefined ? {sketch: shot.sketch} : {})};
         }),
       };
     }),

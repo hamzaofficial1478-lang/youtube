@@ -38,12 +38,13 @@ const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'zoom', 'po
 const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
 const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline']);
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars']);
+const FX_NEAR = Object.freeze({highlight: 'circle', sparkle: 'sparkles', star: 'stars', heart: 'hearts', explosion: 'burst', boom: 'burst', lightning: 'flash', zoom: 'punch', money: 'money-rain', splat: 'ink-splat', wave: 'shockwave', ring: 'circle', tick: 'check', 'x': 'cross'});
 const PROP_MOTIONS = Object.freeze(['auto', 'spin', 'pulse', 'float', 'shake', 'bounce', 'swing', 'none']);
 const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/5';
+const VERSION = 'drawn-scene/6';
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -179,7 +180,10 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       return;
     }
     if (item.kind === 'fx') {
-      const effect = c.pick(item.effect, FX, `${label} effect`, null);
+      // A near-miss name keeps Claude's intent (named in the warnings); an owner edit must use the real name.
+      const near = lenient && FX_NEAR[item.effect];
+      if (near) warn(`${label} effect "${item.effect}" is drawn as "${near}".`);
+      const effect = c.pick(near || item.effect, FX, `${label} effect`, null);
       if (!effect) { if (!lenient) fail(`${label} needs an effect: ${FX.join(', ')}.`); return; }
       const on = item.on === undefined ? undefined : ref(item.on, `${label} on`);
       elements.push({kind: 'fx', effect, ...(Number.isInteger(on) ? {on} : {}), x: c.coord(item.x, `${label} x`, 0.03, 0.97, 0.5), y: c.coord(item.y, `${label} y`, 0.05, 0.84, 0.45), size: c.pick(item.size, SIZES, `${label} size`, 'm'),
@@ -239,6 +243,14 @@ function mend(shots, cast = []) {
     for (const issue of continuityIssues(shots.slice(k - 1, k + 1), cast)) {
       if (issue.kind === 'place') { fixes.push({label: issue.shot.label, fix: `Kept the ${issue.previous.sketch.set}: its words do not move the story to the ${issue.shot.sketch.set}.`}); issue.shot.sketch.set = issue.previous.sketch.set; }
       else { issue.figure.facing = issue.before.facing; fixes.push({label: issue.shot.label, fix: `${name(issue.figure.who)} keeps facing ${issue.before.facing} after changing sides, so the direction on screen holds.`}); }
+    }
+    // A character already on screen in the shot before stays there from the first frame, not popping in again.
+    const a = shots[k - 1], b = shots[k];
+    if (!a.sketch || !b.sketch || a.sceneId !== b.sceneId) continue;
+    for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who && (el.at || !['auto', 'none'].includes(el.enter || 'auto')))) {
+      if (!a.sketch.elements.some(el => el.kind === 'figure' && el.who === fig.who)) continue;
+      delete fig.at; fig.enter = 'none';
+      fixes.push({label: b.label, fix: `${name(fig.who)} stays on screen from ${a.label} instead of appearing again.`});
     }
   }
   return fixes;

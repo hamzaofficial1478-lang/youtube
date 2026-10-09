@@ -31,6 +31,11 @@ test('Claude\'s near-misses are repaired with a warning; the owner\'s own edits 
   assert.equal(warnings.length, 3);
   assert.match(warnings.join(' '), /"dragon" is not in the prop library[\s\S]*pose must be one of[\s\S]*ghost, who is not in the cast/);
   assert.throws(() => Sk.validate({elements: [{kind: 'prop', prop: 'dragon'}]}, {lenient: true}), /at least one element/, 'nothing drawable is still an error');
+  // A near-miss effect name keeps Claude's intent and is named; the owner's own edit must use the real name.
+  const near = [];
+  assert.equal(Sk.validate({elements: [{kind: 'fx', effect: 'highlight'}]}, {lenient: true, warn: message => near.push(message)}).elements[0].effect, 'circle');
+  assert.match(near[0], /"highlight" is drawn as "circle"/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'fx', effect: 'highlight'}]}), /effect must be one of/);
   // Any drawing engine may draw a shot in any video; Claude decides and says why (engines.js).
   assert.equal(Sk.validate({engine: 'handdrawn', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'stickman'}).engine, 'handdrawn');
   assert.equal(Sk.validate({engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'stickman');
@@ -102,4 +107,8 @@ test('a scene setting is shared by its shots, and continuity notes catch place j
   assert.match(fixes[0].fix, /Kept the bank/);
   assert.deepEqual([jumpy[1].sketch.set, jumpy[1].sketch.elements[0].facing], ['bank', 'right']);
   assert.deepEqual(Sk.continuity(jumpy, cast), [], 'nothing left to note once mended');
+  // A character already on screen in the shot before does not pop in again on a word.
+  const carried = [shot('S02A', 'b', 'home', 0.3, 'right'), {...shot('S02B', 'b', 'home', 0.3, 'right'), sketch: Sk.validate({set: 'home', elements: [{kind: 'figure', who: 'c1', x: 0.3, facing: 'right', at: 'every three'}]}, {cast})}];
+  assert.deepEqual(Sk.mend(carried, cast).map(item => item.fix), ['Max stays on screen from S02A instead of appearing again.']);
+  assert.deepEqual([carried[1].sketch.elements[0].at, carried[1].sketch.elements[0].enter], [undefined, 'none']);
 });

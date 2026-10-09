@@ -1,5 +1,5 @@
 {
-  "version": "0.23.1",
+  "version": "0.24.0",
   "updated": "2026-10-09",
   "nextAction": "P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
@@ -316,6 +316,13 @@
           "status": "testing",
           "remaining": "Not yet judged by the owner on a fresh edit and plan. The answer/thinking split is an estimate from the answer length. Effort stays high for planning (quality first); lowering it is an owner decision.",
           "evidence": "0.23.1 (2026-10-09, owner review): editing-brain autoFix applies every critic finding with a safe operation when an edit is drafted and lists it (Editing Room, Room 08); new operations for same-move, graphic-short, transition overuse/variety and long unchanged stretches. Sk.continuity accepts place changes the words or notes go to; Sk.mend fixes the rest on Claude and free plans; old plans show notes by today's rules (demo plan: 6 warnings became 0, 4 shots redrawn by the review shown). Fast captions are one Room 08 item sent to the Voice Room (demo: 13 suggestions became 1). Plan and review answers get up to 32,000 output tokens; a review that runs out of room keeps the plan; jobs record read/answer/thinking (demo plan: answer about 4,700 of 14,297 output tokens, the rest thinking). Page banner and plain message when the program is not running; server logs stray errors instead of stopping. Tests: sketch, editing (autoFix), qc-review (grouping), scene (token split; streamed fake answers). Full suite 229/229."
+        },
+        {
+          "id": "P06g",
+          "title": "Stickman engine v3: text that fits, no empty openings, staged objects, living props, shadows, bigger characters",
+          "status": "testing",
+          "remaining": "Not yet judged by the owner on the new render. Hand-drawn and motion-graphics engines are next in the owner's order. Caption speed in the demo follows the fast demo voice.",
+          "evidence": "0.24.0 (2026-10-10): live test on the demo. Fresh Claude plan with the 0.23.1 rules: 37,537 tokens (read 22,341, answer about 6,400, thinking about 8,800); the continuity review answered every note (2 place jumps fixed, 3 real moves kept with reasons, 1 misquoted text fixed), 0 continuity warnings, nothing left for the program to mend. The first attempt lost 16,958 tokens because a 663-character summary failed the 600 limit; descriptive text is now trimmed. 17 shots drawn in 215 s; fresh edit (no automatic fixes needed on drawn shots; caption speed follows the demo voice); 1080p render with all 9 checks passing. Frame review of that render found text running off the frame under a focus zoom, lone icons on plain backdrops, still props, small characters and pink-tinted faces under the danger mood; engine v3 fixes them (re-render: all checks pass, the counter and the face stay in frame). Tests: sketch (near-miss effects, carry), scene (trim), drawn (browser). Full suite 230/230."
         },
         {
           "id": "S02",

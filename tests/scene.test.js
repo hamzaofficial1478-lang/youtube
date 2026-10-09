@@ -288,6 +288,20 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   assert.equal(failing.room.retryPlan(failed.job.id, {confirmInterrupted: true}).status, 'queued');
 });
 
+test('a long summary, direction or note from Claude is trimmed at a word, never a reason to lose the plan', async t => {
+  const network = fakeNetwork({claudePlan: input => {
+    const plan = blueprintPlan(input.sentences.length);
+    return {...plan, summary: 'Words that run on and on. '.repeat(30), scenes: plan.scenes.map(scene => ({...scene, direction: 'A direction that keeps going. '.repeat(30), shots: scene.shots.map(shot => ({...shot, notes: 'A note. '.repeat(80)}))}))};
+  }});
+  const {room, content, ids} = setup(t, network);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const {plan} = latestManifest(room, content.id);
+  assert.ok(plan.summary.length <= 600 && plan.summary.endsWith('on…'), plan.summary.slice(-20));
+  assert.ok(plan.scenes.every(scene => scene.direction.length <= 600 && scene.shots.every(shot => shot.notes.length <= 500)));
+});
+
 test('a long script is planned in parts: each part covers its own sentences, and a bad part is asked again alone', async t => {
   // A 14-minute draft: 180 sentences in 15 paragraphs, planned in three parts of 60.
   const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
