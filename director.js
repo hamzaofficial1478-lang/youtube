@@ -98,7 +98,8 @@ function slice(map, first, last) {
 }
 
 // The engine a planned shot is drawn or cut with.
-const engineOf = (shot, primary) => (shot.frame ? 'atelier' : shot.source === 'generated-graphics' ? (shot.sketch?.engine || (E.ENGINES[primary]?.draws ? primary : 'stickman')) : 'montage');
+// A planned designed shot that was not designed is drawn from its sketch, so it counts as that engine.
+const engineOf = (shot, primary) => (shot.frame?.html ? 'atelier' : shot.source === 'generated-graphics' ? (shot.sketch?.engine || (E.ENGINES[primary]?.draws ? primary : 'stickman')) : 'montage');
 
 // measureMix(scenes, {primary, seconds}): seconds per engine, the longest run of one engine, engine switches per
 // minute and plain notes when a long video stays in one engine too long or switches on every shot.

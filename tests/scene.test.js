@@ -198,6 +198,17 @@ test('a long story-mix script meets the story director first: every part follows
   assert.ok(manifest.warnings.some(item => /s in handdrawn without a change of engine/.test(item)), 'a long stretch in one engine is named for free');
 });
 
+test('an animated shot a little over the style\'s shot limit is named, a still held too long is an issue', () => {
+  const {buildPayload} = require('../scene-room');
+  const {LAUNCH_PROFILES} = require('../style');
+  const spec = LAUNCH_PROFILES.find(item => item.key === 'story-mix').spec;
+  const plan = shot => buildPayload({scenes: [{id: 'sc1', sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', shots: [{id: 'sh1', query: 'map', prompt: '', motion: 'static', notes: '', ...shot}]}], sentences: [{n: 1, text: 'One sentence that runs on for about seven seconds of narration.', words: 11}], narrationSeconds: 7, spec, terms: []});
+  const drawn = plan({source: 'generated-graphics', sketch: {elements: [{kind: 'prop', prop: 'globe'}]}});
+  assert.deepEqual(drawn.issues, []);
+  assert.ok(drawn.warnings.some(item => /S01A holds 7\.0 s, a little over the style's 6 s shot limit/.test(item)));
+  assert.match(plan({source: 'stock-image'}).issues.join(' '), /S01A would hold 7\.0 s, above the style's 6 s shot limit/);
+});
+
 test('with frame composing switched off, the planner does not read the atelier guide', () => {
   const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
   assert.match(planMessages(input)[0].content, /ATELIER SHOTS/);
@@ -628,6 +639,7 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   let lastRaw = '', redesignFails = false;
   const asked = [], frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the number', roles: 'number = foreground subject', beats: [{show: 'the number counts up in the centre'}], motions: ['counting-dynamic-scale', 'not-a-rule'], type: 'evidence', persuasion: 'worked example', beat: `surprise ${n}`});
   const network = fakeNetwork({claudePlan: input => {
+    if (input.drawNow) return {report: 'Drew the shots that were not designed.', changes: input.drawNow.map(label => ({label, reason: 'A counter carries the number.', sketch: {engine: 'motion', elements: [{kind: 'text', style: 'counter', text: '45', x: 0.5, y: 0.4}]}}))};
     if (input.raw) {
       const packet = JSON.parse(input.raw.split('\n\n')[0]), retry = input.raw.includes('failed these checks');
       asked.push(`${packet.frameId}${retry ? ':retry' : ''}`);
@@ -706,4 +718,17 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   // The owner can drop a design: the shot is then drawn from its words.
   const dropped = room.editManifest(after.id, {op: 'update-shot', shotId: target.id, frame: null, createdBy: 'Owner', expectedRevision: after.revision});
   assert.ok(!shots(dropped).find(shot => shot.id === target.id).frame && shots(dropped).find(shot => shot.id === target.id).sketch);
+  // A shot whose design failed (S02A) gets a real drawing from Claude; every other shot keeps its ID and design.
+  const undesigned = shots(dropped).filter(shot => shot.frame && !shot.frame.html).map(shot => shot.label);
+  assert.deepEqual(undesigned, ['S02A']);
+  const redraw = room.redrawUndesigned(dropped.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: dropped.revision});
+  await room.processNextPlan();
+  const redrawn = latestManifest(room, content.id), redrawJob = room.publicPlanJob(room.planJobRow(redraw.job.id));
+  assert.deepEqual([redrawJob.status, redrawJob.redraw.count, redrawJob.usage.status], ['completed', 1, 'settled']);
+  const s02a = shots(redrawn).find(shot => shot.label === 'S02A');
+  assert.ok(!s02a.frame && s02a.sketch.engine === 'motion', 'drawn by Claude, no longer a pending design');
+  assert.deepEqual(shots(redrawn).map(shot => shot.id), shots(dropped).map(shot => shot.id));
+  assert.deepEqual(shots(redrawn).filter(shot => shot.label !== 'S02A').map(shot => shot.frame?.html || null), shots(dropped).filter(shot => shot.label !== 'S02A').map(shot => shot.frame?.html || null));
+  assert.ok(redrawn.plan.review.changes.some(item => item.label === 'S02A'));
+  assert.throws(() => room.redrawUndesigned(redrawn.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: redrawn.revision}), /Every planned designed shot is designed/);
 });

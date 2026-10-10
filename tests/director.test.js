@@ -37,7 +37,7 @@ test('the director reads the doctrine, the available engines and the budget; ate
 
 test('the mix is measured for free: a long stretch in one engine and engines changing on every shot are named, short videos are left alone', () => {
   let at = 0;
-  const shot = (engine, seconds, k) => { const item = {label: `S${String(k).padStart(2, '0')}`, startSeconds: at, durationSeconds: seconds, source: engine === 'montage' ? 'stock-video' : 'generated-graphics', ...(engine === 'atelier' ? {frame: {}} : engine === 'montage' ? {} : {sketch: {engine}})}; at += seconds; return item; };
+  const shot = (engine, seconds, k) => { const item = {label: `S${String(k).padStart(2, '0')}`, startSeconds: at, durationSeconds: seconds, source: engine === 'montage' ? 'stock-video' : 'generated-graphics', ...(engine === 'atelier' ? {frame: {html: '<div></div>'}} : engine === 'montage' ? {} : {sketch: {engine}})}; at += seconds; return item; };
   const shots = [shot('stickman', 30, 1), shot('handdrawn', 120, 2), ...Array.from({length: 8}, (_, k) => shot(k % 2 ? 'motion' : 'atelier', 2.5, k + 3)), shot('stickman', 40, 11)];
   const mix = D.measureMix([{shots}], {primary: 'stickman', seconds: at});
   assert.deepEqual(Object.keys(mix.engines).sort(), ['atelier', 'handdrawn', 'motion', 'stickman']);
