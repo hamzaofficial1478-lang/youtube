@@ -150,6 +150,13 @@ test('real audio validation decodes the file and measures duration, silence, cli
   assert.equal(typeof report.silenceRatio,'number');assert.equal(typeof report.maxVolumeDb,'number');assert.equal(typeof report.integratedLoudnessLufs,'number');assert.equal(report.passed,true);
 });
 
+test('a narration longer than two minutes with a fractional length is validated (its time limit is a whole number)',async t=>{
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'voice-long-test-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'long.wav');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration=121.3337','-ar','8000','-ac','1','-y',file]);
+  const report=await analyzeAudio(file,{expectedDuration:{min:100,max:200}});
+  assert.equal(report.decodable,true);assert.ok(report.durationSeconds>121);
+});
+
 test('truncated audio cannot pass decoder integrity validation',async t=>{
   const dir=fs.mkdtempSync(path.join(os.tmpdir(),'voice-corrupt-test-'));t.after(()=>fs.rmSync(dir,{recursive:true,force:true}));const file=path.join(dir,'truncated.wav');
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration=2','-ar','44100','-ac','1','-y',file]);const bytes=fs.readFileSync(file);fs.writeFileSync(file,bytes.subarray(0,Math.floor(bytes.length/2)));

@@ -1,4 +1,4 @@
-# Drawn scenes: the stickman, hand-drawn, motion-graphics and atelier engines (P06c 0.19 to P06h 0.25)
+# Drawn scenes: the stickman, hand-drawn, motion-graphics and atelier engines and the story director (P06c 0.19 to P06i 0.26)
 
 The program draws these shots itself, locally and for free. No stock footage is used. The editing brain cuts the drawn shots like footage.
 
@@ -213,3 +213,14 @@ From live runs with real Claude on the demo (2026-10-10):
 - **Effects stay with what they were placed on.** An effect Claude puts on the same spot as a drawing or words (a burst behind a number) follows it when the layout moves it, and a round effect on a line of words stays about two text-heights across.
 - **Big words keep headroom.** Words are placed at least 7% of the frame plus half their own height below the top, so a push-in never presses them against the edge.
 - **Frame design off means no atelier guide.** With `composeFrames` off, the planner does not read the atelier guide (about 6.6k characters less per plan part) and plans drawn shots only.
+
+## 13. The story director: every engine in one long video (P06i, 0.26.0)
+
+Owner request (2026-10-10): "combine all of them, so in a long video all editing styles are used with scene building: where the stickman, where hand-drawn, where atelier, where motion graphics, with a well structured and hooked video; 8 to 10 minute videos in one style bore the viewer."
+
+- **Story Mix style** (launch library v5, adapter `story-mix`): no engine leads. A shot without a named engine is drawn as stickman (the cast's home).
+- **The map (`director.js`).** Before a long script's plan parts, one Claude answer reads the whole script (`D.mapMessages`): the structure, one art direction, chapters (title, job, home engine, re-hook) and beats (one to four sentences, the engine that carries them and why). The doctrine is reasoning, not rules: stickman for people and feelings, hand-drawn for how things work, history and journeys, atelier for the beats that must land, motion graphics for lists, comparisons and recaps, footage for the real thing; a fast hook, a home engine per chapter, a change of engine at least every 45-75 s and at every chapter start, no engine switch on every shot outside the hook, the strongest engine for the payoff.
+- **Repair (`D.validateMap`).** Chapters and beats are made to cover every sentence once; an engine the video cannot use is replaced and named; atelier beats past the budget become motion graphics, named.
+- **Parts follow the map.** Each plan part reads only its slice (`D.slice`) and the map's art direction; a shot leaves its beat's engine only with a reason in its notes. The map is kept with the job, so a retry never pays for it twice. Only multi-part (long) scripts get a map; a one-part plan reads the doctrine directly in the mix style. Settings: "Story director" (on) in Room 04.
+- **Designed-shot budget.** "Designed shots per minute" (default 2) caps atelier shots when atelier is a guest engine; the composing step designs the first ones within the budget and draws the rest from their words. An atelier-style video has no cap (every shot is designed).
+- **The mix, measured for free (`D.measureMix`).** Seconds and share per engine, the longest stretch in one engine and engine switches per minute; in videos of 3 minutes and more, a stretch over 90 s in one engine and more than five engine changes in 20 s outside the hook are named as plan warnings. Room 04 shows a "Story & engines" strip coloured by engine with chapter marks, the shares and the chapters.

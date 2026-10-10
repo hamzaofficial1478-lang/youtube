@@ -97,7 +97,7 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
   return {fetch: fetchImpl, calls};
 }
 
-function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage'} = {}) {
+function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage', storyMap = true} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'scene-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
@@ -134,6 +134,8 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
   };
   if (withVoice) narrate();
   const room = new SceneRoom(store, connectors, quota, styles, {dataRoot});
+  // Tests of other features switch the story director off, so their fakes answer only plan parts.
+  if (!storyMap) room.saveSettings(family.id, {...room.settings(family.id), storyMap: false, revision: room.settings(family.id).revision});
   return {store, connectors, styles, quota, room, family, content, ids, network, dataRoot, narrate};
 }
 const latestManifest = (room, contentId) => room.state().contents.find(item => item.contentId === contentId).manifests.find(item => item.latest);
@@ -150,6 +152,50 @@ test('a new plan uses only the sources the program can fetch now: no stock shots
   }
   const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
   assert.deepEqual([...new Set(shots(manifest).map(shot => shot.source))], ['ai-image']);
+});
+
+test('a long story-mix script meets the story director first: every part follows its slice of the map, the map is paid once and the mix is measured', async t => {
+  let broken = true;
+  const director = {structure: 'Cold open on a promise, then how the records worked.', direction: {read: 'Clay, ink and trust: a warm record of how strangers learned to keep promises.', dials: {variance: 5, motion: 5, density: 4}, palette: {canvas: '#FFFDF8', ink: '#1F1F1F', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Segoe UI'}},
+    chapters: [{title: 'The promise', sentenceStart: 1, sentenceEnd: 12, job: 'hook', home: 'stickman'}, {title: 'How records worked', sentenceStart: 13, sentenceEnd: 60, job: 'explain', home: 'handdrawn', rehook: 'A clay tablet draws itself'}],
+    beats: [{sentenceStart: 1, sentenceEnd: 4, engine: 'stickman', why: 'strangers making a deal'}, {sentenceStart: 5, sentenceEnd: 8, engine: 'motion', why: 'a quick list'}, {sentenceStart: 9, sentenceEnd: 12, engine: 'atelier', why: 'the thesis lands'}, {sentenceStart: 13, sentenceEnd: 60, engine: 'handdrawn', why: 'how it worked'}]};
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.style?.engines) return director;
+    if (!input.sentences) return {report: 'All shots match their words.', changes: []};
+    const scenes = [];
+    for (let k = 0; k < input.sentences.length; k += 2) {
+      const first = input.sentences[k].n, beat = input.map.beats.find(item => item.sentenceStart <= first && item.sentenceEnd >= first);
+      const engine = beat.engine === 'atelier' ? 'motion' : beat.engine;
+      scenes.push({sentenceStart: first, sentenceEnd: input.sentences[Math.min(k + 1, input.sentences.length - 1)].n, purpose: first === 1 ? 'hook' : 'explain', direction: 'Follow the map.', onScreenText: '',
+        shots: [0, 1].map(() => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: {engine, elements: [{kind: 'prop', prop: 'globe'}]}}))});
+    }
+    if (input.part?.index === 2 && broken) { broken = false; scenes.pop(); }
+    return {summary: 'Planned from the map.', scenes};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'story-mix', withVoice: false});
+  narrate(300);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'quality_failed');
+  room.retryPlan(queued.job.id, {});
+  await room.processNextPlan();
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  const asks = network.calls.filter(call => call.path === '/v1/messages').map(call => ({system: call.body.system, input: JSON.parse(call.body.messages[0].content)}));
+  const maps = asks.filter(item => item.input.style?.engines), parts = asks.filter(item => item.input.part);
+  assert.equal(maps.length, 1, 'the map is asked once, before the parts, and kept for the retry');
+  assert.match(maps[0].system, /STORY DIRECTOR[\s\S]*story mix: no engine leads[\s\S]*At most 10 atelier beats/);
+  assert.equal(asks.indexOf(maps[0]), 0);
+  for (const part of parts) {
+    const {firstSentence, lastSentence} = part.input.part;
+    assert.ok(part.input.map.beats.every(item => item.sentenceEnd >= firstSentence && item.sentenceStart <= lastSentence), 'each part reads only its own beats');
+    assert.equal(part.input.direction.read, director.direction.read, 'every part designs inside the one art direction');
+    assert.match(part.system, /Follow the video map/);
+  }
+  const manifest = latestManifest(room, content.id);
+  assert.deepEqual(manifest.plan.map.chapters.map(item => [item.title, item.home]), [['The promise', 'stickman'], ['How records worked', 'handdrawn']]);
+  assert.deepEqual(Object.keys(manifest.plan.mix.engines).sort(), ['handdrawn', 'motion', 'stickman']);
+  assert.ok(manifest.warnings.some(item => /s in handdrawn without a change of engine/.test(item)), 'a long stretch in one engine is named for free');
 });
 
 test('with frame composing switched off, the planner does not read the atelier guide', () => {
@@ -330,7 +376,7 @@ test('a long script is planned in parts: each part covers its own sentences, and
     if (input.part?.index === broken) { broken = null; scenes.pop(); }
     return {summary: `Part ${input.part?.index}`, scenes};
   }});
-  const {room, content, ids, store, family} = setup(t, network, {scriptText: longScript, targetMinutes: 14});
+  const {room, content, ids, store, family} = setup(t, network, {scriptText: longScript, targetMinutes: 14, storyMap: false});
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   assert.deepEqual(queued.job.parts, {total: 3, done: 0});
   await room.processNextPlan();
@@ -367,7 +413,7 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
     }
     return {summary: 'Drawn markets.', cast: [{id: 'c1', name: 'Ava', role: 'the narrator', look: {hair: 'bun', hairColor: 'red', outfit: 'suit'}}], scenes};
   }});
-  const {room, content, ids, store, styles, dataRoot, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false});
+  const {room, content, ids, store, styles, dataRoot, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
   narrate(30);
   // The free planner gives every drawn shot a drawing made from its own narration, acted by a default narrator.
   const {manifest: rules} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
@@ -597,7 +643,7 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
     return {summary: 'Numbers that hit.', cast: [{id: 'c1', name: 'Ava', role: 'the viewer', look: {hair: 'bun'}}], scenes,
       direction: {read: 'Money history told plainly, where every number lands like a fact you can hold.', dials: {variance: 4, motion: 5, density: 3}, palette: {canvas: '#10131A', ink: '#F7F4EE', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Comic Neue'}, motion: 'power3 settles, reveals on the voice', signature: 'one counting ring', avoid: ['purple gradients']}};
   }});
-  const {room, content, ids, store, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false});
+  const {room, content, ids, store, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false, storyMap: false});
   narrate(40);
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();

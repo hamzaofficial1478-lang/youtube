@@ -74,7 +74,7 @@ function chunkText(text,provider){
   }
   push(current);return chunks;
 }
-async function run(executable,args,options={}){try{return await execFileAsync(executable,args,{windowsHide:true,timeout:options.timeout||120000,maxBuffer:options.maxBuffer||8*1024*1024,cwd:options.cwd});}catch(error){throw new InputError(`${executable} could not validate the generated audio. ${String(error.stderr||error.message).slice(0,300)}`,502);}}
+async function run(executable,args,options={}){try{return await execFileAsync(executable,args,{windowsHide:true,timeout:Math.ceil(options.timeout||120000),maxBuffer:options.maxBuffer||8*1024*1024,cwd:options.cwd});}catch(error){throw new InputError(`${executable} could not validate the generated audio. ${String(error.stderr||error.message).slice(0,300)}`,502);}}
 async function checkTool(executable,label){try{await execFileAsync(executable,['-version'],{windowsHide:true,timeout:10000,maxBuffer:1024*1024});return true;}catch{throw new InputError(`${label} is unavailable. Voice generation was not started.`,503);}}
 async function analyzeAudio(filename,{expectedDuration=null,ffprobe='ffprobe',ffmpeg='ffmpeg'}={}){
   const probe=await run(ffprobe,['-v','error','-print_format','json','-show_format','-show_streams',filename]);let parsed;try{parsed=JSON.parse(probe.stdout);}catch{throw new InputError('ffprobe returned invalid audio metadata.',502);}

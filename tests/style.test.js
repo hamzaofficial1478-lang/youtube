@@ -38,7 +38,7 @@ test('launch library seeds six valid draft profiles once and every launch spec p
   const {store, styles} = setup(t);
   new StyleLibrary(store);
   const profiles = styles.profiles();
-  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'motion-graphics', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
+  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
   assert.ok(profiles.every(item => item.revisions.length === 1 && item.revisions[0].status === 'draft' && item.origin === 'launch'));
   for (const launch of LAUNCH_PROFILES) assert.deepEqual(validateStyleSpec(structuredClone(launch.spec)).name, launch.spec.name);
   assert.equal(profile(styles, 'documentary-montage').revisions[0].spec.renderer.adapter, 'ffmpeg-montage');
@@ -208,7 +208,7 @@ test('HTTP style routes require the local token, validate input and return the l
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.styles.profiles.length, 6);
+  assert.equal(state.styles.profiles.length, 7);
   assert.equal(state.app.version, JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version);
   const script = await fetch(`${base}/style-room.js`);
   assert.equal(script.status, 200);

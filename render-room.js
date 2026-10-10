@@ -119,7 +119,7 @@ class RenderRoom {
       approvalRow = this.db.prepare('SELECT * FROM visual_approvals WHERE id=?').get(visual.approvalId);
       spec = JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec);
       // Drawn styles (P06c) render through the montage assembler: their shots are clips the program drew itself.
-      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
+      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier', 'story-mix'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
       if (voice?.ready && manifestRow.voice_approval_id !== voice.approvalId) blockers.push('The approved narration differs from the one the scene plan was timed with.');
     }
     return {family, visual, voice, spec, manifestRow, approvalRow, blockers, ready: !blockers.length};

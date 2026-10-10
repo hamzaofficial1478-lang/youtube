@@ -12,6 +12,7 @@ const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
 const Sk = require('./sketch');
 const At = require('./atelier');
 const E = require('./engines');
+const D = require('./director');
 const Cap = require('./captions');
 const R = require('./render');
 const {MotionRenderer, findBrowser} = require('./motion');
@@ -41,6 +42,9 @@ const SETTINGS_DEFAULTS = {
   continuityReview: true, reviewTokenLimit: 70000,
   // Atelier shots (P06h): Claude designs each one as an animated page, one answer per shot, each reserved alone.
   composeFrames: true, composeTokenLimit: 40000,
+  // The story director (P06i): one Claude pass over a long script before its plan parts, and how many designed
+  // (atelier) shots a minute of video may have.
+  storyMap: true, designedPerMinute: 2,
 };
 const STOPWORDS = new Set(('about above after again against because been before being below between both but by could did does doing down during each few from further have having here hers herself himself into itself just more most must myself once only other ought ours ourselves over same should some such than that their theirs them themselves then there these they this those through under until very were what when where which while whom with would your yours yourself yourselves also every never always still even many much like make made thing things people really today first last next another years year time times something someone anything nothing because without within will shall cannot might around across toward towards whose ever upon onto kept keep keeps came come comes went goes became become began begin said says took take takes gave give gives used uses using found find told tell know knew'
 ).split(' '));
@@ -163,7 +167,7 @@ function atelierFrame(raw, label, warnings, format) {
 // Fills timing into a plan and returns {payload, issues, warnings}.
 // The narrator (an everyman) when a drawn plan names no characters.
 const DEFAULT_CAST = Object.freeze([{id: 'c1', name: 'Narrator', role: 'Guides the viewer through the video', look: {...Sk.DEFAULT_LOOK}}]);
-function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, format = 'long-form'}) {
+function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, map = null, format = 'long-form'}) {
   const timed = timeSentences(sentences, narrationSeconds);
   const issues = [], warnings = [];
   const drawnPlan = scenes.some(scene => scene.shots.some(shot => shot.source === 'generated-graphics'));
@@ -216,9 +220,12 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
   const drawn = out.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: spokenBy.get(shot.label), notes: shot.notes})));
   const mended = mend ? Sk.mend(drawn, castOut) : [];
   warnings.push(...Sk.continuity(drawn, castOut));
+  // How the engines take turns across the video (P06i), measured for free; long videos get plain notes.
+  const mix = D.measureMix(out, {primary, seconds: narrationSeconds});
+  warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
   return {
     payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
-      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {})},
+      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
     issues, warnings,
   };
 }
@@ -278,7 +285,9 @@ function planMessages(input) {
     `On-screen text is optional and at most ${input.style.maxWordsOnScreen} words. Direction says what the viewer should understand from the visuals.`,
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     SCENE_CRAFT,
-    ...(input.style.engine ? [E.promptGuide(input.style.engine)] : []),
+    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix})] : []),
+    ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
+    ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
     ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman'), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
@@ -299,7 +308,7 @@ function reviewMessages(input) {
     'Any "continuityNotes" were found by the program; fix each one, or, when the story truly moves there, keep it and say why in the "notes" of that shot (naming the place). A note left unanswered is fixed by the program: the place stays the place of the scene, and a character who changes sides keeps facing the same way.',
     'Fix what fails by returning a full replacement drawing for that shot (the same vocabulary; keep the cast ids, add new characters in "cast" only if the story needs them). Leave good shots alone. You may move a cue to other words inside its own scene.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
-    E.promptGuide(input.engine), Sk.promptGuide(input.engine),
+    E.promptGuide(input.engine, {mix: input.mix}), Sk.promptGuide(input.engine),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -407,6 +416,7 @@ class SceneRoom {
   recoverInterrupted() {
     // 0.16.1: finished parts of a long plan (kept so a retry does not pay for them again).
     if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'parts')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN parts TEXT');
+    if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'map')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN map TEXT');
     const at = now();
     this.store.transaction(() => {
       for (const row of this.db.prepare("SELECT id FROM scene_plan_jobs WHERE status='running'").all()) {
@@ -442,6 +452,7 @@ class SceneRoom {
       stockOrder: order, perSearch: integer(input.perSearch, 3, 30, 'Results per search'), plannerTokenLimit: integer(input.plannerTokenLimit, 8000, 120000, 'Scene planner token limit'),
       continuityReview: input.continuityReview !== false, reviewTokenLimit: input.reviewTokenLimit === undefined ? SETTINGS_DEFAULTS.reviewTokenLimit : integer(input.reviewTokenLimit, 20000, 200000, 'Continuity review token limit'),
       composeFrames: input.composeFrames !== false, composeTokenLimit: input.composeTokenLimit === undefined ? SETTINGS_DEFAULTS.composeTokenLimit : integer(input.composeTokenLimit, 12000, 150000, 'Atelier shot token limit'),
+      storyMap: input.storyMap !== false, designedPerMinute: input.designedPerMinute === undefined ? SETTINGS_DEFAULTS.designedPerMinute : integer(input.designedPerMinute, 0, 10, 'Designed shots per minute'),
     };
     return this.store.transaction(() => {
       const current = this.settings(family.id);
@@ -534,11 +545,11 @@ class SceneRoom {
     return result;
   }
   // Must run inside a transaction.
-  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null}) {
+  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null, map = null}) {
     const spec = inputs.spec, family = inputs.family, primary = inputs.engine || 'stickman';
     const baseSentences = sentences || splitSentences(content.script, family.primaryLocale);
     structural(scenes, baseSentences.length, inputs.sources, spec.motion.cameraMoves, {primary, cast: Sk.validateCast(cast, {lenient: true})});
-    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: source !== 'edit', direction, compose, format: family.format});
+    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: source !== 'edit', direction, compose, map, format: family.format});
     const latest = this.latestManifestRow(content.id), revision = (latest?.revision || 0) + 1, id = randomUUID(), at = now();
     this.db.prepare('INSERT INTO scene_manifests(id,family_id,content_id,revision,content_revision,voice_approval_id,style_revision_id,style_spec_hash,source,parent_id,change_note,payload,payload_hash,checks,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, family.id, content.id, revision, content.revision, inputs.voice.approvalId, inputs.style.revisionId, inputs.style.specHash, source, parentId, note, JSON.stringify(built.payload), hash(built.payload), JSON.stringify({issues: built.issues, warnings: built.warnings}), createdBy, at);
@@ -570,9 +581,12 @@ class SceneRoom {
     }
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     const settings = this.settings(inputs.family.id), timed = timeSentences(sentences, inputs.voice.durationSeconds), spec = inputs.spec;
+    const perMinute = settings.designedPerMinute ?? SETTINGS_DEFAULTS.designedPerMinute, frames = settings.composeFrames !== false && perMinute > 0;
+    // The budget holds when atelier is a guest engine; an atelier video designs every shot (no budget).
+    const engines = D.availableEngines({sources, frames}), designedShots = !frames ? 0 : inputs.engine === 'atelier' ? null : D.designedBudget(inputs.voice.durationSeconds, perMinute);
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, sources, primarySource, cameraMoves: spec.motion.cameraMoves, ...(settings.composeFrames === false ? {frames: false} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, sources, primarySource, cameraMoves: spec.motion.cameraMoves, ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
       // The narrator's performance (voice direction), when the approved narration was directed: faces, moods
@@ -596,15 +610,22 @@ class SceneRoom {
       requireValue(maxCompletionTokens >= Math.min(16000, 600 + items.length * 90), `The script needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')}. Raise it in visual settings.`, 409);
       return {promptInput: partInput, maxCompletionTokens};
     });
+    // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
+    const map = parts.length > 1 && settings.storyMap !== false ? (() => {
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line}))};
+      const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
+      requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
+      return {input, maxTokens};
+    })() : null;
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
       const id = randomUUID(), at = now();
-      // The planner token limit applies to each part; the job reserves it once per part.
+      // The planner token limit applies to each part (and the story director); the job reserves it once each.
       // A drawing style gets the continuity review: one more Claude answer per part, reserved up front.
       // Its answers read every drawing of a part plus the vocabulary, so they get their own (byte-counted) limit.
       const review = settings.continuityReview && E.ENGINES[inputs.engine]?.draws ? {chunks: parts.length, tokenLimit: settings.reviewTokenLimit ?? SETTINGS_DEFAULTS.reviewTokenLimit} : null;
-      const compose = settings.composeFrames !== false && inputs.sources.includes('generated-graphics') ? {tokenLimit: settings.composeTokenLimit ?? SETTINGS_DEFAULTS.composeTokenLimit} : null;
-      const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * parts.length + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, sentenceCount: sentences.length, sentencesHash: hash(sentences)};
+      const compose = frames && inputs.sources.includes('generated-graphics') ? {tokenLimit: settings.composeTokenLimit ?? SETTINGS_DEFAULTS.composeTokenLimit, ...(designedShots ? {budget: designedShots} : {})} : null;
+      const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences)};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(scope), createdBy, at, at);
       this.store.event(`Queued Claude scene plan for "${content.title}"${parts.length > 1 ? ` in ${parts.length} parts` : ''}`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
@@ -662,12 +683,24 @@ class SceneRoom {
     const done = job.parts ? JSON.parse(job.parts) : [], spent = [];
     try {
       if (job.scope.redesign) return await this.redesign(job, () => { started = true; });
+      // The story director's map comes first and is kept, so a retry never pays for it twice.
+      let map = job.map ? JSON.parse(job.map) : null;
+      if (job.scope.map && !map) {
+        const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: D.mapMessages(job.scope.map.input), maxTokens: job.scope.map.maxTokens, onStart: () => { started = true; }});
+        spent.push({prompt: reply.usage.promptTokens, completion: reply.usage.completionTokens, total: reply.usage.totalTokens, answer: answerTokens(reply.content), model: reply.model, provider: reply.provider});
+        const {sentences: all, style} = job.scope.map.input, warnings = [];
+        map = D.validateMap(looseJson(reply.content), {first: all[0].n, last: all.at(-1).n, engines: style.engines, primary: style.engine, designedShots: style.designedShots ?? Infinity, warn: message => warnings.push(message)}) || {unusable: true};
+        if (warnings.length) map.warnings = warnings.slice(0, 20);
+        this.db.prepare('UPDATE scene_plan_jobs SET map=?, updated_at=? WHERE id=?').run(JSON.stringify(map), now(), job.id);
+      }
+      const story = map?.beats ? map : null;
       for (const [index, part] of parts.entries()) {
         if (done.some(item => item.index === index)) continue;
         const castSoFar = mergeCast(done.map(item => item.parsed));
         // Later parts keep the cast and the art direction the first parts set.
         const directionSoFar = done.map(item => item.parsed?.direction).find(item => item && typeof item === 'object');
-        const promptInput = {...part.promptInput, ...(castSoFar.length ? {cast: castSoFar} : {}), ...(directionSoFar ? {direction: directionSoFar} : {})};
+        const own = part.promptInput.sentences, direction = directionSoFar || story?.direction;
+        const promptInput = {...part.promptInput, ...(castSoFar.length ? {cast: castSoFar} : {}), ...(direction ? {direction} : {}), ...(story ? {map: D.slice(story, own[0].n, own.at(-1).n)} : {})};
         const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: planMessages(promptInput), maxTokens: part.maxCompletionTokens, onStart: () => { started = true; }});
         const usage = {prompt: reply.usage.promptTokens, completion: reply.usage.completionTokens, total: reply.usage.totalTokens, answer: answerTokens(reply.content), model: reply.model, provider: reply.provider};
         spent.push(usage);
@@ -680,10 +713,11 @@ class SceneRoom {
       }
       done.sort((a, b) => a.index - b.index);
       let merged = parts.length === 1 ? done[0].parsed : mergeParts(done.map(item => item.parsed)), review = null;
+      if (story?.direction && !merged.direction) merged = {...merged, direction: story.direction};
       if (job.scope.review) ({plan: merged, review} = await this.reviewPlan(job, merged, spent, () => { started = true; }));
       let compose = null;
       if (job.scope.compose) ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; }));
-      return this.completePlan(job.id, merged, sumUsage(spent), null, review, compose);
+      return this.completePlan(job.id, merged, sumUsage(spent), null, review, compose, story || (map?.unusable ? {unusable: true} : null));
     } catch (error) {
       this.store.transaction(() => {
         const at = now();
@@ -710,8 +744,11 @@ class SceneRoom {
       built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine, direction: raw.direction, format: family.format});
     } catch { return {plan: merged, compose: null}; }
     const framed = built.payload.scenes.flatMap((scene, si) => scene.shots.map((shot, hi) => ({shot, si, hi, scene}))).filter(item => item.shot.frame);
-    const targets = only ? framed.filter(item => item.shot.label === only) : framed;
+    let targets = only ? framed.filter(item => item.shot.label === only) : framed;
     if (!targets.length) return {plan, compose: null};
+    // The video's designed-shot budget (designed shots per minute); shots past it are drawn from their words.
+    const budget = job.scope.compose.budget ?? Infinity;
+    if (!only && targets.length > budget) { for (const {shot} of targets.slice(budget)) notes.push(`${shot.label}: past the budget of ${budget} designed shots; it is drawn from its words.`); targets = targets.slice(0, budget); }
     const words = Cap.wordTimings({sentences: built.payload.sentences, pauses: [], narrationSeconds: built.payload.timing.narrationSeconds});
     const canvas = family.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080}, direction = built.payload.direction;
     const report = {shots: targets.length, designed: 0, tokens: 0, notes};
@@ -784,7 +821,7 @@ class SceneRoom {
       if (!slice.length) continue;
       const shotWords = shot => words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds - 0.01).map(word => word.text).join(' ');
       const flagged = Sk.continuity(slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes}))), built.payload.cast || []);
-      const input = {engine: inputs.engine, style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
+      const input = {engine: inputs.engine, ...(E.isMix(inputs.spec) ? {mix: true} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
           shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
       const messages = reviewMessages(input), maxTokens = Math.min(32000, job.scope.review.tokenLimit - messageTokenUpperBound(messages));
@@ -812,7 +849,7 @@ class SceneRoom {
     }
     return {plan, review: {report: reports.join(' ').slice(0, 1800), changes, notes}};
   }
-  completePlan(id, parsed, usage, problem = null, review = null, compose = null) {
+  completePlan(id, parsed, usage, problem = null, review = null, compose = null, map = null) {
     return this.store.transaction(() => {
       const row = this.planJobRow(id), scope = JSON.parse(row.scope), at = now();
       requireValue(row.status === 'running', 'Scene plan is not running.', 409);
@@ -836,7 +873,7 @@ class SceneRoom {
       let plan, manifest;
       try {
         plan = aiScenes(parsed);
-        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, cast: plan.cast, direction: plan.direction || null, review, compose, source: 'claude', note: review ? `New plan from the Claude scene director, checked by the continuity review (${review.changes.length} shot${review.changes.length === 1 ? '' : 's'} redrawn)` : 'New plan from the Claude scene director', createdBy: row.created_by});
+        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, cast: plan.cast, direction: plan.direction || null, review, compose, map, source: 'claude', note: review ? `New plan from the Claude scene director, checked by the continuity review (${review.changes.length} shot${review.changes.length === 1 ? '' : 's'} redrawn)` : 'New plan from the Claude scene director', createdBy: row.created_by});
       } catch (error) {
         if (error instanceof InputError) return fail(error.message);
         throw error;
@@ -891,7 +928,7 @@ class SceneRoom {
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
       if (this.latestManifestRow(row.content_id).id !== row.id || content.revision !== job.scope.contentRevision || inputs.voice.approvalId !== job.scope.voiceApprovalId || inputs.style.revisionId !== job.scope.styleRevisionId) return close('stale', 'The plan, script, narration or style changed during the redesign. The new design was not saved.');
       const report = {...(payload.compose || {shots: 1, designed: 1, notes: []}), tokens: (payload.compose?.tokens || 0) + compose.tokens};
-      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: report, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: report, map: payload.map || null, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -974,7 +1011,7 @@ class SceneRoom {
     requireValue(input.expectedRevision === row.revision, 'The plan changed in another tab. Reload before editing.', 409);
     return this.store.transaction(() => {
       requireValue(this.latestManifestRow(row.content_id).id === row.id, 'The plan changed in another tab. Reload before editing.', 409);
-      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, source: 'edit', parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, map: payload.map || null, source: 'edit', parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       return this.publicManifest(created, {detail: true});
     });
   }

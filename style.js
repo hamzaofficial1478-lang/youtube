@@ -53,6 +53,11 @@ const RENDERERS = {
     note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
+  'story-mix': {
+    name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
+    note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
+    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe', 'zoom'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
+  },
   'cinematic-hybrid': {
     name: 'Cinematic hybrid', milestone: 'P05+', status: 'not_implemented',
     note: 'Generated or stock video shots with continuity rules and a strict proxy-review loop.',
@@ -68,7 +73,7 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v4';
+const LAUNCH_VERSION = 'Launch library v5';
 const LAUNCH_PROFILES = [
   {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
@@ -122,6 +127,24 @@ const LAUNCH_PROFILES = [
     audio: {musicMoods: ['energetic', 'electronic', 'driving'], duckingDb: -16, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'motion-graphics'},
     qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
+    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
+  }},
+  {key: 'story-mix', upgrade: 'Launch library v5 (0.26): new. One long video uses every engine where it serves the story; Claude\'s story director picks the engine for each beat.', spec: {
+    name: 'Story Mix · every engine',
+    summary: 'Every engine where it serves the story: stick characters for people and feelings, ink drawings for how things work and history, Claude-designed shots for the numbers and turns, motion graphics for lists and comparisons, footage for the real thing. Built for long videos that must not bore.',
+    bestFit: ['Long explainers (8 minutes and more)', 'Science, history and money stories', 'Channels that want a look nobody else has'],
+    formats: ['long-form', 'shorts'],
+    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
+    pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 6, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6},
+    transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom'], default: 'cut', maxDurationMs: 400},
+    motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 60, easing: 'ease-in-out'},
+    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    palette: {background: '#FFFDF8', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
+    captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['curious', 'upbeat', 'cinematic'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
+    renderer: {adapter: 'story-mix'},
+    qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 6, minSceneSeconds: 1.5, maxSceneSeconds: 14, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
   {key: 'atelier', upgrade: 'Launch library v4 (0.25): new. Every shot is designed for its video by Claude (HyperFrames method), so no two videos share a look.', spec: {

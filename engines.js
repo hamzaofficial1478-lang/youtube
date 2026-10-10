@@ -6,7 +6,8 @@
 //   motion    - flat motion graphics: kinetic type, icons, counters, charts (drawn by the program)
 //   atelier   - a shot designed from scratch by Claude as an animated page in this video's art direction (P06h,
 //               the HyperFrames method; rendered by the program)
-// A style's renderer sets the video's main look. Nothing here forbids a combination: the planner reads each
+// A style's renderer sets the video's main look; the story-mix style (P06i) has none: the story director picks
+// the engine for each beat (director.js). Nothing here forbids a combination: the planner reads each
 // engine's strengths and the usual effects of mixing them, decides per video and per shot, and writes its
 // reason in the shot's notes. The style's own visual sources (Room 03, the owner's choice) are the only limit.
 // Pure: no I/O.
@@ -19,7 +20,9 @@ const ENGINES = Object.freeze({
   motion: {name: 'Motion graphics', draws: true, finish: 'flat', strengths: 'numbers, comparisons, lists, processes, timelines, kinetic words and emphasis; clean and fast', risks: 'with no person or place it can feel cold; long runs of it read as slides'},
 });
 
-const PRIMARY_BY_ADAPTER = Object.freeze({'ffmpeg-montage': 'montage', 'cinematic-hybrid': 'montage', 'ffmpeg-sketch': 'stickman', 'canvas-frames': 'handdrawn', 'motion-graphics': 'motion', atelier: 'atelier'});
+// The story mix draws a shot without a named engine as stickman (the cast's home), but no engine leads.
+const PRIMARY_BY_ADAPTER = Object.freeze({'ffmpeg-montage': 'montage', 'cinematic-hybrid': 'montage', 'ffmpeg-sketch': 'stickman', 'canvas-frames': 'handdrawn', 'motion-graphics': 'motion', atelier: 'atelier', 'story-mix': 'stickman'});
+const isMix = spec => spec?.renderer?.adapter === 'story-mix';
 
 // How engines usually combine: experience to weigh, not rules. Claude decides for this script and this audience.
 const COMBINATIONS = Object.freeze([
@@ -47,14 +50,16 @@ function plannerSources(spec, executable) {
 }
 
 // The engines as Claude reads them in the scene-planning prompt.
-function promptGuide(primary) {
+function promptGuide(primary, {mix = false} = {}) {
   return [
-    `ENGINES. This video's main look is ${ENGINES[primary].name} (${primary}). You decide, shot by shot, which engine and source serve the line best; the video must still feel like one film.`,
+    mix ? 'ENGINES. This video is a story mix: no engine leads. Each beat gets the engine that serves its job best (see the story director), and the video must still feel like one film.'
+      : `ENGINES. This video's main look is ${ENGINES[primary].name} (${primary}). You decide, shot by shot, which engine and source serve the line best; the video must still feel like one film.`,
     ...Object.entries(ENGINES).map(([key, item]) => `- ${key}: best for ${item.strengths}; watch out: ${item.risks}.`),
     'What usually happens when engines mix (weigh it, do not follow it blindly):',
     ...COMBINATIONS.map(item => `- ${item}`),
-    `When a shot leaves the main look (another engine or source), say why in its notes in one sentence. Drawn shots name their engine in sketch.engine: ${drawEngines(primary).join(', ')}. An atelier shot carries a "frame" instead of a sketch.`,
+    mix ? `Drawn shots name their engine in sketch.engine: ${DRAW_ENGINES.join(', ')}. An atelier shot carries a "frame" instead of a sketch.`
+      : `When a shot leaves the main look (another engine or source), say why in its notes in one sentence. Drawn shots name their engine in sketch.engine: ${drawEngines(primary).join(', ')}. An atelier shot carries a "frame" instead of a sketch.`,
   ].join('\n');
 }
 
-module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, primaryEngine, drawEngines, plannerSources, promptGuide};
+module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, primaryEngine, isMix, drawEngines, plannerSources, promptGuide};
