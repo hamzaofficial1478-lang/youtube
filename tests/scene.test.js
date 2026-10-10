@@ -466,7 +466,13 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
   // The program draws a preview of each shot itself: a local video clip, kept with its drawing, selected for the shot.
   const {queued: count} = room.queueDrawAll(plan.id, {requestedBy: 'Owner'});
   assert.equal(count, plan.plan.scenes.flatMap(item => item.shots).length);
-  const drawn = await room.processNextVisual();
+  // Drawing is local and free: a browser that stalls once (a busy or waking PC) is tried again on a fresh browser.
+  const {MotionRenderer} = require('../motion'), render = MotionRenderer.prototype.render;
+  let stalls = 0;
+  MotionRenderer.prototype.render = function (...args) { if (!stalls++) throw new Error('The browser did not answer Runtime.evaluate in time.'); return render.apply(this, args); };
+  let drawn;
+  try { drawn = await room.processNextVisual(); } finally { MotionRenderer.prototype.render = render; }
+  assert.equal(stalls, 2);
   assert.equal(drawn?.status, 'completed', JSON.stringify(store.db.prepare("SELECT error FROM visual_jobs WHERE status='failed'").all()));
   const asset = room.assetRow(drawn.result.assetId), probe = JSON.parse(asset.probe), rights = JSON.parse(asset.rights);
   assert.deepEqual([asset.origin, asset.media_type, asset.mime, probe.width, probe.height], ['drawn', 'video', 'video/mp4', 1280, 720]);

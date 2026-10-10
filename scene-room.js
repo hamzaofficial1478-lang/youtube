@@ -1501,21 +1501,20 @@ class SceneRoom {
       const spec = JSON.parse(this.styles.revisionRow(ctx.row.style_revision_id).spec);
       const fps = Math.min(30, spec.canvas.frameRate), duration = Math.min(40, Math.max(2, scope.durationSeconds * 1.15 + 0.5));
       const preview = ctx.family.format === 'shorts' ? {width: 720, height: 1280} : {width: 1280, height: 720};
-      const renderer = new MotionRenderer({browser: this.browser});
-      let drawn;
-      if (scope.composition) {
-        // An atelier shot (P06h): its designed composition, seeked frame by frame at preview size.
-        const canvas = ctx.family.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
+      // Drawing is local and free: a browser that stalls (a busy or waking PC) gets one more try on a fresh browser.
+      const canvas = ctx.family.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
+      const draw = async () => {
+        const renderer = new MotionRenderer({browser: this.browser});
         try {
           await renderer.start();
-          drawn = await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, outDir: work});
-        } finally { await renderer.close(); }
-      } else try {
-        await renderer.start();
-        drawn = await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
+          // An atelier shot (P06h) is its designed composition, seeked frame by frame at preview size.
+          return scope.composition ? await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, outDir: work}) : await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
           fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
           vertical: ctx.family.format === 'shorts', width: preview.width, height: preview.height, fps, duration, outDir: work});
-      } finally { await renderer.close(); }
+        } finally { await renderer.close(); }
+      };
+      let drawn;
+      try { drawn = await draw(); } catch (error) { if (!/did not answer|did not start/i.test(String(error.message))) throw error; fs.rmSync(work, {recursive: true, force: true}); drawn = await draw(); }
       file = path.join(dir, `${assetId}.mp4`);
       await R.run(this.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(work, drawn.pattern), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', '-y', file], {timeout: Math.max(120000, drawn.frames * 200)});
       const probe = await this.evidence(file, 'video/mp4'), thumb = await this.thumbnail(file, assetId, probe), sha256 = VS.sha256File(file), sizeBytes = fs.statSync(file).size;

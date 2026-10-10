@@ -32,6 +32,10 @@ test('the drawing engine draws every prop, set, pose, expression, look and effec
     const spot = {set: 'abstract', camera: 'still', elements: [{kind: 'prop', prop: 'calendar', x: 0.3, y: 0.5, size: 'xl'}, {kind: 'fx', effect: 'burst', x: 0.66, y: 0.3, size: 'l'}, {kind: 'text', style: 'counter', text: '4,000,000', x: 0.66, y: 0.3, size: 'xl'}]};
     const tied = {...spot, elements: spot.elements.map((item, k) => (k === 1 ? {...item, on: 3} : item))};
     assert.ok((await frame(renderer, spot, 2.5)).equals(await frame(renderer, tied, 2.5)), 'the burst follows the number');
+    // A face is never covered: a prop placed on a character's head moves off it.
+    await frame(renderer, {set: 'street', camera: 'still', elements: [{kind: 'figure', pose: 'stand', x: 0.5, y: 0.8, size: 'xl'}, {kind: 'prop', prop: 'target', x: 0.5, y: 0.3}]}, 1.0);
+    const {est} = await renderer.evaluate('DRAWN.layout()'), [hx, hy, hr] = est[0].head, box = est[1].box;
+    assert.ok(box[2] < hx - hr || box[0] > hx + hr || box[3] < hy - hr || box[1] > hy + hr, 'the prop clears the face');
     // Everything draws without an error, mid-entrance and settled.
     for (let k = 0; k < Sk.PROPS.length; k += 12) await frame(renderer, {elements: Sk.PROPS.slice(k, k + 12).map((prop, i) => ({kind: 'prop', prop, x: 0.1 + (i % 6) * 0.16, y: i < 6 ? 0.3 : 0.7, size: 's', label: prop}))}, 0.2);
     for (const set of Sk.SETS) await frame(renderer, {set, mood: Sk.MOODS[Sk.SETS.indexOf(set) % Sk.MOODS.length], elements: [{kind: 'figure', pose: 'talk', x: 0.4}]}, 1.2);

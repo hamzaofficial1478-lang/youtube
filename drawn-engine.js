@@ -38,6 +38,21 @@
   function layout(d) {
     const dur = P.duration, engine = d.engine, times = d.times || {elements: [], focus: []};
     const est = d.elements.map(estimate);
+    // A face is never covered: a loose prop placed on a character's head moves above it, or beside it towards the open
+    // side when there is no room above (live 0.26 run: a target pin sat on the hero's face).
+    const heads = est.filter((item, i) => d.elements[i].kind === 'figure').map(item => item.head);
+    d.elements.forEach((el, i) => {
+      if (el.kind !== 'prop' || ['cloud', 'rainbow'].includes(el.prop)) return;
+      for (const [hx, hy, hr] of heads) {
+        const e = est[i], s = e.box[2] - e.box[0], R = hr * 1.25;
+        const ox = Math.min(e.box[2], hx + R) - Math.max(e.box[0], hx - R), oy = Math.min(e.box[3], hy + R) - Math.max(e.box[1], hy - R);
+        if (ox <= 0 || oy <= 0 || ox * oy < 0.2 * 4 * R * R) continue;
+        let cx = e.center[0], cy = hy - R - 0.55 * s;
+        if (cy - 0.5 * s < 0.06 * K.H) { cy = e.center[1]; cx = hx + (hx > K.W / 2 ? -1 : 1) * (R + 0.6 * s); }
+        cx = Math.min(K.W - K.M - 0.5 * s, Math.max(K.M + 0.5 * s, cx));
+        est[i] = {...e, box: [cx - 0.5 * s, cy - 0.5 * s, cx + 0.5 * s, cy + 0.5 * s], center: [cx, cy]};
+      }
+    });
     const solid = d.elements.map((el, i) => (['figure', 'prop'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
@@ -453,5 +468,6 @@
     return true;
   }
   const catalog = () => ({props: Object.keys(K.PROPS).sort(), sets: Object.keys(K.SETS).sort(), poses: [...K.POSES].sort(), expressions: [...K.EXPRESSIONS].sort()});
-  window.DRAWN = {frame, catalog};
+  // layout(): the last frame's measured boxes, read by the tests.
+  window.DRAWN = {frame, catalog, layout: () => (LAYOUT ? {est: LAYOUT.est} : null)};
 }());
