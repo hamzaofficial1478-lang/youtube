@@ -25,6 +25,13 @@ test('the drawing engine draws every prop, set, pose, expression, look and effec
     assert.ok(first.equals(await frame(renderer, still, 1.0)), 'a frame is a pure function of time');
     assert.ok(!first.equals(await frame(renderer, still, 1.5)), 'nothing sits still: the sun turns and the figure breathes');
     assert.ok(!first.equals(await frame(renderer, {...still, engine: 'motion'}, 1.0)), 'each engine has its own finish');
+    // A character in the shot from its start is on the first frame, so the room never shows empty before them.
+    const room = {set: 'home', camera: 'still', transition: 'cut', elements: [{kind: 'prop', prop: 'tree', x: 0.85}]};
+    assert.ok(!(await frame(renderer, {...room, elements: [...room.elements, {kind: 'figure', pose: 'stand', x: 0.4}]}, 0.02)).equals(await frame(renderer, room, 0.02)), 'the character arrives with the shot');
+    // An effect placed on the same spot as words (a burst behind a number) stays with them when the layout moves them.
+    const spot = {set: 'abstract', camera: 'still', elements: [{kind: 'prop', prop: 'calendar', x: 0.3, y: 0.5, size: 'xl'}, {kind: 'fx', effect: 'burst', x: 0.66, y: 0.3, size: 'l'}, {kind: 'text', style: 'counter', text: '4,000,000', x: 0.66, y: 0.3, size: 'xl'}]};
+    const tied = {...spot, elements: spot.elements.map((item, k) => (k === 1 ? {...item, on: 3} : item))};
+    assert.ok((await frame(renderer, spot, 2.5)).equals(await frame(renderer, tied, 2.5)), 'the burst follows the number');
     // Everything draws without an error, mid-entrance and settled.
     for (let k = 0; k < Sk.PROPS.length; k += 12) await frame(renderer, {elements: Sk.PROPS.slice(k, k + 12).map((prop, i) => ({kind: 'prop', prop, x: 0.1 + (i % 6) * 0.16, y: i < 6 ? 0.3 : 0.7, size: 's', label: prop}))}, 0.2);
     for (const set of Sk.SETS) await frame(renderer, {set, mood: Sk.MOODS[Sk.SETS.indexOf(set) % Sk.MOODS.length], elements: [{kind: 'figure', pose: 'talk', x: 0.4}]}, 1.2);

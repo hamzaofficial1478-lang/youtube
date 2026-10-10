@@ -131,7 +131,7 @@
   };
   // The face, drawn in the head's own frame (radius 1, facing right, turned a little towards the viewer).
   function face(f, R, expression, st, body) {
-    const E = EXPR[expression] || EXPR.neutral, ink = body === 'creature' ? '#FFFFFF' : K.PAL.line, lw = Math.max(2.4 * K.u, R * 0.075), ox = 0.17, dark = '#3A1F1F';
+    const E = EXPR[expression] || EXPR.neutral, ink = body === 'creature' ? '#FFFFFF' : K.PAL.face, lw = Math.max(2.4 * K.u, R * 0.075), ox = 0.17, dark = '#3A1F1F';
     const blink = (st.tl + (st.seed % 7) * 0.53) % 3.7 < 0.11 && ['dot', 'side', 'up', 'white', 'wide'].includes(E.eyes);
     const eyes = [[ox - 0.33, -0.06], [ox + 0.33, -0.06]];
     const ell = (x, y, rx, ry, fill, rot = 0) => shape(f.ring(x, y, rx, ry, 24).map(([px, py]) => [px, py]), {fill});
@@ -211,7 +211,7 @@
     switch (look.facial) {
       case 'mustache': shape([...f.curve(0.19, 0.24, 0.0, 0.18, -0.12, 0.32), ...f.curve(-0.12, 0.32, 0.02, 0.3, 0.19, 0.28), ...f.curve(0.19, 0.28, 0.36, 0.3, 0.5, 0.32), ...f.curve(0.5, 0.32, 0.38, 0.18, 0.19, 0.24)], {fill: hair === K.HAIR.white ? '#DDDDDD' : hair, width: lw * 0.6, stroke: ink}); break;
       case 'beard': shape([...f.arc(0, 0, 1.02, 1.02, Math.PI * 0.08, Math.PI * 0.92, 24), ...f.arc(0.12, 0.08, 0.66, 0.62, Math.PI * 0.86, Math.PI * 0.1, 20)], {fill: hair, width: lw * 0.6, stroke: ink}); break;
-      case 'stubble': { const rand = K.seeded(77); for (let n = 0; n < 22; n++) { const a = 0.25 + rand() * 2.3, r = 0.62 + rand() * 0.28; shape(f.ring(0.08 + Math.cos(a) * r, 0.1 + Math.sin(a) * r * 0.8, 0.018, 0.018, 6), {fill: K.alpha(ink, 0.6)}); } break; }
+      case 'stubble': { const rand = K.seeded(77); for (let n = 0; n < 22; n++) { const a = 0.25 + rand() * 2.3, r = 0.62 + rand() * 0.28; shape(f.ring(0.08 + Math.cos(a) * r, 0.1 + Math.sin(a) * r * 0.8, 0.018, 0.018, 6), {fill: K.alpha(K.PAL.face, 0.6)}); } break; }
       case 'goatee': shape(f.pts([[0.06, 0.62], [0.3, 0.62], [0.18, 0.86]]), {fill: hair, width: lw * 0.6, stroke: ink}); break;
       default: break;
     }
@@ -281,7 +281,7 @@
   }
   // Eyewear sits over the eyes, so it is drawn after the face.
   function eyewear(f, look) {
-    const L = [], ink = K.PAL.line, eyes = [[0.17 - 0.33, -0.06], [0.17 + 0.33, -0.06]];
+    const L = [], ink = K.PAL.face, eyes = [[0.17 - 0.33, -0.06], [0.17 + 0.33, -0.06]];
     switch (look.eyewear) {
       case 'glasses': L.push(...eyes.map(([x, y]) => ({pts: f.ring(x, y, 0.24, 0.22, 24), color: ink, width: 0.7})), {pts: f.pts([[eyes[0][0] + 0.24, -0.08], [eyes[1][0] - 0.24, -0.08]]), width: 0.6}, {pts: f.pts([[eyes[0][0] - 0.24, -0.08], [-0.9, -0.14]]), width: 0.6}); break;
       case 'sunglasses': L.push(...eyes.map(([x, y]) => ({pts: f.rrect(x - 0.27, y - 0.17, 0.54, 0.34, 0.12), fill: '#151515'})), {pts: f.pts([[eyes[0][0] + 0.27, -0.1], [eyes[1][0] - 0.27, -0.1]]), width: 0.8}, {pts: f.pts([[eyes[0][0] - 0.27, -0.1], [-0.92, -0.16]]), width: 0.7}, {pts: f.pts([[eyes[1][0] - 0.16, -0.14], [eyes[1][0] - 0.04, -0.14]]), color: '#FFFFFF', width: 0.5}); break;

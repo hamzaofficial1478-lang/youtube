@@ -38,13 +38,15 @@ const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'zoom', 'po
 const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
 const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline']);
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars']);
+// Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
+const FACE_NEAR = Object.freeze({curious: 'thinking', wondering: 'thinking', focused: 'determined', serious: 'determined', puzzled: 'confused', afraid: 'scared', terrified: 'scared', anxious: 'nervous', amazed: 'starstruck', impressed: 'surprised', astonished: 'shocked', horrified: 'shocked', joyful: 'happy', cheerful: 'happy', delighted: 'happy', proud: 'smug', calm: 'neutral', skeptical: 'suspicious', frustrated: 'angry', mad: 'angry', upset: 'sad', tired: 'sleepy'});
 const FX_NEAR = Object.freeze({highlight: 'circle', sparkle: 'sparkles', star: 'stars', heart: 'hearts', explosion: 'burst', boom: 'burst', lightning: 'flash', zoom: 'punch', money: 'money-rain', splat: 'ink-splat', wave: 'shockwave', ring: 'circle', tick: 'check', 'x': 'cross'});
 const PROP_MOTIONS = Object.freeze(['auto', 'spin', 'pulse', 'float', 'shake', 'bounce', 'swing', 'none']);
 const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/6';
+const VERSION = 'drawn-scene/7';
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -141,14 +143,15 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       if (who && !castMap.has(who)) who = c.problem(`${label} names ${who}, who is not in the cast.`, undefined);
       const look = who ? castMap.get(who).look : lookOf(item.look, c, label);
       const holds = item.holds ? propName(item.holds) : undefined;
+      const face = (value, where) => { const near = lenient && FACE_NEAR[value]; if (near) warn(`${where} "${value}" is drawn as "${near}".`); return c.pick(near || value, EXPRESSIONS, where, 'neutral'); };
       const then = (Array.isArray(item.then) ? item.then : []).slice(0, MAX_THEN).map((step, s) => {
         const at = phrase(step?.at);
         if (!step || typeof step !== 'object' || !at) return c.problem(`${label} change ${s + 1} needs "at" (the words it happens on).`, null);
-        return {at, ...(step.pose !== undefined ? {pose: c.pick(step.pose, POSES, `${label} change pose`, 'stand')} : {}), ...(step.expression !== undefined ? {expression: c.pick(step.expression, EXPRESSIONS, `${label} change expression`, 'neutral')} : {}),
+        return {at, ...(step.pose !== undefined ? {pose: c.pick(step.pose, POSES, `${label} change pose`, 'stand')} : {}), ...(step.expression !== undefined ? {expression: face(step.expression, `${label} change expression`)} : {}),
           ...(step.emote !== undefined ? {emote: c.pick(step.emote, EMOTES, `${label} change emote`, 'none')} : {}), ...(step.x !== undefined ? {x: c.coord(step.x, `${label} change x`, 0.06, 0.94, 0.5)} : {}),
           ...(step.facing !== undefined ? {facing: c.pick(step.facing, ['left', 'right'], `${label} change facing`, 'right')} : {})};
       }).filter(Boolean);
-      elements.push({kind: 'figure', ...(who ? {who} : {}), look, pose: c.pick(item.pose, POSES, `${label} pose`, 'stand'), expression: c.pick(item.expression, EXPRESSIONS, `${label} expression`, 'neutral'), emote: c.pick(item.emote, EMOTES, `${label} emote`, 'none'),
+      elements.push({kind: 'figure', ...(who ? {who} : {}), look, pose: c.pick(item.pose, POSES, `${label} pose`, 'stand'), expression: face(item.expression, `${label} expression`), emote: c.pick(item.emote, EMOTES, `${label} emote`, 'none'),
         ...(holds ? {holds: PROPS.includes(holds) ? holds : c.problem(`${label} holds must be one of the props.`, undefined)} : {}),
         x: c.coord(item.x, `${label} x`, 0.1, 0.9, 0.3), y: c.coord(item.y, `${label} y`, 0.4, 0.84, 0.8), size: c.pick(item.size, SIZES, `${label} size`, 'm'), facing: c.pick(item.facing, ['left', 'right'], `${label} facing`, 'right'), then, ...base});
       if (elements.at(-1).holds === undefined) delete elements.at(-1).holds;
@@ -363,7 +366,7 @@ function promptGuide(primary = 'stickman') {
     'VOICE: a sentence may carry the narrator voice "delivery" (emotion, energy 1-5, pace). Let the expressions of the characters, the mood, the camera and the beat speed follow it: excited lines get punchy pops and bright faces, sad lines slow pushes and sad faces, tense lines worried faces and a tense mood, a whisper a close, quiet frame.',
     'PACING: match the genre. Energetic explainers and listicles change the picture every 1.5-3 seconds (a new shot or a new beat) and use whip, zoom and pop openings at section changes; calm or serious topics hold longer with slow pushes. Never let a frame sit still: every shot has something that moves.',
     'MOTION SHOTS (engine motion): one hero element at size xl and the number or word big (size l or xl), filling the frame; no empty half-frame.',
-    'COMPOSITION: feet on the ground line (y 0.8); text in the top third; keep the bottom 18% clear for captions; never cover a face with text; use size xl and focus zoom for reaction close-ups; alternate left/right/centre layouts and sets, never the same composition twice in a row; at most 3-4 things arriving at once. Words on screen come from the narration.',
+    'COMPOSITION: feet on the ground line (y 0.8); text in the top third; keep the bottom 18% clear for captions; never cover a face with text; characters are the subject: m or larger, a lone character l or xl, s only when smallness is the point (a tiny person under a huge storm); use size xl and focus zoom for reaction close-ups; alternate left/right/centre layouts and sets, never the same composition twice in a row; at most 3-4 things arriving at once. Words on screen come from the narration.',
     'Example: {"source": "generated-graphics", "query": "", "prompt": "", "motion": "static", "notes": "", "cue": "a single bolt", "sketch": {"engine": "stickman", "set": "storm", "mood": "tense", "camera": "push", "transition": "cut", "elements": [{"kind": "figure", "who": "c1", "pose": "cower", "expression": "scared", "emote": "sweat", "x": 0.28, "y": 0.8, "size": "l", "facing": "right", "then": [{"at": "hotter", "pose": "shock", "expression": "shocked"}]}, {"kind": "prop", "prop": "bolt", "x": 0.62, "y": 0.4, "size": "xl", "at": "bolt", "enter": "drop"}, {"kind": "fx", "effect": "flash", "at": "bolt"}, {"kind": "prop", "prop": "sun", "x": 0.85, "y": 0.22, "size": "m", "at": "sun"}, {"kind": "text", "text": "5x hotter", "style": "stamp", "x": 0.5, "y": 0.14, "at": "five times", "accent": true}]}}',
   ].join('\n');
 }

@@ -78,4 +78,13 @@ test('the local browser renders a composition identically twice, follows the war
   const wide = A.validateComposition(composition(timeline.replace('y: 0, duration', 'x: 1400, y: 0, duration')), {frameId, width: 1920, height: 1080, duration: 3}).html;
   await renderer.loadComposition({...base, html: wide});
   assert.match((await renderer.auditComposition([2.5])).join(' '), /runs off the frame/);
+  // A rolling counter's waiting digits sit outside the frame inside a masked window: not a finding.
+  const ticker = `<div id="${frameId}-win" style="position:absolute;left:800px;top:300px;width:200px;height:200px;overflow:hidden"><div style="position:absolute;top:0;font:900 180px Bahnschrift;color:#fff">1<br>2<br>3<br>4<br>5<br>6<br>7</div></div>`;
+  await renderer.loadComposition({...base, html: A.validateComposition(composition(timeline, ticker), {frameId, width: 1920, height: 1080, duration: 3}).html});
+  assert.deepEqual(await renderer.auditComposition([2.5]), []);
+  // A dark opening is found the way the render's black-frame check finds it: before 1 s only the dark field shows
+  // (a lone white number on a dark field counts as black too; here the hero lands as a full-width band).
+  const dark = A.validateComposition(composition(timeline, `<style>#${frameId}-hero{background:#E0753E}</style>`).replace('#10131A', '#0B1020'), {frameId, width: 1920, height: 1080, duration: 3}).html;
+  await renderer.loadComposition({...base, html: dark});
+  assert.deepEqual(await renderer.blackMoments([0, 0.5, 2]), [0, 0.5]);
 });

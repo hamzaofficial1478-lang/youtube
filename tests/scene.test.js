@@ -12,7 +12,7 @@ const {ConnectorSlots} = require('../connectors');
 const {StyleLibrary} = require('../style');
 const {QuotaLedger} = require('../intel-sources');
 const VS = require('../visual-sources');
-const {SceneRoom, splitSentences, timeSentences, keywords} = require('../scene-room');
+const {SceneRoom, splitSentences, timeSentences, keywords, planMessages} = require('../scene-room');
 const {RenderRoom} = require('../render-room');
 const {findBrowser} = require('../motion');
 const Sk = require('../sketch');
@@ -140,6 +140,23 @@ const latestManifest = (room, contentId) => room.state().contents.find(item => i
 const approvePlan = (room, manifest) => room.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', notes: '', confirmations: {coverageReviewed: true, directionReviewed: true}});
 const shots = manifest => manifest.plan.scenes.flatMap(scene => scene.shots);
 async function drain(room) { for (let i = 0; i < 200; i++) { const busy = room.db.prepare("SELECT 1 FROM visual_jobs WHERE status='queued'").get(); if (!busy) return; await room.processNextVisual(); } }
+
+test('a new plan uses only the sources the program can fetch now: no stock shots without a tested stock connection', t => {
+  const {store, room, content, ids} = setup(t);
+  for (const ref of [ids.pexels, ids.pixabay]) {
+    const row = store.db.prepare('SELECT payload FROM connectors WHERE id=?').get(ref.id), payload = JSON.parse(row.payload);
+    payload.test = {status: 'failed', at: new Date().toISOString(), message: 'fixture'};
+    store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(payload), ref.id);
+  }
+  const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  assert.deepEqual([...new Set(shots(manifest).map(shot => shot.source))], ['ai-image']);
+});
+
+test('with frame composing switched off, the planner does not read the atelier guide', () => {
+  const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
+  assert.match(planMessages(input)[0].content, /ATELIER SHOTS/);
+  assert.doesNotMatch(planMessages({...input, style: {...input.style, frames: false}})[0].content, /ATELIER SHOTS/);
+});
 
 test('sentences, word-share timing and keywords handle punctuation, short fragments and other scripts', () => {
   const sentences = splitSentences('Money began as trust. In the U.S. it changed! Did it? Yes.\n\nNew paragraph without a stop', 'en-US');
@@ -289,10 +306,10 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   assert.equal(failing.room.retryPlan(failed.job.id, {confirmInterrupted: true}).status, 'queued');
 });
 
-test('a long summary, direction or note from Claude is trimmed at a word, never a reason to lose the plan', async t => {
+test('a long summary, direction or note from Claude is trimmed at a word and an extra field is dropped, never a reason to lose the plan', async t => {
   const network = fakeNetwork({claudePlan: input => {
     const plan = blueprintPlan(input.sentences.length);
-    return {...plan, summary: 'Words that run on and on. '.repeat(30), scenes: plan.scenes.map(scene => ({...scene, direction: 'A direction that keeps going. '.repeat(30), shots: scene.shots.map(shot => ({...shot, notes: 'A note. '.repeat(80)}))}))};
+    return {...plan, summary: 'Words that run on and on. '.repeat(30), scenes: plan.scenes.map(scene => ({...scene, direction: 'A direction that keeps going. '.repeat(30), shots: scene.shots.map(shot => ({...shot, notes: 'A note. '.repeat(80), sentenceStart: scene.sentenceStart}))}))};
   }});
   const {room, content, ids} = setup(t, network);
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
@@ -300,7 +317,7 @@ test('a long summary, direction or note from Claude is trimmed at a word, never 
   assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
   const {plan} = latestManifest(room, content.id);
   assert.ok(plan.summary.length <= 600 && plan.summary.endsWith('on…'), plan.summary.slice(-20));
-  assert.ok(plan.scenes.every(scene => scene.direction.length <= 600 && scene.shots.every(shot => shot.notes.length <= 500)));
+  assert.ok(plan.scenes.every(scene => scene.direction.length <= 600 && scene.shots.every(shot => shot.notes.length <= 500 && !('sentenceStart' in shot))));
 });
 
 test('a long script is planned in parts: each part covers its own sentences, and a bad part is asked again alone', async t => {
@@ -561,12 +578,15 @@ test('HTTP routes need the local token and serve the scene state, previews and t
 });
 
 test('atelier shots: Claude plans an art direction and frames, a frame worker designs each, the program checks it and Room 04 draws it', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
-  const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#10131A}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
+  const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#2A3350}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
+  let lastRaw = '', redesignFails = false;
   const asked = [], frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the number', roles: 'number = foreground subject', beats: [{show: 'the number counts up in the centre'}], motions: ['counting-dynamic-scale', 'not-a-rule'], type: 'evidence', persuasion: 'worked example', beat: `surprise ${n}`});
   const network = fakeNetwork({claudePlan: input => {
     if (input.raw) {
       const packet = JSON.parse(input.raw.split('\n\n')[0]), retry = input.raw.includes('failed these checks');
       asked.push(`${packet.frameId}${retry ? ':retry' : ''}`);
+      lastRaw = input.raw;
+      if (packet.frameId === 's01a' && redesignFails) return 'No composition this time.';
       if (packet.frameId === 's01b' && !retry) return '<template><div data-composition-id="s01b"><script>const x = Math.random();</script></div></template>';
       if (packet.frameId === 's02a') return 'Here is a sketch of my idea, not a composition.';
       return good(packet.frameId);
@@ -601,14 +621,43 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   assert.ok(manifest.plan.compose.notes.some(item => /^S02A: the composition did not pass its checks/.test(item)));
   const frames = store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='atelier_frame'").all();
   assert.deepEqual([frames.length, frames.every(row => row.status === 'settled')], [asked.length, true], 'each answer is reserved and settled on its own');
+  // An owner edit keeps the designed frames, the art direction and the compose report.
+  const edited = room.editManifest(manifest.id, {op: 'update-scene', sceneId: manifest.plan.scenes[0].id, direction: 'Open on the number.', createdBy: 'Owner', expectedRevision: manifest.revision});
+  assert.equal(shots(edited).filter(shot => shot.frame?.html).length, atelierShots - 1);
+  assert.deepEqual([edited.plan.direction, edited.plan.compose], [manifest.plan.direction, manifest.plan.compose]);
   // Room 04 draws the designed shots from their compositions (and the others from their sketches).
-  approvePlan(room, manifest);
-  const drawCount = shots(manifest).filter(shot => shot.source === 'generated-graphics').length;
-  assert.equal(room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, drawCount);
+  approvePlan(room, edited);
+  const drawCount = shots(edited).filter(shot => shot.source === 'generated-graphics').length;
+  assert.equal(room.queueDrawAll(edited.id, {requestedBy: 'Owner'}).queued, drawCount);
   for (let k = 0; k < drawCount; k++) assert.equal((await room.processNextVisual())?.status, 'completed');
   const asset = store.db.prepare("SELECT rights, probe FROM visual_assets WHERE origin='drawn' AND shot_id=?").get(byLabel.S01A.id);
   assert.equal(JSON.parse(asset.rights).basis, 'own-composition');
   assert.ok(JSON.parse(asset.probe).durationSeconds > 0.5);
   // Redrawing the same design is skipped.
-  assert.throws(() => room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}), /already shows its current drawing/);
+  assert.throws(() => room.queueDrawAll(edited.id, {requestedBy: 'Owner'}), /already shows its current drawing/);
+  // One shot is designed again on its own (one answer, the owner's reason as the brief); every other shot keeps its
+  // ID and its design. A redesign that fails its checks keeps the current design.
+  const before = latestManifest(room, content.id), target = shots(before).find(shot => shot.label === 'S01A');
+  const redesign = reason => room.redesignFrame(before.id, {shotId: target.id, reason, requestedBy: 'Owner', connector: ids.claude, expectedRevision: before.revision});
+  assert.throws(() => room.redesignFrame(before.id, {shotId: byLabel.S02B.id, requestedBy: 'Owner', connector: ids.claude, expectedRevision: before.revision}), /Only a designed/);
+  redesignFails = true;
+  const failed = redesign('Open on the full number.');
+  await room.processNextPlan();
+  assert.match(room.publicPlanJob(room.planJobRow(failed.job.id)).error, /S01A did not pass its checks, so the shot keeps its current design/);
+  assert.equal(latestManifest(room, content.id).id, before.id);
+  redesignFails = false;
+  const second = redesign('Open on the full number, not an empty field.');
+  await room.processNextPlan();
+  const secondJob = room.publicPlanJob(room.planJobRow(second.job.id));
+  assert.deepEqual([secondJob.status, secondJob.redesign.label, secondJob.redesign.tokens > 0], ['completed', 'S01A', true]);
+  const after = latestManifest(room, content.id);
+  assert.equal(asked.at(-1), 's01a');
+  assert.match(lastRaw, /owner asks for a new design of this shot:\nOpen on the full number, not an empty field\./);
+  assert.deepEqual(shots(after).map(shot => shot.id), shots(before).map(shot => shot.id));
+  assert.deepEqual(shots(after).filter(shot => shot.label !== 'S01A').map(shot => shot.frame?.html || null), shots(before).filter(shot => shot.label !== 'S01A').map(shot => shot.frame?.html || null));
+  assert.ok(shots(after).find(shot => shot.label === 'S01A').frame.html);
+  assert.ok(after.plan.compose.tokens > before.plan.compose.tokens, 'the redesign adds its tokens to the report');
+  // The owner can drop a design: the shot is then drawn from its words.
+  const dropped = room.editManifest(after.id, {op: 'update-shot', shotId: target.id, frame: null, createdBy: 'Owner', expectedRevision: after.revision});
+  assert.ok(!shots(dropped).find(shot => shot.id === target.id).frame && shots(dropped).find(shot => shot.id === target.id).sketch);
 });

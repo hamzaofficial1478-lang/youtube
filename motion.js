@@ -167,6 +167,17 @@ class MotionRenderer {
   }
   // Layout findings at the given composition times: text off the frame, text in the caption band.
   async auditComposition(times) { return this.evaluate(`__atelier.audit(${JSON.stringify(times)})`); }
+  // The times at which the loaded composition would fail the render's black-frame check.
+  async blackMoments(times) {
+    const found = [];
+    for (const t of times) {
+      await this.evaluate(`__atelier.seek(${Number(t)})`);
+      // JPEG is enough to judge darkness and takes about a third of a PNG's time.
+      const data = (await this.send('Page.captureScreenshot', {format: 'jpeg', quality: 80, fromSurface: true})).data;
+      if (await this.evaluate(`__atelier.blackShare('data:image/jpeg;base64,${data}')`) >= 0.98) found.push(t);
+    }
+    return found;
+  }
   async renderComposition({html, frameId, width, height, scale = 1, canvas, duration, fps, outDir, warp = null, onFrame = () => {}}) {
     const status = await this.loadComposition({html, frameId, width, height, scale, canvas, duration});
     if (!status.ready) throw new InputError(`The composition did not start: ${status.errors[0] || 'no timeline was registered'}.`, 422);

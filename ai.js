@@ -16,8 +16,11 @@ const MODELS = Object.freeze({'claude-opus-5-5': 'Claude Opus 5.5', 'claude-opus
 const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-opus-4-8'});
 // Owner decision 2026-10-06: Opus 5.5 writes scripts and makes the editing, visual and niche decisions;
 // Opus 4.8 does the rest.
-const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', research: 'support', competitors: 'support'});
+const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', research: 'support', competitors: 'support', frames: 'main'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
+// A frame's design is already settled by the plan (blueprint, beats, motions); writing it needs less deliberation
+// (live 0.25 run: about 10k thinking tokens per frame at high).
+const TASK_EFFORT = Object.freeze({frames: 'medium'});
 // Answers up to this size come back in one response; longer ones (a 30-minute script) are streamed, so the
 // request never meets the SDK's timeout for long non-streaming calls.
 const NON_STREAMING_MAX_TOKENS = 16000;
@@ -177,7 +180,7 @@ class Ai {
   model(slot, task) {
     const role = TASK_ROLE[task];
     if (!role) throw new AiError(`Unknown AI task ${task}.`, 500);
-    return {role, model: slot.models?.[role] || DEFAULT_MODELS[role], effort: EFFORT[role]};
+    return {role, model: slot.models?.[role] || DEFAULT_MODELS[role], effort: TASK_EFFORT[task] || EFFORT[role]};
   }
   // messages: [{role, content}]; returns {content, usage, model, provider}.
   async complete({connectorId, task, messages, maxTokens, onStart}) {

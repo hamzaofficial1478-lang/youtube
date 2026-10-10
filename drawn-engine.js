@@ -47,8 +47,9 @@
       const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
       const x = el.style === 'headline' ? K.W / 2 : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
       const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
-      const limit = 0.8 * K.H - size * 0.6;
-      const y = el.style === 'headline' ? 0.09 * K.H : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, v)).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
+      // Big words keep room above them for the camera's push (live 0.25 run: an xl counter touched the top edge).
+      const limit = 0.8 * K.H - size * 0.6, top = 0.07 * K.H + size * 0.6;
+      const y = el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
       est[i] = {box: [x - half, y - size * 0.55, x + half, y + size * 0.55], center: [x, y], r: half};
       return {x, y, size, width};
     });
@@ -57,9 +58,13 @@
     const el = d.elements.map((item, i) => {
       const cue = times.elements?.[i] || {};
       let ts = cue.t0;
-      const enter = !item.enter || item.enter === 'auto' ? autoEnter(item, engine) : item.enter;
+      let enter = !item.enter || item.enter === 'auto' ? autoEnter(item, engine) : item.enter;
       // A drawing arriving on a word starts a moment before it, so it has landed when the word is heard.
       if (ts != null && item.kind !== 'fx') ts -= Math.min(0.3, 0.08 + 0.45 * enterSeconds(enter, engine));
+      // A character who is in the shot from its start is there on the first frame and arrives with the shot's
+      // transition, so the place never shows empty before the person (owner review 2026-10-10). Hand-drawn
+      // still draws the character on, first.
+      if (ts == null && item.kind === 'figure' && (!item.enter || item.enter === 'auto')) { ts = engine === 'handdrawn' ? 0.05 : 0; if (engine !== 'handdrawn') enter = 'none'; }
       if (ts == null) { ts = engine === 'handdrawn' ? 0.05 + order * Math.min(0.5, Math.max(0.18, dur * 0.45 / Math.max(1, uncued))) : 0.03 + order * 0.08; order++; }
       ts = Math.max(0, Math.min(ts, dur - 0.3));
       const te = cue.t1 != null && cue.t1 > ts + 0.25 ? cue.t1 : null;
@@ -305,12 +310,19 @@
       D.elements.forEach((item, k) => { if (k === i || ['fx', 'arrow'].includes(item.kind) || !LAYOUT.est[k]) return; const dd = Math.hypot(LAYOUT.est[k].center[0] - x, LAYOUT.est[k].center[1] - y); if (dd < far) { far = dd; best = k + 1; } });
       if (best) return fxTarget({...el, on: best}, i);
     }
+    // An effect placed on the same spot as a drawing or words (a burst behind a number) stays with it when the
+    // layout moves them (live 0.25 run: the counter moved up, the burst stayed and covered it).
+    if (!MARKS.has(el.effect) && !SCREEN_FX.has(el.effect)) {
+      const k = D.elements.findIndex((item, n) => n !== i && !['fx', 'arrow'].includes(item.kind) && Number.isFinite(item.x) && Number.isFinite(item.y) && Math.hypot(item.x - el.x, (item.y - el.y) * K.H / K.W) < 0.04);
+      if (k >= 0) return fxTarget({...el, on: k + 1}, i);
+    }
     const s = FX_SIZE[el.size || 'm'] * K.u;
     return {cx: el.x * K.W, cy: el.y * K.H, w: s * 1.4, h: s * 1.4};
   }
   function drawFx(el, i, t, local, p) {
     const {ctx, u, W, H} = K, g = fxTarget(el, i), color = el.accent ? K.PAL.accent : null, seed = LAYOUT.el[i].seed;
-    const r = Math.max(g.w, g.h) * 0.62;
+    // On a wide target (a line of words) a round effect stays about two text-heights across, not the whole line.
+    const r = Math.min(Math.max(g.w, g.h), Math.min(g.w, g.h) * 2.2) * 0.62;
     switch (el.effect) {
       case 'burst': { const z = ease.outBack(clamp01(local / 0.3)), f = K.frame(g.cx, g.cy, r * z, 1, local * 0.25); K.render([{pts: f.star(0, 0, 1.08, 0.68, 14), fill: color || C.yellow, px: 6 * u}, {pts: f.star(0, 0, 0.8, 0.5, 14, 0.2), fill: K.mix(color || C.yellow, '#FFFFFF', 0.45), stroke: false}]); break; }
       case 'speedlines': { const rand = K.seeded(seed + Math.floor(K.T * 15)), n = 46, inner = Math.max(r * 1.1, Math.min(W, H) * 0.28); ctx.save(); ctx.strokeStyle = K.alpha(K.PAL.ink, 0.32 * clamp01(local / 0.15)); ctx.lineCap = 'round'; for (let k = 0; k < n; k++) { const a = (k + rand() * 0.6) * TAU / n, r1 = inner * (1 + rand() * 0.35), r2 = Math.max(W, H) * 1.1; ctx.lineWidth = (2 + rand() * 6) * u; ctx.beginPath(); ctx.moveTo(g.cx + Math.cos(a) * r1, g.cy + Math.sin(a) * r1); ctx.lineTo(g.cx + Math.cos(a) * r2, g.cy + Math.sin(a) * r2); ctx.stroke(); } ctx.restore(); break; }

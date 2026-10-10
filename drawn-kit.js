@@ -36,7 +36,8 @@
   K.bind = ({ctx, P, W, H, M}) => {
     const dark = K.lum(P.palette.bg) < 0.45;
     Object.assign(K, {ctx, P, W, H, M, u: Math.min(W, H) / 1080, FIN: P.finish || 'cartoon', DARK: dark,
-      PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, head: dark ? K.mix(P.palette.bg, P.palette.ink, 0.16) : '#FFFFFF', shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
+      PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
+      head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };
   K.LW = () => (K.FIN === 'ink' ? 4.4 : K.FIN === 'flat' ? 4.2 : 5.2) * K.u;
   // Background colours sit back so the foreground reads: pastel on light styles, dim on dark ones.

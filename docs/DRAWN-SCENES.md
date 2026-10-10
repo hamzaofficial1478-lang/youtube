@@ -195,3 +195,21 @@ Owner request (2026-10-09): take how OpenMontage and HyperFrames work, run it th
 **Settings (Room 04).** `composeFrames` (on), `composeTokenLimit` (40,000 per frame answer, byte-counted), `plannerTokenLimit` now 60,000 because the atelier guide adds about 6.6k characters when generated graphics are allowed.
 
 **Limits.** People stay in the drawn engines (a composition has no cast). Every atelier shot costs one Claude call. Fonts are limited to the fonts installed on this PC. Compositions are checked for safety and layout, not for taste: the owner still judges them at the visual approval and the edit verdict.
+
+## 12. Live tests and repairs (0.25.1)
+
+From live runs with real Claude on the demo (2026-10-10):
+
+- **Fewer tokens per designed shot.** Frame workers run at medium effort (`ai.js` task `frames`): the design is already settled by the plan. Live: about 6-9k answer tokens per frame instead of 13-14k; a frame costs about 13-18k tokens in total.
+- **No false alarms.** The audit measures only the part of the text a viewer can see: a rolling counter's waiting digits inside a masked window are not "off the frame" (a live retry cost about 15k tokens for this). Text cut by the frame's edge is still reported.
+- **No black openings.** The frame worker's contract says the shot's stage (panels, grid, map, horizon, outline) is on screen from the first frame. The composing step samples the shot in the browser exactly as the render's black-frame check does (98% of pixels at luma 25.5 or less) and uses the shot's one retry when a stretch would fail.
+- **Redesign one shot (Room 04).** "Redesign" on an atelier shot asks Claude for that shot only, with the owner's reason as the brief; every other shot keeps its ID, design and visual; a new design that fails its checks leaves the current one. Live: two dark openings redesigned for about 14k tokens each, then the render passed every check.
+- **Owner edits keep the designs.** Editing a plan in Room 04 kept no `frame` before; now frames, the art direction and the compose report survive every edit; the shot edit has "Drop the atelier design" (the shot is then drawn from its words).
+- **Only sources the program can fetch.** A new plan offers Claude stock footage only with a tested Pexels or Pixabay connection and AI images only with a tested OpenAI connection (a live plan chose stock on a PC without a stock key).
+- **A plan is never lost to an extra field.** Claude's plan is read field by field; an extra field (a scene's sentence range repeated on a shot cost a live plan 16,770 tokens) is dropped.
+- **Characters arrive with their shot.** A character in the shot from its start is on the first frame and moves in with the opening transition; hand-drawn still draws them on, first (`drawn-scene/7`). The last scene no longer shows the room before Sam.
+- **Near-miss expressions** ("curious") map to the closest face with a named warning (`FACE_NEAR`); characters are asked to be medium or larger unless smallness is the point.
+- **Faces read on dark palettes.** Faces are light with dark features on every palette (the motion-graphics finish on a dark palette drew dark faces).
+- **Effects stay with what they were placed on.** An effect Claude puts on the same spot as a drawing or words (a burst behind a number) follows it when the layout moves it, and a round effect on a line of words stays about two text-heights across.
+- **Big words keep headroom.** Words are placed at least 7% of the frame plus half their own height below the top, so a push-in never presses them against the edge.
+- **Frame design off means no atelier guide.** With `composeFrames` off, the planner does not read the atelier guide (about 6.6k characters less per plan part) and plans drawn shots only.

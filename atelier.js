@@ -99,13 +99,14 @@ const CONTRACT = [
   'DETERMINISM (the browser seeks to any frame in any order): no Math.random (derive variation from the element index), no Date.now/performance.now/new Date, no setTimeout/setInterval/requestAnimationFrame, no CSS transition or @keyframes, no repeat: -1 or yoyo forever (finite repeats only), no hover/scroll/input. Entrances use fromTo with explicit from-states. Never put a CSS transform on an element you also tween x/y/scale/rotation (centre with flex/inset/margins, or xPercent/yPercent). Animate transforms, opacity, filter, clip-path, stroke properties; never width/height/top/left.',
   'MOTION DOCTRINE: (1) smooth beats bouncy: long-tail power3 / expo.out settles; overshoot only when the direction says playful. (2) Never front-load: at t=0 only what the voice is saying enters; reveal each further piece when the narrator says it (the word times are given), spreading reveals across the shot and especially its back half. (3) No lazy breathing, no slow pan or push in the back half; a held, still read beats bad motion (subtle low-amplitude jitter at most). (4) A seam inside the shot is a velocity-matched cut (same direction and speed on both sides). Compose 2-4 named motions per shot and use at least two different eases.',
   'LAYOUT: the hero (the designed idea: a word, number, diagram, metaphor) fills 40-60% of the frame; at least three depth layers (background field, midground, foreground); one clearly dominant element (size 3:1 or weight contrast); never a small cluster floating in empty space; a full-bleed background is its own full-duration .clip layer. Keep every element above the bottom 17% (captions live there) and inside the frame with margins. Hero visible by 0.5 s.',
+  "FIRST FRAME: the picture reads from t=0. The background field and the shot's stage (its panels, grid, map, horizon, axis, the outline that will fill) are on screen at full strength from the first frame; only the content the voice names waits for its word. On a dark canvas real light is on screen from t=0: a frame that is almost all near-black for even 0.1 s fails the render's black-frame check.",
   'TEXT ON SCREEN is short motion-graphics copy (a hero word, a number, a 2-5 word label), never a sentence of the narration (captions already show the words). No <br> in running text; give text a max-width. Use font-variant-numeric: tabular-nums for counting numbers.',
   'NO EXIT: never animate the shot out at its end (the cut is the exit); everything holds its landed state. Prefix every id and class you invent with the frame id. Then re-read your fragment against every rule above before answering.',
 ].join('\n');
 
 // The user turn: this shot's packet (the frame block, the art direction, the words with their times, the
 // selected blueprint and motion recipes), plus findings from a failed attempt.
-function composeMessages({frameId, width, height, duration, frame, direction, words, neighbours = {}, notes = '', findings = []}) {
+function composeMessages({frameId, width, height, duration, frame, direction, words, neighbours = {}, notes = '', findings = [], ask = ''}) {
   const packet = {
     frameId, canvas: `${width}x${height}`, durationSeconds: round(duration, 2),
     words: words.map(word => `${word.text}@${round(word.start, 2)}`).join(' '),
@@ -117,7 +118,9 @@ function composeMessages({frameId, width, height, duration, frame, direction, wo
     ...frame.motions.slice(0, 3).map(id => `## Selected motion rule: ${id}\n${ruleText(id)}`),
   ].join('\n\n');
   const fix = findings.length ? `\n\n## Your previous answer failed these checks; fix every one:\n- ${findings.join('\n- ')}` : '';
-  return [{role: 'system', content: CONTRACT.replace(/FRAME_ID/g, '<frame id>')}, {role: 'user', content: `${JSON.stringify(packet)}\n\n${recipes}${fix}`}];
+  // A redesign the owner asked for (Room 04): the reason is a brief, not a failed check.
+  const brief = ask ? `\n\n## The owner asks for a new design of this shot:\n${ask}` : '';
+  return [{role: 'system', content: CONTRACT.replace(/FRAME_ID/g, '<frame id>')}, {role: 'user', content: `${JSON.stringify(packet)}\n\n${recipes}${brief}${fix}`}];
 }
 
 // ---------------------------------------------------------------- checking Claude's composition (static)
