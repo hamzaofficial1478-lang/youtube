@@ -1,7 +1,7 @@
 {
-  "version": "0.25.1",
+  "version": "0.26.0",
   "updated": "2026-10-10",
-  "nextAction": "Show the owner the four live demo renders (stickman with atelier numbers, atelier, hand-drawn, motion graphics) and collect his verdict. Then continue with the next editing brain in his order. ElevenLabs word timestamps need a live narration once the owner adds the key. P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
+  "nextAction": "Show the owner the 8-minute Story Mix video and collect his verdict on the engine choices and pacing; then continue with the next editing engine in his order. Show the owner the four live demo renders (stickman with atelier numbers, atelier, hand-drawn, motion graphics) and collect his verdict. Then continue with the next editing brain in his order. ElevenLabs word timestamps need a live narration once the owner adds the key. P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -332,6 +332,13 @@
           "evidence": "0.25.0/0.25.1 (2026-10-10): live Claude runs on the demo. Atelier plan 19,006 tokens; 9 designed shots, 167,486 tokens (2 retries: one false alarm of the audit, fixed; one real). Two near-black openings failed the render check; each was redesigned alone (about 14k tokens) and the re-render passed all 9 checks. Stickman with two atelier shots, hand-drawn and motion-graphics plans rendered with all checks passing. 45,147 tokens with frame design off (the review moved six arrows and one heart onto their words and kept one storm layout). 18 shots drawn; render passed all 9 checks. Frame review: faces on the dark palette were dark, and a burst stayed behind while its counter moved to the top edge; fixed (light faces, effects follow what they were placed on, big words keep headroom); the re-render passed all 9 checks. Full suite 238/238."
         },
         {
+          "id": "P06i",
+          "title": "Story director: every engine in one long video (Story Mix), chapters, re-hooks and a measured mix",
+          "status": "testing",
+          "remaining": "Not yet judged by the owner. Shorts and ElevenLabs narration untested with it; music on a long mixed video untested.",
+          "evidence": "0.26.0 (2026-10-10): live 8 min 26 s Story Mix video planned by real Claude: story director 18,138 tokens (12 chapters, 50 beats, 16 atelier), plan job 423,128 tokens, 17 designed shots 254,843 tokens, 24 undesigned shots drawn by Claude for 50,621 tokens; mix hand-drawn 32%, stickman 30%, motion 26%, atelier 12%, longest stretch 39 s. 720p render (demo setting) in 19 minutes, 8 min 26 s, 77 MB, all 9 checks passed (71 measured cuts, all planned). Full suite 244/244."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -463,5 +470,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Atelier engine (P06h)"
+  "milestone": "Story director (P06i)"
 }
