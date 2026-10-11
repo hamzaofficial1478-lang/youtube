@@ -92,6 +92,11 @@
     ctx.restore();
   };
   // Draws items in order; a draw-on progress is shared out by stroke length, the way a hand draws.
+  // World-kit items (kit.js, P06j): shapes in unit space, drawn as ordinary items so each engine gives them its own
+  // finish. K.KIT is the shot's kit; a "kit:<id>" prop draws like any library prop (standing or held).
+  K.KIT = {};
+  K.kitShapes = (name, map) => (K.KIT[String(name).slice(4)]?.shapes || []).map(shape => ({pts: shape.pts.map(map), ...(shape.fill ? {fill: shape.fill} : {})}));
+  K.propOf = name => (String(name).startsWith('kit:') ? (b => K.kitShapes(name, ([x, y]) => b.p(x, y))) : K.PROPS[name]);
   K.render = (list, progress = 1, seed = 1) => {
     const lengths = list.map(it => (it.draw || it.stroke === false ? 0 : K.polyLen(it.pts || [])));
     const total = lengths.reduce((a, b) => a + b, 0) || 1;

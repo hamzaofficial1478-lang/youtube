@@ -229,7 +229,7 @@
     if (m === 'bounce') ctx.translate(0, -Math.abs(Math.sin(local * 4)) * 0.12 * s);
     if (m === 'swing') { ctx.translate(cx, cy - 0.45 * s); ctx.rotate(Math.sin(local * 3) * 0.25); ctx.translate(-cx, -(cy - 0.45 * s)); }
     const frame = K.frame(cx, cy, s, 1), g = {tl: el.motion === 'none' ? 0 : local, seed: LAYOUT.el[i].seed, label: el.label};
-    K.render(K.PROPS[el.prop](frame, g), p, LAYOUT.el[i].seed);
+    K.render(K.propOf(el.prop)(frame, g), p, LAYOUT.el[i].seed);
     ctx.restore();
     LAYOUT.anchors[i] = LAYOUT.est[i];
     if (el.label && el.prop !== 'sign' && p >= 1) K.pill(el.label, cx, cy - 0.62 * s, 46 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
@@ -427,6 +427,7 @@
   }
   function frame(t, context) {
     P = context.P; D = P.data;
+    K.KIT = D.kit || {};
     const params = {...P, finish: FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
     K.T = t;
@@ -438,7 +439,9 @@
     if (K.FIN === 'ink') { const rand = K.seeded(11); ctx.fillStyle = K.alpha(K.PAL.ink, 0.035); for (let k = 0; k < 260; k++) ctx.fillRect(rand() * W, rand() * H, 2 + rand() * 3, 2 + rand() * 3); }
     const cam = camera(t);
     // The set: drawn at full strength on its own layer, laid back behind the action, moving a little slower.
-    if (D.set && D.set !== 'none' && K.SETS[D.set]) {
+    // A kit set (the story's own place) is drawn on the whole frame like a library set.
+    const setOf = name => (String(name).startsWith('kit:') ? (K.KIT[name.slice(4)] ? () => K.kitShapes(name, ([x, y]) => [x * K.W, y * K.H]) : null) : K.SETS[name]);
+    if (D.set && D.set !== 'none' && setOf(D.set)) {
       const canvas = ctx.canvas;
       if (!layerCanvas || layerCanvas.width !== canvas.width || layerCanvas.height !== canvas.height) { layerCanvas = document.createElement('canvas'); layerCanvas.width = canvas.width; layerCanvas.height = canvas.height; layerCtx = layerCanvas.getContext('2d'); }
       layerCtx.setTransform(1, 0, 0, 1, 0, 0); layerCtx.clearRect(0, 0, layerCanvas.width, layerCanvas.height);
@@ -446,7 +449,7 @@
       layerCtx.save(); applyCamera(layerCtx, cam, 0.7);
       K.ctx = layerCtx;
       const reveal = K.FIN === 'ink' ? clamp01(t / 0.6) : 1;
-      K.render(K.SETS[D.set](t), reveal, 77);
+      K.render(setOf(D.set)(t), reveal, 77);
       K.ctx = ctx;
       layerCtx.restore();
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1); ctx.drawImage(layerCanvas, 0, 0); ctx.restore();

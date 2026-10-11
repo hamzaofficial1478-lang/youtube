@@ -46,3 +46,21 @@ test('the mix is measured for free: a long stretch in one engine and engines cha
   at = 0;
   assert.deepEqual(D.measureMix([{shots: [shot('stickman', 100, 1), shot('motion', 20, 2)]}], {primary: 'stickman', seconds: 120}).notes, [], 'a two-minute video is measured but not judged');
 });
+
+test('the director builds the story\'s world first: its era and rules, a cast dressed for it and a kit for what the vocabulary lacks', () => {
+  const input = {style: {name: 'Story Mix', engine: 'stickman', mix: true, engines, designedShots: 4}, sentences: [{n: 1, seconds: 3, text: 'Ten thousand years ago, a hunter left his cave.'}], competitorGuidance: [{technique: 'cold open on the danger'}]};
+  const [system, user] = D.mapMessages(input);
+  assert.match(system.content, /WORLD: build the story's own world[\s\S]*NICHE: the competitor guidance[\s\S]*"outfit": [^"]*\|kit:<id>[\s\S]*WORLD KIT[\s\S]*"world": \{"era": one of \["prehistoric"/);
+  assert.match(user.content, /cold open on the danger/, 'the director reads the niche guidance');
+  const warnings = [];
+  const map = D.validateMap({structure: 'A hunt in three acts.', world: {era: 'prehistoric', place: 'a river valley in the ice age', rules: ['No metal; tools are stone, wood and bone', 'People live in caves']},
+    cast: [{id: 'c1', name: 'Ugg', role: 'hunter', look: {hair: 'messy', facial: 'beard', outfit: 'kit:fur'}}, {id: 'c2', name: 'Ama', look: {outfit: 'kit:nothing'}}],
+    kit: [{id: 'fur', kind: 'outfit', name: 'fur tunic', shapes: [{path: 'M30 0 L70 0 L72 110 L28 110 Z', fill: '#9C6B3F'}]}, {id: 'mammoth', kind: 'prop', shapes: [{circle: [50, 50, 40], fill: '#8B5A3C'}]}],
+    chapters: [{title: 'The hunt', sentenceStart: 1, sentenceEnd: 1, job: 'hook', home: 'handdrawn'}], beats: [{sentenceStart: 1, sentenceEnd: 1, engine: 'handdrawn', why: 'the valley'}]},
+  {first: 1, last: 1, engines, primary: 'stickman', warn: message => warnings.push(message)});
+  assert.deepEqual(map.world, {era: 'prehistoric', place: 'a river valley in the ice age', rules: ['No metal; tools are stone, wood and bone', 'People live in caves']});
+  assert.deepEqual(Object.keys(map.kit), ['fur', 'mammoth']);
+  assert.deepEqual(map.cast.map(item => item.look.outfit), ['kit:fur', 'none'], 'a costume that was not designed falls back, named');
+  assert.match(warnings.join(' '), /Cast: Character 2 outfit/);
+  assert.deepEqual(D.validateWorld({era: 'jurassic'}), {era: 'modern', place: '', rules: []});
+});

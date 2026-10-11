@@ -304,6 +304,11 @@
       if (o === 'backpack') { const c = along(0.55); L.push({pts: K.frame(c[0] - 0.07 * h * dir, c[1], h, dir).rrect(-0.06, -0.08, 0.1, 0.16, 0.025), fill: col}); }
       return L;
     }
+    // A kit outfit (the story's own costume): u across the shoulders, v from the neck (0) to the hips (1) and below.
+    if (String(o).startsWith('kit:')) {
+      const dx = J.neck[0] - J.hip[0], dy = J.neck[1] - J.hip[1], l = Math.hypot(dx, dy) || 1, top = along(0.92);
+      L.push(...K.kitShapes(o, ([u, v]) => { const w = u * 0.375 * h * dir, down = v * 0.92 * l; return [top[0] - dx / l * down - dy / l * w, top[1] - dy / l * down + dx / l * w]; }));
+    }
     if (o === 'suit') { L.push(body(0.07, 0.065, 0.92, -0.05, '#2E3440')); const n = along(0.92), t = along(0.45); L.push({pts: [[n[0] - 0.03 * h * dir, n[1]], [n[0] + 0.03 * h * dir, n[1]], [t[0], t[1]], [n[0] - 0.03 * h * dir, n[1]]], fill: '#FFFFFF', stroke: false}, {pts: [n, [n[0] + 0.012 * h, n[1] + 0.03 * h], [t[0], t[1] - 0.02 * h], [n[0] - 0.012 * h, n[1] + 0.03 * h], n], fill: col === K.COL.red ? C.blue : C.red, stroke: false}); }
     if (o === 'lab-coat') { L.push(body(0.075, 0.09, 0.92, -0.22, '#FFFFFF')); const n = along(0.92), m = along(0.3); L.push({pts: [n, m], width: 0.6}); }
     if (o === 'hoodie') L.push(body(0.075, 0.07, 0.92, -0.04, col));
@@ -382,10 +387,10 @@
     // The held prop sits in the hand (or on the lap, or at the chest).
     const holds = st.holds || pose.hold;
     let hand = J.hf;
-    if (holds && K.PROPS[holds] && progress >= 1) {
+    if (holds && K.propOf(holds) && progress >= 1) {
       const scale = (pose.holdScale || 1) * 0.3 * h;
       const at = st.pose === 'type' ? [J.hip[0] + 0.17 * h * dir, J.hip[1] - 0.05 * h] : pose.holdAt === 'chest' ? [(J.hf[0] + J.hb[0]) / 2 + 0.03 * h * dir, (J.hf[1] + J.hb[1]) / 2 - 0.02 * h] : [J.hf[0] + 0.05 * h * dir, J.hf[1] + 0.02 * h];
-      K.render(K.PROPS[holds](K.frame(at[0], at[1], st.pose === 'type' ? 0.36 * h : scale, dir), {tl: st.tl, seed: st.seed}), 1, st.seed + 5);
+      K.render(K.propOf(holds)(K.frame(at[0], at[1], st.pose === 'type' ? 0.36 * h : scale, dir), {tl: st.tl, seed: st.seed}), 1, st.seed + 5);
       hand = at;
     }
     const emoteName = st.emote && st.emote !== 'none' ? st.emote : (K.EXPR[st.expression]?.emote || (['sleep'].includes(st.pose) ? 'zzz' : 'none'));

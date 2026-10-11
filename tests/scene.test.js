@@ -156,7 +156,10 @@ test('a new plan uses only the sources the program can fetch now: no stock shots
 
 test('a long story-mix script meets the story director first: every part follows its slice of the map, the map is paid once and the mix is measured', async t => {
   let broken = true;
-  const director = {structure: 'Cold open on a promise, then how the records worked.', direction: {read: 'Clay, ink and trust: a warm record of how strangers learned to keep promises.', dials: {variance: 5, motion: 5, density: 4}, palette: {canvas: '#FFFDF8', ink: '#1F1F1F', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Segoe UI'}},
+  const director = {structure: 'Cold open on a promise, then how the records worked.',
+    world: {era: 'ancient', place: 'market towns by a river', rules: ['Records are clay tablets', 'No coins yet']},
+    cast: [{id: 'c1', name: 'Trader', role: 'keeps the records', look: {hair: 'curly', outfit: 'kit:robe'}}],
+    kit: [{id: 'robe', kind: 'outfit', name: 'wool robe', shapes: [{path: 'M30 0 L70 0 L78 150 L22 150 Z', fill: '#C9A46A'}]}, {id: 'tablet', kind: 'prop', name: 'clay tablet', shapes: [{rect: [20, 15, 60, 70], fill: '#B5835A'}, {line: [30, 30, 70, 30]}]}], direction: {read: 'Clay, ink and trust: a warm record of how strangers learned to keep promises.', dials: {variance: 5, motion: 5, density: 4}, palette: {canvas: '#FFFDF8', ink: '#1F1F1F', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Segoe UI'}},
     chapters: [{title: 'The promise', sentenceStart: 1, sentenceEnd: 12, job: 'hook', home: 'stickman'}, {title: 'How records worked', sentenceStart: 13, sentenceEnd: 60, job: 'explain', home: 'handdrawn', rehook: 'A clay tablet draws itself'}],
     beats: [{sentenceStart: 1, sentenceEnd: 4, engine: 'stickman', why: 'strangers making a deal'}, {sentenceStart: 5, sentenceEnd: 8, engine: 'motion', why: 'a quick list'}, {sentenceStart: 9, sentenceEnd: 12, engine: 'atelier', why: 'the thesis lands'}, {sentenceStart: 13, sentenceEnd: 60, engine: 'handdrawn', why: 'how it worked'}]};
   const network = fakeNetwork({claudePlan: input => {
@@ -167,7 +170,7 @@ test('a long story-mix script meets the story director first: every part follows
       const first = input.sentences[k].n, beat = input.map.beats.find(item => item.sentenceStart <= first && item.sentenceEnd >= first);
       const engine = beat.engine === 'atelier' ? 'motion' : beat.engine;
       scenes.push({sentenceStart: first, sentenceEnd: input.sentences[Math.min(k + 1, input.sentences.length - 1)].n, purpose: first === 1 ? 'hook' : 'explain', direction: 'Follow the map.', onScreenText: '',
-        shots: [0, 1].map(() => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: {engine, elements: [{kind: 'prop', prop: 'globe'}]}}))});
+        shots: [0, 1].map(() => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: {engine, ...(first === 3 ? {set: 'ocean'} : {}), elements: [{kind: 'prop', prop: 'kit:tablet'}, {kind: 'figure', who: 'c1', x: 0.3}]}}))});
     }
     if (input.part?.index === 2 && broken) { broken = false; scenes.pop(); }
     return {summary: 'Planned from the map.', scenes};
@@ -196,6 +199,16 @@ test('a long story-mix script meets the story director first: every part follows
   assert.deepEqual(manifest.plan.map.chapters.map(item => [item.title, item.home]), [['The promise', 'stickman'], ['How records worked', 'handdrawn']]);
   assert.deepEqual(Object.keys(manifest.plan.mix.engines).sort(), ['handdrawn', 'motion', 'stickman']);
   assert.ok(manifest.warnings.some(item => /s in handdrawn without a change of engine/.test(item)), 'a long stretch in one engine is named for free');
+  // The story's own world: parts read its era, rules, cast and kit (names only) and draw with them; drawings carry
+  // the kit items they use; a figure left on the sea floor goes to the beach.
+  assert.ok(parts.every(part => part.input.world.era === 'ancient' && part.input.kit.some(item => item.ref === 'kit:tablet') && !JSON.stringify(part.input.kit).includes('pts')));
+  assert.equal(parts[0].input.cast[0].look.outfit, 'kit:robe');
+  assert.deepEqual([manifest.plan.world.era, Object.keys(manifest.plan.kit).sort()], ['ancient', ['robe', 'tablet']]);
+  const first = shots(manifest)[0].sketch;
+  assert.deepEqual([first.elements[0].prop, first.elements[1].look.outfit, Object.keys(first.kit).sort()], ['kit:tablet', 'kit:robe', ['robe', 'tablet']]);
+  const sea = manifest.plan.scenes.find(scene => scene.sentenceStart === 3);
+  assert.equal(sea.shots[0].sketch.set, 'beach');
+  assert.ok(manifest.plan.continuity.some(item => item.label === sea.shots[0].label && /sea floor/.test(item.fix)));
 });
 
 test('an animated shot a little over the style\'s shot limit is named, a still held too long is an issue', () => {

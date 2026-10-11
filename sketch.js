@@ -6,6 +6,7 @@
 // builds one from the narration. Pure: no I/O. The drawing itself is drawn-engine.js, in the local browser.
 
 const E = require('./engines');
+const Kit = require('./kit');
 
 const POSES = Object.freeze(['stand', 'talk', 'point', 'present', 'think', 'shock', 'cheer', 'facepalm', 'shrug', 'cross-arms', 'hands-hips', 'wave', 'walk', 'run', 'sit', 'type', 'hold', 'carry', 'phone', 'read', 'beg', 'fall', 'lie', 'sneak', 'dance', 'fist', 'cower', 'scratch-head', 'clap', 'thumbs-up', 'stop', 'jump', 'sleep', 'fight', 'reach', 'push', 'pull', 'throw', 'kneel', 'lean']);
 const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'grin', 'laugh', 'excited', 'sad', 'cry', 'angry', 'rage', 'scared', 'shocked', 'surprised', 'worried', 'nervous', 'smug', 'suspicious', 'confused', 'thinking', 'sleepy', 'dead', 'love', 'starstruck', 'evil', 'disgusted', 'determined', 'bored']);
@@ -85,15 +86,17 @@ function checker({lenient = false, warn = () => {}} = {}) {
   return {problem, pick, coord};
 }
 
-function lookOf(raw, c, label) {
+// A world-kit reference ("kit:<id>") of the right kind, or null (kit.js).
+const kitRefOf = kits => (value, kind) => (typeof value === 'string' && value.startsWith('kit:') && kits[value.slice(4)]?.kind === kind ? value : null);
+function lookOf(raw, c, label, kitRef = () => null) {
   if (raw === undefined || raw === null) return {...DEFAULT_LOOK};
   if (typeof raw !== 'object' || Array.isArray(raw)) return c.problem(`${label} look must be an object.`, {...DEFAULT_LOOK});
-  return Object.fromEntries(Object.entries(LOOK).map(([key, list]) => [key, c.pick(raw[key], list, `${label} ${key}`, DEFAULT_LOOK[key])]));
+  return Object.fromEntries(Object.entries(LOOK).map(([key, list]) => [key, (key === 'outfit' && kitRef(raw[key], 'outfit')) || c.pick(raw[key], list, `${label} ${key}`, DEFAULT_LOOK[key])]));
 }
 
 function validateCast(raw, options = {}) {
   if (raw === undefined || raw === null) return [];
-  const c = checker(options);
+  const c = checker(options), kitRef = kitRefOf(options.kit || {});
   if (!Array.isArray(raw)) return c.problem('The cast must be a list of characters.', []);
   const seen = new Set();
   return raw.slice(0, MAX_CAST).map((item, k) => {
@@ -102,7 +105,7 @@ function validateCast(raw, options = {}) {
     const id = clean(item.id, 12).toLowerCase().replace(/[^a-z0-9-]/g, '') || `c${k + 1}`;
     if (seen.has(id)) return c.problem(`${label} repeats the id ${id}.`, null);
     seen.add(id);
-    return {id, name: clean(item.name, 24) || `Character ${k + 1}`, role: clean(item.role, 60), look: lookOf(item.look, c, label)};
+    return {id, name: clean(item.name, 24) || `Character ${k + 1}`, role: clean(item.role, 60), look: lookOf(item.look, c, label, kitRef)};
   }).filter(Boolean);
 }
 
@@ -118,9 +121,11 @@ const propName = value => {
 
 // validate(raw, {primary, cast, lenient, warn}): the normalised drawing. `primary` is the video's primary engine,
 // which decides the engines this shot may use; `cast` resolves each figure's `who` into its look.
-function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}} = {}) {
+function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}, kit = null} = {}) {
   const c = checker({lenient, warn});
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('A drawn scene must be an object.');
+  // The video's world kit, and the kit a stored drawing already carries (checked again).
+  const kits = {...Kit.embedded(raw.kit), ...(kit || {})}, kitRef = kitRefOf(kits);
   if (!Array.isArray(raw.elements) || !raw.elements.length) fail(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
   if (raw.elements.length > MAX_ELEMENTS) c.problem(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
   const engines = E.drawEngines(primary);
@@ -141,8 +146,8 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
     if (item.kind === 'figure') {
       let who = clean(item.who, 12).toLowerCase() || undefined;
       if (who && !castMap.has(who)) who = c.problem(`${label} names ${who}, who is not in the cast.`, undefined);
-      const look = who ? castMap.get(who).look : lookOf(item.look, c, label);
-      const holds = item.holds ? propName(item.holds) : undefined;
+      const look = who ? castMap.get(who).look : lookOf(item.look, c, label, kitRef);
+      const holds = item.holds ? kitRef(item.holds, 'prop') || propName(item.holds) : undefined;
       const face = (value, where) => { const near = lenient && FACE_NEAR[value]; if (near) warn(`${where} "${value}" is drawn as "${near}".`); return c.pick(near || value, EXPRESSIONS, where, 'neutral'); };
       const then = (Array.isArray(item.then) ? item.then : []).slice(0, MAX_THEN).map((step, s) => {
         const at = phrase(step?.at);
@@ -152,14 +157,14 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
           ...(step.facing !== undefined ? {facing: c.pick(step.facing, ['left', 'right'], `${label} change facing`, 'right')} : {})};
       }).filter(Boolean);
       elements.push({kind: 'figure', ...(who ? {who} : {}), look, pose: c.pick(item.pose, POSES, `${label} pose`, 'stand'), expression: face(item.expression, `${label} expression`), emote: c.pick(item.emote, EMOTES, `${label} emote`, 'none'),
-        ...(holds ? {holds: PROPS.includes(holds) ? holds : c.problem(`${label} holds must be one of the props.`, undefined)} : {}),
+        ...(holds ? {holds: PROPS.includes(holds) || kitRef(holds, 'prop') ? holds : c.problem(`${label} holds must be one of the props.`, undefined)} : {}),
         x: c.coord(item.x, `${label} x`, 0.1, 0.9, 0.3), y: c.coord(item.y, `${label} y`, 0.4, 0.84, 0.8), size: c.pick(item.size, SIZES, `${label} size`, 'm'), facing: c.pick(item.facing, ['left', 'right'], `${label} facing`, 'right'), then, ...base});
       if (elements.at(-1).holds === undefined) delete elements.at(-1).holds;
       return;
     }
     if (item.kind === 'prop') {
-      const prop = propName(item.prop);
-      if (!PROPS.includes(prop)) { if (!lenient) fail(`${label} prop must be one of: ${PROPS.join(', ')}.`); warn(`${label}: "${clean(item.prop, 30)}" is not in the prop library, so it was left out.`); return; }
+      const prop = kitRef(item.prop, 'prop') || propName(item.prop);
+      if (!PROPS.includes(prop) && !kitRef(prop, 'prop')) { if (!lenient) fail(`${label} prop must be one of: ${PROPS.join(', ')}.`); warn(`${label}: "${clean(item.prop, 30)}" is not in the prop library, so it was left out.`); return; }
       elements.push({kind: 'prop', prop, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.65), y: c.coord(item.y, `${label} y`, 0.08, 0.84, 0.45), size: c.pick(item.size, SIZES, `${label} size`, 'm'), motion: c.pick(item.motion, PROP_MOTIONS, `${label} motion`, 'auto'), ...base});
       return;
     }
@@ -197,14 +202,43 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   });
   if (!elements.length) fail('A drawn scene needs at least one element the engine can draw.');
   const focus = (Array.isArray(raw.focus) ? raw.focus : []).slice(0, MAX_FOCUS).map((item, k) => (item && typeof item === 'object' ? {...(phrase(item.at) ? {at: phrase(item.at)} : {}), x: c.coord(item.x, `Focus ${k + 1} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `Focus ${k + 1} y`, 0.1, 0.9, 0.5), zoom: Math.round(Math.min(2.5, Math.max(1, Number(item.zoom) || 1.4)) * 100) / 100} : c.problem(`Focus ${k + 1} must be an object.`, null))).filter(Boolean);
-  return {engine, set: c.pick(raw.set, SETS, 'Set', 'none'), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
+  const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
+  const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
+  return {...(used.length ? {kit: carried} : {}), engine, set, mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
-function validateSetting(raw, {strict = false} = {}) {
+function validateSetting(raw, {strict = false, kit = null} = {}) {
   const c = checker({lenient: !strict});
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return c.problem('A setting must be an object with a set and a mood.', {set: 'none', mood: 'normal'});
-  return {set: c.pick(raw.set, SETS, 'Setting set', 'none'), mood: c.pick(raw.mood, MOODS, 'Setting mood', 'normal')};
+  return {set: kitRefOf(kit || {})(raw.set, 'set') || c.pick(raw.set, SETS, 'Setting set', 'none'), mood: c.pick(raw.mood, MOODS, 'Setting mood', 'normal')};
+}
+
+// World notes (P06j, owner review 2026-10-11: "the sailor was under water"): plain physics and the story's era.
+// People on the ocean set stand on the sea floor, which is right only for diving; modern things do not exist in a
+// prehistoric, ancient or medieval story unless the line itself is about today. Notes for the owner and the
+// continuity review; worldMend moves people who were left under water to the beach (the sea surface).
+const DIVING = /\b(dive[sd]?|diving|divers?|underwater|under water|scuba|snorkel\w*|sea ?floor|seabed|ocean floor|submarine|coral|reefs?|swim\w*|deep sea)\b/i;
+const NOWADAYS = /\b(today|nowadays|these days|modern|now)\b/i;
+const OLD_ERAS = ['prehistoric', 'ancient', 'medieval'];
+const MODERN = Object.freeze({props: ['car', 'bus', 'truck', 'plane', 'rocket', 'bike', 'card', 'calculator', 'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'lightbulb', 'microscope', 'satellite', 'syringe', 'pill', 'newspaper', 'alarm', 'burger', 'pizza', 'megaphone', 'toilet', 'chart', 'chart-up', 'chart-down', 'pie-chart'],
+  outfits: ['tie', 'bowtie', 'lab-coat', 'suit', 'backpack', 'badge', 'hoodie', 'uniform'], sets: ['office', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road']});
+const underWater = item => item.sketch?.set === 'ocean' && item.sketch.elements.some(el => el.kind === 'figure') && !DIVING.test(`${item.words || ''} ${item.notes || ''}`);
+function worldNotes(drawn, world = null) {
+  const notes = [];
+  for (const item of drawn) {
+    if (!item.sketch) continue;
+    if (underWater(item)) notes.push(`${item.label}: people stand on the sea floor here (the ocean set is under water); put them on beach or storm with ship and waves props, or on a kit set, unless the line is about diving.`);
+    if (!OLD_ERAS.includes(world?.era) || NOWADAYS.test(item.words || '')) continue;
+    const els = item.sketch.elements;
+    const odd = [...new Set([...els.flatMap(el => [el.prop, el.holds]).filter(name => MODERN.props.includes(name)), ...els.map(el => el.look?.outfit).filter(name => MODERN.outfits.includes(name)), ...(MODERN.sets.includes(item.sketch.set) ? [`the ${item.sketch.set} set`] : [])])];
+    if (odd.length) notes.push(`${item.label}: ${odd.join(', ')} ${odd.length === 1 ? 'does' : 'do'} not exist in a ${world.era} story; draw what that world has (or a kit item).`);
+  }
+  return notes;
+}
+function worldMend(drawn) {
+  return drawn.filter(underWater).map(item => { item.sketch.set = 'beach'; return {label: item.label, fix: 'People stood on the sea floor (the ocean set is under water), so the shot moved to the beach, at the sea surface.'}; });
 }
 
 // Continuity notes across neighbouring drawn shots: a change of place inside one scene, and a character who
@@ -372,4 +406,4 @@ function promptGuide(primary = 'stickman') {
   ].join('\n');
 }
 
-module.exports = {VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

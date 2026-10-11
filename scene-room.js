@@ -13,6 +13,9 @@ const Sk = require('./sketch');
 const At = require('./atelier');
 const E = require('./engines');
 const D = require('./director');
+const Kit = require('./kit');
+// A plan's world kit as checked items: designed by Claude (a list) or carried by a stored plan (an object).
+const kitOf = value => (Array.isArray(value) ? Kit.validateKit(value) : Kit.embedded(value));
 const Cap = require('./captions');
 const R = require('./render');
 const {MotionRenderer, findBrowser} = require('./motion');
@@ -110,7 +113,7 @@ function keywords(value, locale = 'en', fallback = '') {
 
 // ---------------------------------------------------------------- plan checks
 // Structural problems throw; quality problems are recorded on the revision and block approval.
-function structural(scenes, sentenceCount, sources, motions, {primary = 'stickman', cast = []} = {}) {
+function structural(scenes, sentenceCount, sources, motions, {primary = 'stickman', cast = [], kit = null} = {}) {
   requireValue(Array.isArray(scenes) && scenes.length >= 1 && scenes.length <= MAX_SCENES, `A plan needs 1-${MAX_SCENES} scenes.`);
   let expected = 1, shotTotal = 0;
   for (const [index, scene] of scenes.entries()) {
@@ -134,7 +137,7 @@ function structural(scenes, sentenceCount, sources, motions, {primary = 'stickma
       if (shot.source === 'ai-image') requireValue(shot.prompt.trim().length >= 10, `${shotLabel} needs an image prompt of at least 10 characters.`);
       if (shot.cue !== undefined) requireValue(typeof shot.cue === 'string' && shot.cue.length <= 80, `${shotLabel} cue must be at most 80 characters.`);
       if (shot.source === 'generated-graphics' && shot.frame !== undefined) { try { At.validateFrame(shot.frame, {lenient: true, label: shotLabel}); } catch (error) { throw new InputError(error.message); } }
-      if (shot.source === 'generated-graphics' && shot.sketch !== undefined && shot.frame === undefined) { try { Sk.validate(shot.sketch, {primary, cast, lenient: true}); } catch (error) { throw new InputError(`${shotLabel} drawing: ${error.message}`); } }
+      if (shot.source === 'generated-graphics' && shot.sketch !== undefined && shot.frame === undefined) { try { Sk.validate(shot.sketch, {primary, cast, lenient: true, kit}); } catch (error) { throw new InputError(`${shotLabel} drawing: ${error.message}`); } }
     }
     shotTotal += scene.shots.length;
     expected = scene.sentenceEnd + 1;
@@ -167,11 +170,11 @@ function atelierFrame(raw, label, warnings, format) {
 // Fills timing into a plan and returns {payload, issues, warnings}.
 // The narrator (an everyman) when a drawn plan names no characters.
 const DEFAULT_CAST = Object.freeze([{id: 'c1', name: 'Narrator', role: 'Guides the viewer through the video', look: {...Sk.DEFAULT_LOOK}}]);
-function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, map = null, format = 'long-form'}) {
+function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, map = null, kit = null, world = null, format = 'long-form'}) {
   const timed = timeSentences(sentences, narrationSeconds);
   const issues = [], warnings = [];
   const drawnPlan = scenes.some(scene => scene.shots.some(shot => shot.source === 'generated-graphics'));
-  let castOut = Sk.validateCast(cast, {lenient: true, warn: message => warnings.push(`Cast: ${message}`)});
+  let castOut = Sk.validateCast(cast, {lenient: true, warn: message => warnings.push(`Cast: ${message}`), kit});
   if (drawnPlan && !castOut.length && ['stickman', 'handdrawn'].includes(primary)) castOut = structuredClone(DEFAULT_CAST);
   const spokenWords = drawnPlan || scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences: timed, pauses: [], narrationSeconds}) : [];
   const {pacing, qc, typography} = spec, spokenBy = new Map();
@@ -204,12 +207,12 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
       if (term) issues.push(`${shotLabel} names a competitor ("${term}"). Describe the visual instead.`);
       if (/\bin the style of\b|\bstyle of [A-Z]/i.test(`${shot.query} ${shot.prompt}`)) issues.push(`${shotLabel} asks for another creator's style. Describe the look in your own words.`);
       const own = sceneWords.filter(word => word.start >= shotStart(shotIndex) - 0.01 && word.start < shotStart(shotIndex) + shotLength(shotIndex) - 0.01).map(word => word.text).join(' ') || narration;
-      const setting = scene.setting ? Sk.validateSetting(scene.setting) : null;
+      const setting = scene.setting ? Sk.validateSetting(scene.setting, {kit}) : null;
       const raw = shot.sketch && setting ? {...shot.sketch, set: shot.sketch.set ?? setting.set, mood: shot.sketch.mood ?? setting.mood} : shot.sketch;
       // An atelier frame (P06h) replaces the sketch; its composition, once designed, is checked again here.
       const frame = shot.source === 'generated-graphics' && shot.frame ? atelierFrame(shot.frame, shotLabel, warnings, format) : null;
       const drawPrimary = E.ENGINES[primary]?.draws ? primary : 'motion';
-      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`)}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
+      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
       // Leaving the main look is a judgement call: the planner says why in the shot's notes.
       const leaves = frame ? primary !== 'atelier' : E.ENGINES[primary]?.draws ? (sketch.sketch ? sketch.sketch.engine !== primary : true) : primary === 'atelier' ? !!sketch.sketch && shot.source !== 'generated-graphics' : !!sketch.sketch;
       if (leaves && !shot.notes.trim()) warnings.push(`${shotLabel} leaves the main ${primary} look without a reason in its notes.`);
@@ -221,14 +224,14 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
   // Continuity with each shot's own words: Claude's and the free plans are mended (the fixes are listed in the
   // plan); the owner's own edits are only checked.
   const drawn = out.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: spokenBy.get(shot.label), notes: shot.notes})));
-  const mended = mend ? Sk.mend(drawn, castOut) : [];
-  warnings.push(...Sk.continuity(drawn, castOut));
+  const mended = mend ? [...Sk.mend(drawn, castOut), ...Sk.worldMend(drawn)] : [];
+  warnings.push(...Sk.continuity(drawn, castOut), ...Sk.worldNotes(drawn, world));
   // How the engines take turns across the video (P06i), measured for free; long videos get plain notes.
   const mix = D.measureMix(out, {primary, seconds: narrationSeconds});
   warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
   return {
     payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
-      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
+      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(world ? {world} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
     issues, warnings,
   };
 }
@@ -291,6 +294,8 @@ function planMessages(input) {
     ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
+    ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
+      : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
     ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman'), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
@@ -310,6 +315,7 @@ function reviewMessages(input) {
     'For every shot you get its exact spoken words and its drawing. Check each shot: (1) SCRIPT MATCH - the drawing shows what those words say, when they are said: the right subject, action and emotion, with nothing shown early or late and no unrelated picture; (2) CONTINUITY with its neighbours - the place stays while the words stay there, characters keep their looks, side of the screen and facing, introduced props stay while discussed, the mood flows; (3) CLARITY - one idea, a readable composition, nothing important hidden or off the frame, never text on a face; (4) LIFE - something arrives on the key words and nothing sits still.',
     'Any "continuityNotes" were found by the program; fix each one, or, when the story truly moves there, keep it and say why in the "notes" of that shot (naming the place). A note left unanswered is fixed by the program: the place stays the place of the scene, and a character who changes sides keeps facing the same way.',
     'Fix what fails by returning a full replacement drawing for that shot (the same vocabulary; keep the cast ids, add new characters in "cast" only if the story needs them). Leave good shots alone. You may move a cue to other words inside its own scene.',
+    '(5) WORLD - the shot obeys the story\'s world (input "world": its era and rules) and plain physics: people stand on ground or floors and are under water only when diving, ships float on the surface, things keep their size and era, and what the words name is shown (use the kit, input "kit", for what the vocabulary lacks).',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
     E.promptGuide(input.engine, {mix: input.mix}), Sk.promptGuide(input.engine),
@@ -334,6 +340,7 @@ function aiScenes(raw, ids = true) {
     summary: raw.summary === undefined ? '' : asText(raw.summary, 'summary', 600, true),
     cast: Array.isArray(raw.cast) ? raw.cast : [],
     ...(raw.direction && typeof raw.direction === 'object' ? {direction: raw.direction} : {}),
+    ...(raw.kit && typeof raw.kit === 'object' ? {kit: raw.kit} : {}), ...(raw.world && typeof raw.world === 'object' ? {world: D.validateWorld(raw.world)} : {}),
     scenes: raw.scenes.map(scene => {
       object(scene, 'Claude scene');
       requireValue(Array.isArray(scene.shots), 'Claude returned a scene without shots.');
@@ -365,7 +372,8 @@ function mergeCast(plans) {
 }
 function mergeParts(plans) {
   const direction = plans.find(plan => plan?.direction && typeof plan.direction === 'object')?.direction;
-  return {summary: String(plans[0]?.summary ?? '').slice(0, 600), cast: mergeCast(plans), ...(direction ? {direction} : {}), scenes: plans.flatMap(plan => plan.scenes)};
+  const kits = plans.map(plan => plan?.kit).filter(item => Array.isArray(item)), world = plans.find(plan => plan?.world && typeof plan.world === 'object')?.world;
+  return {summary: String(plans[0]?.summary ?? '').slice(0, 600), cast: mergeCast(plans), ...(direction ? {direction} : {}), ...(kits.length ? {kit: kits.flat()} : {}), ...(world ? {world} : {}), scenes: plans.flatMap(plan => plan.scenes)};
 }
 function sumUsage(list) {
   const sum = key => (list.every(item => Number.isSafeInteger(item[key])) ? list.reduce((total, item) => total + item[key], 0) : null);
@@ -549,11 +557,11 @@ class SceneRoom {
     return result;
   }
   // Must run inside a transaction.
-  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null, map = null}) {
+  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null, map = null, kit = null, world = null}) {
     const spec = inputs.spec, family = inputs.family, primary = inputs.engine || 'stickman';
     const baseSentences = sentences || splitSentences(content.script, family.primaryLocale);
-    structural(scenes, baseSentences.length, inputs.sources, spec.motion.cameraMoves, {primary, cast: Sk.validateCast(cast, {lenient: true})});
-    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: source !== 'edit', direction, compose, map, format: family.format});
+    structural(scenes, baseSentences.length, inputs.sources, spec.motion.cameraMoves, {primary, cast: Sk.validateCast(cast, {lenient: true, kit}), kit});
+    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: source !== 'edit', direction, compose, map, kit, world, format: family.format});
     const latest = this.latestManifestRow(content.id), revision = (latest?.revision || 0) + 1, id = randomUUID(), at = now();
     this.db.prepare('INSERT INTO scene_manifests(id,family_id,content_id,revision,content_revision,voice_approval_id,style_revision_id,style_spec_hash,source,parent_id,change_note,payload,payload_hash,checks,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, family.id, content.id, revision, content.revision, inputs.voice.approvalId, inputs.style.revisionId, inputs.style.specHash, source, parentId, note, JSON.stringify(built.payload), hash(built.payload), JSON.stringify({issues: built.issues, warnings: built.warnings}), createdBy, at);
@@ -616,7 +624,7 @@ class SceneRoom {
     });
     // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
     const map = parts.length > 1 && settings.storyMap !== false ? (() => {
-      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line}))};
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {})};
       const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
       requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
       return {input, maxTokens};
@@ -702,11 +710,11 @@ class SceneRoom {
       const story = map?.beats ? map : null;
       for (const [index, part] of parts.entries()) {
         if (done.some(item => item.index === index)) continue;
-        const castSoFar = mergeCast(done.map(item => item.parsed));
+        const castSoFar = mergeCast([{cast: story?.cast || []}, ...done.map(item => item.parsed)]);
         // Later parts keep the cast and the art direction the first parts set.
         const directionSoFar = done.map(item => item.parsed?.direction).find(item => item && typeof item === 'object');
         const own = part.promptInput.sentences, direction = directionSoFar || story?.direction;
-        const promptInput = {...part.promptInput, ...(castSoFar.length ? {cast: castSoFar} : {}), ...(direction ? {direction} : {}), ...(story ? {map: D.slice(story, own[0].n, own.at(-1).n)} : {})};
+        const promptInput = {...part.promptInput, ...(castSoFar.length ? {cast: castSoFar} : {}), ...(direction ? {direction} : {}), ...(story ? {map: D.slice(story, own[0].n, own.at(-1).n), world: story.world, ...(story.kit ? {kit: Kit.summary(story.kit)} : {})} : {})};
         const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: planMessages(promptInput), maxTokens: part.maxCompletionTokens, onStart: () => { started = true; }});
         const usage = {prompt: reply.usage.promptTokens, completion: reply.usage.completionTokens, total: reply.usage.totalTokens, answer: answerTokens(reply.content), model: reply.model, provider: reply.provider};
         spent.push(usage);
@@ -720,6 +728,8 @@ class SceneRoom {
       done.sort((a, b) => a.index - b.index);
       let merged = parts.length === 1 ? done[0].parsed : mergeParts(done.map(item => item.parsed)), review = null;
       if (story?.direction && !merged.direction) merged = {...merged, direction: story.direction};
+      // The world and its kit: the story director's, or what a one-part plan designed itself.
+      merged = {...merged, cast: mergeCast([{cast: story?.cast || []}, merged]), kit: {...kitOf(merged.kit), ...(story?.kit || {})}, ...(story?.world ? {world: story.world} : {})};
       if (job.scope.review) ({plan: merged, review} = await this.reviewPlan(job, merged, spent, () => { started = true; }));
       let compose = null;
       if (job.scope.compose) ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; }));
@@ -747,7 +757,7 @@ class SceneRoom {
     let built;
     try {
       const raw = aiScenes(merged, false);
-      built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine, direction: raw.direction, format: family.format});
+      built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine, direction: raw.direction, kit: kitOf(merged.kit), format: family.format});
     } catch { return {plan: merged, compose: null}; }
     const framed = built.payload.scenes.flatMap((scene, si) => scene.shots.map((shot, hi) => ({shot, si, hi, scene}))).filter(item => item.shot.frame);
     let targets = only ? framed.filter(item => item.shot.label === only) : framed;
@@ -824,7 +834,7 @@ class SceneRoom {
     let built;
     try {
       const raw = aiScenes(merged, false);
-      built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, inputs.family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine});
+      built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, inputs.family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine, kit: kitOf(merged.kit), world: merged.world || null});
     } catch { return {plan: merged, review: null}; }
     const words = Cap.wordTimings({sentences: built.payload.sentences, pauses: [], narrationSeconds: built.payload.timing.narrationSeconds});
     // With `only`, the review reads just the scenes holding those shots and draws them now (redraw job).
@@ -835,8 +845,10 @@ class SceneRoom {
       const slice = scenes.slice(k * size, (k + 1) * size);
       if (!slice.length) continue;
       const shotWords = shot => words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds - 0.01).map(word => word.text).join(' ');
-      const flagged = Sk.continuity(slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes}))), built.payload.cast || []);
-      const input = {engine: inputs.engine, ...(E.isMix(inputs.spec) ? {mix: true} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
+      const listed = slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes})));
+      const flagged = [...Sk.continuity(listed, built.payload.cast || []), ...Sk.worldNotes(listed, merged.world)];
+      const kitNow = kitOf(merged.kit);
+      const input = {engine: inputs.engine, ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
         ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
           shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
@@ -889,7 +901,7 @@ class SceneRoom {
       let plan, manifest;
       try {
         plan = aiScenes(parsed);
-        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, cast: plan.cast, direction: plan.direction || null, review, compose, map, source: 'claude', note: review ? `New plan from the Claude scene director, checked by the continuity review (${review.changes.length} shot${review.changes.length === 1 ? '' : 's'} redrawn)` : 'New plan from the Claude scene director', createdBy: row.created_by});
+        manifest = this.insertManifest({inputs, content, scenes: plan.scenes, summary: plan.summary, cast: plan.cast, direction: plan.direction || null, review, compose, map, kit: kitOf(plan.kit), world: plan.world || null, source: 'claude', note: review ? `New plan from the Claude scene director, checked by the continuity review (${review.changes.length} shot${review.changes.length === 1 ? '' : 's'} redrawn)` : 'New plan from the Claude scene director', createdBy: row.created_by});
       } catch (error) {
         if (error instanceof InputError) return fail(error.message);
         throw error;
@@ -969,7 +981,7 @@ class SceneRoom {
       if (!drawn.size) return close('quality_failed', `Claude returned no drawings, so the ${labels.length} shot${labels.length === 1 ? ' keeps its drawing' : 's keep their drawings'} from the words.${review?.notes?.[0] ? ` ${review.notes[0]}` : ''}`);
       // The new drawings land on the same shots (same IDs); everything else is the plan as it was.
       const scenes = payload.scenes.map((scene, si) => sceneOf(scene, true, scene.shots.map((shot, hi) => ({...shotOf(plan.scenes[si].shots[hi], false), id: shot.id}))));
-      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: plan.cast || payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, map: payload.map || null, review: {report: review.report, changes: [...(payload.review?.changes || []), ...review.changes], notes: review.notes}, source: 'edit', parentId: row.id, note: `Claude drew ${drawn.size} of ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: plan.cast || payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, review: {report: review.report, changes: [...(payload.review?.changes || []), ...review.changes], notes: review.notes}, source: 'edit', parentId: row.id, note: `Claude drew ${drawn.size} of ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -994,7 +1006,7 @@ class SceneRoom {
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
       if (this.latestManifestRow(row.content_id).id !== row.id || content.revision !== job.scope.contentRevision || inputs.voice.approvalId !== job.scope.voiceApprovalId || inputs.style.revisionId !== job.scope.styleRevisionId) return close('stale', 'The plan, script, narration or style changed during the redesign. The new design was not saved.');
       const report = {...(payload.compose || {shots: 1, designed: 1, notes: []}), tokens: (payload.compose?.tokens || 0) + compose.tokens};
-      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: report, map: payload.map || null, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: report, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -1018,7 +1030,7 @@ class SceneRoom {
       if (input.purpose !== undefined) { requireValue(PURPOSES.includes(input.purpose), 'Choose a known scene purpose.'); scene.purpose = input.purpose; }
       if (input.direction !== undefined) scene.direction = text(input.direction, 'Direction', 0, 600);
       if (input.onScreenText !== undefined) scene.onScreenText = text(input.onScreenText, 'On-screen text', 0, 140);
-      if (input.setting !== undefined) { if (input.setting === null) delete scene.setting; else { try { scene.setting = Sk.validateSetting(input.setting, {strict: true}); } catch (error) { throw new InputError(error.message); } } }
+      if (input.setting !== undefined) { if (input.setting === null) delete scene.setting; else { try { scene.setting = Sk.validateSetting(input.setting, {strict: true, kit: payload.kit}); } catch (error) { throw new InputError(error.message); } } }
       note = `Edited scene ${payload.scenes.find(item => item.id === scene.id).label}`;
     } else if (op === 'update-shot') {
       const {scene, index} = findShot(input.shotId), shot = scene.shots[index];
@@ -1030,7 +1042,7 @@ class SceneRoom {
       if (input.cue !== undefined) { const cue = text(input.cue, 'Cue', 0, 80); if (cue) shot.cue = cue; else delete shot.cue; }
       if (input.sketch !== undefined) {
         if (input.sketch === null) delete shot.sketch;
-        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || []}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
+        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || [], kit: payload.kit || null}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
       }
       // The owner can drop a designed frame (the shot then uses its drawing, or one made from its words).
       if (input.frame === null) delete shot.frame;
@@ -1077,7 +1089,7 @@ class SceneRoom {
     requireValue(input.expectedRevision === row.revision, 'The plan changed in another tab. Reload before editing.', 409);
     return this.store.transaction(() => {
       requireValue(this.latestManifestRow(row.content_id).id === row.id, 'The plan changed in another tab. Reload before editing.', 409);
-      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, map: payload.map || null, source: 'edit', parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, source: 'edit', parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       return this.publicManifest(created, {detail: true});
     });
   }

@@ -64,6 +64,30 @@ test('narration pauses move the estimated sentence starts onto the real breaks',
   assert.deepEqual(none.sentences.map(item => item.startSeconds), sentences.map(item => item.startSeconds));
 });
 
+test('a long narration stays on the voice: sentence ends beat comma pauses and an early drift never carries on', () => {
+  // 60 sentences; years and numbers take longer to say than their word count, so a word-share estimate drifts
+  // seconds ahead (the live 8-minute run drifted up to 6 s from 2:03). Commas leave short pauses as decoys.
+  const texts = Array.from({length: 60}, (_, k) => (k < 30 ? `In ${1950 + k}, about ${20000 + k * 7} people waited ${k + 3}.` : k % 2 ? 'The signal travels fast, and it never stops.' : 'Here is the part most people never hear.'));
+  const sentences = texts.map((text, k) => ({n: k + 1, text, words: text.split(' ').length}));
+  let at = 0;
+  const truth = [], pauses = [];
+  for (const [k, item] of sentences.entries()) {
+    truth.push(at);
+    const speak = item.text.length * 0.06 + (item.text.match(/\d/g) || []).length * 0.12;
+    const commas = (item.text.match(/,/g) || []).length;
+    for (let c = 1; c <= commas; c++) pauses.push({start: at + speak * c / (commas + 1), end: at + speak * c / (commas + 1) + 0.45});
+    at += speak + commas * 0.45;
+    if (k < sentences.length - 1) { pauses.push({start: at, end: at + 0.9}); at += 0.9; }
+  }
+  const total = sentences.reduce((sum, item) => sum + item.words, 0);
+  let elapsed = 0;
+  for (const item of sentences) { item.startSeconds = elapsed; item.durationSeconds = at * item.words / total; elapsed += item.durationSeconds; }
+  const aligned = B.alignSentences(sentences, pauses.sort((x, y) => x.start - y.start), at);
+  assert.equal(aligned.matched, 59);
+  aligned.sentences.forEach((item, k) => assert.ok(Math.abs(item.startSeconds - Math.max(0, truth[k] - 0.08)) < 0.02, `sentence ${k + 1} starts on its voice (${item.startSeconds} vs ${truth[k]})`));
+  assert.ok(Math.max(...sentences.map((item, k) => Math.abs(item.startSeconds - truth[k]))) > 3, 'the word-share estimate itself drifts by seconds');
+});
+
 test('the auto edit is frame-exact, deterministic and explains every decision', () => {
   const {sentences, scenes, assets, narrationSeconds} = fixture();
   const input = {fps: 30, narrationSeconds, sentences, scenes, assets, spec: SPEC};

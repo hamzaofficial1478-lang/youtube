@@ -316,4 +316,4 @@ function validateCaptions(captions, narrationSeconds) {
   return problems;
 }
 
-module.exports = {SCHEMA, METHOD, SKILL, LIMITS, wordTimings, measuredTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};
+module.exports = {SCHEMA, METHOD, SKILL, LIMITS, weight, wordTimings, measuredTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};

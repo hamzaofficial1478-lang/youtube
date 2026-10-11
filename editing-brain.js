@@ -67,27 +67,65 @@ function pausesFromSilence(stderr) {
   const ends = [...String(stderr).matchAll(/silence_end:\s*([\d.]+)/g)].map(match => Number(match[1]));
   return starts.map((start, index) => ({start: round(start), end: round(ends[index] ?? start)})).filter(span => span.end > span.start);
 }
-// Moves each word-share sentence start onto the real pause before it, so cuts land as the next sentence
-// begins (skill editing.visual-on-the-word). A boundary with no pause nearby keeps its estimate.
+// Puts every sentence start on the real pause before it, for the whole narration at once (skill
+// editing.visual-on-the-word). Each sentence is expected to take time in proportion to its spoken weight (numbers
+// weigh what they take to say), measured from where the sentence before it really started, so an early error never
+// carries on; the longer pauses (sentence ends) are preferred over short ones (commas, breaths); a boundary with no
+// pause is placed by weight between its neighbours. Live 0.26 run: snapping each start to the nearest pause around
+// a drifting word-count estimate put the pictures up to 6 s ahead of an 8-minute voice from 2:03 on.
 function alignSentences(sentences, pauses, narrationSeconds) {
-  const aligned = sentences.map(item => ({...item}));
-  let matched = 0;
-  const used = new Set();
-  for (let index = 1; index < aligned.length; index++) {
-    const estimate = aligned[index].startSeconds;
-    const window = Math.max(0.8, 0.25 * aligned[index - 1].durationSeconds);
-    let best = null;
-    pauses.forEach((pause, key) => {
-      if (used.has(key)) return;
-      const cut = Math.max(pause.start, pause.end - 0.08), distance = Math.abs(cut - estimate);
-      if (distance <= window && (!best || distance < best.distance)) best = {key, cut, distance};
-    });
-    const floor = aligned[index - 1].startSeconds + 0.2;
-    if (best && best.cut > floor && best.cut < narrationSeconds - 0.2) { aligned[index].startSeconds = round(best.cut); used.add(best.key); matched++; }
-    else aligned[index].startSeconds = round(Math.max(estimate, floor));
+  const aligned = sentences.map(item => ({...item})), N = aligned.length;
+  const finish = (matched) => {
+    aligned.forEach((item, index) => { item.durationSeconds = round((index < N - 1 ? aligned[index + 1].startSeconds : narrationSeconds) - item.startSeconds); });
+    return {sentences: aligned, matched, boundaries: Math.max(0, N - 1), method: matched ? 'pause-aligned' : 'word-share'};
+  };
+  const t0 = N ? aligned[0].startSeconds : 0;
+  const cands = pauses.map(pause => ({cut: Math.max(pause.start, pause.end - 0.08), length: pause.end - pause.start}))
+    .filter(item => item.cut > t0 + 0.2 && item.cut < narrationSeconds - 0.2).sort((x, y) => x.cut - y.cut);
+  if (N < 2 || !cands.length) { for (let k = 1; k < N; k++) aligned[k].startSeconds = round(Math.max(aligned[k].startSeconds, aligned[k - 1].startSeconds + 0.2)); return finish(0); }
+  const spoken = aligned.map(item => Math.max(1, (String(item.text || '').match(/\S+/g) || []).reduce((sum, token) => sum + Cap.weight(token), 0)));
+  const before = [0];
+  spoken.forEach(value => before.push(before.at(-1) + value));
+  const rate = (narrationSeconds - t0) / before[N];
+  const lengths = cands.map(item => item.length).sort((x, y) => x - y), typical = lengths[Math.floor(lengths.length / 2)] || 0.3;
+  const W_DURATION = 3, W_PAUSE = 2, W_SKIP = 2.5, MAX_SKIP = 3;
+  // Cost of sentences a..b-1 spanning `seconds`, and the reward for cutting on a pause of this length.
+  const spanCost = (a, b, seconds) => (seconds <= 0.15 * (b - a) ? Infinity : W_DURATION * Math.abs(Math.log(seconds / ((before[b] - before[a]) * rate))) + W_SKIP * (b - a - 1));
+  const reward = item => W_PAUSE * Math.min(2.5, item.length / typical);
+  // best[b][j]: the cheapest placement of boundary b (the start of sentence b) on candidate j.
+  const best = Array.from({length: N}, () => new Map());
+  for (let b = 1; b < N; b++) {
+    for (let j = 0; j < cands.length; j++) {
+      const at = cands[j].cut;
+      let choice = null;
+      for (let a = Math.max(0, b - MAX_SKIP - 1); a < b; a++) {
+        if (a === 0) { const cost = spanCost(0, b, at - t0); if (!choice || cost < choice.cost) choice = {cost, a: 0, i: -1}; continue; }
+        for (const [i, prior] of best[a]) {
+          if (cands[i].cut >= at) continue;
+          const cost = prior.cost + spanCost(a, b, at - cands[i].cut);
+          if (!choice || cost < choice.cost) choice = {cost, a, i};
+        }
+      }
+      if (choice && Number.isFinite(choice.cost)) best[b].set(j, {...choice, cost: choice.cost - reward(cands[j])});
+    }
   }
-  aligned.forEach((item, index) => { item.durationSeconds = round((index < aligned.length - 1 ? aligned[index + 1].startSeconds : narrationSeconds) - item.startSeconds); });
-  return {sentences: aligned, matched, boundaries: Math.max(0, aligned.length - 1), method: matched ? 'pause-aligned' : 'word-share'};
+  // The last placed boundary runs on to the end of the narration.
+  let end = null;
+  for (let b = Math.max(1, N - MAX_SKIP - 1); b < N; b++) for (const [j, state] of best[b]) {
+    const cost = state.cost + spanCost(b, N, narrationSeconds - cands[j].cut);
+    if (!end || cost < end.cost) end = {cost, b, j};
+  }
+  const placed = new Map();
+  for (let at = end; at && at.b > 0;) { placed.set(at.b, cands[at.j].cut); const state = best[at.b].get(at.j); at = state.a > 0 ? {b: state.a, j: state.i} : null; }
+  if (!placed.size) return finish(0);
+  // Boundaries without a pause share the time between their placed neighbours by spoken weight.
+  const known = [[0, t0], ...[...placed].sort((x, y) => x[0] - y[0]), [N, narrationSeconds]];
+  for (let k = 0; k + 1 < known.length; k++) {
+    const [a, from] = known[k], [b, to] = known[k + 1];
+    for (let n = a + 1; n < b; n++) aligned[n].startSeconds = round(from + (to - from) * (before[n] - before[a]) / (before[b] - before[a]));
+    if (b < N) aligned[b].startSeconds = round(to);
+  }
+  return finish(placed.size);
 }
 
 // ---------------------------------------------------------------- stock clip windows

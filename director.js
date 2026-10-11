@@ -7,9 +7,12 @@
 // switching on every shot). OpenMontage's proposal director and HyperFrames' story design, restated for our engines.
 // Pure: no I/O.
 const E = require('./engines');
+const Sk = require('./sketch');
+const Kit = require('./kit');
 
 const VERSION = 'director/1';
 const JOBS = Object.freeze(['hook', 'promise', 'setup', 'explain', 'story', 'evidence', 'turn', 'payoff', 'recap', 'close']);
+const ERAS = Object.freeze(['prehistoric', 'ancient', 'medieval', 'early-modern', 'modern', 'future', 'timeless']);
 // Above this length a video needs a rhythm across engines; below it the mix measures but says nothing.
 const LONG_SECONDS = 180;
 const MAX_RUN_SECONDS = 90, WHIPLASH_WINDOW = 20, WHIPLASH_SWITCHES = 5;
@@ -24,6 +27,8 @@ const DOCTRINE = [
   '- motion: lists, comparisons, rankings, timelines, quick facts, definitions, recaps and keyword emphasis; fast and clean.',
   '- montage: the real thing when it matters - a real place, product, animal or event (stock or AI image; only when that source is available).',
   'RHYTHM for long videos: the hook changes picture every 3-8 s across two or three engines and opens on the most striking image. Each chapter has a home engine that carries most of it, so it plays as a sequence and not a slideshow; other engines enter as punctuation (a number in atelier or motion, a reaction in stickman). Change engine at least every 45-75 s and at every chapter start (a re-hook: an atelier title, a motion keyword, a new place). Do not switch engine on every shot for long, except in the hook or a deliberate quick-fire montage. Come back to familiar faces and places between new looks. Give the payoff and the biggest number the strongest engine.',
+  'WORLD: build the story\'s own world before any shot. Its era and place decide the people (a stone-age hunter wears furs, not a hoodie), the places (a cave, not a street) and the objects (a spear, not a phone); everything obeys plain physics (people stand on ground or floors, ships float on the sea surface, people are under water only when diving, things keep their size and weight). What the words name is what is shown: a train is a train, not a door.',
+  'NICHE: the competitor guidance (input "competitorGuidance", techniques seen in this niche) shows what this audience expects; use the techniques that fit, in this video\'s own look, never a copy (at most 30% reference, 70% own).',
   'ONE FILM: one art direction for the whole video (palette, fonts, motion grammar); atelier shots use its palette, or a contrast the story motivates (night and day, past and present). Cuts between engines are motivated: a whip in the direction of motion, a match on shape or position, a flash on an impact.',
 ].join('\n');
 
@@ -42,7 +47,9 @@ function mapMessages(input) {
     DOCTRINE,
     E.promptGuide(input.style.engine, {mix: input.style.mix}),
     `Engines available for this video: ${input.style.engines.join(', ')}.${input.style.engines.includes('atelier') && input.style.designedShots ? ` At most ${input.style.designedShots} atelier beats in the whole video (each designed shot costs Claude tokens); spend them on the moments that matter.` : ''}`,
-    'Return only one JSON object: {"structure": the shape of the video in one sentence, ' + (input.style.engines.includes('atelier') ? '"direction": the art direction (as described in the atelier guide below), ' : '') + '"chapters": [{"title": up to 6 words, "sentenceStart": n, "sentenceEnd": n, "job": one of ' + JSON.stringify(JOBS) + ', "home": engine, "rehook"?: how the chapter grabs attention again, up to 120 characters}], "beats": [{"sentenceStart": n, "sentenceEnd": n, "engine": engine, "why": up to 100 characters}]}.',
+    `The drawn engines share one cast and one world. Characters: {"id": "c1", "name", "role", "look": {${Object.entries(Sk.LOOK).map(([key, list]) => `"${key}": ${list.join('|')}${key === 'outfit' ? '|kit:<id>' : ''}`).join(', ')}}} - dress them for the story\'s era and place (a kit outfit when none of the outfits fits).`,
+    Kit.promptGuide(),
+    'Return only one JSON object: {"structure": the shape of the video in one sentence, "world": {"era": one of ' + JSON.stringify(ERAS) + ', "place": where the story happens, up to 80 characters, "rules": [up to 8 short rules of this world and its physics]}, "cast": [characters], "kit": [kit items], ' + (input.style.engines.includes('atelier') ? '"direction": the art direction (as described in the atelier guide below), ' : '') + '"chapters": [{"title": up to 6 words, "sentenceStart": n, "sentenceEnd": n, "job": one of ' + JSON.stringify(JOBS) + ', "home": engine, "rehook"?: how the chapter grabs attention again, up to 120 characters}], "beats": [{"sentenceStart": n, "sentenceEnd": n, "engine": engine, "why": up to 100 characters}]}.',
     'Chapters and beats each cover every numbered sentence exactly once, in order. A beat is one to four sentences carried by one engine; a chapter holds several beats. Keep "why" short: it is read by the shot planner, not the viewer.',
     ...(input.style.engines.includes('atelier') ? [require('./atelier').promptGuide()] : []),
   ].join('\n');
@@ -88,7 +95,15 @@ function validateMap(raw, {first, last, engines, primary, designedShots = Infini
       if (engine === 'atelier' && ++designed > designedShots) { engine = engines.includes('motion') ? 'motion' : fallback; warn(`Sentences ${item.sentenceStart}-${item.sentenceEnd}: over the budget of ${designedShots} designed shots, so ${engine} carries them.`); }
       return {sentenceStart: item.sentenceStart, sentenceEnd: item.sentenceEnd, engine, why: clean(item.why, 100)};
     });
-  return {version: VERSION, structure: clean(raw.structure, 300), chapters, beats, ...(raw.direction && typeof raw.direction === 'object' ? {direction: raw.direction} : {})};
+  const kit = Kit.validateKit(raw.kit, {warn: message => warn(`Kit: ${message}`)});
+  const cast = Sk.validateCast(raw.cast, {lenient: true, kit, warn: message => warn(`Cast: ${message}`)});
+  return {version: VERSION, structure: clean(raw.structure, 300), world: validateWorld(raw.world), ...(cast.length ? {cast} : {}), ...(Object.keys(kit).length ? {kit} : {}), chapters, beats, ...(raw.direction && typeof raw.direction === 'object' ? {direction: raw.direction} : {})};
+}
+
+// The story's world: its era (one of ERAS), its place and up to eight short rules of its world and physics.
+function validateWorld(raw) {
+  const value = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  return {era: ERAS.includes(value.era) ? value.era : 'modern', place: clean(value.place, 80), rules: (Array.isArray(value.rules) ? value.rules : []).map(rule => clean(rule, 120)).filter(Boolean).slice(0, 8)};
 }
 
 // The part of the map one plan part needs: its chapters and beats (and the structure, for orientation).
@@ -130,7 +145,7 @@ function measureMix(scenes, {primary, seconds}) {
     switchesPerMinute: round(Math.max(0, runs.length - 1) / (total / 60)), runs: runs.map(run => ({engine: run.engine, start: round(run.start), end: round(run.end)})), notes};
 }
 
-module.exports = {VERSION, JOBS, DOCTRINE, LONG_SECONDS, availableEngines, designedBudget, mapMessages, validateMap, slice, engineOf, measureMix};
+module.exports = {ERAS, validateWorld, VERSION, JOBS, DOCTRINE, LONG_SECONDS, availableEngines, designedBudget, mapMessages, validateMap, slice, engineOf, measureMix};
 
 // Self-check: node director.js
 if (require.main === module) {
