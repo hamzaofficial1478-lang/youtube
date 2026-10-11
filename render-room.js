@@ -331,16 +331,27 @@ class RenderRoom {
             const start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
             const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3)}));
             const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
+            // Drawing is local: a browser that stalls (a busy or throttled PC) is restarted and the shot drawn again, so
+            // one stalled frame never throws away a long render (live 0.26 run: a stall after 3.6 hours).
+            const drawIt = () => {
+              if (drawing.composition) {
+                // Atelier shot: the composition, seeked so each reveal lands on the narrator's actual word.
+                const comp = drawing.composition, canvas = scope.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
+                const warp = At.warp({planned: comp.words || [], actual: words, composed: comp.composedSeconds, hold: seconds});
+                return renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, outDir: path.join(work, folder)});
+              } else {
+              const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: E.ENGINES[scope.edit.engine]?.draws ? scope.edit.engine : 'motion', lenient: true});
+              return renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
+                vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
+              }
+            };
             let drawn;
-            if (drawing.composition) {
-              // Atelier shot: the composition, seeked so each reveal lands on the narrator's actual word.
-              const comp = drawing.composition, canvas = scope.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
-              const warp = At.warp({planned: comp.words || [], actual: words, composed: comp.composedSeconds, hold: seconds});
-              drawn = await renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, outDir: path.join(work, folder)});
-            } else {
-            const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: E.ENGINES[scope.edit.engine]?.draws ? scope.edit.engine : 'motion', lenient: true});
-            drawn = await renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
-              vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
+            try { drawn = await drawIt(); } catch (error) {
+              if (!/did not answer|did not start/i.test(String(error.message))) throw error;
+              await renderer.close(); await renderer.start();
+              fs.rmSync(path.join(work, folder), {recursive: true, force: true});
+              logs.push({step: `redraw ${clip.label} after a stalled browser`, ok: true, stderr: ''});
+              drawn = await drawIt();
             }
             const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
             const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});

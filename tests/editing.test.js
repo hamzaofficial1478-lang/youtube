@@ -815,7 +815,13 @@ test('documentary partners: hand-drawn cutaways are drawn again at render time o
   const report = await renders.checkReadiness({requestedBy: 'Owner'});
   renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for drawn cutaways.'});
   const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
-  const done = await renders.processNext();
+  // A browser that stalls once while a shot is drawn is restarted and the shot drawn again; the render goes on.
+  const render = MotionRenderer.prototype.render;
+  let stalls = 0;
+  MotionRenderer.prototype.render = function (...args) { if (args[0]?.template === 'sketch-scene' && !stalls++) throw new Error('The browser did not answer Page.captureScreenshot in time.'); return render.apply(this, args); };
+  let done;
+  try { done = await renders.processNext(); } finally { MotionRenderer.prototype.render = render; }
+  assert.equal(stalls, 3, 'one stall, then both drawn shots');
   assert.equal(done?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
   const result = JSON.parse(renders.row(queued.id).result);
   assert.ok(result.qc.every(check => check.passed || check.name === 'clipping'), JSON.stringify(result.qc.filter(check => !check.passed)));
