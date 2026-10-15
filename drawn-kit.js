@@ -2,8 +2,11 @@
 // P06d - Drawing toolkit for drawn shots, shared by drawn-props.js, drawn-figures.js, drawn-sets.js and
 // drawn-engine.js. Runs inside the local headless browser (injected by motion.js); our own code, no network.
 // Every frame is a pure function of time: no Math.random, clocks or timers; randomness is seeded.
-// Three finishes: cartoon (stickman: bold clean outlines, flat colour), ink (hand-drawn: wobbly double line
-// that boils on twos, washed colour, paper) and flat (motion graphics: filled shapes, no outlines, glow).
+// Finishes: cartoon (stickman: bold clean outlines, flat colour), ink (hand-drawn, 0.29: an illustrator's clean ink
+// line, flat colour with coloured-pencil shading and hatching, white paper) and flat (motion graphics: filled
+// shapes, no outlines, glow); the stickman looks
+// add board (whiteboard: clean black marker on white), story (storybook: warm paper, soft brown line, muted colour)
+// and doodle (thick uneven marker, bright fills).
 (function () {
   const K = window.DK = {};
   const clamp01 = x => Math.max(0, Math.min(1, x));
@@ -39,7 +42,8 @@
       PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
       head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };
-  K.LW = () => (K.FIN === 'ink' ? 4.4 : K.FIN === 'flat' ? 4.2 : 5.2) * K.u;
+  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6};
+  K.LW = () => (LINE[K.FIN] || 5.2) * K.u;
   // Background colours sit back so the foreground reads: pastel on light styles, dim on dark ones.
   K.tone = (c, k = 0.3) => K.mix(K.col(c), K.PAL.bg, K.DARK ? 0.72 : k);
 
@@ -64,30 +68,63 @@
   };
   // One drawing item: {pts, fill?, color?, width? (x line width) | px?, stroke?: false, line?: true (keep the outline
   // on flat), closed?, alpha?, glow?} or a custom {draw(p)}.
-  // K.TIP: where the pen is in this frame (device pixels), so the hand-drawn engine can draw the hand holding it.
+  // K.TIP: where the pen is in this frame (device pixels) while the drawing hand is on (K.PEN), so the engine can
+  // draw the hand holding it.
   K.TIP = null;
-  K.penAt = (x, y) => { const m = K.ctx.getTransform(); K.TIP = [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]; };
+  K.PEN = false;
+  K.SKETCH = false;
+  K.penAt = (x, y) => { if (!K.PEN) return; const m = K.ctx.getTransform(); K.TIP = [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]; };
   K.paint = (it, p, seed, wash = 1) => {
     const {ctx, u, FIN} = K, pts = it.pts;
     if (!pts || pts.length < 2) return;
     ctx.save();
     if (it.alpha !== undefined) ctx.globalAlpha *= it.alpha;
     const closed = it.closed ?? !!it.fill;
+    // K.SKETCH: a place on the whiteboard is line art with a light touch of colour.
+    if (K.SKETCH && it.fill) ctx.globalAlpha *= 0.22;
     if (it.fill && p >= 1) {
-      // Ink: the colour washes in just after its outline is drawn, slightly off the line like watercolour.
-      if (FIN === 'ink' && it.fill[0] === '#') { ctx.save(); ctx.translate(2.6 * u, 2 * u); ctx.globalAlpha *= wash; ctx.fillStyle = K.alpha(K.mix(it.fill, '#FFFFFF', 0.12), 0.8); K.trace(pts, true); ctx.fill(); ctx.restore(); }
-      else { if (it.glow) { ctx.shadowColor = it.glow; ctx.shadowBlur = 30 * u; } ctx.fillStyle = it.fill; K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0; }
+      // Ink: the colour comes in just after its outline, then coloured pencil shades the side away from the light
+      // (lower right) and a light hatch gives the paper's tooth.
+      if (FIN === 'ink' && it.fill[0] === '#') {
+        ctx.save(); ctx.globalAlpha *= wash; ctx.fillStyle = it.fill; K.trace(pts, true); ctx.fill();
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+        for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+        const size = Math.min(x1 - x0, y1 - y0);
+        if (size > 16 * u && !K.SKETCH) {
+          ctx.clip();
+          const d = Math.max(3 * u, size * 0.13), dark = K.mix(it.fill, '#1B1B2F', 0.4);
+          ctx.beginPath(); ctx.rect(x0 - 2 * d, y0 - 2 * d, x1 - x0 + 4 * d, y1 - y0 + 4 * d);
+          pts.forEach(([x, y], k) => (k ? ctx.lineTo(x - d, y - d) : ctx.moveTo(x - d, y - d))); ctx.closePath();
+          ctx.fillStyle = K.alpha(dark, 0.32); ctx.fill('evenodd');
+          ctx.strokeStyle = K.alpha(dark, 0.16); ctx.lineWidth = 1.3 * u; ctx.beginPath();
+          for (let k = x0 - (y1 - y0); k < x1; k += 6 * u) { ctx.moveTo(k, y1); ctx.lineTo(k + (y1 - y0), y0); }
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+      else {
+        // Under the pen the colour comes in just after its outline; storybook colours sit back into the paper.
+        if (K.PEN || FIN === 'board') ctx.globalAlpha *= wash;
+        if (it.glow) { ctx.shadowColor = it.glow; ctx.shadowBlur = 30 * u; }
+        ctx.fillStyle = FIN === 'story' && it.fill[0] === '#' ? K.mix(it.fill, K.PAL.bg, 0.22) : it.fill; K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0;
+      }
     }
     if (it.stroke !== false && !(FIN === 'flat' && it.fill && !it.line)) {
       const part = K.partial(pts, p), width = it.px || (it.width || 1) * K.LW();
-      if (FIN === 'ink' && p > 0 && p < 1 && part.length) K.penAt(...part[part.length - 1]);
+      if (p > 0 && p < 1 && part.length) K.penAt(...part[part.length - 1]);
       ctx.strokeStyle = it.color || K.PAL.line; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      if (it.dash) ctx.setLineDash(it.dash.map(v => v * u));
       if (FIN === 'ink') {
-        const boil = Math.floor(K.T * 12);
+        // An illustrator's ink line: one confident stroke with the slight unevenness of a pen, the same every frame.
+        const rand = K.seeded(seed * 31 + 977);
+        K.trace(part, closed && p >= 1, () => (rand() - 0.5) * 0.9 * u * 2);
+        ctx.lineWidth = width * 0.85; ctx.stroke();
+      } else if (FIN === 'doodle') {
+        // A felt marker: one uneven line, the same on every frame (no boil).
         for (let pass = 0; pass < 2; pass++) {
-          const rand = K.seeded(seed * 31 + pass * 977 + boil * 7919), amp = (pass ? 2.4 : 1.3) * u;
+          const rand = K.seeded(seed * 17 + pass * 389), amp = (pass ? 1.5 : 0.7) * u;
           K.trace(part, closed && p >= 1, () => (rand() - 0.5) * amp * 2);
-          ctx.lineWidth = pass ? width * 0.45 : width * 0.9; ctx.stroke();
+          ctx.lineWidth = pass ? width * 0.55 : width; ctx.stroke();
         }
       } else {
         if (it.glow && FIN === 'flat') { ctx.shadowColor = it.glow; ctx.shadowBlur = 22 * u; }

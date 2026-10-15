@@ -37,7 +37,7 @@ const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'dange
 const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right']);
 const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'zoom', 'pop', 'ink', 'glitch', 'slide-up']);
 const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
-const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline']);
+const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout']);
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars']);
 // Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
 const FACE_NEAR = Object.freeze({curious: 'thinking', wondering: 'thinking', focused: 'determined', serious: 'determined', puzzled: 'confused', afraid: 'scared', terrified: 'scared', anxious: 'nervous', amazed: 'starstruck', impressed: 'surprised', astonished: 'shocked', horrified: 'shocked', joyful: 'happy', cheerful: 'happy', delighted: 'happy', proud: 'smug', calm: 'neutral', skeptical: 'suspicious', frustrated: 'angry', mad: 'angry', upset: 'sad', tired: 'sleepy'});
@@ -47,7 +47,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/9';
+const VERSION = 'drawn-scene/10';
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -165,7 +165,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
     if (item.kind === 'prop') {
       const prop = kitRef(item.prop, 'prop') || propName(item.prop);
       if (!PROPS.includes(prop) && !kitRef(prop, 'prop')) { if (!lenient) fail(`${label} prop must be one of: ${PROPS.join(', ')}.`); warn(`${label}: "${clean(item.prop, 30)}" is not in the prop library, so it was left out.`); return; }
-      elements.push({kind: 'prop', prop, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.65), y: c.coord(item.y, `${label} y`, 0.08, 0.84, 0.45), size: c.pick(item.size, SIZES, `${label} size`, 'm'), motion: c.pick(item.motion, PROP_MOTIONS, `${label} motion`, 'auto'), ...base});
+      elements.push({kind: 'prop', prop, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.65), y: c.coord(item.y, `${label} y`, 0.08, 0.84, 0.45), size: c.pick(item.size, SIZES, `${label} size`, 'm'), motion: c.pick(item.motion, PROP_MOTIONS, `${label} motion`, 'auto'), ...(item.face === true ? {face: true} : {}), ...base});
       return;
     }
     if (item.kind === 'text') {
@@ -177,7 +177,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
     if (item.kind === 'arrow') {
       const from = ref(item.from, `${label} from`), to = ref(item.to, `${label} to`);
       if (from === null || to === null || from === undefined || to === undefined) { if (!lenient) fail(`${label} needs from and to points.`); warn(`${label} needs from and to points, so it was left out.`); return; }
-      elements.push({kind: 'arrow', from, to, ...base});
+      elements.push({kind: 'arrow', from, to, ...(item.dashed === true ? {dashed: true} : {}), ...base});
       return;
     }
     if (item.kind === 'bubble') {
@@ -391,10 +391,10 @@ function promptGuide(primary = 'stickman') {
     'Sets that are easy to misread: ocean is under water (light rays, seaweed, the sea floor), for divers and sea life; ships, sailors and the sea surface go on beach (sky, sea and sand) or storm with ship and waves props. space is outer space, night is a city at night, abstract and none are plain backdrops.',
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
-    `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?}`,
-    `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word), "x", "y", "size", "accent"?}`,
+    `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
+    `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts), "x", "y", "size", "accent"?}`,
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
-    '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
+    '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
     'CONTINUITY: plan the world first. Each part of the story has one place that matches what the narration describes; shots stay in it while the narration stays there and change place only when the words move. Keep each character on the same side of the screen and facing the same way across neighbouring shots unless they move; keep introduced props while they are still discussed; return to an earlier place when the story returns to its topic. A new place or a new layout needs a reason in the words.',

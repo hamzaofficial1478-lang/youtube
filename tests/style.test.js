@@ -38,12 +38,24 @@ test('launch library seeds six valid draft profiles once and every launch spec p
   const {store, styles} = setup(t);
   new StyleLibrary(store);
   const profiles = styles.profiles();
-  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
+  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'stickman-whiteboard', 'stickman-storybook', 'stickman-doodle', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
   assert.ok(profiles.every(item => item.revisions.length === 1 && item.revisions[0].status === 'draft' && item.origin === 'launch'));
   for (const launch of LAUNCH_PROFILES) assert.deepEqual(validateStyleSpec(structuredClone(launch.spec)).name, launch.spec.name);
   assert.equal(profile(styles, 'documentary-montage').revisions[0].spec.renderer.adapter, 'ffmpeg-montage');
   assert.equal(RENDERERS['ffmpeg-montage'].firstProof, true);
   assert.ok(Object.values(RENDERERS).every(renderer => renderer.status === 'not_implemented'), 'no renderer may claim to be ready before P05');
+});
+
+test('the stickman drawing setting: a look and the drawing hand, optional, checked strictly', () => {
+  const stickman = () => structuredClone(LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec);
+  assert.equal('drawing' in validateStyleSpec(stickman()), false, 'a style without it keeps its old spec (classic look, no hand)');
+  assert.deepEqual(validateStyleSpec({...stickman(), drawing: {look: 'whiteboard', hand: true}}).drawing, {look: 'whiteboard', hand: true});
+  assert.throws(() => validateStyleSpec({...stickman(), drawing: {look: 'anime', hand: false}}), /stickman look/);
+  assert.throws(() => validateStyleSpec({...stickman(), drawing: {look: 'doodle', hand: 'yes'}}), /Drawing hand/);
+  assert.equal(validateStyleSpec({...stickman(), brief: 'Hold each drawing while its notes arrive, then cut.'}).brief, 'Hold each drawing while its notes arrive, then cut.');
+  assert.throws(() => validateStyleSpec({...stickman(), brief: 'x'.repeat(1300)}), /Planning brief/);
+  const looks = LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => [item.key, item.spec.drawing.look, item.spec.drawing.hand]);
+  assert.deepEqual(looks, [['stickman-whiteboard', 'whiteboard', true], ['stickman-storybook', 'storybook', false], ['stickman-doodle', 'doodle', false]]);
 });
 
 test('style specs reject unsupported renderer combinations, weak contrast, missing cuts and the 30% reference rule', () => {
@@ -208,7 +220,7 @@ test('HTTP style routes require the local token, validate input and return the l
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.styles.profiles.length, 7);
+  assert.equal(state.styles.profiles.length, 10);
   assert.equal(state.app.version, JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version);
   const script = await fetch(`${base}/style-room.js`);
   assert.equal(script.status, 200);

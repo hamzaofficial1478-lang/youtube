@@ -95,7 +95,7 @@
 
   // Joints for angles A at height h, facing right, feet on the ground at (0, 0).
   function skeleton(A, h, body) {
-    const thigh = 0.19 * h, shin = 0.18 * h, torso = 0.25 * h, upper = 0.155 * h, fore = 0.15 * h, R = (body === 'robot' ? 0.15 : 0.165) * h;
+    const thigh = 0.19 * h, shin = 0.18 * h, torso = 0.25 * h, upper = 0.155 * h, fore = 0.15 * h, R = (body === 'robot' ? 0.15 : body === 'bean' ? 0.19 : body === 'person' ? 0.115 : 0.165) * h;
     const limb = ([x, y], a, len) => [x + Math.sin(a * D) * len, y + Math.cos(a * D) * len];
     const hip = [0, 0], kf = limb(hip, A.lf[0], thigh), ff = limb(kf, A.lf[1], shin), kb = limb(hip, A.lb[0], thigh), fb = limb(kb, A.lb[1], shin);
     const lean = A.lean * D, neck = [Math.sin(lean) * torso, -Math.cos(lean) * torso], sh = [neck[0] * 0.88, neck[1] * 0.88];
@@ -136,7 +136,7 @@
     const eyes = [[ox - 0.33, -0.06], [ox + 0.33, -0.06]];
     const ell = (x, y, rx, ry, fill, rot = 0) => shape(f.ring(x, y, rx, ry, 24).map(([px, py]) => [px, py]), {fill});
     const look = E.eyes === 'up' ? [0.02, -0.07] : E.eyes === 'side' ? [-0.07, 0] : [0.05, 0.01];
-    const eyesType = body === 'creature' && !['x', 'heart', 'star', 'happy', 'closed'].includes(E.eyes) ? 'red' : body === 'robot' ? 'robot' : E.eyes;
+    const eyesType = body === 'creature' && !['x', 'heart', 'star', 'happy', 'closed'].includes(E.eyes) ? 'red' : body === 'robot' ? 'robot' : K.FIN === 'doodle' && E.eyes === 'dot' ? 'wide' : E.eyes;
     eyes.forEach(([x, y], k) => {
       const inner = Math.sign(ox - x);
       switch (eyesType) {
@@ -352,10 +352,15 @@
   // Returns anchors: head [x, y, r], hand [x, y], box [x1, y1, x2, y2].
   K.drawFigure = (st, progress = 1) => {
     const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u, dir = st.dir, look = st.look, body = look.body || 'stick', engine = st.engine;
-    const J0 = skeleton(st.A, h, body), lift = st.A.lift * h;
+    // Storybook people have bean bodies: a filled rounded torso under a big round head.
+    const bean = K.FIN === 'story' && body === 'stick';
+    // Hand-drawn people are cartoon people, not stick figures: a smaller head with a skin tone, clothes on the
+    // body, arms and legs as filled sleeves and trousers, hands and shoes (the illustrated-explainer look).
+    const person = engine === 'handdrawn' && body === 'stick';
+    const J0 = skeleton(st.A, h, bean ? 'bean' : person ? 'person' : body), lift = st.A.lift * h;
     const J = {};
     for (const key of ['hip', 'kf', 'ff', 'kb', 'fb', 'neck', 'sh', 'head', 'ef', 'hf', 'eb', 'hb']) J[key] = [st.x + J0[key][0] * dir, st.y + J0[key][1] - lift];
-    const R = J0.R, line = K.PAL.line, lw = Math.max(5 * u, h * (engine === 'handdrawn' ? 0.022 : 0.031)), hdir = J0.tiltRad * dir;
+    const R = J0.R, line = K.PAL.line, lw = Math.max(5 * u, h * (engine === 'handdrawn' ? 0.022 : K.FIN === 'doodle' ? 0.036 : bean ? 0.024 : 0.031)), hdir = J0.tiltRad * dir;
     const head = K.frame(J.head[0], J.head[1], R, dir, hdir);
     const pose = K.POSE[st.pose] || {};
     const L = [];
@@ -363,18 +368,25 @@
     if (engine !== 'handdrawn' && !st.A.rotate) L.push({pts: K.frame(st.x, st.y, h, 1).ring(0, 0, 0.17 * (1 - Math.min(0.5, st.A.lift * 3)), 0.025, 24), fill: K.PAL.shadow, stroke: false});
     if (pose.seat) { const s = 0.43 * h; K.render(K.PROPS.chair(K.frame(J.hip[0] - 0.03 * h * dir, J.hip[1] - 0.04 * s + 0.02 * h, s, -dir), {tl: st.tl, seed: 1}), 1, 9); }
     const limbStyle = {px: lw};
-    const limb = pts => (engine === 'handdrawn' ? [{pts, px: lw * 2.6}, {pts, px: lw * 1.2, color: K.PAL.bg === '#FFFFFF' ? '#FFFFFF' : K.mix(K.PAL.bg, '#FFFFFF', 0.4)}] : [{pts, ...limbStyle}]);
+    const shirt = look.color ? K.col(look.color) : '#5B7FA6', trousers = '#3E4A5C', skin = ['#F3D3B8', '#E2B48D', '#C68E63', '#8D5A3B'][K.hashText(`${look.color}${look.hair}${look.hairColor}`) % 4];
+    const limb = (pts, inner = shirt) => (engine === 'handdrawn' ? [{pts, px: lw * 3.2}, {pts, px: lw * 1.8, color: person ? inner : K.PAL.bg === '#FFFFFF' ? '#FFFFFF' : K.mix(K.PAL.bg, '#FFFFFF', 0.4)}] : [{pts, ...limbStyle}]);
     L.push(...outfit(J, look, h, dir, 'back', st));
     L.push(...hairBack(head, look, st).map(item => ({...item, width: (lw * 0.75) / K.LW()})));
-    L.push(...limb([J.sh, J.eb, J.hb]), ...limb([J.hip, J.kb, J.fb]));
+    L.push(...limb([J.sh, J.eb, J.hb]), ...limb([J.hip, J.kb, J.fb], trousers));
+    if (person) L.push({pts: K.frame(J.hb[0], J.hb[1], h, 1).ring(0, 0, 0.026), fill: skin, px: lw * 0.8}, {pts: K.frame(J.fb[0] + 0.02 * h * dir, J.fb[1], h, 1).ring(0, 0, 0.045, 0.022), fill: '#2E2E2E', px: lw * 0.8});
     if (body === 'robot') L.push({pts: K.frame(...J.neck, h, dir, st.A.lean * D * dir).rrect(-0.08, 0.02, 0.16, 0.26, 0.03), fill: C.metal, px: lw * 0.8});
-    else if (engine === 'handdrawn') { const n = J.neck, p = J.hip, w = 0.06 * h; L.push({pts: [[n[0] - w, n[1]], [n[0] + w, n[1]], [p[0] + w * 0.9, p[1]], [p[0] - w * 0.9, p[1]], [n[0] - w, n[1]]], fill: K.col(look.color), px: lw}); }
+    else if (engine === 'handdrawn') { const n = J.neck, p = J.hip, w = 0.075 * h, b = 0.03 * h; L.push({pts: [[n[0] - w, n[1]], [n[0] + w, n[1]], [p[0] + w * 0.92, p[1] + b], [p[0] - w * 0.92, p[1] + b], [n[0] - w, n[1]]], fill: shirt, px: lw}); }
+    else if (bean) {
+      const n = J.neck, p = J.hip, angle = Math.atan2(n[0] - p[0], p[1] - n[1]), torso = K.frame((n[0] + p[0]) / 2, (n[1] + p[1]) / 2, h, 1, angle);
+      L.push({pts: torso.rrect(-0.085, -0.15, 0.17, 0.31, 0.075), fill: look.color ? K.col(look.color) : '#7D8C9A', px: lw});
+    }
     else L.push({pts: [J.neck, J.hip], px: lw});
     L.push(...outfit(J, look, h, dir, 'front', st).map(item => ({...item, px: item.width ? undefined : lw * 0.7})));
-    L.push(...limb([J.hip, J.kf, J.ff]));
+    L.push(...limb([J.hip, J.kf, J.ff], trousers));
+    if (person) L.push({pts: K.frame(J.ff[0] + 0.02 * h * dir, J.ff[1], h, 1).ring(0, 0, 0.045, 0.022), fill: '#2E2E2E', px: lw * 0.8});
     if (pose.armBehind) L.push(...limb([J.sh, J.ef, J.hf]));
     // The head: a big round face (creatures are a dark bristling blob, robots a box).
-    const headFill = body === 'creature' ? '#1C1C1C' : body === 'robot' ? C.metal : (K.EXPR[st.expression]?.tint || K.PAL.head);
+    const headFill = body === 'creature' ? '#1C1C1C' : body === 'robot' ? C.metal : (K.EXPR[st.expression]?.tint || (person ? skin : K.PAL.head));
     if (body === 'creature') L.push({pts: head.blob(0, 0, 1.12, 1.1, 18, 0.08), fill: headFill, px: lw});
     else if (body === 'robot') L.push({pts: head.pts([[0, -1.0], [0, -1.35]]), px: lw * 0.7}, {pts: head.ring(0, -1.4, 0.13), fill: st.tl % 1 < 0.5 ? C.red : '#7A2020', px: lw * 0.6}, {pts: head.rrect(-1.0, -0.95, 2.0, 1.85, 0.3), fill: headFill, px: lw});
     else L.push({pts: head.ring(0, 0, 1, 1, 48), fill: headFill, px: lw});
@@ -382,6 +394,7 @@
     L.push({draw: () => face(head, R, st.expression, st, body)});
     if (body === 'stick') L.push(...eyewear(head, look).map(item => ({...item, px: item.px || (item.width ? item.width * lw * 0.75 : lw * 0.75)})));
     if (!pose.armBehind) L.push(...limb([J.sh, J.ef, J.hf]));
+    if (person) L.push({pts: K.frame(J.hf[0], J.hf[1], h, 1).ring(0, 0, 0.026), fill: skin, px: lw * 0.8});
     if (pose.thumb) L.push({pts: [J.hf, [J.hf[0] + 0.012 * h * dir, J.hf[1] - 0.05 * h]], px: lw * 0.8});
     K.render(L, progress, st.seed);
     // The held prop sits in the hand (or on the lap, or at the chest).

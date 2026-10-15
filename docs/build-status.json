@@ -1,7 +1,7 @@
 {
-  "version": "0.28.0",
+  "version": "0.29.0",
   "updated": "2026-10-15",
-  "nextAction": "Show the owner the hand-drawn v2 preview; then a full hand-drawn video with a Claude plan when he wants one, and the next engine in his order (motion graphics). The owner accepted the Story Mix engine; next is the next editing engine in his order. A full world-kit video (plan, draw, render) can be run when he wants to see one. Show the owner the 8-minute Story Mix video and collect his verdict on the engine choices and pacing; then continue with the next editing engine in his order. Show the owner the four live demo renders (stickman with atelier numbers, atelier, hand-drawn, motion graphics) and collect his verdict. Then continue with the next editing brain in his order. ElevenLabs word timestamps need a live narration once the owner adds the key. P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
+  "nextAction": "Style studies (self-learning from reference frames) are next: 0.30. Show the owner the hand-drawn v2 preview; then a full hand-drawn video with a Claude plan when he wants one, and the next engine in his order (motion graphics). The owner accepted the Story Mix engine; next is the next editing engine in his order. A full world-kit video (plan, draw, render) can be run when he wants to see one. Show the owner the 8-minute Story Mix video and collect his verdict on the engine choices and pacing; then continue with the next editing engine in his order. Show the owner the four live demo renders (stickman with atelier numbers, atelier, hand-drawn, motion graphics) and collect his verdict. Then continue with the next editing brain in his order. ElevenLabs word timestamps need a live narration once the owner adds the key. P08a narration-only finishing is implemented. Run the updated FFmpeg readiness check and pin the build, then use Production → Audio Room on a current approved edit; render, listen and review. Keep the current Claude direction (owner decision, 2026-10-07). Music and sound effects are in 0.23.0 (P08c): confirm commercial use, score, generate, switch on and render. P07 caption corrections and WebVTT are in 0.15.1; Room 08 Review & QC (P09) is in 0.16.0, the frame scan and any length in 0.17.0, Room 09 Packaging (P10) in 0.18.0; P11 final master is next. Before enabling later production stages, validate the narration-only primary-language loop with real owner media. See docs/CONTINUATION-REVIEW.md and docs/AUDIO-ROOM.md. Publishing stays locked.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -349,8 +349,15 @@
           "id": "P06k",
           "title": "Hand-drawn engine v2 (a hand draws and writes every scene) and HyperFrames tools in the edit: transition brain, active-word captions, voice-over carve",
           "status": "testing",
-          "remaining": "A full hand-drawn video (Claude plan, narration, render) and the owner's verdict; the carve on real ElevenLabs music; new transitions inside a full edit render.",
+          "remaining": "Owner review 2026-10-15: the hand moved to the stickman engine in 0.29 (P06l); the hand-drawn engine became an illustrated explainer. A full hand-drawn video (Claude plan, narration, render) and the owner's verdict; the carve on real ElevenLabs music; new transitions inside a full edit render.",
           "evidence": "0.28.0 (2026-10-15): hand and handwriting checked in the browser and on a 12 s preview; all seven xfade transitions run on the installed FFmpeg; carve measured (speech band -8.4 dB, bass -3.1 dB, medium); npm test 254/254 passed."
+        },
+        {
+          "id": "P06l",
+          "title": "Stickman looks (whiteboard with the drawing hand, storybook, doodle) and the hand-drawn engine as an illustrated explainer, each with its own editing",
+          "status": "testing",
+          "remaining": "Owner verdict on the preview; a full video with a Claude plan in each new look; look-specific sets for storybook.",
+          "evidence": "0.29.0 (2026-10-15): 28.7 s preview of every look drawn by the program; hand track probed (draws, writes left to right, lifts, leaves); Style Library fields checked in the browser; npm test 258/258, then 41 related tests after the brief field."
         },
         {
           "id": "S02",
@@ -484,5 +491,5 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
   ],
-  "milestone": "Hand-drawn engine v2 and HyperFrames editing tools (P06k)"
+  "milestone": "Stickman looks and the drawing hand; illustrated hand-drawn engine (P06l)"
 }

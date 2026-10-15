@@ -73,7 +73,8 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v5';
+const LAUNCH_VERSION = 'Launch library v6';
+const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle']);
 const LAUNCH_PROFILES = [
   {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
@@ -93,17 +94,74 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'hand-drawn-canvas', upgrade: 'Launch library v3 (0.21): the hand-drawn engine. Drawn shots lead; photos and AI images stay available and Claude decides when the story needs one, with its reason.', spec: {
+  {key: 'stickman-whiteboard', upgrade: 'Launch library v6 (0.29): new. The stickman engine on a whiteboard: a hand draws every line and writes every word.', spec: {
+    name: 'Stickman · Whiteboard',
+    summary: 'Whiteboard animation: a hand holding a marker draws every stick figure, object and word on a white board, one after another, on the narrator\'s words.',
+    bestFit: ['Educational explainers', 'Business and self-improvement', 'Step-by-step stories'],
+    formats: ['long-form', 'shorts'],
+    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
+    pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 7},
+    transitions: {allowed: ['cut', 'crossfade', 'wipe'], default: 'cut', maxDurationMs: 500},
+    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 35, easing: 'ease-in-out'},
+    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'},
+    captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['curious', 'calm', 'upbeat'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
+    renderer: {adapter: 'ffmpeg-sketch'},
+    drawing: {look: 'whiteboard', hand: true},
+    qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 7, minSceneSeconds: 2, maxSceneSeconds: 16, contactSheetEverySeconds: 3},
+    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
+  }},
+  {key: 'stickman-storybook', upgrade: 'Launch library v6 (0.29): new. The stickman engine as an illustrated storybook: warm paper, bean-bodied characters, chapter cards.', spec: {
+    name: 'Stickman · Storybook',
+    summary: 'Warm illustrated storytelling: round-headed characters with bean bodies and deadpan faces in fully drawn places, chapter cards between stages, quick cuts and changing framing.',
+    bestFit: ['"Every rank" and progression stories', 'Life stories and how-it-works', 'Crime, history and society'],
+    formats: ['long-form', 'shorts'],
+    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
+    pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4},
+    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black'], default: 'cut', maxDurationMs: 500},
+    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 30, easing: 'ease-in-out'},
+    typography: {headingFont: 'Segoe UI', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'},
+    captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['cinematic', 'tense', 'curious'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
+    renderer: {adapter: 'ffmpeg-sketch'},
+    drawing: {look: 'storybook', hand: false},
+    qc: {maxBlackSeconds: 1, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
+    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
+  }},
+  {key: 'stickman-doodle', upgrade: 'Launch library v6 (0.29): new. The stickman engine as a marker doodle: big eyes, bright colour, a visual gag for every line.', spec: {
+    name: 'Stickman · Doodle',
+    summary: 'Marker doodles on a white page: stick figures with big eyes and messy hair, bright flat colour, a visual gag for every line, face close-ups for reactions and very quick cuts.',
+    bestFit: ['History and science for everyone', 'Funny explainers', '"What did people actually do" stories'],
+    formats: ['long-form', 'shorts'],
+    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
+    pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3},
+    transitions: {allowed: ['cut'], default: 'cut', maxDurationMs: 0},
+    motion: {cameraMoves: ['static', 'zoom'], intensity: 55, easing: 'ease-in-out'},
+    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 4, textCase: 'sentence', minTextHeightPercent: 4},
+    palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'},
+    captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
+    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
+    audio: {musicMoods: ['playful', 'quirky', 'upbeat'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
+    renderer: {adapter: 'ffmpeg-sketch'},
+    drawing: {look: 'doodle', hand: false},
+    qc: {maxBlackSeconds: 0.3, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 2},
+    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
+  }},
+  {key: 'hand-drawn-canvas', upgrade: 'Launch library v6 (0.29): the hand-drawn engine is now an illustrated explainer (owner reference 2026-10-15): real objects and cartoon people in ink and coloured pencil on white paper, annotated with handwritten labels, arrows, sticky notes, price tags and callouts; 2-5 s holds and hard cuts.', spec: {
     name: 'Hand-drawn Canvas',
-    summary: 'Ink illustrations and ink figures drawn line by line on paper, with a living line, washed colour and inked motion graphics, for storytelling and essays.',
-    bestFit: ['Storytelling', 'Video essays', 'Artistic education'],
+    summary: 'Illustrated explainer: real objects and cartoon people drawn in ink and coloured pencil on white paper, explained by handwritten labels, arrows, sticky notes, price tags and callouts that build on the narrator\'s words; one idea per drawing.',
+    bestFit: ['How a business or industry makes money', 'Economics and personal finance', 'How things work', 'Storytelling and essays'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 24, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 8},
-    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], default: 'crossfade', maxDurationMs: 600},
+    pacing: {shotMinSeconds: 2, shotMaxSeconds: 5.5, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6},
+    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], default: 'cut', maxDurationMs: 500},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 20, easing: 'ease-in-out'},
     typography: {headingFont: 'Caveat', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
-    palette: {background: '#F6F0E4', primary: '#2B2B2B', accent: '#B5473A', text: '#2B2B2B'},
+    palette: {background: '#FFFFFF', primary: '#222222', accent: '#D9534F', text: '#222222'},
     captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
     visuals: {sources: ['generated-graphics', 'stock-image', 'ai-image', 'archival-public-domain'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['warm', 'reflective', 'acoustic'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
@@ -338,6 +396,16 @@ function validateStyleSpec(input) {
   transitions.allowed.forEach(item => requireValue(support.transitions.includes(item), `The ${name} renderer does not support the "${item}" transition.`));
   motion.cameraMoves.forEach(item => requireValue(support.cameraMoves.includes(item), `The ${name} renderer does not support the "${item}" camera move.`));
 
+  // The stickman engine's look (0.29): classic, whiteboard, storybook or doodle, and whether a hand is seen drawing.
+  // Optional: a style without it draws the classic look without the hand.
+  const drawing = input.drawing === undefined ? null : (() => {
+    const drawingIn = object(input.drawing, 'Stickman drawing');
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand')};
+  })();
+
+  // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
+  const brief = input.brief === undefined || input.brief === null || input.brief === '' ? null : text(input.brief, 'Planning brief', 20, 1200);
+
   const qcIn = object(input.qc, 'Quality checks');
   const qc = {
     maxBlackSeconds: number(qcIn.maxBlackSeconds, 0, 5, 'Longest allowed black', 0.1),
@@ -360,6 +428,8 @@ function validateStyleSpec(input) {
     summary: text(input.summary, 'Style summary', 10, 400),
     bestFit: textList(input.bestFit, 'Best fit', 1, 6, 80),
     formats, canvas, pacing, transitions, motion, typography, palette, captions, visuals, audio, renderer, qc, originality,
+    ...(drawing ? {drawing} : {}),
+    ...(brief ? {brief} : {}),
   };
 }
 function bool(value, label) {
@@ -566,7 +636,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -754,4 +824,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS};

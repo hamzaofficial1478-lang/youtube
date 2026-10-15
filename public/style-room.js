@@ -11,6 +11,7 @@ const STYLE_LABELS = {
   both: 'Burned in + sidecar', bottom: 'Bottom', center: 'Center', top: 'Top', 'stock-video': 'Stock video', 'stock-image': 'Stock images',
   'ai-image': 'AI images', 'ai-video': 'AI video', 'generated-graphics': 'Generated graphics', 'maps-and-diagrams': 'Maps & diagrams',
   'archival-public-domain': 'Public-domain archive', 'review-per-asset': 'Review per asset', 'always-disclose': 'Always disclose',
+  classic: 'Classic cartoon', whiteboard: 'Whiteboard', storybook: 'Storybook', doodle: 'Doodle',
   none: 'None', subtle: 'Subtle', accent: 'Accent hits', rich: 'Rich sound design', draft: 'Draft · needs review', approved: 'Approved', retired: 'Retired',
 };
 const styleLabel = value => STYLE_LABELS[value] || String(value);
@@ -179,6 +180,13 @@ function styleEditorBody(spec) {
     ${styleNumber('s.truePeakDbtp', 'True-peak ceiling (dBTP)', spec.audio.truePeakDbtp, -3, -0.5, 0.1)}
     <label>Sound effects<select name="s.sfxUsage">${styleOptions(v.sfxUsage, spec.audio.sfxUsage)}</select></label>
   </div></fieldset>
+  <fieldset class="editor-section"><legend>Stickman drawing</legend><div class="form-grid">
+    <label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: classic cartoon, whiteboard, illustrated storybook or marker doodle.</span></label>
+    <label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>
+  </div></fieldset>
+  <fieldset class="editor-section"><legend>Planning brief</legend><div class="form-grid">
+    <label class="full">Brief for Claude's planner <span class="hint">Optional, up to 1,200 characters. A style made from an approved style study carries what was learned here, in our own words.</span><textarea name="s.brief" rows="4" maxlength="1200">${esc(spec.brief || '')}</textarea></label>
+  </div></fieldset>
   <fieldset class="editor-section"><legend>Renderer &amp; quality checks</legend><div class="form-grid">
     <label class="full">Renderer adapter<select name="s.renderer">${Object.entries(renderers).map(([key, item]) => `<option value="${esc(key)}" ${key === spec.renderer.adapter ? 'selected' : ''}>${esc(item.name)} (${esc(item.milestone)}${item.firstProof ? ', first proof' : ''})</option>`).join('')}</select><span class="hint">The renderer must support every format, frame rate, transition and camera move you chose.</span></label>
     ${styleNumber('s.maxBlackSeconds', 'Longest black (s)', spec.qc.maxBlackSeconds, 0, 5, 0.1)}
@@ -210,6 +218,8 @@ function collectStyleSpec(form) {
     visuals: {sources: checked('s.sources'), primarySource: value('s.primarySource'), aiDisclosure: value('s.aiDisclosure'), characterConsistency: form.elements['s.characterConsistency'].checked},
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
+    drawing: {look: value('s.drawingLook'), hand: form.elements['s.drawingHand'].checked},
+    ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
     originality: {referenceSharePercent: num('s.referenceSharePercent'), prohibited: list('s.prohibited', /\r?\n/)},
   };
@@ -251,6 +261,8 @@ function styleSpecRows(spec) {
     ['Visuals', `${spec.visuals.sources.map(styleLabel).join(', ')} · primary ${styleLabel(spec.visuals.primarySource)} · AI disclosure: ${styleLabel(spec.visuals.aiDisclosure).toLowerCase()} · licence evidence required${spec.visuals.characterConsistency ? ' · consistent characters' : ''}`],
     ['Audio', `${spec.audio.musicMoods.join(', ')} · ducking ${spec.audio.duckingDb} dB · ${spec.audio.targetLufs} LUFS · ≤ ${spec.audio.truePeakDbtp} dBTP · SFX ${styleLabel(spec.audio.sfxUsage).toLowerCase()} · licensed only`],
     ['Renderer', `${state.styles.renderers[spec.renderer.adapter].name} — ${state.styles.renderers[spec.renderer.adapter].note}`],
+    ...(spec.brief ? [['Planning brief', spec.brief]] : []),
+    ...(spec.drawing ? [['Stickman drawing', `${styleLabel(spec.drawing.look)} look · ${spec.drawing.hand ? 'a hand draws each scene' : 'no drawing hand'}`]] : []),
     ['QC thresholds', `Black ≤ ${spec.qc.maxBlackSeconds}s · frozen ≤ ${spec.qc.maxFrozenSeconds}s · scenes ${spec.qc.minSceneSeconds}-${spec.qc.maxSceneSeconds}s · contact sheet every ${spec.qc.contactSheetEverySeconds}s`],
     ['Originality', `Reference share ≤ ${spec.originality.referenceSharePercent}% · prohibited: ${spec.originality.prohibited.join('; ')}`],
   ];

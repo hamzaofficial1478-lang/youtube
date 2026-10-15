@@ -105,14 +105,14 @@ class MotionRenderer {
   }
   // Renders one graphic to numbered lossless PNG frames (f00000.png ...; `format: 'jpeg'` exists for quick
   // previews only). Returns the frame count, the frame pattern and a hash of all frames.
-  async render({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
+  async render({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
     if (!this.injected) {
       if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
-    const params = {template, data, palette, fonts, finish, vertical, width, height, fps, duration};
+    const params = {template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration};
     await this.evaluate(`MOTION.setup(${JSON.stringify(params)})`);
     // Wait for the named fonts (system fonts resolve immediately; a missing one falls back).
     await this.evaluate(`Promise.all([${JSON.stringify(fonts.heading)}, ${JSON.stringify(fonts.body)}, ${JSON.stringify(fonts.hand)}].map(name => document.fonts.load('40px "' + name + '"'))).then(() => true)`);
@@ -128,14 +128,14 @@ class MotionRenderer {
     return {frames, sha256: hash.digest('hex'), pattern: `f%05d.${format === 'jpeg' ? 'jpg' : 'png'}`};
   }
   // One frame as PNG bytes, for checks.
-  async frame({template, data, palette, fonts, finish = 'clean', vertical = false, width, height, fps, duration, t}) {
+  async frame({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, t}) {
     if (!this.injected) {
       if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
-    await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, vertical, width, height, fps, duration})})`);
+    await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration})})`);
     const url = await this.evaluate(`MOTION.renderFrame(${t}) && document.getElementById('stage').toDataURL('image/png')`);
     return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
   }
