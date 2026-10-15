@@ -60,3 +60,13 @@ Not taken: the HyperFrames CLI, studio, registry and Remotion bridge; its networ
 
 - Live test with real Claude of a full atelier video (plan, compose, draw, render) — see BUILD-PROGRESS.md for the result of the 0.25 run.
 - People stay in the drawn engines; atelier designs graphics, type, diagrams and metaphors.
+
+## 5. Third read of HyperFrames (0.28, `db845d9`)
+
+Taken into the edit, restated in our own code (DRAWN-SCENES.md section 15):
+
+- Transitions: the video's energy picks one primary transition for related scenes and an accent for a change of topic or the climax; the outro is the slowest. FFmpeg's xfade draws all of them.
+- Captions: words light up on the voice; the payoff word gets an entrance in the accent.
+- Audio: the voice-over carve - the music gives up only the speech band under the voice and keeps its bass and its top.
+
+Left: caption theme presets, registry blocks, LUT grading, shader transitions.

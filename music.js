@@ -163,7 +163,7 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
 // loudness (music) and peak (effects) so every asset lands at the same level.
 // music: [{start, end, entry, exit, measuredLufs}], sfx: [{seconds, measuredPeakDb}], settings: {music, sfx}.
 function mixGraph({music = [], sfx = [], settings}) {
-  const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=2[voice][key]'], beds = [], hits = [];
+  const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]'], beds = [], hits = [];
   music.forEach((cue, k) => {
     const input = k + 1, length = round(cue.end - cue.start, 3), fadeIn = cue.entry === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.02, fadeOut = cue.exit === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.05;
     const gain = round(Math.max(-40, Math.min(12, settings.music.levelLufs - (Number.isFinite(cue.measuredLufs) ? cue.measuredLufs : -14))), 2), delay = Math.round(cue.start * 1000);
@@ -179,9 +179,14 @@ function mixGraph({music = [], sfx = [], settings}) {
   if (beds.length) {
     parts.push(`${beds.join('')}amix=inputs=${beds.length}:normalize=0:duration=longest[bed]`);
     const ratio = {off: 1, light: 3, medium: 6, strong: 10}[settings.music.duck] || 6;
-    parts.push(ratio > 1 ? `[bed][key]sidechaincompress=threshold=0.02:ratio=${ratio}:attack=15:release=350[music]` : '[bed]anull[music];[key]anullsink');
+    // Voice-over carve (HyperFrames voiceover-carve): the music makes room only where speech lives, so under the
+    // voice it keeps its bass and its top and comes back between phrases; the whole bed dips a little as well.
+    // ponytail: one fixed speech band (300 Hz-4 kHz, around speech's 2 kHz); per-voice band analysis if a bed still masks.
+    parts.push(ratio > 1 ? [`[bed]acrossover=split=300 4000[low][mid][high]`, `[mid][key]sidechaincompress=threshold=0.02:ratio=${Math.min(20, ratio * 2)}:attack=15:release=250[room]`,
+      '[low][room][high]amix=inputs=3:normalize=0[carved]', `[carved][level]sidechaincompress=threshold=0.02:ratio=${round(Math.max(1.5, ratio / 3), 2)}:attack=15:release=350[music]`].join(';')
+      : '[bed]anull[music];[key]anullsink;[level]anullsink');
     layers.push('[music]');
-  } else parts.push('[key]anullsink');
+  } else parts.push('[key]anullsink;[level]anullsink');
   layers.push(...hits);
   parts.push(`${layers.join('')}amix=inputs=${layers.length}:normalize=0:duration=first,alimiter=limit=0.89:attack=5:release=50[out]`);
   return parts.join(';');

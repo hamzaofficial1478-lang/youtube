@@ -50,3 +50,21 @@ test('the drawing engine draws every prop, set, pose, expression, look and effec
     await renderer.close();
   }
 });
+
+test('hand-drawn: a hand holds the pen while something is drawn, words are written out left to right, no hand elsewhere', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const shot = engine => ({engine, set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'prop', prop: 'house', x: 0.3, y: 0.55}, {kind: 'text', style: 'title', text: 'Home sweet home', x: 0.65, y: 0.3}]});
+    const tipAt = async (engine, t) => { await frame(renderer, shot(engine), t, {primary: engine}); return (await renderer.evaluate('DRAWN.layout()')).tip; };
+    const drawing = await tipAt('handdrawn', 0.1);
+    assert.ok(drawing && drawing[0] < 160, 'the pen is on the house while it is drawn');
+    const [early, late] = [await tipAt('handdrawn', 0.6), await tipAt('handdrawn', 1.2)];
+    assert.ok(early[0] < late[0] && Math.abs(early[1] - late[1]) < 1 && Math.abs(early[1] - 0.3 * 180) < 10, 'the title is written left to right along its line');
+    assert.equal(await tipAt('handdrawn', 2.9), null, 'no hand once everything is drawn');
+    assert.equal(await tipAt('stickman', 0.6), null, 'the hand belongs to the hand-drawn engine');
+    assert.ok(!(await frame(renderer, shot('handdrawn'), 0.6, {primary: 'handdrawn'})).equals(await frame(renderer, shot('handdrawn'), 0.9, {primary: 'handdrawn'})));
+  } finally {
+    await renderer.close();
+  }
+});

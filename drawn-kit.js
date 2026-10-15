@@ -64,18 +64,23 @@
   };
   // One drawing item: {pts, fill?, color?, width? (x line width) | px?, stroke?: false, line?: true (keep the outline
   // on flat), closed?, alpha?, glow?} or a custom {draw(p)}.
-  K.paint = (it, p, seed) => {
+  // K.TIP: where the pen is in this frame (device pixels), so the hand-drawn engine can draw the hand holding it.
+  K.TIP = null;
+  K.penAt = (x, y) => { const m = K.ctx.getTransform(); K.TIP = [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]; };
+  K.paint = (it, p, seed, wash = 1) => {
     const {ctx, u, FIN} = K, pts = it.pts;
     if (!pts || pts.length < 2) return;
     ctx.save();
     if (it.alpha !== undefined) ctx.globalAlpha *= it.alpha;
     const closed = it.closed ?? !!it.fill;
     if (it.fill && p >= 1) {
-      if (FIN === 'ink' && it.fill[0] === '#') { ctx.save(); ctx.translate(2.6 * u, 2 * u); ctx.fillStyle = K.alpha(K.mix(it.fill, '#FFFFFF', 0.12), 0.8); K.trace(pts, true); ctx.fill(); ctx.restore(); }
+      // Ink: the colour washes in just after its outline is drawn, slightly off the line like watercolour.
+      if (FIN === 'ink' && it.fill[0] === '#') { ctx.save(); ctx.translate(2.6 * u, 2 * u); ctx.globalAlpha *= wash; ctx.fillStyle = K.alpha(K.mix(it.fill, '#FFFFFF', 0.12), 0.8); K.trace(pts, true); ctx.fill(); ctx.restore(); }
       else { if (it.glow) { ctx.shadowColor = it.glow; ctx.shadowBlur = 30 * u; } ctx.fillStyle = it.fill; K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0; }
     }
     if (it.stroke !== false && !(FIN === 'flat' && it.fill && !it.line)) {
       const part = K.partial(pts, p), width = it.px || (it.width || 1) * K.LW();
+      if (FIN === 'ink' && p > 0 && p < 1 && part.length) K.penAt(...part[part.length - 1]);
       ctx.strokeStyle = it.color || K.PAL.line; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       if (FIN === 'ink') {
         const boil = Math.floor(K.T * 12);
@@ -105,7 +110,8 @@
       const share = lengths[k] / total, p = progress >= 1 ? 1 : share ? clamp01((progress - done) / share) : (progress >= Math.min(0.999, done + 0.02) ? 1 : 0);
       done += share;
       if (p <= 0) return;
-      if (it.draw) { K.ctx.save(); if (it.alpha !== undefined) K.ctx.globalAlpha *= it.alpha; it.draw(p); K.ctx.restore(); } else K.paint(it, p, seed + k * 13);
+      const wash = progress >= 1 ? 1 : clamp01((progress - done) / 0.12);
+      if (it.draw) { K.ctx.save(); if (it.alpha !== undefined) K.ctx.globalAlpha *= it.alpha; it.draw(p); K.ctx.restore(); } else K.paint(it, p, seed + k * 13, wash);
     });
   };
 

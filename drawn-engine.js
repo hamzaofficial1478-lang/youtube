@@ -6,6 +6,7 @@
 (function () {
   const K = window.DK, C = K.COL, TAU = Math.PI * 2, clamp01 = K.clamp01, ease = K.ease;
   const FINISH = {stickman: 'cartoon', handdrawn: 'ink', motion: 'flat'};
+  const WRITTEN = new Set(['title', 'label', 'highlight']);
   const PROP_SIZE = {s: 150, m: 230, l: 330, xl: 460};
   const TEXT_BASE = {title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
@@ -235,6 +236,25 @@
     if (el.label && el.prop !== 'sign' && p >= 1) K.pill(el.label, cx, cy - 0.62 * s, 46 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
   }
   const NUMBER = /(-?\d[\d,]*(?:\.\d+)?)/;
+  // The hand-drawn engine's hand: a marker held in a hand, its tip on the stroke being drawn (device pixels),
+  // with the small wobble of a hand at work. Drawn only while something is being drawn.
+  function drawHand([x, y], t, context) {
+    const {ctx} = K, s = 1.35 * context.H * (context.scale || 1) / 1080, angle = 0.95 + Math.sin(t * 9) * 0.03;
+    const f = K.frame(x, y, s, 1, angle), ink = '#2B2B2B', lw = 2.6 * s, skin = '#F1D2B6';
+    const draw = (pts, fill) => { ctx.beginPath(); pts.forEach(([px, py], k) => (k ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } ctx.strokeStyle = ink; ctx.lineWidth = lw; ctx.lineJoin = 'round'; ctx.stroke(); };
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    // Back to front: the sleeve, the palm behind the pen, the marker (nib on the line, barrel, cap in the accent),
+    // then the fingers that grip it - the middle finger under, the index along the barrel, the thumb over it.
+    draw(f.pts([[180, 52], [330, 118], [292, 205], [148, 122]]), '#3C4A5C');
+    draw(f.pts([[56, 10], [96, 22], [150, 32], [190, 48], [200, 92], [162, 122], [112, 112], [80, 82], [60, 46]]), skin);
+    draw(f.pts([[0, 0], [16, -6], [16, 6]]), '#3A3A3A');
+    draw(f.pts([[16, -10], [175, -12], [175, 12], [16, 10]]), '#4A4A4A');
+    draw(f.pts([[175, -13], [214, -13], [214, 13], [175, 13]]), K.PAL.accent);
+    draw(f.pts([[58, 6], [82, 22], [72, 32], [52, 20]]), skin);
+    draw(f.pts([[46, -5], [100, -12], [124, -8], [126, 6], [100, 11], [50, 8]]), skin);
+    draw(f.pts([[72, -12], [98, -27], [122, -26], [120, -12], [94, -5]]), skin);
+    ctx.restore();
+  }
   function drawText(el, i, t, local, p) {
     const at = LAYOUT.textAt[i], {ctx, u} = K, color = el.accent || ['number', 'counter'].includes(el.style) ? K.PAL.accent : K.PAL.ink;
     const {x, y, size} = at;
@@ -416,6 +436,15 @@
     const {ctx} = K;
     ctx.save();
     ctx.globalAlpha *= a;
+    // Hand-drawn: words are written out left to right by the pen, at a writing pace.
+    if (K.FIN === 'ink' && enter === 'draw' && el.kind === 'text' && WRITTEN.has(el.style)) {
+      const at = LAYOUT.textAt[i], q = clamp01(local / Math.min(1.6, Math.max(0.4, 0.25 + el.text.length * 0.045)));
+      if (q < 1) {
+        const half = at.width / 2 + at.size * 0.6, left = at.x - half, edge = left + 2 * half * q;
+        ctx.beginPath(); ctx.rect(left, at.y - at.size * 1.3, edge - left, at.size * 2.6); ctx.clip();
+        K.penAt(edge, at.y + at.size * 0.22);
+      }
+    }
     ctx.translate(ax + dx, ay + dy); ctx.scale(Math.max(0.001, sx), Math.max(0.001, sy)); ctx.translate(-ax, -ay);
     if (el.kind === 'figure') drawFigure(el, i, t, local, p);
     else if (el.kind === 'prop') drawProp(el, i, t, local, p);
@@ -428,6 +457,7 @@
   function frame(t, context) {
     P = context.P; D = P.data;
     K.KIT = D.kit || {};
+    K.TIP = null;
     const params = {...P, finish: FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
     K.T = t;
@@ -461,6 +491,7 @@
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);
+    if (K.FIN === 'ink' && K.TIP) drawHand(K.TIP, t, context);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && SCREEN_FX.has(el.effect)) drawScreenFx(el, i, t); });
     // The opening transition's own marks: speed streaks on a whip, an ink wipe, a glitch, a flash on a pop.
     const tr = D.transition;
@@ -471,6 +502,6 @@
     return true;
   }
   const catalog = () => ({props: Object.keys(K.PROPS).sort(), sets: Object.keys(K.SETS).sort(), poses: [...K.POSES].sort(), expressions: [...K.EXPRESSIONS].sort()});
-  // layout(): the last frame's measured boxes, read by the tests.
-  window.DRAWN = {frame, catalog, layout: () => (LAYOUT ? {est: LAYOUT.est} : null)};
+  // layout(): the last frame's measured boxes and the pen's tip, read by the tests.
+  window.DRAWN = {frame, catalog, layout: () => (LAYOUT ? {est: LAYOUT.est, tip: K.TIP} : null)};
 }());

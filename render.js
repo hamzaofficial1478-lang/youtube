@@ -150,11 +150,14 @@ function zoompanFor(move, index, frames, intensity) {
   if (cycle === 'pan-right') return {z: String(1 + amp), x: `(iw-iw/zoom)*on/${last}`, y: centre.y, kind: cycle};
   return {z: String(1 + amp), x: `(iw-iw/zoom)*(1-on/${last})`, y: centre.y, kind: cycle};
 }
+// The edit's transitions as FFmpeg xfade transitions (the HyperFrames catalog's push slide, cover, zoom through,
+// whip pan with motion blur, wipe, crossfade and colour dip).
+const XFADE = Object.freeze({crossfade: 'fade', 'dip-to-black': 'fadeblack', push: 'slideleft', slide: 'coverleft', zoom: 'zoomin', 'whip-pan': 'hblur', wipe: 'wipeleft'});
 // Builds every command for one proxy. Shot boundaries are snapped to frames so the picture never drifts from the narration.
 function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, workDir, outFile}) {
   const size = preset[format] || preset['long-form'], fps = Math.min(spec.canvas.frameRate, preset.maxFps);
   const transition = spec.transitions.default;
-  const fade = transition === 'crossfade' ? 'fade' : transition === 'dip-to-black' ? 'fadeblack' : null;
+  const fade = XFADE[transition] || null;
   const totalFrames = Math.round(narration.durationSeconds * fps);
   let boundaries = shots.map(shot => Math.round(shot.startSeconds * fps));
   boundaries.push(totalFrames);
@@ -265,7 +268,7 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
   const parts = chunks.map((chunk, index) => `[${index}:v]settb=AVTB,setpts=PTS-STARTPTS[c${index}]`);
   let label = 'c0', length = chunks[0].frames;
   for (let k = 1; k < chunks.length; k++) {
-    const join = chunks[k].join, fade = join.type === 'dip-to-black' ? 'fadeblack' : 'fade';
+    const join = chunks[k].join, fade = XFADE[join.type] || 'fade';
     parts.push(`[${label}][c${k}]xfade=transition=${fade}:duration=${round(join.frames / fps, 6)}:offset=${round((length - join.frames) / fps, 6)}[x${k}]`);
     length += chunks[k].frames - join.frames;
     label = `x${k}`;

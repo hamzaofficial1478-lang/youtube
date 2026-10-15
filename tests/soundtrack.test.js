@@ -69,3 +69,21 @@ test('real FFmpeg mixes music under the voice and effects on top, for every duck
     assert.equal(probe.channels, 2);
   }
 });
+
+test('the voice-over carve: under the voice the music gives up its speech band and keeps its bass', {skip: !R.resolveExecutable('ffmpeg') && 'FFmpeg is not installed'}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'carve-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  // The voice: a 2.5 kHz tone from 3 s on; the music: pink noise all the way through.
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'sine=f=2500:d=8:sample_rate=48000,volume=0.5,afade=t=in:st=3:d=0.01', '-y', path.join(dir, 'voice.wav')]);
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'anoisesrc=d=8:c=pink:a=0.4:r=48000', '-y', path.join(dir, 'music.wav')]);
+  const graph = M.mixGraph({music: [{start: 0, end: 8, entry: 'cut', exit: 'cut', measuredLufs: -20}], sfx: [], settings: {music: {...A.MUSIC_DEFAULTS, enabled: true, duck: 'medium'}, sfx: A.SFX_DEFAULTS}});
+  assert.match(graph, /acrossover=split=300 4000/);
+  fs.writeFileSync(path.join(dir, 'graph.txt'), graph);
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'voice.wav', '-i', 'music.wav', '-filter_complex_script', 'graph.txt', '-map', '[out]', '-y', 'mix.wav'], {cwd: dir});
+  // The music's level in one band before the voice (0.5-2.5 s) and under it (4-7.5 s); the voice is outside both bands.
+  const level = async (from, to, band) => Number(/RMS level dB: (-?[\d.]+)/.exec((await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'mix.wav', '-af', `atrim=${from}:${to},${band},astats=measure_overall=RMS_level:measure_perchannel=none`, '-f', 'null', '-'], {cwd: dir})).stderr)[1]);
+  const drop = async band => (await level(0.5, 2.5, band)) - (await level(4, 7.5, band));
+  const bass = await drop('lowpass=f=150,lowpass=f=150,lowpass=f=150'), speech = await drop('highpass=f=500,highpass=f=500,lowpass=f=1000,lowpass=f=1000,lowpass=f=1000');
+  assert.ok(speech >= 6, `the speech band makes room (${speech.toFixed(1)} dB)`);
+  assert.ok(speech - bass >= 3, `the bass stays (${bass.toFixed(1)} dB against ${speech.toFixed(1)} dB)`);
+});

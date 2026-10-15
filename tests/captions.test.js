@@ -193,3 +193,21 @@ test('measured word times from the voice replace the estimate; a re-spelled word
   // Too few matches: the estimate stays.
   assert.equal(Cap.buildCaptions({sentences, narrationSeconds: 3.5, measured: [{text: 'unrelated', start: 0, end: 1}]}).method, 'estimated');
 });
+
+test('active-word highlight: words wait dimmed and light up on the narrator\'s words, the hero word pops in the accent', () => {
+  const captions = Cap.buildCaptions({sentences: SENTENCES, pauses: PAUSES, narrationSeconds: 9});
+  const timeline = {captions, format: 'long-form', graphics: [], fps: 30};
+  const spec = {palette: {accent: '#C9A227'}, typography: {bodyFont: 'Arial'}, captions: {activeWordHighlight: true}};
+  const parts = Cap.assParts(timeline, spec, []);
+  assert.match(parts.styles[0], /^Style: Caption,Arial,50,&H00FFFFFF,&H90FFFFFF,/, 'words not yet spoken are dimmed');
+  const first = captions.groups[0], event = parts.events[0];
+  const beats = [...event.matchAll(/\\k(\d+)/g)].map(match => Number(match[1]));
+  assert.equal(beats.length, first.words.length + (first.words[0].start > first.start ? 1 : 0));
+  assert.equal(beats.reduce((sum, value) => sum + value, 0), Math.round((first.words.at(-1).end - first.start) * 100), 'the beats follow the word times');
+  assert.match(event, /\\c&H27A2C9&\\t\(\d+,\d+,\\fscx114\\fscy114\)\\t\(\d+,\d+,\\fscx100\\fscy100\)\}1347\{\\c&HFFFFFF&\\fscx100\\fscy100\}/, 'the hero word pops when it is said');
+  // A corrected caption with other words has no word times to follow; it is shown whole.
+  const fixed = structuredClone(captions);
+  Cap.editCaption(fixed, {groupId: first.id, text: 'In the year 1347 a ship'});
+  assert.doesNotMatch(Cap.assParts({...timeline, captions: fixed}, spec, []).events[0], /\\k/);
+  assert.doesNotMatch(Cap.assParts(timeline, {...spec, captions: {activeWordHighlight: false}}, []).events.join(''), /\\k/);
+});

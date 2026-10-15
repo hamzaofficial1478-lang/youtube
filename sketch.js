@@ -47,7 +47,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/8';
+const VERSION = 'drawn-scene/9';
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({

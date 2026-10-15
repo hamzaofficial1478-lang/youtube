@@ -223,14 +223,26 @@ function assParts(timeline, spec, clearTemplates) {
   // words take the style's ink and a white outline instead.
   const bg = /^#?([0-9a-f]{6})$/i.exec(String((spec.palette || {}).background || ''))?.[1], light = !!bg && (0.299 * parseInt(bg.slice(0, 2), 16) + 0.587 * parseInt(bg.slice(2, 4), 16) + 0.114 * parseInt(bg.slice(4, 6), 16)) / 255 > 0.6;
   const word = light ? assInline((spec.palette || {}).primary || '#1F1F1F') : '&HFFFFFF&', white = word, edge = light ? '&H00FFFFFF' : '&H00101010';
-  const style = `Style: Caption,${font},${vertical ? 80 : 50},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${edge},${light ? '&H00FFFFFF' : '&H96000000'},-1,0,0,0,100,100,0,0,1,${vertical ? (light ? 6 : 5) : (light ? 4 : 3)},${light ? 0 : 1},2,${M},${M},${vertical ? 620 : 62},1`;
+  // Active-word highlight (HyperFrames caption DNA): words wait dimmed and light up as the narrator says them
+  // (ASS karaoke on the caption's word times); the hero word lights in the accent with a small pop.
+  const follow = !!spec.captions?.activeWordHighlight;
+  const style = `Style: Caption,${font},${vertical ? 80 : 50},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${word.replace(/^&H/, follow ? '&H90' : '&H00').replace(/&$/, '')},${edge},${light ? '&H00FFFFFF' : '&H96000000'},-1,0,0,0,100,100,0,0,1,${vertical ? (light ? 6 : 5) : (light ? 4 : 3)},${light ? 0 : 1},2,${M},${M},${vertical ? 620 : 62},1`;
   const clears = clearWindows(timeline, clearTemplates), shown = visibleGroups(captions, clears);
   const events = shown.map((group, k) => {
     const before = k ? group.start - shown[k - 1].end : group.start, after = k + 1 < shown.length ? shown[k + 1].start - group.end : Infinity;
     const fade = `{\\fad(${before > 0.3 ? 150 : 0},${after > 0.3 ? 150 : 0})}`;
+    // Karaoke needs one time per shown word; a corrected caption with other words is shown without it.
+    const timed = follow && group.lines.join(' ').split(' ').length === group.words.length;
+    const cs = seconds => Math.max(0, Math.round((seconds - group.start) * 100));
+    const at = k => (k < group.words.length ? cs(group.words[k].start) : Math.max(cs(group.words[k - 1].end), cs(group.words[k - 1].start) + 1));
     let index = 0;
-    const lines = group.lines.map(line => line.split(' ').map(word => { const styled = index === group.emphasis ? `{\\c${accent}}${assText(word)}{\\c${white}}` : assText(word); index++; return styled; }).join(' '));
-    return `Dialogue: 5,${assTime(group.start)},${assTime(group.end)},Caption,,0,0,0,,${fade}${lines.join('\\N')}`;
+    const lines = group.lines.map(line => line.split(' ').map(word => {
+      const k = index++, hero = k === group.emphasis, beat = timed ? `\\k${at(k + 1) - at(k)}` : '';
+      const pop = timed && hero ? `\\t(${at(k) * 10},${at(k) * 10 + 90},\\fscx114\\fscy114)\\t(${at(k) * 10 + 90},${at(k) * 10 + 260},\\fscx100\\fscy100)` : '';
+      return hero ? `{${beat}\\c${accent}${pop}}${assText(word)}{\\c${white}${pop ? '\\fscx100\\fscy100' : ''}}` : `${beat ? `{${beat}}` : ''}${assText(word)}`;
+    }).join(' '));
+    const lead = timed && at(0) > 0 ? `{\\k${at(0)}}` : '';
+    return `Dialogue: 5,${assTime(group.start)},${assTime(group.end)},Caption,,0,0,0,,${fade}${lead}${lines.join('\\N')}`;
   });
   return {styles: [style], events, hidden: captions.groups.length - shown.length};
 }

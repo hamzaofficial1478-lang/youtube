@@ -53,6 +53,12 @@ At most one word per caption, never in two captions in a row: figures first (any
 limits (never, nobody, nothing, only, not, no, zero …). The word lists are English; other languages only
 lift figures.
 
+### Active-word highlight (0.28, HyperFrames caption DNA)
+
+Styles with `activeWordHighlight` burn captions whose words wait dimmed and light up as the narrator says
+them (ASS karaoke from the caption's word times); the emphasis word lights in the accent with a short pop.
+A caption corrected to other words has no word times and is shown whole.
+
 ### On screen (skills `captions.keep-out-band`, `editing.caption-spec`)
 
 - Burned in as the **top ASS layer** (above graphics and canvas overlays), white bold sans with a dark

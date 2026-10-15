@@ -4,7 +4,7 @@
 // filter strings enter this contract.
 const SCHEMA = 'ytprod.audio/1';
 const DEFAULTS = Object.freeze({schema: SCHEMA, mode: 'normalize', targetLufs: -16, truePeakDb: -2});
-const MIX_FILTERS = Object.freeze(['amix', 'adelay', 'afade', 'atrim', 'asplit', 'sidechaincompress', 'alimiter', 'volume', 'anull', 'anullsink', 'asetpts']);
+const MIX_FILTERS = Object.freeze(['amix', 'adelay', 'afade', 'atrim', 'asplit', 'sidechaincompress', 'alimiter', 'volume', 'anull', 'anullsink', 'asetpts', 'acrossover']);
 const REQUIRED_FILTERS = Object.freeze(['aformat', 'loudnorm', 'silencedetect', ...MIX_FILTERS]);
 const MUSIC_DEFAULTS = Object.freeze({enabled: false, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: null});
 const SFX_DEFAULTS = Object.freeze({enabled: false, density: 'accent', levelDb: -12});

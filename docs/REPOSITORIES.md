@@ -152,6 +152,12 @@ Rather than presenting untested upstream features as ready, the first release re
 - Not used: its CLI, studio, registry, Remotion bridge, network fetching and audio graph.
 - New dependency: `gsap` 3.15.0 (exact pin; GreenSock standard no-charge license, including the bonus plugins), inlined into the local render page from `node_modules`.
 
+### heygen-com/hyperframes, third read (0.28)
+
+- Source: <https://github.com/heygen-com/hyperframes>, read again at `db845d9409340fbf2910e6061b40145527daadb7` (2026-10-15). License: Apache-2.0.
+- Read: the transitions overview (energy, mood, narrative position, one primary plus accents, duration presets), `embedded-captions` (active word, hero word entrance), `docs/studio/voiceover-carve.mdx` and `packages/core/src/audioCarve.ts` (bands, strength profile).
+- No code copied. Restated in our own code: `editing-brain.js` `transitionPlan`/`sceneJoin`, `render.js` `XFADE` (FFmpeg's own xfade transitions), `captions.js` active-word karaoke and hero pop, `music.js` three-band voice-over carve. Vendored files in `vendor/hyperframes` are unchanged (still `5ec2dd2`).
+
 ### calesthio/OpenMontage, deep read (0.25)
 
 - Read again at `9327439db69021ab4b0e2776729bf3b58fdb5a87` (2026-10-03). AGPL-3.0: nothing copied.

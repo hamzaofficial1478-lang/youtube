@@ -140,6 +140,31 @@ test('the auto edit is frame-exact, deterministic and explains every decision', 
   assert.equal(B.autoEdit({...input, scenes: filled}).clips.find(clip => clip.shotId === 'g').move.kind, 'static', 'a short planned static hold stays static');
 });
 
+test('the transition brain: one primary between related scenes, an accent for a new topic or the turn, drawn moves never doubled', () => {
+  const {sentences, scenes, assets, narrationSeconds} = fixture();
+  const joinInto = (edit, id) => edit.joins[edit.clips.findIndex(clip => clip.sceneId === id) - 1];
+  const withPurposes = purposes => scenes.map((scene, k) => ({...scene, purpose: purposes[k]}));
+  // Medium energy (Story Mix): push between related scenes, zoom for the turn; the hook still ends on a cut.
+  const story = {...SPEC, transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom'], maxDurationMs: 600}, motion: {...SPEC.motion, intensity: 60}};
+  const related = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets, spec: story});
+  assert.equal(joinInto(related, 'sc2').type, 'cut');
+  assert.deepEqual([joinInto(related, 'sc3').type, joinInto(related, 'sc3').frames], ['push', 12]);
+  assert.match(joinInto(related, 'sc3').reason, /Related scenes share the primary transition \(medium energy: push/);
+  const turn = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'turn', 'close']), assets, spec: story});
+  assert.equal(joinInto(turn, 'sc3').type, 'zoom');
+  // Calm (hand-drawn): crossfades between related scenes, a wipe at a change of topic.
+  const calm = {...SPEC, transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], maxDurationMs: 600}, motion: {...SPEC.motion, intensity: 20}};
+  assert.deepEqual([joinInto(B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets, spec: calm}), 'sc3').type], ['crossfade']);
+  assert.equal(joinInto(B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'example', 'close']), assets, spec: calm}), 'sc3').type, 'wipe');
+  // A drawing that opens with its own move is the transition: the edit cuts into it.
+  const drawn = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets: {...assets, e: {...assets.e, sketch: {transition: 'ink'}}}, spec: story});
+  assert.match(joinInto(drawn, 'sc3').reason, /opens with its own ink move/);
+  // The render draws each transition with its FFmpeg xfade.
+  const files = Object.fromEntries(related.clips.map(clip => [clip.id, `${clip.id}.src`]));
+  const plan = R.planTimeline({timeline: related, files, narration: {file: 'n.wav', durationSeconds: narrationSeconds}, format: 'long-form', workDir: '/w', outFile: '/w/o.mp4', graphics: false});
+  assert.match(plan.final.args.join(' '), /xfade=transition=slideleft:duration=0\.4/);
+});
+
 test('the critic names the boring, lazy and amateur choices with a fix', () => {
   const {sentences, scenes, assets, narrationSeconds} = fixture();
   const edit = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes, assets, spec: SPEC});
@@ -189,7 +214,7 @@ test('owner edits are checked before anything changes, and scene repair touches 
   assert.equal(JSON.stringify(edit), before, 'the source edit is never mutated');
   assert.throws(() => B.applyOp(edit, {type: 'set-hold', clipId: edit.clips.at(-1).id, seconds: 2}, {spec: SPEC}), /last clip/);
   assert.throws(() => B.applyOp(edit, {type: 'set-hold', clipId: first.id, seconds: 0.1}, {spec: SPEC}), /half a second/);
-  assert.throws(() => B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'wipe'}, {spec: SPEC}), /Choose a transition/);
+  assert.throws(() => B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'morph'}, {spec: SPEC}), /Choose a transition/);
   assert.throws(() => B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'dip-to-black'}, {spec: {...SPEC, transitions: {...SPEC.transitions, allowed: ['cut', 'crossfade']}}}), /does not allow/);
   const faded = B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'crossfade', seconds: 0.5}, {spec: SPEC}).timeline;
   assert.deepEqual([faded.joins[0].type, faded.joins[0].frames], ['crossfade', 15]);
