@@ -59,8 +59,21 @@ YouTube API data about other people's channels is **display-only** by default: i
 
 **Edit caps** sets the NexLev monthly request cap (default 150, counted per UTC month) and the YouTube daily unit cap (default 2,000, counted per Pacific-time day). Keep the NexLev cap at or below your NexLev plan's allowance. Caps are shared by Competitor Intelligence and the Niche Factory.
 
+## Style studies: the program learns a look (0.30)
+
+Owner review 2026-10-15: "the program should learn by itself ... analyze and adopt the competitors' style on every niche". On the Competitors page, **Style studies** → **Study a reference** lets the program study the look and editing of any video you like (a competitor's, or one you found):
+
+1. **Your reference.** Paste a path on this PC: a video file, one screenshot or a folder of up to 12 screenshots (in File Explorer: Shift + right-click → Copy as path). Add a title, and optionally the channel, the link (kept for your record; nothing is downloaded from it) and what you like about it.
+2. **Measured on this PC (free).** The pinned FFmpeg samples 18 frames into two contact sheets and, for a video, measures every cut (median shot length and the middle half) and the main colours.
+3. **Claude studies it (one answer, ~8-16k tokens reserved from the family's monthly limit; never retried by itself).** It maps the look onto our engines and looks (stickman classic/whiteboard/storybook/doodle, hand-drawn, motion, atelier, montage) and returns the palette, shot lengths, transitions, people, places, words, camera, the techniques to learn, our own contributions, what never to copy, and a planning brief in our own words.
+4. **Checks.** Only our vocabulary; colours as hex; the 30/70 rule (`learn x 7 <= ours x 3`); a copy guard (no six words in a row from the title or your notes, never the channel's name); the measured rhythm replaces Claude's guess. A failed check keeps the study as **Blocked by checks** with its reasons.
+5. **Your review.** Approve by name with three confirmations (techniques only, the 30/70 balance, the whole study read), or reject with a reason.
+6. **Style draft.** **Create style draft** starts from the launch style the study maps onto and applies its palette, shot lengths, transitions, look and planning brief (a change that fails the Style Library checks is skipped and listed). The brief reaches Claude's planner, continuity review and story director as "LEARNED LOOK". You still approve and assign the draft in the Style Library.
+
+Live check (2026-10-15, our own 0.29 preview as the reference): 37 s, 7,757 tokens; Claude named the drawing hand, the storybook street, the doodle gag and the illustrated price tags, mapped it to Stickman · Whiteboard, and proposed 5 techniques, 12 of our own and 6 things never to copy.
+
 ## Not included yet
 
-- No video downloading, frame analysis or audio analysis: editing and voice evidence is your observations plus transcripts.
+- No video downloading or audio analysis. Frames are studied only from files you point to (style studies); scans still take editing and voice evidence from your observations and transcripts.
 - NexLev MCP (OAuth) is not used; the REST API with a key in a Windows-protected connector slot is.
 - Live verification against the real NexLev, YouTube and Hermes services still needs your keys. All automated and browser checks used fake providers.

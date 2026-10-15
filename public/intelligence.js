@@ -9,6 +9,7 @@ const INTEL_STATUS = {
   queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Completed', 'green'], partial: ['Partial data', 'orange'], failed: ['Failed', 'gray'],
   interrupted: ['Interrupted · usage unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Blocked by data cap', 'orange'], blocked_budget: ['Blocked by token limit', 'orange'],
   quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange'],
+  studied: ['Ready to review', 'orange'], approved: ['Approved', 'green'], rejected: ['Rejected', 'gray'],
 };
 function intelStatus(status) { const [label, color] = INTEL_STATUS[status] || [status, 'gray']; return badge(label, color); }
 // provider 'ai' means either Claude connection; the subscription one has no stored key.
@@ -17,7 +18,7 @@ function intelNumber(value) { return value === null || value === undefined ? '�
 function intelDuration(seconds) { if (!Number.isFinite(seconds)) return '—'; const m = Math.floor(seconds / 60), s = Math.round(seconds % 60); return m ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`; }
 // Spend meters warn near the cap; rating meters (warnHigh=false) never do.
 function intelMeter(used, cap, warnHigh = true) { const pct = cap ? Math.min(100, Math.round(used / cap * 100)) : 100; return `<div class="meter"><span class="meter-fill ${warnHigh && pct >= 90 ? 'hot' : ''}" data-width="${pct}"></span></div>`; }
-function intelApplyMeters(root = document) { root.querySelectorAll('[data-width]').forEach(element => { const value = Number(element.dataset.width); if (Number.isFinite(value)) element.style.width = `${Math.max(0, Math.min(100, value))}%`; }); }
+function intelApplyMeters(root = document) { root.querySelectorAll('[data-swatch]').forEach(element => { element.style.background = element.dataset.swatch; }); root.querySelectorAll('[data-width]').forEach(element => { const value = Number(element.dataset.width); if (Number.isFinite(value)) element.style.width = `${Math.max(0, Math.min(100, value))}%`; }); }
 function intelList(items) { return items.length ? `<ul class="intel-list">${items.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '<p class="muted">None recorded.</p>'; }
 function intelBusy() {
   const intel = state?.intelligence;
@@ -94,7 +95,34 @@ function competitorsView() {
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Claude for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
         ${analysis ? blueprintView(analysis, family, data) : ''}</section>
+      ${studiesCard(family)}
     </div><div>${dataCapsCard()}${guidanceCard(family, data)}</div></div>`;
+}
+
+// R05c: the program learns a look from a reference (a video file or screenshots on this PC).
+function studiesCard(family) {
+  const studies = (state.styleStudies?.studies || []).filter(item => item.familyId === family.id);
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">LEARN A LOOK · CLAUDE STUDIES A REFERENCE</span><h2>Style studies</h2></div>${action('Study a reference', 'intel-study', family.id, 'primary')}</div>
+    <p class="hint">Point the program at a video file or screenshots of a video whose look you like, for example a competitor's. FFmpeg measures its cut rhythm and colours on this PC; Claude reads the frames and maps the look onto our engines. It learns techniques only (at most 30%), never a channel's identity, and changes nothing until you approve it and make a style draft.</p>
+    ${studies.map(studyView).join('') || '<p class="muted">No studies yet.</p>'}</section>`;
+}
+function studyView(item) {
+  const study = item.study, measured = item.measured, swatch = colour => `<span class="swatch" data-swatch="${esc(colour)}" title="${esc(colour)}"></span>`;
+  const retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'stale'].includes(item.status) && item.attempts < 3;
+  return `<article class="study-row">
+    <div class="production-card-head"><div><strong>${esc(item.title)}</strong> ${intelStatus(item.status)}<small class="muted"> · ${item.source.kind === 'video' ? 'video file' : `${item.source.files} screenshot${item.source.files === 1 ? '' : 's'}`} · ${esc(item.createdBy)} · ${esc(date(item.createdAt))}${item.usage?.total ? ` · ${intelNumber(item.usage.total)} tokens` : ''}</small></div>
+      <div class="row-end">${retry ? action('Retry', 'intel-study-retry', item.id) : ''}${item.status === 'studied' ? action('Review', 'intel-study-review', item.id, 'primary') : ''}${item.status === 'approved' ? action('Create style draft', 'intel-study-draft', item.id, 'primary') : ''}</div></div>
+    ${item.error ? `<p class="inline-warning">${esc(item.error)}</p>` : ''}
+    ${measured ? `<p class="hint">Measured on this PC: ${measured.shots ? `${measured.shots} shots, median ${measured.medianShotSeconds} s (middle half ${measured.p25ShotSeconds}-${measured.p75ShotSeconds} s)` : 'screenshots, no timing'}${measured.colours?.length ? ` · main colours ${measured.colours.map(swatch).join('')}` : ''}</p>` : ''}
+    ${item.sheets ? `<div class="study-sheets">${Array.from({length: item.sheets}, (_, k) => `<img class="contact-sheet" src="/api/style-studies/${esc(item.id)}/sheets/${k + 1}" alt="Contact sheet ${k + 1} of ${esc(item.title)}" loading="lazy">`).join('')}</div>` : ''}
+    ${study ? `<p>${esc(study.summary)}</p>
+      <dl class="style-facts"><div><dt>Engine</dt><dd>${esc(study.engine)}${study.look ? ` · ${esc(study.look)} look` : ''}</dd></div><div><dt>Palette</dt><dd>${['background', 'primary', 'accent', 'text'].map(key => swatch(study.palette[key])).join('')}</dd></div><div><dt>Shots</dt><dd>${study.pacing.shotMinSeconds}-${study.pacing.shotMaxSeconds} s · ${esc(study.transitions.join(', '))}</dd></div>
+        <div><dt>People</dt><dd>${esc(study.characters)}</dd></div><div><dt>Places</dt><dd>${esc(study.places)}</dd></div><div><dt>Words</dt><dd>${esc(study.words)}</dd></div><div><dt>Camera</dt><dd>${esc(study.camera)}</dd></div></dl>
+      <h4 class="intel-subhead">Techniques to learn (the 30%)</h4>${intelList(study.learn)}<h4 class="intel-subhead">Our own (the 70%)</h4>${intelList(study.ours)}<h4 class="intel-subhead">Never copy</h4>${intelList(study.avoid)}
+      <h4 class="intel-subhead">Planning brief for Claude</h4><p>${esc(study.brief)}</p>${item.warnings.length ? `<p class="hint">${esc(item.warnings.join(' '))}</p>` : ''}` : ''}
+    ${item.review ? `<p class="hint">${item.review.decision === 'approved' ? 'Approved' : 'Rejected'} by ${esc(item.review.reviewer)}${item.review.reason ? `: ${esc(item.review.reason)}` : ''}.</p>` : ''}
+    ${item.applied.map(entry => `<p class="hint">Style draft created by ${esc(entry.by)} (applied ${esc(entry.applied.join(', ') || 'nothing')}${entry.skipped.length ? `; skipped ${esc(entry.skipped.map(s => s.change).join(', '))}` : ''}). Review and approve it in Production panel → Style Library.</p>`).join('')}
+  </article>`;
 }
 
 function scanDetail(scan) {
@@ -289,6 +317,20 @@ function intelAction(command, id, button) {
       <label class="checkbox-label"><input type="checkbox" name="recommendationsReviewed">I reviewed every recommendation and its evidence references.</label>`}
       <div class="form-grid">${nameField('Reviewer name', 'person')}<label>${revoke ? 'Reason' : 'Notes'}<input name="notes" maxlength="2000" ${revoke ? 'required minlength="8"' : ''}></label></div>`, revoke ? 'Revoke approval' : 'Record decision', {id, revoke});
   }
+  if (command === 'intel-study') return intelDialog('study', `Study a reference · ${family.name}`, 'LEARN A LOOK · TECHNIQUES, NOT COPIES', `<div class="form-grid">
+      <label class="full">Path on this PC<input name="path" required maxlength="400" placeholder="C:\\Users\\you\\Videos\\reference.mp4"><span class="hint">A video file (mp4, mov, mkv, webm), one screenshot, or a folder of up to 12 screenshots. In File Explorer: hold Shift, right-click the file or folder, choose "Copy as path", then paste here. Nothing is uploaded or downloaded.</span></label>
+      <label>Reference title<input name="title" required minlength="2" maxlength="160"></label><label>Channel <span class="hint">optional</span><input name="channel" maxlength="80"></label>
+      <label class="full">Link <span class="hint">optional, kept for your record only</span><input name="link" maxlength="300" placeholder="https://www.youtube.com/watch?v=…"></label>
+      <label class="full">What you like about it <span class="hint">optional</span><textarea name="notes" rows="2" maxlength="1500"></textarea></label>
+      ${connectorSelect('claude', 'ai', 'Claude connection')}${nameField()}</div>
+      <p class="note">Reserves about 13,000-16,000 tokens from this family's monthly limit before anything is sent. Claude is asked once; no automatic retries.</p>`, 'Study it', {familyId: family.id});
+  if (command === 'intel-study-retry') { const item = state.styleStudies.studies.find(entry => entry.id === id); return intelDialog('study-retry', 'Retry the study', 'CLAUDE · ONE MORE ATTEMPT', `<p class="hint">Attempt ${item.attempts + 1} of 3.</p>${item.status === 'interrupted' ? '<label class="checkbox-label"><input type="checkbox" name="confirmInterrupted">The last attempt was interrupted and may have used tokens. Retry anyway.</label>' : ''}`, 'Retry', {id}); }
+  if (command === 'intel-study-review') return intelDialog('study-review', 'Review the style study', 'HUMAN APPROVAL GATE', `<div class="form-grid"><label>Decision<select name="decision"><option value="approved">Approve</option><option value="rejected">Reject</option></select></label></div>
+      <label class="checkbox-label"><input type="checkbox" name="techniquesOnly">It learns techniques only: no channel identity, characters, mascots, drawings or wording.</label>
+      <label class="checkbox-label"><input type="checkbox" name="balance">The 30% reference / 70% our own balance is acceptable.</label>
+      <label class="checkbox-label"><input type="checkbox" name="reviewed">I read the whole study, including the planning brief.</label>
+      <div class="form-grid">${nameField('Reviewer name', 'person')}<label>Reason <span class="hint">needed to reject</span><input name="reason" maxlength="500"></label></div>`, 'Record decision', {id});
+  if (command === 'intel-study-draft') return intelDialog('study-draft', 'Create a style draft from the study', 'STYLE LIBRARY', '<p class="hint">Starts from the launch style the study maps onto and applies its palette, shot lengths, transitions, look and planning brief (changes that do not pass the Style Library checks are skipped and listed). It is saved as a new draft that you still review, approve and assign in the Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
   if (command === 'intel-style-draft') return intelDialog('style-draft', 'Create a style draft', 'STYLE LIBRARY', '<p class="hint">Copies the recommended style\'s latest approved revision, applies the proposed adjustments that pass validation, and saves it as a new draft. You still approve and assign it in Production panel → Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
   if (command === 'intel-voice') {
     const direction = familyData?.voiceDirection;
@@ -383,6 +425,10 @@ document.getElementById('intel-form').addEventListener('submit', event => {
     if (kind === 'scan') return api(`/api/families/${data.familyId}/competitor-scans`, {familyRevision: data.familyRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
     if (kind === 'analyze') { const analysis = await api(`/api/families/${data.familyId}/competitor-analyses`, {familyRevision: data.familyRevision, scanId: data.scanId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')}); selectedAnalysis = analysis.id; return analysis; }
     if (kind === 'review') return api(`/api/competitor-analyses/${data.id}/review`, data.revoke ? {decision: 'reject', reviewer: value('person'), notes: value('notes')} : {decision: value('decision'), reviewer: value('person'), notes: value('notes'), confirmations: {techniquesNotCopied: checked('techniquesNotCopied'), balanceAccepted: checked('balanceAccepted'), recommendationsReviewed: checked('recommendationsReviewed')}});
+    if (kind === 'study') return api(`/api/families/${data.familyId}/style-studies`, {path: value('path'), title: value('title'), channel: value('channel') || undefined, link: value('link') || undefined, notes: value('notes') || undefined, connector: connectorPayload(form, 'claude'), createdBy: value('person')});
+    if (kind === 'study-retry') return api(`/api/style-studies/${data.id}/retry`, {confirmInterrupted: checked('confirmInterrupted')});
+    if (kind === 'study-review') return api(`/api/style-studies/${data.id}/review`, {decision: value('decision'), reviewer: value('person'), techniquesOnly: checked('techniquesOnly'), balance: checked('balance'), reviewed: checked('reviewed'), ...(value('reason') ? {reason: value('reason')} : {})});
+    if (kind === 'study-draft') { const result = await api(`/api/style-studies/${data.id}/style-draft`, {createdBy: value('person')}); message = `Style draft "${result.revision.spec.name}" created in the Style Library.${result.skipped.length ? ` ${result.skipped.length} change(s) skipped.` : ''}`; return result; }
     if (kind === 'style-draft') { const result = await api(`/api/competitor-analyses/${data.id}/style-draft`, {createdBy: value('person')}); message = `Style draft "${result.revision.spec.name}" created in the Style Library.${result.skipped.length ? ` ${result.skipped.length} adjustment(s) were skipped by validation.` : ''}`; return result; }
     if (kind === 'idea') {
       const list = (name, separator) => value(name).split(separator).map(item => item.trim()).filter(Boolean);
