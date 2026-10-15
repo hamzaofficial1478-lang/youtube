@@ -44,6 +44,9 @@ class MotionRenderer {
   }
   async start() {
     if (!this.browser) throw new InputError('No Chromium browser was found. Install Microsoft Edge or Google Chrome, or set MOTION_BROWSER.', 503);
+    // A (re)started browser has an empty page: the template script must be injected again (a stalled browser that
+    // was restarted kept "injected" and failed with "MOTION is not defined", demo render 2026-10-16).
+    this.injected = false; this.dirty = false;
     this.profile = fs.mkdtempSync(path.join(os.tmpdir(), 'motion-profile-'));
     this.child = spawn(this.browser, [
       '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${this.profile}`,
@@ -147,12 +150,16 @@ class MotionRenderer {
   async blank() {
     await this.send('Runtime.evaluate', {expression: 'window.__previous = 1'});
     await this.send('Page.navigate', {url: 'about:blank'});
-    for (let attempt = 0; attempt < 100; attempt++) {
-      const state = (await this.send('Runtime.evaluate', {expression: 'typeof window.__previous + document.readyState', returnByValue: true})).result.value;
-      if (state === 'undefinedcomplete') break;
-      await sleep(20);
+    // On a busy PC the blank page can take seconds; drawing code injected before it arrives would be wiped out
+    // ("MOTION is not defined", demo render 2026-10-16). Wait for it, and treat a page that never turns blank
+    // as a stalled browser (the render restarts it and draws the shot again).
+    let blank = false;
+    for (let attempt = 0; attempt < 500 && !blank; attempt++) {
+      blank = (await this.send('Runtime.evaluate', {expression: 'typeof window.__previous + document.readyState', returnByValue: true})).result.value === 'undefinedcomplete';
+      if (!blank) await sleep(20);
     }
     this.injected = false;
+    if (!blank) throw new InputError('The drawing browser did not answer (the page did not reset).', 503);
   }
   async loadComposition({html, frameId, width, height, scale = 1, canvas = '#FFFFFF', duration}) {
     await this.blank();

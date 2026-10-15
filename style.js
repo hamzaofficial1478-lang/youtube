@@ -29,36 +29,43 @@ const PROFILE_LIMIT = 60;
 // every adapter stays "not_implemented" until its milestone passes real fixtures.
 const RENDERERS = {
   'ffmpeg-montage': {
+    features: ['Stock footage and photos cut to the voice', 'Drawn explainer cutaways where footage cannot show it'],
     name: 'FFmpeg montage', milestone: 'P05', status: 'not_implemented', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'wipe'], cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle (choose in the style)', 'Option: a hand draws each scene', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
+    features: ['Real objects and cartoon people in ink and coloured pencil on white paper', 'Handwritten labels with arrows, price tags, sticky notes and callouts', 'Keyword titles, side-by-side comparisons, thoughts inside a head'],
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
+    features: ['Kinetic words, counters, charts, timelines and icons'],
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   atelier: {
+    features: ['Every shot designed by Claude for this video'],
     name: 'Atelier compositions', milestone: 'P06h', status: 'not_implemented',
     note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'story-mix': {
+    features: ['Every engine in one video: the story director picks the engine for each beat'],
     name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
     note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe', 'zoom'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'cinematic-hybrid': {
+    features: ['Cinematic footage with designed titles'],
     name: 'Cinematic hybrid', milestone: 'P05+', status: 'not_implemented',
     note: 'Generated or stock video shots with continuity rules and a strict proxy-review loop.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'zoom', 'whip-pan', 'match-cut', 'wipe'], cameraMoves: CAMERA_MOVES},
@@ -73,8 +80,20 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v6';
+const LAUNCH_VERSION = 'Launch library v7';
 const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle']);
+// The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
+// main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
+// owner can still change; the drawing itself follows drawing.look.
+const LOOK_PRESETS = Object.freeze({
+  classic: {hand: false, palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'}, pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5}, transitions: {allowed: ['cut', 'crossfade', 'push'], default: 'cut', maxDurationMs: 300}, intensity: 60},
+  whiteboard: {hand: true, palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 7}, transitions: {allowed: ['cut', 'crossfade', 'wipe'], default: 'cut', maxDurationMs: 500}, intensity: 35},
+  storybook: {hand: false, palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4}, transitions: {allowed: ['cut', 'crossfade', 'dip-to-black'], default: 'cut', maxDurationMs: 500}, intensity: 30},
+  doodle: {hand: false, palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'}, pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3}, transitions: {allowed: ['cut'], default: 'cut', maxDurationMs: 0}, intensity: 55},
+});
+// Launch profiles that are gone from the library (0.29's separate stickman looks). A copy the owner never
+// approved, assigned or revised is retired automatically, so it leaves the library list.
+const RETIRED_LAUNCH = Object.freeze(['stickman-whiteboard', 'stickman-storybook', 'stickman-doodle']);
 const LAUNCH_PROFILES = [
   {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
@@ -92,63 +111,6 @@ const LAUNCH_PROFILES = [
     audio: {musicMoods: ['upbeat', 'curious', 'playful'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'ffmpeg-sketch'},
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
-    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
-  }},
-  {key: 'stickman-whiteboard', upgrade: 'Launch library v6 (0.29): new. The stickman engine on a whiteboard: a hand draws every line and writes every word.', spec: {
-    name: 'Stickman · Whiteboard',
-    summary: 'Whiteboard animation: a hand holding a marker draws every stick figure, object and word on a white board, one after another, on the narrator\'s words.',
-    bestFit: ['Educational explainers', 'Business and self-improvement', 'Step-by-step stories'],
-    formats: ['long-form', 'shorts'],
-    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 7},
-    transitions: {allowed: ['cut', 'crossfade', 'wipe'], default: 'cut', maxDurationMs: 500},
-    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 35, easing: 'ease-in-out'},
-    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
-    palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'},
-    captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
-    audio: {musicMoods: ['curious', 'calm', 'upbeat'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
-    renderer: {adapter: 'ffmpeg-sketch'},
-    drawing: {look: 'whiteboard', hand: true},
-    qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 7, minSceneSeconds: 2, maxSceneSeconds: 16, contactSheetEverySeconds: 3},
-    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
-  }},
-  {key: 'stickman-storybook', upgrade: 'Launch library v6 (0.29): new. The stickman engine as an illustrated storybook: warm paper, bean-bodied characters, chapter cards.', spec: {
-    name: 'Stickman · Storybook',
-    summary: 'Warm illustrated storytelling: round-headed characters with bean bodies and deadpan faces in fully drawn places, chapter cards between stages, quick cuts and changing framing.',
-    bestFit: ['"Every rank" and progression stories', 'Life stories and how-it-works', 'Crime, history and society'],
-    formats: ['long-form', 'shorts'],
-    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4},
-    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black'], default: 'cut', maxDurationMs: 500},
-    motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 30, easing: 'ease-in-out'},
-    typography: {headingFont: 'Segoe UI', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
-    palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'},
-    captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
-    audio: {musicMoods: ['cinematic', 'tense', 'curious'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
-    renderer: {adapter: 'ffmpeg-sketch'},
-    drawing: {look: 'storybook', hand: false},
-    qc: {maxBlackSeconds: 1, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
-    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
-  }},
-  {key: 'stickman-doodle', upgrade: 'Launch library v6 (0.29): new. The stickman engine as a marker doodle: big eyes, bright colour, a visual gag for every line.', spec: {
-    name: 'Stickman · Doodle',
-    summary: 'Marker doodles on a white page: stick figures with big eyes and messy hair, bright flat colour, a visual gag for every line, face close-ups for reactions and very quick cuts.',
-    bestFit: ['History and science for everyone', 'Funny explainers', '"What did people actually do" stories'],
-    formats: ['long-form', 'shorts'],
-    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3},
-    transitions: {allowed: ['cut'], default: 'cut', maxDurationMs: 0},
-    motion: {cameraMoves: ['static', 'zoom'], intensity: 55, easing: 'ease-in-out'},
-    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 4, textCase: 'sentence', minTextHeightPercent: 4},
-    palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'},
-    captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
-    visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
-    audio: {musicMoods: ['playful', 'quirky', 'upbeat'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
-    renderer: {adapter: 'ffmpeg-sketch'},
-    drawing: {look: 'doodle', hand: false},
-    qc: {maxBlackSeconds: 0.3, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 2},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
   {key: 'hand-drawn-canvas', upgrade: 'Launch library v6 (0.29): the hand-drawn engine is now an illustrated explainer (owner reference 2026-10-15): real objects and cartoon people in ink and coloured pencil on white paper, annotated with handwritten labels, arrows, sticky notes, price tags and callouts; 2-5 s holds and hard cuts.', spec: {
@@ -506,6 +468,16 @@ class StyleLibrary {
   // approve. A revision the owner made is never followed by an automatic one.
   seedLaunchProfiles() {
     this.store.transaction(() => {
+      for (const key of RETIRED_LAUNCH) {
+        const profile = this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(key);
+        if (!profile) continue;
+        const revisions = this.db.prepare('SELECT id, status, created_by FROM style_revisions WHERE profile_id=?').all(profile.id);
+        const used = revisions.some(item => item.status === 'approved' || !item.created_by.startsWith('Launch library')) || this.db.prepare("SELECT 1 FROM style_assignments a JOIN style_revisions r ON r.id=a.revision_id WHERE r.profile_id=? LIMIT 1").get(profile.id);
+        if (used || revisions.every(item => item.status === 'retired')) continue;
+        const retirement = JSON.stringify({retiredBy: LAUNCH_VERSION, retiredAt: now(), reason: 'The stickman looks are features of the Stickman engine now: choose them in its style, not as separate styles.'});
+        this.db.prepare("UPDATE style_revisions SET status='retired', retirement=? WHERE profile_id=? AND status<>'retired'").run(retirement, profile.id);
+        this.store.event(`Launch library update: the separate ${key} style was retired (its look is a Stickman feature now)`);
+      }
       for (const launch of LAUNCH_PROFILES) {
         const spec = validateStyleSpec(structuredClone(launch.spec)), at = now(), existing = this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(launch.key);
         if (existing) {
@@ -636,7 +608,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 

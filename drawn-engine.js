@@ -8,11 +8,11 @@
   const FINISH = {stickman: 'cartoon', handdrawn: 'ink', motion: 'flat'};
   // The stickman engine's looks (the style's drawing.look): each its own finish.
   const LOOKS = {classic: 'cartoon', whiteboard: 'board', storybook: 'story', doodle: 'doodle'};
-  const WRITTEN = new Set(['title', 'label', 'highlight']);
+  const WRITTEN = new Set(['title', 'label', 'highlight', 'keyword']);
   // Words are written out at a writing pace.
   const writeSeconds = text => Math.min(1.6, Math.max(0.4, 0.25 + String(text).length * 0.045));
   const PROP_SIZE = {s: 150, m: 230, l: 330, xl: 460};
-  const TEXT_BASE = {title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50};
+  const TEXT_BASE = {title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
   const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, none: 0};
@@ -29,11 +29,11 @@
 
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
-    if (el.kind === 'text' && el.style === 'chapter') return 'none';
+    if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN) return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
     if (el.kind === 'figure') return engine === 'motion' ? 'slide' : 'pop';
-    if (el.kind === 'text' && ['stamp', 'number', 'counter', 'note', 'headline', 'chapter'].includes(el.style)) return 'none';
+    if (el.kind === 'text' && ['stamp', 'number', 'counter', 'note', 'headline', 'chapter', 'versus'].includes(el.style)) return 'none';
     return 'pop';
   }
   const figureH = el => K.FIGURE_SIZE[el.size || 'm'] * K.u;
@@ -70,11 +70,11 @@
       // Words always fit inside the frame, even at the camera's closest zoom: a long line gets a smaller font.
       const base = textSize(el), safe = (K.W - 2 * K.M) / 1.12, natural = K.measure(el.text, base, {weight: 800}) * 1.08;
       const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
-      const x = ['headline', 'chapter'].includes(el.style) ? K.W / 2 : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
+      const x = ['headline', 'chapter'].includes(el.style) ? K.W / 2 : el.style === 'keyword' ? (el.x <= 0.5 ? K.M + 0.05 * K.W + half : K.W - K.M - 0.05 * K.W - half) : el.style === 'versus' ? Math.min(0.8, Math.max(0.2, el.x)) * K.W : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
       const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
       // Big words keep room above them for the camera's push (live 0.25 run: an xl counter touched the top edge).
       const limit = 0.8 * K.H - size * 0.6, top = 0.07 * K.H + size * 0.6;
-      const y = el.style === 'chapter' ? K.H / 2 : el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
+      const y = ['chapter', 'versus'].includes(el.style) ? K.H / 2 : el.style === 'keyword' ? Math.max(top, 0.13 * K.H) : el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
       est[i] = {box: [x - half, y - size * 0.55, x + half, y + size * 0.55], center: [x, y], r: half};
       return {x, y, size, width};
     });
@@ -426,6 +426,20 @@
         ctx.restore();
         break;
       }
+      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !K.DARK && K.FIN !== 'ink', maxWidth: K.W * 0.5}); break; }
+      case 'versus': {
+        // A comparison divider: a hand-drawn line down the frame with the word in a circle at its middle.
+        const q = clamp01(local / 0.5), r = size * 0.85, rand = K.seeded(LAYOUT.el[i].seed), line = Array.from({length: 13}, (_, k) => [x + (rand() - 0.5) * 6 * u, K.H * (0.08 + 0.84 * k / 12)]);
+        K.render([{pts: K.partial(line, q), px: 5 * u}], 1, 7);
+        if (q > 0.4) {
+          const z = ease.outBack(clamp01((q - 0.4) / 0.6));
+          ctx.save(); ctx.translate(x, y); ctx.scale(z, z);
+          K.render([{pts: K.frame(0, 0, 1).ring(0, 0, r, r, 40), fill: K.PAL.bg, px: 4.5 * u}], 1, 9);
+          K.text(el.text.toUpperCase(), 0, 0, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 800, outline: false, maxWidth: r * 1.7});
+          ctx.restore();
+        }
+        break;
+      }
       case 'chapter': {
         // A chapter card (storybook "Level 1: The Runner"): the frame goes to a dark card and the words fade in on it.
         const q = clamp01(local / 0.35);
@@ -630,14 +644,14 @@
       K.ctx = layerCtx;
       // Ink draws the place on; under the pen it fades in, so the hand only draws the action.
       const reveal = K.FIN === 'ink' && !PEN ? clamp01(t / 0.6) : 1, pen = K.PEN;
-      K.PEN = false; K.SKETCH = K.FIN === 'board';
+      K.PEN = false; K.SKETCH = K.FIN === 'board' || K.FIN === 'ink';
       K.render(setOf(D.set)(t), reveal, 77);
       K.PEN = pen; K.SKETCH = false; K.ctx = ctx;
       layerCtx.restore();
       // Storybook places are illustrated, so they are drawn at nearly full strength.
       // Storybook places are illustrated (nearly full strength, warm and muted); a doodle page keeps only a hint of
       // the place and a bold ground.
-      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : strength;
+      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : K.FIN === 'ink' ? strength * 0.6 : strength;
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = shown * (PEN ? clamp01(t / 0.3) : 1);
       if (K.FIN === 'story') ctx.filter = 'sepia(0.45) saturate(0.72)';
       ctx.drawImage(layerCanvas, 0, 0); ctx.restore();
@@ -655,7 +669,8 @@
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();
-    K.mood(D.mood, t);
+    // On the hand-drawn engine's white paper a mood is a light touch, never a tint over the page.
+    ctx.save(); if (K.FIN === 'ink') ctx.globalAlpha *= 0.35; K.mood(D.mood, t); ctx.restore();
     if (K.FIN === 'story') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(60,40,25,0)'); g.addColorStop(1, 'rgba(60,40,25,0.16)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (HAND) drawHand(t, context);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && SCREEN_FX.has(el.effect)) drawScreenFx(el, i, t); });

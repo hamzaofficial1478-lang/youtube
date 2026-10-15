@@ -124,3 +124,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .study-sheets { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; margin: 8px 0; }
 .study-sheets img { width: 100%; border-radius: 6px; }
 .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.2); margin: 0 3px -4px 0; }
+
+/* Engine features on a style card */
+.engine-features { margin: 6px 0 8px; padding-left: 18px; font-size: 13px; color: var(--muted, #6B6459); }
+.engine-features li { margin: 2px 0; }

@@ -34,3 +34,16 @@ The channel (80.5K subscribers, 122 videos) runs a 20-40 minute series, "The Eco
 | Hand-drawn (C) | ink-and-pencil illustrations of objects and people on white paper | labels, arrows, sticky notes, tags and charts build on the words; 2-5 s holds; hard cuts |
 
 The hand is an option on any stickman look (it draws whatever is drawn on). Searches for more hand-drawn styles on YouTube in the browser returned little; the known families are whiteboard animation (a hand drawing in black marker), coloured doodle explainers and illustrated explainers like C.
+
+## 5. More hand-drawn styles (owner request 2026-10-16: "look for more types of hand-drawn styles")
+
+The owner's rule, restated: the **hand-drawn engine** is its own thing (illustrated objects and people, the Mr. Finance family); the stick figure drawn by a hand is a **stickman** feature. Frames sampled in the browser (no downloads):
+
+| Channel and video | Look | Techniques worth learning |
+|---|---|---|
+| Mr. Finance, older videos ("The Economics of Owning a Gym", 308K) | stick-like figures on a pastel wall | one big hand-lettered **keyword** per shot in a top corner (DREAM, BUILD, PLAN, LIE, TRUTH) that names the beat |
+| Sprouts ("Growth Mindset vs. Fixed Mindset", hand-drawn by MinuteVideos) | detailed black ink line art with hatching on white, drawn by a real hand | **visual metaphors** (a scene inside a head in profile, a brain with legs), **side-by-side comparisons** of two ideas, the picture built line by line |
+| MinuteEarth ("Why Are Some People Mosquito Magnets?", 3M) | marker drawings on white; characters with filled skin-tone heads and simple clothes | **colour for meaning** (orange heat with arrows, purple scent), small **chapter labels** in a corner ("SIGNAL #2"), close-ups of a face at the frame edge, simple science diagrams |
+| Primate Economics ("Inflation Explained with Bananas", 1.7M) | cartoon animals and handwritten signs, painted skies | one **metaphor world** carried through the whole video (an economy of bananas among apes), signs and stalls that carry the words |
+
+Taken into the hand-drawn engine (0.31, our own drawing): a `keyword` text style (a big hand-lettered word in a top corner), a `versus` divider for side-by-side comparisons, a `head` prop (a head in profile to put a scene or a thought inside), ink hatching on the shaded side, and planning guidance for colour-for-meaning, corner chapter labels and one metaphor world per video (the idea of a metaphor world is a technique; the bananas are theirs).

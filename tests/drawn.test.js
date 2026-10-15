@@ -111,8 +111,25 @@ test('hand-drawn: an illustrated explainer - annotations, faces on things, dashe
     assert.ok(!(await at(link(false))).equals(await at(link(true))), 'a dashed connector');
     const person = {kind: 'figure', pose: 'present', x: 0.4, look: {outfit: 'suit', color: 'blue'}};
     assert.ok(!(await at(shot([person]))).equals(await frame(renderer, {...shot([person]), engine: 'stickman'}, 2.6)), 'people are drawn as cartoon people, not stick figures');
+    // More hand-drawn tools (research 2026-10-16): a keyword in a corner, a comparison divider, a head to think inside.
+    const base = await at(shot([truck]));
+    for (const extra of [{kind: 'text', style: 'keyword', text: 'Dream', x: 0.1}, {kind: 'text', style: 'versus', text: 'vs'}, {kind: 'prop', prop: 'head', x: 0.7, size: 'xl'}]) assert.ok(!base.equals(await at(shot([truck, extra]))), `${extra.style || extra.prop} draws`);
     const checked = Sk.validate(shot([{...truck, face: true}, {kind: 'arrow', from: 1, to: [0.9, 0.5], dashed: true}]), {primary: 'handdrawn'});
     assert.deepEqual([checked.elements[0].face, checked.elements[1].dashed], [true, true]);
+  } finally {
+    await renderer.close();
+  }
+});
+
+test('a drawing browser that is restarted (a stall during a render) draws again on the same renderer', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async t => {
+  const renderer = new MotionRenderer({browser}), out = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'restart-'));
+  t.after(() => require('node:fs').rmSync(out, {recursive: true, force: true}));
+  const draw = () => renderer.render({...base, data: {...Sk.validate({set: 'none', elements: [{kind: 'prop', prop: 'truck'}]}, {primary: 'stickman'}), times: null}, duration: 0.2, fps: 10, outDir: out});
+  try {
+    await renderer.start();
+    assert.equal((await draw()).frames, 2);
+    await renderer.close(); await renderer.start();
+    assert.equal((await draw()).frames, 2, 'the restarted browser gets the drawing code again');
   } finally {
     await renderer.close();
   }

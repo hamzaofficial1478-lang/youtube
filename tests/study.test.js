@@ -36,7 +36,7 @@ test('a study answer is checked: our vocabulary, the 30/70 rule, the copy guard 
   assert.deepEqual([study.engine, study.palette.accent, study.transitions], ['handdrawn', '#D9534F', ['cut', 'crossfade']]);
   assert.deepEqual(warnings, []);
   assert.equal(St.baseStyleKey(study), 'hand-drawn-canvas');
-  assert.equal(St.baseStyleKey({engine: 'stickman', look: 'storybook'}), 'stickman-storybook');
+  assert.equal(St.baseStyleKey({engine: 'stickman', look: 'storybook'}), 'stickman-sketch-explainer', 'a look is a feature of the one Stickman style');
   assert.throws(() => St.validate({...ANSWER, ours: ['Only one thing of our own.']}), /30\/70 rule: 2 learned techniques need at least 5 contributions/);
   assert.throws(() => St.validate({...ANSWER, brief: `${ANSWER.brief} Do it like Mr Finance does.`}, {channel: 'Mr. Finance'}), /names the reference channel/);
   assert.throws(() => St.validate({...ANSWER, summary: 'The economics of owning a cargo fleet explained with drawings.'}, {title: 'The Economics of Owning a Cargo Fleet'}), /repeats the reference's words/);
@@ -54,9 +54,9 @@ test('a study answer is checked: our vocabulary, the 30/70 rule, the copy guard 
 });
 
 test('an approved study becomes a style draft: palette, rhythm, transitions, look and planning brief', () => {
-  const base = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'stickman-storybook').spec);
+  const base = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec);
   const {study} = St.validate({...ANSWER, engine: 'stickman', look: 'storybook', palette: {background: '#F1E4D2', primary: '#4A3A30', accent: '#A8402F', text: '#3A2C24'}, transitions: ['cut', 'dip-to-black']});
-  const {spec, applied, skipped} = St.draftSpec(study, validateStyleSpec(base), {validateStyleSpec, name: 'Stickman · Storybook · learned'});
+  const {spec, applied, skipped} = St.draftSpec(study, validateStyleSpec(base), {validateStyleSpec, name: 'Stickman · learned storybook'});
   assert.deepEqual(applied, ['palette', 'pacing', 'transitions', 'look', 'brief']);
   assert.deepEqual(skipped, []);
   assert.deepEqual([spec.palette.background, spec.pacing.shotMinSeconds, spec.drawing.look, spec.transitions.allowed], ['#F1E4D2', 2, 'storybook', ['cut', 'dip-to-black']]);

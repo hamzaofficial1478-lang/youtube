@@ -8,7 +8,7 @@ const {LAUNCH_PROFILES} = require('../style');
 const spec = key => LAUNCH_PROFILES.find(item => item.key === key).spec;
 
 test('every drawing engine may draw a shot in any video; the style sets the main look', () => {
-  assert.deepEqual(LAUNCH_PROFILES.map(item => E.primaryEngine(item.spec)), ['stickman', 'stickman', 'stickman', 'stickman', 'handdrawn', 'motion', 'stickman', 'atelier', 'montage', 'montage']);
+  assert.deepEqual(LAUNCH_PROFILES.map(item => E.primaryEngine(item.spec)), ['stickman', 'handdrawn', 'motion', 'stickman', 'atelier', 'montage', 'montage']);
   assert.deepEqual(E.drawEngines('stickman'), ['stickman', 'handdrawn', 'motion'], 'the main look leads');
   assert.deepEqual(E.drawEngines('handdrawn'), ['handdrawn', 'stickman', 'motion']);
   assert.deepEqual(E.drawEngines('montage'), ['stickman', 'handdrawn', 'motion']);

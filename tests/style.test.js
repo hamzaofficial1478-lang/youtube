@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {Store} = require('../store');
 const {StyleLibrary, validateStyleSpec, specDiff, contrastRatio, LAUNCH_PROFILES, RENDERERS} = require('../style');
+const DRAWING_PRESETS = new StyleLibrary(new Store(':memory:')).state().vocabulary.lookPresets;
 const {createApp} = require('../server');
 
 const familyFixture = {
@@ -38,7 +39,7 @@ test('launch library seeds six valid draft profiles once and every launch spec p
   const {store, styles} = setup(t);
   new StyleLibrary(store);
   const profiles = styles.profiles();
-  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'stickman-whiteboard', 'stickman-storybook', 'stickman-doodle', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
+  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
   assert.ok(profiles.every(item => item.revisions.length === 1 && item.revisions[0].status === 'draft' && item.origin === 'launch'));
   for (const launch of LAUNCH_PROFILES) assert.deepEqual(validateStyleSpec(structuredClone(launch.spec)).name, launch.spec.name);
   assert.equal(profile(styles, 'documentary-montage').revisions[0].spec.renderer.adapter, 'ffmpeg-montage');
@@ -54,8 +55,32 @@ test('the stickman drawing setting: a look and the drawing hand, optional, check
   assert.throws(() => validateStyleSpec({...stickman(), drawing: {look: 'doodle', hand: 'yes'}}), /Drawing hand/);
   assert.equal(validateStyleSpec({...stickman(), brief: 'Hold each drawing while its notes arrive, then cut.'}).brief, 'Hold each drawing while its notes arrive, then cut.');
   assert.throws(() => validateStyleSpec({...stickman(), brief: 'x'.repeat(1300)}), /Planning brief/);
-  const looks = LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => [item.key, item.spec.drawing.look, item.spec.drawing.hand]);
-  assert.deepEqual(looks, [['stickman-whiteboard', 'whiteboard', true], ['stickman-storybook', 'storybook', false], ['stickman-doodle', 'doodle', false]]);
+  // The looks are features of the one Stickman style: no separate launch styles, and every look's preset is a valid
+  // stickman spec (colours, shot lengths, transitions the sketch renderer can do).
+  assert.ok(LAUNCH_PROFILES.every(item => !item.spec.drawing));
+  for (const [look, preset] of Object.entries(DRAWING_PRESETS)) {
+    const spec = validateStyleSpec({...stickman(), palette: preset.palette, pacing: preset.pacing, transitions: preset.transitions, motion: {...stickman().motion, intensity: preset.intensity}, drawing: {look, hand: preset.hand}});
+    assert.equal(spec.drawing.look, look);
+  }
+  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle']);
+});
+
+test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  new StyleLibrary(store);
+  const spec = JSON.stringify(validateStyleSpec(structuredClone(LAUNCH_PROFILES[0].spec)));
+  const old = (key, status) => {
+    const id = `p-${key}`;
+    store.db.prepare("INSERT INTO style_profiles(id,profile_key,origin,base_revision_id,created_at) VALUES(?,?,'launch',NULL,?)").run(id, key, new Date().toISOString());
+    store.db.prepare('INSERT INTO style_revisions(id,profile_id,revision,status,spec,spec_hash,change_note,created_by,created_at) VALUES(?,?,1,?,?,?,?,?,?)').run(`r-${key}`, id, status, spec, 'hash', 'Launch profile.', 'Launch library v6', new Date().toISOString());
+  };
+  old('stickman-whiteboard', 'draft');
+  old('stickman-doodle', 'approved');
+  const styles = new StyleLibrary(store), status = key => styles.profiles().find(item => item.key === key).revisions[0].status;
+  assert.equal(status('stickman-whiteboard'), 'retired', 'an untouched copy is retired');
+  assert.equal(status('stickman-doodle'), 'approved', 'an approved copy stays in the library');
+  assert.match(styles.profiles().find(item => item.key === 'stickman-whiteboard').revisions[0].retirement.reason, /features of the Stickman engine/);
 });
 
 test('style specs reject unsupported renderer combinations, weak contrast, missing cuts and the 30% reference rule', () => {
@@ -220,7 +245,7 @@ test('HTTP style routes require the local token, validate input and return the l
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.styles.profiles.length, 10);
+  assert.equal(state.styles.profiles.length, 7);
   assert.equal(state.app.version, JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version);
   const script = await fetch(`${base}/style-room.js`);
   assert.equal(script.status, 200);

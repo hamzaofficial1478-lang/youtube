@@ -13,9 +13,10 @@ const ENGINES = Object.freeze(['stickman', 'handdrawn', 'motion', 'atelier', 'mo
 const LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle']);
 const TRANSITIONS = Object.freeze(['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'whip-pan', 'wipe']);
 const LIMITS = Object.freeze({summary: 400, aspect: 300, item: 160, brief: 1200, learn: 6, ours: 14, avoid: 6});
-// The launch style a study starts from: the engine (and for stick figures the look) it maps onto.
-const BASE_STYLE = Object.freeze({stickman: {classic: 'stickman-sketch-explainer', whiteboard: 'stickman-whiteboard', storybook: 'stickman-storybook', doodle: 'stickman-doodle'}, handdrawn: 'hand-drawn-canvas', motion: 'motion-graphics', atelier: 'atelier', montage: 'documentary-montage'});
-const baseStyleKey = study => (study.engine === 'stickman' ? BASE_STYLE.stickman[study.look || 'classic'] : BASE_STYLE[study.engine]);
+// The launch style a study starts from: one per engine (a stickman look is a feature of the Stickman style, set by
+// drawing.look in the draft).
+const BASE_STYLE = Object.freeze({stickman: 'stickman-sketch-explainer', handdrawn: 'hand-drawn-canvas', motion: 'motion-graphics', atelier: 'atelier', montage: 'documentary-montage'});
+const baseStyleKey = study => BASE_STYLE[study.engine];
 const HEX = /^#[0-9A-F]{6}$/;
 
 // Long descriptive text is trimmed at a word rather than failing the study.

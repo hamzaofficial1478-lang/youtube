@@ -43,6 +43,12 @@ function styleRendererBadge(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter];
   return badge(`${renderer.name} · ${renderer.firstProof ? 'first proof target' : 'not built'} (${renderer.milestone})`, renderer.firstProof ? 'orange' : 'gray');
 }
+// What the style's engine can do, and for stick figures the look and the hand this style uses.
+function styleFeatures(spec) {
+  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, stick = ['ffmpeg-sketch', 'story-mix'].includes(spec.renderer.adapter);
+  const chosen = stick ? `<p class="hint">Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}</p>` : '';
+  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen;
+}
 function styleFacts(spec) {
   const aspects = spec.formats.map(format => `${styleLabel(format)} ${state.styles.vocabulary.aspect[format]}`).join(' · ');
   return `<dl class="style-facts">
@@ -56,7 +62,7 @@ function styleFacts(spec) {
 }
 
 function styleRoom(family) {
-  const profiles = styleProfiles(), handoff = styleHandoff(family.id), familyAssignment = styleActive(family.id);
+  const profiles = styleProfiles().filter(profile => !(profile.origin === 'launch' && profile.revisions.every(item => item.status === 'retired'))), handoff = styleHandoff(family.id), familyAssignment = styleActive(family.id);
   const assigned = familyAssignment && styleRevisionById(familyAssignment.revisionId);
   const overrides = styleFamilyAssignments(family.id).filter(item => item.status === 'active' && item.scope === 'channel');
   const approvedCount = profiles.reduce((sum, profile) => sum + profile.revisions.filter(item => item.status === 'approved').length, 0);
@@ -95,6 +101,7 @@ function styleRoom(family) {
       <h3>${esc(spec.name)}</h3>
       <p>${esc(spec.summary)}</p>
       <div class="chip-row">${spec.bestFit.map(item => `<span class="chip">${esc(item)}</span>`).join('')}</div>
+      ${styleFeatures(spec)}
       ${styleFacts(spec)}
       <div class="style-card-foot">${styleRendererBadge(spec)}${profile.id === familyAssignedProfile ? badge('This family\'s default', 'green') : ''}${inUse ? `<small>${inUse} active assignment${inUse === 1 ? '' : 's'}</small>` : ''}${approved.length && latest.status === 'draft' ? `<small>r${approved.at(-1).revision} remains approved</small>` : ''}</div>
       <div class="card-actions">${action('Spec & history', 'style-view', profile.id, 'text-button')}${latest.status === 'draft' ? action('Review & approve', 'style-approve', latest.id, 'primary') : ''}${action('New revision', 'style-revise', profile.id, 'text-button')}${action('Duplicate', 'style-duplicate', profile.id, 'text-button')}${latest.status !== 'retired' ? action('Retire', 'style-retire', latest.id, 'text-button danger') : ''}</div>
@@ -180,10 +187,11 @@ function styleEditorBody(spec) {
     ${styleNumber('s.truePeakDbtp', 'True-peak ceiling (dBTP)', spec.audio.truePeakDbtp, -3, -0.5, 0.1)}
     <label>Sound effects<select name="s.sfxUsage">${styleOptions(v.sfxUsage, spec.audio.sfxUsage)}</select></label>
   </div></fieldset>
-  <fieldset class="editor-section"><legend>Stickman drawing</legend><div class="form-grid">
+  ${['ffmpeg-sketch', 'story-mix'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>Stickman engine features</legend><div class="form-grid">
     <label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: classic cartoon, whiteboard, illustrated storybook or marker doodle.</span></label>
     <label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>
-  </div></fieldset>
+    ${spec.renderer.adapter === 'ffmpeg-sketch' ? '<p class="hint full">Choosing a look fills in its recommended colours, shot lengths and transitions below; you can still change them.</p>' : ''}
+  </div></fieldset>` : ''}
   <fieldset class="editor-section"><legend>Planning brief</legend><div class="form-grid">
     <label class="full">Brief for Claude's planner <span class="hint">Optional, up to 1,200 characters. A style made from an approved style study carries what was learned here, in our own words.</span><textarea name="s.brief" rows="4" maxlength="1200">${esc(spec.brief || '')}</textarea></label>
   </div></fieldset>
@@ -218,7 +226,7 @@ function collectStyleSpec(form) {
     visuals: {sources: checked('s.sources'), primarySource: value('s.primarySource'), aiDisclosure: value('s.aiDisclosure'), characterConsistency: form.elements['s.characterConsistency'].checked},
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
-    drawing: {look: value('s.drawingLook'), hand: form.elements['s.drawingHand'].checked},
+    ...(form.elements['s.drawingLook'] ? {drawing: {look: value('s.drawingLook'), hand: form.elements['s.drawingHand'].checked}} : {}),
     ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
     originality: {referenceSharePercent: num('s.referenceSharePercent'), prohibited: list('s.prohibited', /\r?\n/)},
@@ -433,4 +441,20 @@ document.getElementById('style-decision-form').addEventListener('submit', event 
 document.getElementById('style-spec-dialog').addEventListener('click', event => {
   const button = event.target.closest('[data-style-revision]');
   if (button) styleSpecDialog(button.dataset.styleProfile, button.dataset.styleRevision);
+});
+
+// A Stickman look fills in its recommended colours, shot lengths, transitions and motion in the editor (the owner
+// can still change them before saving the revision).
+document.addEventListener('change', event => {
+  if (event.target.name !== 's.drawingLook') return;
+  const form = event.target.form, preset = state.styles?.vocabulary?.lookPresets?.[event.target.value];
+  if (!form || !preset || form.elements['s.renderer']?.value !== 'ffmpeg-sketch') return;
+  const set = (name, value) => { if (form.elements[name]) form.elements[name].value = value; };
+  for (const key of ['background', 'primary', 'accent', 'text']) set(`s.palette.${key}`, preset.palette[key].toLowerCase());
+  for (const key of ['shotMinSeconds', 'shotMaxSeconds', 'hookShotMaxSeconds', 'maxStaticHoldSeconds']) set(`s.${key}`, preset.pacing[key]);
+  form.querySelectorAll('input[name="s.transitions"]').forEach(box => { box.checked = preset.transitions.allowed.includes(box.value); });
+  set('s.defaultTransition', preset.transitions.default);
+  set('s.maxTransitionMs', preset.transitions.maxDurationMs);
+  set('s.motionIntensity', preset.intensity);
+  if (form.elements['s.drawingHand']) form.elements['s.drawingHand'].checked = preset.hand;
 });
