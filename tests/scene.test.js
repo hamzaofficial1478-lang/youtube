@@ -222,6 +222,23 @@ test('an animated shot a little over the style\'s shot limit is named, a still h
   assert.match(plan({source: 'stock-image'}).issues.join(' '), /S01A would hold 7\.0 s, above the style's 6 s shot limit/);
 });
 
+test('Claude chooses each scene\'s transition: offered from the style, kept through the plan, unknown names dropped', () => {
+  const {aiScenes, buildPayload} = require('../scene-room');
+  const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], transitions: ['iris-open', 'whip-pan'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
+  const prompt = planMessages(input)[0].content;
+  assert.match(prompt, /"transition"\?: string/);
+  assert.match(prompt, /iris-open \(opening on a new world/);
+  assert.doesNotMatch(prompt, /pixelize/, 'only the transitions the style allows are offered');
+  assert.doesNotMatch(planMessages({...input, style: {...input.style, transitions: []}})[0].content, /how the edit enters it/);
+  const scene = transition => ({sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', ...(transition ? {transition} : {}), shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: ''}]});
+  const raw = aiScenes({summary: '', scenes: [scene('iris-open'), scene('spin-3d'), scene('push')]});
+  assert.deepEqual(raw.scenes.map(item => item.transition), ['iris-open', undefined, 'push'], 'an unknown name is dropped, never a reason to lose the plan');
+  const {LAUNCH_PROFILES} = require('../style');
+  const spec = LAUNCH_PROFILES.find(item => item.key === 'story-mix').spec;
+  const payload = buildPayload({scenes: [{id: 'sc1', ...scene('push'), shots: [{id: 'sh1', source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: {elements: [{kind: 'prop', prop: 'globe'}]}}]}], sentences: [{n: 1, text: 'One sentence of narration.', words: 4}], narrationSeconds: 3, spec, terms: []});
+  assert.equal(payload.payload.scenes[0].transition, 'push-left', 'older short names are stored by their full name');
+});
+
 test('with frame composing switched off, the planner does not read the atelier guide', () => {
   const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
   assert.match(planMessages(input)[0].content, /ATELIER SHOTS/);

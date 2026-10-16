@@ -57,14 +57,15 @@ test('an approved study becomes a style draft: palette, rhythm, transitions, loo
   const base = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec);
   const {study} = St.validate({...ANSWER, engine: 'stickman', look: 'storybook', palette: {background: '#F1E4D2', primary: '#4A3A30', accent: '#A8402F', text: '#3A2C24'}, transitions: ['cut', 'dip-to-black']});
   const {spec, applied, skipped} = St.draftSpec(study, validateStyleSpec(base), {validateStyleSpec, name: 'Stickman · learned storybook'});
-  assert.deepEqual(applied, ['palette', 'pacing', 'transitions', 'look', 'brief']);
+  assert.deepEqual(applied, ['palette', 'pacing', 'look', 'brief']);
   assert.deepEqual(skipped, []);
-  assert.deepEqual([spec.palette.background, spec.pacing.shotMinSeconds, spec.drawing.look, spec.transitions.allowed], ['#F1E4D2', 2, 'storybook', ['cut', 'dip-to-black']]);
-  assert.equal(spec.brief, study.brief);
+  assert.deepEqual([spec.palette.background, spec.pacing.shotMinSeconds, spec.drawing.look, spec.transitions.allowed], ['#F1E4D2', 2, 'storybook', base.transitions.allowed], "the reference's transitions never narrow the style");
+  assert.ok(spec.brief.startsWith(study.brief) && /The reference moves between scenes with dip-to-black/.test(spec.brief));
   assert.ok(spec.originality.referenceSharePercent <= 30);
   // A change the renderer cannot do is skipped and listed, the rest still applies.
-  const motion = St.draftSpec({...study, engine: 'handdrawn', look: undefined, transitions: ['cut', 'whip-pan']}, validateStyleSpec(structuredClone(LAUNCH_PROFILES.find(item => item.key === 'hand-drawn-canvas').spec)), {validateStyleSpec, name: 'Learned hand-drawn'});
-  assert.deepEqual(motion.skipped.map(item => item.change), ['transitions']);
+  const motion = St.draftSpec({...study, engine: 'handdrawn', look: undefined, palette: {...study.palette, background: '#FFFFFF', text: '#F4F4F4'}}, validateStyleSpec(structuredClone(LAUNCH_PROFILES.find(item => item.key === 'hand-drawn-canvas').spec)), {validateStyleSpec, name: 'Learned hand-drawn'});
+  assert.deepEqual(motion.skipped.map(item => item.change), ['palette']);
+  assert.deepEqual(motion.applied, ['pacing', 'brief']);
 });
 
 test('measurements: shot rhythm from cuts, main colours, frame times and the contact-sheet command', () => {
@@ -112,8 +113,8 @@ test('a style study end to end: a video file is measured and studied by Claude o
   assert.equal(approved.review.reviewer, 'Owner');
   const draft = studies.styleDraft(done.id, {createdBy: 'Owner'});
   const profile = styles.profiles().find(item => item.key === draft.revision.profileKey), spec = profile.revisions.at(-1).spec;
-  assert.deepEqual([profile.revisions.at(-1).status, spec.brief, spec.palette.accent], ['draft', ANSWER.brief, '#D9534F']);
-  assert.match(profile.name, /Hand-drawn Canvas · learned · Study family/);
+  assert.deepEqual([profile.revisions.at(-1).status, spec.brief.startsWith(ANSWER.brief), spec.palette.accent], ['draft', true, '#D9534F']);
+  assert.match(profile.name, /Hand-drawn Whiteboard · learned · Study family/);
   // Screenshots work too; a failing answer is kept as a quality failure with its reasons, tokens settled.
   for (const [k, colour] of ['white', 'navy'].entries()) execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `color=c=${colour}:s=320x180:d=0.1`, '-frames:v', '1', path.join(dir, `shot-${k}.png`)]);
   answer = {...ANSWER, ours: ['Only one']};

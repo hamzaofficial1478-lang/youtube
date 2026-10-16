@@ -47,3 +47,28 @@ The owner's rule, restated: the **hand-drawn engine** is its own thing (illustra
 | Primate Economics ("Inflation Explained with Bananas", 1.7M) | cartoon animals and handwritten signs, painted skies | one **metaphor world** carried through the whole video (an economy of bananas among apes), signs and stalls that carry the words |
 
 Taken into the hand-drawn engine (0.31, our own drawing): a `keyword` text style (a big hand-lettered word in a top corner), a `versus` divider for side-by-side comparisons, a `head` prop (a head in profile to put a scene or a thought inside), ink hatching on the shaded side, and planning guidance for colour-for-meaning, corner chapter labels and one metaphor world per video (the idea of a metaphor world is a technique; the bananas are theirs).
+
+## 6. Whiteboard animation and expressive stickman (owner links 2026-10-16)
+
+The owner's target for the **hand-drawn engine** is whiteboard animation; the illustrated food-truck look of 0.31 becomes a **Stickman** look. Frames sampled in the browser (no downloads):
+
+| Link | Look | How it is made |
+|---|---|---|
+| AI4Next, "How to Create Stickman Animation with AI" | black-and-white sketch stickman with very expressive faces (raised brows, open mouths with teeth, sweat, stress marks), hands with fingers, furniture in perspective, thought bubbles with clocks and question marks | ChatGPT writes image prompts; Grok Imagine makes the pictures in batches; they are animated and cut to an AI voice |
+| Youri van Hofwegen, "How to Make AI Whiteboard Animation Videos" | colour cartoon people and things (clean line art, flat colour) drawn by a real hand with a pencil; close-ups of faces | an AI image per scene, then a hand-drawing reveal; clips cut in a timeline editor |
+| Skill Bite, "How I Create Whiteboard Animation Videos with AI" | black marker line art filling the board (a person at a crossroads among storms, lightning, skulls, warning signs), drawn by a hand with a marker | ChatGPT writes per scene the voiceover and an "animation prompt" ("blank whiteboard, the hand draws ..."); an AI video model draws it |
+| AI and Tech for Education, "Turn ANY Idea Into a Whiteboard Animation Video" | realistic grey pencil sketches of adults, minimal colour accents, handwritten numbers and sentences ("Silence lets them set the number.") | prompt rules for a "professional adult-learning whiteboard explainer"; AI video |
+| Leo Ai, "How I Create Whiteboard Animation Videos with AI" | a framed whiteboard, a hand with a black marker, simple figures with faces, handwritten capital words, coloured money icons | an AI studio (images, video and voice) from a script |
+
+What this means for the program:
+
+- Whiteboard animation is defined by the **drawing**: a hand draws each picture line by line, words are written, colour comes after the line, and the board moves on to the next picture. Its sub-looks (colour cartoon, black marker, grey pencil sketch, framed board) are features of the hand-drawn engine.
+- The people are drawn as people (proportioned bodies, clothes, hands with fingers), never as stick figures; expressions are strong (brows, mouths, sweat, stress marks).
+- All five references draw their pictures with AI image or video models; the program draws its own (free, word-timed, consistent). An AI picture drawn on by the program's hand is a later option once an image provider is connected.
+- Editing in all of them is cut to the voice with many changes of picture; the program's engines may now use every transition and effect, and Claude chooses them per scene.
+
+## 7. After Skool (owner link 2026-10-16: "another style of hand-drawn ... a feature of the hand-drawn engine")
+
+Channel page and video frames looked at in the browser (no downloads). The look: a white board drawn with **coloured dry-erase markers**. People are **caricatures** (big heads with strong features on smaller bodies), shapes are coloured in with **visible diagonal marker strokes** rather than flat fills, the line is a confident felt-tip line, and the board keeps filling as the narration goes on (one idea after another on the same white space). Walls and skies stay white; colour goes on the people and things the line is about.
+
+What the program takes, in its own code: the hand-drawn engine's whiteboard look `dry-erase` (marker hatching in the fill colour clipped to each shape, only on things smaller than a quarter of the frame; caricature proportions for people). Nothing is copied: no characters, wording or signature compositions, and Claude decides the places, colour and composition of every scene (TASTE rule).

@@ -57,12 +57,24 @@ test('the stickman drawing setting: a look and the drawing hand, optional, check
   assert.throws(() => validateStyleSpec({...stickman(), brief: 'x'.repeat(1300)}), /Planning brief/);
   // The looks are features of the one Stickman style: no separate launch styles, and every look's preset is a valid
   // stickman spec (colours, shot lengths, transitions the sketch renderer can do).
-  assert.ok(LAUNCH_PROFILES.every(item => !item.spec.drawing));
+  assert.deepEqual(LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => item.key), ['hand-drawn-canvas'], 'only the whiteboard launch style names its drawing (a hand and a whiteboard look)');
   for (const [look, preset] of Object.entries(DRAWING_PRESETS)) {
     const spec = validateStyleSpec({...stickman(), palette: preset.palette, pacing: preset.pacing, transitions: preset.transitions, motion: {...stickman().motion, intensity: preset.intensity}, drawing: {look, hand: preset.hand}});
     assert.equal(spec.drawing.look, look);
   }
-  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle']);
+  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']);
+});
+
+test('every engine may use every transition; the whiteboard look is checked; launch library v8', () => {
+  const T = require('../transitions');
+  for (const launch of LAUNCH_PROFILES) {
+    const spec = validateStyleSpec(structuredClone(launch.spec));
+    assert.deepEqual(spec.transitions.allowed, ['cut', ...Object.keys(T.CATALOG)], `${launch.key} allows every transition`);
+  }
+  const hand = LAUNCH_PROFILES.find(item => item.key === 'hand-drawn-canvas').spec;
+  assert.deepEqual(validateStyleSpec(structuredClone(hand)).drawing, {look: 'classic', hand: true, board: 'cartoon'});
+  assert.throws(() => validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: true, board: 'chalk'}}), /whiteboard look/);
+  assert.equal(validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: false}}).drawing.board, undefined, 'the whiteboard look is optional');
 });
 
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {
@@ -85,7 +97,7 @@ test('the separate stickman-look styles of 0.29 leave the library unless the own
 
 test('style specs reject unsupported renderer combinations, weak contrast, missing cuts and the 30% reference rule', () => {
   const base = () => structuredClone(LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec);
-  assert.throws(() => validateStyleSpec({...base(), transitions: {allowed: ['cut', 'morph'], default: 'cut', maxDurationMs: 300}}), /FFmpeg montage renderer does not support the "morph" transition/);
+  assert.throws(() => validateStyleSpec({...base(), transitions: {allowed: ['cut', 'spin-3d'], default: 'cut', maxDurationMs: 300}}), /valid transition/);
   assert.throws(() => validateStyleSpec({...base(), motion: {cameraMoves: ['static', 'handheld-sim'], intensity: 20, easing: 'linear'}}), /does not support the "handheld-sim" camera move/);
   assert.throws(() => validateStyleSpec({...base(), renderer: {adapter: 'canvas-frames'}, canvas: {frameRate: 60, longFormResolution: '1920x1080', shortsResolution: '1080x1920'}}), /does not support 60 fps|ken-burns/);
   assert.throws(() => validateStyleSpec({...base(), transitions: {allowed: ['crossfade'], default: 'crossfade', maxDurationMs: 300}}), /straight cut/);

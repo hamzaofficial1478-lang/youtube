@@ -5,6 +5,7 @@
 // later rooms (scenes, editing, captions, render) must lock into their manifests.
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
+const T = require('./transitions');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -13,7 +14,10 @@ const FORMATS = ['long-form', 'shorts'];
 const FRAME_RATES = [24, 25, 30, 50, 60];
 const RESOLUTIONS = {'long-form': ['1920x1080', '2560x1440', '3840x2160'], shorts: ['1080x1920']};
 const ASPECT = {'long-form': '16:9', shorts: '9:16'};
-const TRANSITIONS = ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'whip-pan', 'match-cut', 'wipe', 'morph'];
+// Every transition of the catalogue, the older short names, and two kept only so older styles stay valid.
+const TRANSITIONS = ['cut', ...T.NAMES, 'match-cut', 'morph'];
+// What a launch style allows: every transition; Claude chooses per scene (owner review 2026-10-16).
+const ALL_TRANSITIONS = () => ['cut', ...Object.keys(T.CATALOG)];
 const CAMERA_MOVES = ['static', 'ken-burns', 'pan', 'zoom', 'parallax', 'handheld-sim', 'tracking'];
 const EASING = ['linear', 'ease-in-out', 'spring'];
 const TEXT_CASE = ['sentence', 'title', 'upper'];
@@ -32,19 +36,19 @@ const RENDERERS = {
     features: ['Stock footage and photos cut to the voice', 'Drawn explainer cutaways where footage cannot show it'],
     name: 'FFmpeg montage', milestone: 'P05', status: 'not_implemented', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
-    supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'wipe'], cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
+    supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle (choose in the style)', 'Option: a hand draws each scene', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated (choose in the style)', 'Option: a hand draws each scene', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
-    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
+    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
-    features: ['Real objects and cartoon people in ink and coloured pencil on white paper', 'Handwritten labels with arrows, price tags, sticky notes and callouts', 'Keyword titles, side-by-side comparisons, thoughts inside a head'],
+    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers (choose in the style)', 'People drawn as people: proportions, clothes, hands and expressive faces'],
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
-    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'wipe'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
+    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
     features: ['Kinetic words, counters, charts, timelines and icons'],
@@ -62,13 +66,13 @@ const RENDERERS = {
     features: ['Every engine in one video: the story director picks the engine for each beat'],
     name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
     note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
-    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'wipe', 'zoom'], cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
+    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'cinematic-hybrid': {
     features: ['Cinematic footage with designed titles'],
     name: 'Cinematic hybrid', milestone: 'P05+', status: 'not_implemented',
     note: 'Generated or stock video shots with continuity rules and a strict proxy-review loop.',
-    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: ['cut', 'crossfade', 'dip-to-black', 'zoom', 'whip-pan', 'match-cut', 'wipe'], cameraMoves: CAMERA_MOVES},
+    supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES},
   },
 };
 
@@ -80,16 +84,19 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v7';
-const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle']);
+const LAUNCH_VERSION = 'Launch library v8';
+const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']);
+// The hand-drawn engine's whiteboard looks (0.32).
+const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
 const LOOK_PRESETS = Object.freeze({
-  classic: {hand: false, palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'}, pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5}, transitions: {allowed: ['cut', 'crossfade', 'push'], default: 'cut', maxDurationMs: 300}, intensity: 60},
-  whiteboard: {hand: true, palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 7}, transitions: {allowed: ['cut', 'crossfade', 'wipe'], default: 'cut', maxDurationMs: 500}, intensity: 35},
-  storybook: {hand: false, palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4}, transitions: {allowed: ['cut', 'crossfade', 'dip-to-black'], default: 'cut', maxDurationMs: 500}, intensity: 30},
-  doodle: {hand: false, palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'}, pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3}, transitions: {allowed: ['cut'], default: 'cut', maxDurationMs: 0}, intensity: 55},
+  classic: {hand: false, palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'}, pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 60},
+  whiteboard: {hand: true, palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 7}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 35},
+  storybook: {hand: false, palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 30},
+  doodle: {hand: false, palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'}, pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 55},
+  illustrated: {hand: false, palette: {background: '#FFFFFF', primary: '#222222', accent: '#D9534F', text: '#222222'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 5.5, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 25},
 });
 // Launch profiles that are gone from the library (0.29's separate stickman looks). A copy the owner never
 // approved, assigned or revised is retired automatically, so it leaves the library list.
@@ -102,7 +109,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5},
-    transitions: {allowed: ['cut', 'crossfade', 'push'], default: 'cut', maxDurationMs: 300},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 60, easing: 'ease-in-out'},
     typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
@@ -113,21 +120,22 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'hand-drawn-canvas', upgrade: 'Launch library v6 (0.29): the hand-drawn engine is now an illustrated explainer (owner reference 2026-10-15): real objects and cartoon people in ink and coloured pencil on white paper, annotated with handwritten labels, arrows, sticky notes, price tags and callouts; 2-5 s holds and hard cuts.', spec: {
-    name: 'Hand-drawn Canvas',
-    summary: 'Illustrated explainer: real objects and cartoon people drawn in ink and coloured pencil on white paper, explained by handwritten labels, arrows, sticky notes, price tags and callouts that build on the narrator\'s words; one idea per drawing.',
-    bestFit: ['How a business or industry makes money', 'Economics and personal finance', 'How things work', 'Storytelling and essays'],
+  {key: 'hand-drawn-canvas', upgrade: 'Launch library v8 (0.32): the hand-drawn engine is whiteboard animation (owner references 2026-10-16): a hand draws people, objects and words line by line and colours them in; looks: colour cartoon, black marker, pencil sketch, framed board, dry-erase markers.', spec: {
+    name: 'Hand-drawn Whiteboard',
+    summary: 'Whiteboard animation: a hand draws people, objects and words on a whiteboard, line by line on the narrator\'s words, then colours them in; the board moves on to the next picture.',
+    bestFit: ['Self-improvement and psychology', 'Business and money explained', 'Big ideas and stories'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 24, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 2, shotMaxSeconds: 5.5, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6},
-    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], default: 'cut', maxDurationMs: 500},
+    pacing: {shotMinSeconds: 2.5, shotMaxSeconds: 8, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 8},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 20, easing: 'ease-in-out'},
     typography: {headingFont: 'Caveat', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
-    palette: {background: '#FFFFFF', primary: '#222222', accent: '#D9534F', text: '#222222'},
+    palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'},
     captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
     visuals: {sources: ['generated-graphics', 'stock-image', 'ai-image', 'archival-public-domain'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
     audio: {musicMoods: ['warm', 'reflective', 'acoustic'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
     renderer: {adapter: 'canvas-frames'},
+    drawing: {look: 'classic', hand: true, board: 'cartoon'},
     qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
@@ -138,7 +146,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4, hookShotMaxSeconds: 1.2, maxStaticHoldSeconds: 4},
-    transitions: {allowed: ['cut', 'push', 'slide', 'zoom', 'whip-pan', 'match-cut', 'morph', 'wipe'], default: 'cut', maxDurationMs: 350},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'zoom', 'pan', 'parallax', 'tracking'], intensity: 70, easing: 'spring'},
     typography: {headingFont: 'Inter', bodyFont: 'Inter', maxWordsOnScreen: 5, textCase: 'title', minTextHeightPercent: 5},
     palette: {background: '#101418', primary: '#F2F4F5', accent: '#37C2A0', text: '#FFFFFF'},
@@ -156,7 +164,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 6, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6},
-    transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom'], default: 'cut', maxDurationMs: 400},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 60, easing: 'ease-in-out'},
     typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFDF8', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
@@ -174,7 +182,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 6, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 6},
-    transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom', 'wipe'], default: 'cut', maxDurationMs: 500},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'zoom', 'pan', 'parallax', 'tracking'], intensity: 60, easing: 'ease-in-out'},
     typography: {headingFont: 'Bahnschrift', bodyFont: 'Segoe UI', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#F7F4EE', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
@@ -192,7 +200,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 3, shotMaxSeconds: 8, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 8},
-    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black'], default: 'cut', maxDurationMs: 700},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'ken-burns', 'pan', 'zoom'], intensity: 35, easing: 'ease-in-out'},
     typography: {headingFont: 'Source Serif 4', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#0E0E0E', primary: '#F2EEE6', accent: '#C9A227', text: '#FFFFFF'},
@@ -210,7 +218,7 @@ const LAUNCH_PROFILES = [
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 24, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 2, shotMaxSeconds: 6, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 6},
-    transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'match-cut', 'whip-pan', 'zoom'], default: 'cut', maxDurationMs: 500},
+    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'tracking', 'handheld-sim', 'parallax'], intensity: 60, easing: 'ease-in-out'},
     typography: {headingFont: 'Bebas Neue', bodyFont: 'Inter', maxWordsOnScreen: 5, textCase: 'upper', minTextHeightPercent: 5},
     palette: {background: '#050505', primary: '#EDE6DA', accent: '#D6452F', text: '#FFFFFF'},
@@ -362,7 +370,7 @@ function validateStyleSpec(input) {
   // Optional: a style without it draws the classic look without the hand.
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
-    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand')};
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')})};
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
@@ -607,8 +615,8 @@ class StyleLibrary {
   }
 
   vocabulary() {
-    return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+    return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -796,4 +804,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS};

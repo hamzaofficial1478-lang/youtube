@@ -12,6 +12,7 @@ const C = require('./craft');
 const Cap = require('./captions');
 const Audio = require('./audio');
 const Sk = require('./sketch');
+const T = require('./transitions');
 const E = require('./engines');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -127,12 +128,12 @@ class EditingRoom {
     const alignment = B.alignSentences(inputs.payload.sentences, analysis.pauses, narrationSeconds);
     const assets = Object.fromEntries(Object.entries(inputs.assets).map(([shotId, asset]) => {
       const cuts = this.cachedCuts(asset);
-      return [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds, ...(cuts ? {cuts} : {})}];
+      return [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds, ...(cuts ? {cuts} : {}), ...(asset.sketch?.transition ? {sketch: {transition: asset.sketch.transition}} : {})}];
     }));
     return {
       alignment,
       edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
-        scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
+        scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, ...(scene.transition ? {transition: scene.transition} : {}), onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
     };
   }
   // Approved skills that apply to editing for this family, recorded with every edit for provenance.
@@ -385,7 +386,7 @@ class EditingRoom {
   state() {
     const contents = this.store.contents().filter(content => content.state === 'approved' || this.db.prepare('SELECT 1 FROM edit_timelines WHERE content_id=? LIMIT 1').get(content.id));
     return {
-      brain: B.SCHEMA, moves: B.MOVES, transitions: B.TRANSITIONS, templates: B.GRAPHIC_TEMPLATES,
+      brain: B.SCHEMA, moves: B.MOVES, transitions: ['cut', ...Object.keys(T.CATALOG)], templates: B.GRAPHIC_TEMPLATES,
       contents: contents.map(content => {
         // Show the edit made from the current approved inputs; fall back to the newest one when the inputs moved on.
         const scopeHash = (() => { try { const inputs = this.inputs(content); return inputs.ready ? inputs.scopeHash : null; } catch { return null; } })();

@@ -198,6 +198,14 @@ test('HTTP routes serve render state, need the local token and stream video rang
   assert.equal((await fetch(`${base}/api/renders/00000000-0000-0000-0000-000000000000/video`)).status, 404);
 });
 
+test('the FFmpeg here draws every transition of the catalogue', {skip}, () => {
+  const T = require('../transitions');
+  for (const fade of new Set(Object.values(T.CATALOG).map(item => item.xfade))) {
+    const out = ffmpeg(['-f', 'lavfi', '-i', 'color=c=red:s=64x36:d=1:r=10', '-f', 'lavfi', '-i', 'color=c=blue:s=64x36:d=1:r=10', '-filter_complex', `xfade=transition=${fade}:duration=0.4:offset=0.5,format=gray`, '-f', 'rawvideo', '-']);
+    assert.equal(out.length, 64 * 36 * 15, `${fade} draws 1.5 s`);
+  }
+});
+
 test('crossfade and dip-to-black assemblies stay frame-exact against the narration', {skip}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-xfade-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));

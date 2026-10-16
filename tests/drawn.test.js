@@ -66,19 +66,19 @@ test('stickman: the drawing hand is an option - it draws one thing at a time, wr
     assert.ok(leaving && leaving.lift > 0 && leaving.at[0] > late[0], 'the hand lifts and leaves the frame when the drawing is done');
     assert.equal((await at('stickman', 2.9)).hand, null, 'no hand once it has left');
     assert.equal((await at('stickman', 0.6, null)).hand, null, 'without the option the stickman engine draws as before');
-    assert.equal((await at('handdrawn', 0.6)).hand, null, 'the hand belongs to the stickman engine');
+    assert.equal((await at('motion', 0.6)).hand, null, 'the hand belongs to the stickman and hand-drawn engines, not motion graphics');
   } finally {
     await renderer.close();
   }
 });
 
-test('stickman looks: whiteboard, storybook and doodle each draw differently; a chapter card covers the frame', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+test('stickman looks: whiteboard, storybook, doodle and illustrated each draw differently; a chapter card covers the frame', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
   const renderer = new MotionRenderer({browser});
   try {
     await renderer.start();
     const scene = {set: 'street', camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'point', x: 0.35, look: {color: 'red'}}, {kind: 'prop', prop: 'coin', x: 0.75, y: 0.4}]};
     const looks = {};
-    for (const look of ['classic', 'whiteboard', 'storybook', 'doodle']) looks[look] = await frame(renderer, scene, 2.8, {drawing: {look, hand: false}});
+    for (const look of ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']) looks[look] = await frame(renderer, scene, 2.8, {drawing: {look, hand: false}});
     const all = Object.values(looks);
     assert.ok(all.every((png, k) => all.every((other, j) => j === k || !png.equals(other))), 'every look has its own finish');
     assert.ok(looks.classic.equals(await frame(renderer, scene, 2.8)), 'no setting is the classic look');
@@ -94,7 +94,7 @@ test('stickman looks: whiteboard, storybook and doodle each draw differently; a 
   }
 });
 
-test('hand-drawn: an illustrated explainer - annotations, faces on things, dashed connectors and cartoon people', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+test('hand-drawn: whiteboard animation - annotations, faces on things, dashed connectors and drawn people', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
   const renderer = new MotionRenderer({browser});
   try {
     await renderer.start();
@@ -116,6 +116,51 @@ test('hand-drawn: an illustrated explainer - annotations, faces on things, dashe
     for (const extra of [{kind: 'text', style: 'keyword', text: 'Dream', x: 0.1}, {kind: 'text', style: 'versus', text: 'vs'}, {kind: 'prop', prop: 'head', x: 0.7, size: 'xl'}]) assert.ok(!base.equals(await at(shot([truck, extra]))), `${extra.style || extra.prop} draws`);
     const checked = Sk.validate(shot([{...truck, face: true}, {kind: 'arrow', from: 1, to: [0.9, 0.5], dashed: true}]), {primary: 'handdrawn'});
     assert.deepEqual([checked.elements[0].face, checked.elements[1].dashed], [true, true]);
+    // The whiteboard looks (owner references 2026-10-16) each draw their own way, and the hand draws when asked.
+    const board = shot([person, truck]), boards = {};
+    for (const look of ['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']) boards[look] = await frame(renderer, board, 2.6, {primary: 'handdrawn', drawing: {look: 'classic', hand: false, board: look}});
+    const list = Object.values(boards);
+    assert.ok(list.every((png, k) => list.every((other, j) => j === k || !png.equals(other))), 'every whiteboard look has its own finish');
+    assert.ok(boards.cartoon.equals(await at(board)), 'no setting is the colour cartoon look');
+    await frame(renderer, board, 0.5, {primary: 'handdrawn', drawing: {look: 'classic', hand: true}});
+    assert.ok((await renderer.evaluate('DRAWN.layout()')).hand, 'the hand draws in the hand-drawn engine too');
+  } finally {
+    await renderer.close();
+  }
+});
+
+test('every camera move, shot opening, effect and mood changes the picture (vocabulary of 0.32)', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const shot = {set: 'office', camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'talk', x: 0.35}, {kind: 'prop', prop: 'laptop', x: 0.7, y: 0.6}]};
+    const still = await frame(renderer, shot, 2.2), opening = await frame(renderer, shot, 0.1);
+    for (const camera of Sk.CAMERAS.filter(name => name !== 'still')) assert.ok(!still.equals(await frame(renderer, {...shot, camera}, 2.2)), `camera ${camera}`);
+    for (const transition of Sk.TRANSITIONS.filter(name => name !== 'cut')) assert.ok(!opening.equals(await frame(renderer, {...shot, transition}, 0.1)), `opening ${transition}`);
+    // A glitch flickers early in its life; every other effect shows half a second in.
+    for (const effect of Sk.FX.filter(name => name !== 'progress')) { const t = effect === 'glitch' ? 0.2 : 0.5; assert.ok(!(await frame(renderer, shot, t)).equals(await frame(renderer, {...shot, elements: [...shot.elements, {kind: 'fx', effect, on: 2}]}, t)), `effect ${effect}`); }
+    for (const mood of Sk.MOODS.filter(name => name !== 'normal')) assert.ok(!still.equals(await frame(renderer, {...shot, mood}, 2.2)), `mood ${mood}`);
+    const faces = new Set();
+    for (const expression of Sk.EXPRESSIONS) faces.add((await frame(renderer, {set: 'none', camera: 'still', elements: [{kind: 'figure', expression, emote: 'none', x: 0.5, size: 'xl'}]}, 1.5)).toString('base64'));
+    assert.ok(faces.size >= Sk.EXPRESSIONS.length - 2, `${faces.size} different faces for ${Sk.EXPRESSIONS.length} expressions`);
+  } finally {
+    await renderer.close();
+  }
+});
+
+test('a cut to the same place keeps the place on screen under the drawing hand; a new place is drawn in', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const shot = set => ({engine: 'handdrawn', set, camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'talk', x: 0.4}]});
+  const shots = [{label: 'A', sceneId: 's1', sketch: shot('street')}, {label: 'B', sceneId: 's2', sketch: shot('street')}, {label: 'C', sceneId: 's2', sketch: shot('office')}];
+  Sk.carry(shots);
+  assert.deepEqual(shots.map(item => item.sketch.holdSet === true), [false, true, false]);
+  assert.equal(Sk.validate(shots[1].sketch, {primary: 'handdrawn'}).holdSet, true);
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const hand = {primary: 'handdrawn', drawing: {look: 'classic', hand: true}};
+    const fresh = await frame(renderer, shot('street'), 0.05, hand), held = await frame(renderer, shots[1].sketch, 0.05, hand);
+    assert.ok(!fresh.equals(held), 'the held street is already there on the first frames');
+    assert.ok((await frame(renderer, shot('street'), 1.5, hand)).equals(await frame(renderer, shots[1].sketch, 1.5, hand)), 'once drawn, both look the same');
   } finally {
     await renderer.close();
   }

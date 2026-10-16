@@ -38,12 +38,12 @@
   // ------------------------------------------------------------ state for the current frame
   K.bind = ({ctx, P, W, H, M}) => {
     const dark = K.lum(P.palette.bg) < 0.45;
-    Object.assign(K, {ctx, P, W, H, M, u: Math.min(W, H) / 1080, FIN: P.finish || 'cartoon', DARK: dark,
+    Object.assign(K, {ctx, P, W, H, M, u: Math.min(W, H) / 1080, FIN: P.finish || 'cartoon', WB: P.drawing?.board || 'cartoon', DARK: dark,
       PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
       head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };
-  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6};
-  K.LW = () => (LINE[K.FIN] || 5.2) * K.u;
+  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6, wb: 3.8};
+  K.LW = () => (K.FIN === 'wb' && K.WB === 'pencil' ? 2.6 : LINE[K.FIN] || 5.2) * K.u;
   // Background colours sit back so the foreground reads: pastel on light styles, dim on dark ones.
   K.tone = (c, k = 0.3) => K.mix(K.col(c), K.PAL.bg, K.DARK ? 0.72 : k);
 
@@ -104,9 +104,25 @@
       }
       else {
         // Under the pen the colour comes in just after its outline; storybook colours sit back into the paper.
-        if (K.PEN || FIN === 'board') ctx.globalAlpha *= wash;
+        if (K.PEN || FIN === 'board' || FIN === 'wb') ctx.globalAlpha *= wash;
         if (it.glow) { ctx.shadowColor = it.glow; ctx.shadowBlur = 30 * u; }
-        ctx.fillStyle = FIN === 'story' && it.fill[0] === '#' ? K.mix(it.fill, K.PAL.bg, 0.22) : it.fill; K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0;
+        // Whiteboard looks: black marker keeps the board white inside its lines, pencil colours lightly, and dry-erase
+        // markers colour in with visible strokes over the white.
+        const wbFill = FIN === 'wb' && it.fill[0] === '#' ? (K.WB === 'marker' ? '#FFFFFF' : K.WB === 'pencil' ? K.mix(it.fill, '#FFFFFF', 0.68) : K.WB === 'dry-erase' ? '#FFFFFF' : it.fill) : null;
+        ctx.fillStyle = wbFill || (FIN === 'story' && it.fill[0] === '#' ? K.mix(it.fill, K.PAL.bg, 0.22) : it.fill); K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0;
+        if (FIN === 'wb' && K.WB === 'dry-erase' && it.fill[0] === '#' && it.fill.toUpperCase() !== '#FFFFFF') {
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+          for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+          // Walls, floors and skies stay board-white: only the drawings are coloured in.
+          if ((x1 - x0) * (y1 - y0) <= 0.25 * K.W * K.H) {
+          ctx.save(); K.trace(pts, true); ctx.clip();
+          const rand = K.seeded(seed * 7 + 3), gap = 6.5 * u, span = y1 - y0;
+          ctx.strokeStyle = it.fill; ctx.lineWidth = 5.2 * u; ctx.lineCap = 'round'; ctx.globalAlpha *= 0.92;
+          ctx.beginPath();
+          for (let k = x0 - span; k < x1 + gap; k += gap) { const j = (rand() - 0.5) * 2.4 * u; ctx.moveTo(k + j, y1 + 2 * u); ctx.lineTo(k + span * 0.55 + j, y0 - 2 * u); }
+          ctx.stroke(); ctx.restore();
+          }
+        }
       }
     }
     if (it.stroke !== false && !(FIN === 'flat' && it.fill && !it.line)) {
@@ -119,6 +135,15 @@
         const rand = K.seeded(seed * 31 + 977);
         K.trace(part, closed && p >= 1, () => (rand() - 0.5) * 0.9 * u * 2);
         ctx.lineWidth = width * 0.85; ctx.stroke();
+      } else if (FIN === 'wb') {
+        // A whiteboard marker: one confident line; a pencil: two light graphite passes.
+        const pencil = K.WB === 'pencil', rand = K.seeded(seed * 29 + 151);
+        if (pencil && !it.color) ctx.strokeStyle = K.mix(K.PAL.line, '#FFFFFF', 0.22);
+        for (let pass = 0; pass < (pencil ? 2 : 1); pass++) {
+          const amp = (pencil ? (pass ? 1.6 : 0.8) : 0.7) * u;
+          K.trace(part, closed && p >= 1, () => (rand() - 0.5) * amp * 2);
+          ctx.lineWidth = pencil ? width * (pass ? 0.5 : 0.85) : width; ctx.stroke();
+        }
       } else if (FIN === 'doodle') {
         // A felt marker: one uneven line, the same on every frame (no boil).
         for (let pass = 0; pass < 2; pass++) {
@@ -174,7 +199,7 @@
       wave: (x1, x2, y, amp, waves, phase = 0, n = 40) => Array.from({length: n + 1}, (_, k) => { const t = k / n; return p(x1 + (x2 - x1) * t, y + amp * Math.sin((t * waves + phase) * Math.PI * 2)); }),
     };
   };
-  K.font = (size, {heading = true, weight = 700} = {}) => `${weight} ${size}px "${heading ? (K.FIN === 'ink' ? K.P.fonts.hand : K.P.fonts.heading) : K.P.fonts.body}", "Segoe UI", Arial, sans-serif`;
+  K.font = (size, {heading = true, weight = 700} = {}) => `${weight} ${size}px "${heading ? (K.FIN === 'ink' || K.FIN === 'wb' ? K.P.fonts.hand : K.P.fonts.heading) : K.P.fonts.body}", "Segoe UI", Arial, sans-serif`;
   // Text that never leaves the frame and stays readable: a white edge on light styles, a glow on dark ones.
   K.text = (value, x, y, size, {color = K.PAL.ink, align = 'center', weight = 800, heading = true, outline = true, baseline = 'middle', maxWidth = null} = {}) => {
     const {ctx, u} = K;

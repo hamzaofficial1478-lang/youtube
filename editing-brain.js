@@ -11,6 +11,7 @@ const {createHash} = require('node:crypto');
 const Cap = require('./captions');
 const Audio = require('./audio');
 const Sk = require('./sketch');
+const T = require('./transitions');
 
 const SCHEMA = 'ytprod.edit/1';
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -39,20 +40,22 @@ const MOVE_REASONS = Object.freeze({
   'push-detail': 'a punch-in to a detail keeps a long hold alive',
   static: 'planned as a static hold',
 });
-const TRANSITIONS = Object.freeze(['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'whip-pan', 'wipe']);
+// Every transition of the catalogue (transitions.js), for every engine (owner review 2026-10-16).
+const TRANSITIONS = Object.freeze(['cut', ...T.NAMES]);
 // The transition brain (HyperFrames transitions/overview.md, restated): a transition says how two scenes relate,
 // so the video's energy picks ONE primary transition for related scenes (60-70% of scene changes) and one accent
 // for a change of topic or the climax; the outro is the slowest and simplest. Presets: calm is gentle (0.6 s),
-// medium is smooth (0.4 s), high is snappy (0.25 s). FFmpeg draws every one of them (render.js XFADE).
+// medium is smooth (0.4 s), high is snappy (0.25 s). FFmpeg draws every one of them (transitions.js). This is only
+// the fallback: a transition Claude chose for a scene in the plan comes first (sceneJoin).
 const ENERGY = Object.freeze({
-  calm: {primary: ['crossfade'], accent: ['wipe', 'dip-to-black'], seconds: 0.6},
-  medium: {primary: ['push', 'slide', 'crossfade'], accent: ['wipe', 'zoom', 'whip-pan'], seconds: 0.4},
-  high: {primary: ['zoom', 'whip-pan', 'push'], accent: ['whip-pan', 'push', 'zoom'], seconds: 0.25},
+  calm: {primary: ['crossfade', 'dissolve'], accent: ['wipe-left', 'iris-open', 'dip-to-black'], seconds: 0.6},
+  medium: {primary: ['push-left', 'slide-left', 'crossfade'], accent: ['wipe-left', 'zoom-in', 'whip-pan', 'iris-open'], seconds: 0.4},
+  high: {primary: ['zoom-in', 'whip-pan', 'push-left'], accent: ['whip-pan', 'flash', 'push-left', 'zoom-in'], seconds: 0.25},
 });
 const energyOf = spec => ((spec?.motion?.intensity ?? 50) < 40 ? 'calm' : (spec?.motion?.intensity ?? 50) < 70 ? 'medium' : 'high');
 // The video's transition vocabulary from its style: a primary and an accent the style allows.
 function transitionPlan(spec, fps) {
-  const allowed = new Set((spec?.transitions?.allowed || ['cut']).filter(type => TRANSITIONS.includes(type) && type !== 'cut')), energy = energyOf(spec), table = ENERGY[energy];
+  const allowed = new Set((spec?.transitions?.allowed || ['cut']).filter(type => TRANSITIONS.includes(type) && type !== 'cut').map(T.resolve)), energy = energyOf(spec), table = ENERGY[energy];
   const primary = table.primary.find(type => allowed.has(type)) || [...allowed][0] || null;
   const accent = table.accent.find(type => allowed.has(type) && type !== primary && type !== 'dip-to-black') || null;
   const maxFrames = Math.round((spec?.transitions?.maxDurationMs || 0) / 1000 * fps);
@@ -431,6 +434,13 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
 
 function sceneJoin(previous, next, budget, spec, fps) {
   const plan = transitionPlan(spec, fps);
+  // Claude's choice for this scene in the plan comes first, when the style allows it (owner review 2026-10-16:
+  // the program thinks for itself; nothing here limits the variety it chooses).
+  const chosen = next.transition && T.resolve(next.transition);
+  if (chosen === 'cut') return {type: 'cut', frames: 0, reason: 'The scene plan cuts straight into this scene.', skill: SKILL.transitions};
+  if (chosen && T.CATALOG[chosen] && new Set((spec?.transitions?.allowed || []).map(T.resolve)).has(chosen) && plan.maxFrames >= 2) {
+    return {type: chosen, frames: Math.min(plan.maxFrames, Math.max(2, Math.round(T.secondsOf(chosen) * fps))), reason: `The scene plan chose ${chosen} here: ${T.CATALOG[chosen].use}.`, skill: SKILL.transitions};
+  }
   if (plan.primary && plan.frames >= 2 && budget.left > 0) {
     const say = (type, frames, why) => ({type, frames, reason: `${why} (${plan.energy} energy: ${plan.primary} between related scenes${plan.accent ? `, ${plan.accent} for a change of topic` : ''}).`, skill: SKILL.transitions});
     if (['close', 'call-to-action'].includes(next.purpose) && plan.outro) return say(plan.outro, Math.min(plan.maxFrames, Math.round(0.8 * fps)), 'The outro gets the slowest, simplest transition');
@@ -448,7 +458,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
   const sceneRows = scenes.map((scene, index) => {
     const start = index === 0 ? 0 : clamp(Math.round(sentences[scene.sentenceStart - 1].startSeconds * fps), 1, totalFrames - 1);
-    return {id: scene.id, label: scene.label, index, purpose: scene.purpose, register: PURPOSE_REGISTER[scene.purpose] || 'reverent', onScreenText: scene.onScreenText || '', direction: scene.direction || '', sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, startFrame: start, shots: scene.shots, variant: variants[scene.id] || 0};
+    return {id: scene.id, label: scene.label, index, purpose: scene.purpose, register: PURPOSE_REGISTER[scene.purpose] || 'reverent', ...(scene.transition ? {transition: scene.transition} : {}), onScreenText: scene.onScreenText || '', direction: scene.direction || '', sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, startFrame: start, shots: scene.shots, variant: variants[scene.id] || 0};
   });
   sceneRows.forEach((scene, index) => { scene.endFrame = index < sceneRows.length - 1 ? sceneRows[index + 1].startFrame : totalFrames; });
   for (const scene of sceneRows) if (scene.endFrame <= scene.startFrame) scene.endFrame = scene.startFrame + 1;
@@ -598,9 +608,11 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     const previous = sceneRows.find(scene => scene.id === a.sceneId), next = sceneRows.find(scene => scene.id === b.sceneId);
     // A drawn shot that opens with its own move (a whip, a slide, an ink wipe) is its transition; no second one.
     const own = assets?.[b.shotId]?.sketch?.transition;
-    let join = previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook}
-      : own && own !== 'cut' ? {type: 'cut', frames: 0, reason: `The next drawing opens with its own ${own} move, so the edit cuts.`, skill: SKILL.transitions} : sceneJoin(previous, next, budget, spec, fps);
-    if (join.type !== 'cut' && joins.length && joins[joins.length - 1].type !== 'cut') join = {type: 'cut', frames: 0, reason: 'Two transitions in a row would look decorative; this one is a hard cut.', skill: SKILL.transitions};
+    // Order: a drawing's own opening move, then Claude's choice for the scene, then the brain's own habits.
+    let join = own && own !== 'cut' ? {type: 'cut', frames: 0, reason: `The next drawing opens with its own ${own} move, so the edit cuts.`, skill: SKILL.transitions}
+      : next.transition ? sceneJoin(previous, next, budget, spec, fps)
+      : previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook} : sceneJoin(previous, next, budget, spec, fps);
+    if (join.type !== 'cut' && !next.transition && joins.length && joins[joins.length - 1].type !== 'cut') join = {type: 'cut', frames: 0, reason: 'Two transitions in a row would look decorative; this one is a hard cut.', skill: SKILL.transitions};
     const shorter = Math.min(a.frames, b.frames);
     if (join.type !== 'cut') join.frames = Math.max(2, Math.min(join.frames, Math.floor(shorter / 3)));
     if (join.type !== 'cut') budget.left--;
@@ -730,8 +742,8 @@ function critique(timeline, spec) {
   const purposeOf = clip => timeline.scenes.find(scene => scene.id === clip.sceneId)?.purpose;
   const least = soft.find(({k}) => clips[k].sceneId === clips[k + 1].sceneId) || soft.find(({k}) => purposeOf(clips[k + 1]) !== 'turn');
   const toCut = least ? {op: {type: 'set-transition', clipId: clips[least.k].id, transition: 'cut'}} : {};
-  if (transitionTypes.size > 3) findings.push(finding('suggestion', 'transition-variety', `The edit uses ${transitionTypes.size} transition types; keep to two or three.`, 'Turn the least meaningful transitions into hard cuts.', {skill: SKILL.transitions, ...toCut}));
-  if (nonCut.length > Math.max(1, Math.floor(timeline.narrationSeconds / 20)) + 1) findings.push(finding('suggestion', 'transition-overuse', `${nonCut.length} soft transitions in ${clock(timeline.narrationSeconds)} make the edit feel decorative.`, 'Keep soft transitions for section breaks and turns only.', {skill: SKILL.transitions, ...toCut}));
+  // Variety is welcome (owner review 2026-10-16); only a transition on nearly every change is flagged, and never changed by itself.
+  if (nonCut.length > Math.max(1, Math.floor(timeline.narrationSeconds / 6)) + 1) findings.push(finding('suggestion', 'transition-overuse', `${nonCut.length} soft transitions in ${clock(timeline.narrationSeconds)} make the edit feel decorative.`, 'Keep soft transitions for section breaks and turns only.', {skill: SKILL.transitions, ...toCut}));
   // Pattern interrupts and retention (skills editing.pattern-interrupt-schedule, editing.retention-curve-defense).
   const treatment = [0, ...clips.slice(1).filter((clip, k) => clip.mediaType !== clips[k].mediaType || clip.sceneId !== clips[k].sceneId || clip.part === 'detail').map(clip => clip.start), ...accepted.map(graphic => graphic.start), ...timeline.joins.map((join, k) => (join.type !== 'cut' ? clips[k + 1].start : null)).filter(value => value !== null)].sort((a, b) => a - b);
   for (let k = 1; k <= treatment.length; k++) {
@@ -804,7 +816,7 @@ function findClip(timeline, id) { const index = timeline.clips.findIndex(clip =>
 // program can fix, then show what it did). One fix at a time, checking again after each (one fix can make
 // another unnecessary); each fix is tried once. Findings that need new visuals, a new narration or the owner's
 // taste stay listed. Returns {timeline, fixed: [{code, severity, message, fix}]}.
-const AUTO_FIXES = Object.freeze(['hook-static', 'static-too-long', 'hidden-cut', 'captions-off', 'same-move', 'graphic-short', 'transition-variety', 'transition-overuse', 'long-unchanged', 'interrupt-gap']);
+const AUTO_FIXES = Object.freeze(['hook-static', 'static-too-long', 'hidden-cut', 'captions-off', 'same-move', 'graphic-short', 'long-unchanged', 'interrupt-gap']);
 function autoFix(source, spec, {limit = 60} = {}) {
   let timeline = source;
   const fixed = [], tried = new Set();
@@ -844,8 +856,8 @@ function applyOp(source, op, {spec} = {}) {
     const index = findClip(timeline, op.clipId);
     if (index === timeline.clips.length - 1) throw opError('There is no join after the last clip.');
     if (!TRANSITIONS.includes(op.transition)) throw opError(`Choose a transition: ${TRANSITIONS.join(', ')}.`);
-    const allowed = new Set([...(spec?.transitions?.allowed || ['cut']), 'cut']);
-    if (!allowed.has(op.transition)) throw opError('The family style does not allow that transition.');
+    const allowed = new Set([...(spec?.transitions?.allowed || ['cut']), 'cut'].map(T.resolve));
+    if (!allowed.has(T.resolve(op.transition))) throw opError('The family style does not allow that transition.');
     let frames = 0;
     if (op.transition !== 'cut') {
       frames = clipFrames(op.seconds ?? 0.6);

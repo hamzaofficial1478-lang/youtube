@@ -81,7 +81,7 @@ const CAPABILITIES = {
 // local browser and keeps it as a video clip. No provider, no cost, no third-party media.
 CAPABILITIES['drawn-scene'] = {
   id: 'drawn-scene', version: REGISTRY_VERSION, provider: 'local', source: 'generated-graphics', kind: 'draw', name: 'Drawn scene (local)', mediaType: 'video',
-  settings: {template: 'sketch-scene', finish: 'From the style: hand-drawn for Stickman and Hand-drawn Canvas, clean for Motion Graphics'},
+  settings: {template: 'sketch-scene', finish: 'From the style: drawn for Stickman and the Hand-drawn Whiteboard, clean for Motion Graphics'},
   mediaRoles: [], output: {mime: ['video/mp4'], maxBytes: 300 * MB, rendition: 'Drawn at the family resolution and the style frame rate'},
   rights: {name: 'Drawn by this program', url: '', commercialUse: true, attribution: 'Not required', restrictions: ['Original drawing from the scene plan; no third-party media']}, synthetic: false,
   cost: {unit: 'shot', paid: false, note: 'Drawn locally in Microsoft Edge or Google Chrome; free.'},

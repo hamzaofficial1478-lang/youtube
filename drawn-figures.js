@@ -95,11 +95,12 @@
 
   // Joints for angles A at height h, facing right, feet on the ground at (0, 0).
   function skeleton(A, h, body) {
-    const thigh = 0.19 * h, shin = 0.18 * h, torso = 0.25 * h, upper = 0.155 * h, fore = 0.15 * h, R = (body === 'robot' ? 0.15 : body === 'bean' ? 0.19 : body === 'person' ? 0.115 : 0.165) * h;
+    // A whiteboard person ('drawn') has human proportions: longer legs and body, a small head on a neck.
+    const drawn = body === 'drawn' || body === 'caricature', thigh = (drawn ? 0.22 : 0.19) * h, shin = (drawn ? 0.21 : 0.18) * h, torso = (drawn ? 0.29 : 0.25) * h, upper = (drawn ? 0.16 : 0.155) * h, fore = 0.15 * h, R = (body === 'robot' ? 0.15 : body === 'bean' ? 0.19 : body === 'person' ? 0.115 : body === 'caricature' ? 0.13 : drawn ? 0.09 : 0.165) * h, neckGap = drawn ? 0.04 * h : 0;
     const limb = ([x, y], a, len) => [x + Math.sin(a * D) * len, y + Math.cos(a * D) * len];
     const hip = [0, 0], kf = limb(hip, A.lf[0], thigh), ff = limb(kf, A.lf[1], shin), kb = limb(hip, A.lb[0], thigh), fb = limb(kb, A.lb[1], shin);
     const lean = A.lean * D, neck = [Math.sin(lean) * torso, -Math.cos(lean) * torso], sh = [neck[0] * 0.88, neck[1] * 0.88];
-    const tilt = (A.lean + A.tilt) * D, head = [neck[0] + Math.sin(tilt) * R * 0.98, neck[1] - Math.cos(tilt) * R * 0.98];
+    const tilt = (A.lean + A.tilt) * D, head = [neck[0] + Math.sin(tilt) * (R * 0.98 + neckGap), neck[1] - Math.cos(tilt) * (R * 0.98 + neckGap)];
     const ef = limb(sh, A.f[0], upper), hf = limb(ef, A.f[1], fore), eb = limb(sh, A.b[0], upper), hb = limb(eb, A.b[1], fore);
     const J = {hip, kf, ff, kb, fb, neck, sh, head, ef, hf, eb, hb};
     if (A.rotate) { const r = A.rotate * D, c = Math.cos(r), s = Math.sin(r); for (const key of Object.keys(J)) { const [x, y] = J[key]; J[key] = [x * c - y * s, x * s + y * c]; } }
@@ -119,6 +120,15 @@
     suspicious: {eyes: 'squint', brows: 'uneven', mouth: 'flat'}, confused: {eyes: 'dot', brows: 'uneven', mouth: 'squiggle', emote: 'question'}, thinking: {eyes: 'up', brows: 'uneven', mouth: 'o'},
     sleepy: {eyes: 'closed', mouth: 'o', emote: 'zzz'}, dead: {eyes: 'x', mouth: 'tongue'}, love: {eyes: 'heart', mouth: 'smile', blush: true}, starstruck: {eyes: 'star', mouth: 'grin'},
     evil: {eyes: 'red', brows: 'angry', mouth: 'jagged'}, disgusted: {eyes: 'squint', brows: 'angry', mouth: 'tongue'}, determined: {eyes: 'dot', brows: 'angry', mouth: 'flat'}, bored: {eyes: 'half', mouth: 'flat'},
+    panic: {eyes: 'white', brows: 'sad', mouth: 'shout', emote: 'sweat'}, terrified: {eyes: 'small', brows: 'sad', mouth: 'O', emote: 'sweat', tint: '#E1EAF6'},
+    furious: {eyes: 'small', brows: 'angry', mouth: 'shout', emote: 'anger', tint: '#FFB8AE'}, exhausted: {eyes: 'half', brows: 'sad', mouth: 'wavy', emote: 'sweat'},
+    embarrassed: {eyes: 'side', brows: 'sad', mouth: 'wavy', blush: true, emote: 'sweat'}, proud: {eyes: 'happy', brows: 'up', mouth: 'smile', emote: 'shine'},
+    skeptical: {eyes: 'squint', brows: 'uneven', mouth: 'wavy'}, hopeful: {eyes: 'wide', brows: 'sad', mouth: 'smile', emote: 'sparkle'},
+    awkward: {eyes: 'dot', brows: 'flat', mouth: 'squiggle', emote: 'sweat'}, relieved: {eyes: 'closed', brows: 'sad', mouth: 'smile'},
+    curious: {eyes: 'wide', brows: 'uneven', mouth: 'o'}, amazed: {eyes: 'wide', brows: 'up', mouth: 'O', emote: 'sparkle'},
+    jealous: {eyes: 'squint', brows: 'angry', mouth: 'frown', tint: '#D5EFC4'}, guilty: {eyes: 'side', brows: 'sad', mouth: 'frown', emote: 'sweat'},
+    sick: {eyes: 'half', brows: 'sad', mouth: 'wavy', tint: '#CDE7B5', emote: 'dizzy'}, dizzy: {eyes: 'x', mouth: 'squiggle', emote: 'dizzy'},
+    focused: {eyes: 'squint', brows: 'angry', mouth: 'small'}, shy: {eyes: 'closed', mouth: 'small', blush: true}, mischievous: {eyes: 'half', brows: 'angry', mouth: 'grin'},
   };
   K.EXPRESSIONS = Object.keys(EXPR);
   K.EXPR = EXPR;
@@ -350,32 +360,122 @@
   // ------------------------------------------------------------ the whole figure
   // st: {x, y (feet, px), dir, size, A (angles), expression, emote, talk, holds, tl, seed, look, engine}
   // Returns anchors: head [x, y, r], hand [x, y], box [x1, y1, x2, y2].
+  // ------------------------------------------------------------ whiteboard people (0.32)
+  // The hand-drawn engine draws people, not stick figures (owner review 2026-10-16): an oval head with an ear, a
+  // nose, hair and the cast's face, a neck, a shirt with sleeves, trousers, shoes and hands, about six heads tall.
+  // Every part is an outlined shape on the same pose skeleton, so the 40 poses, the expressions and the looks of
+  // the cast all work, and a hand can draw the person line by line.
+  const smooth = (pts, closed = true, steps = 5) => {
+    const n = pts.length, at = k => pts[closed ? (k + n) % n : Math.max(0, Math.min(n - 1, k))], out = [];
+    for (let k = 0; k < (closed ? n : n - 1); k++) {
+      const a = at(k - 1), b = at(k), c = at(k + 1), d = at(k + 2);
+      for (let s = 0; s < steps; s++) { const t = s / steps, t2 = t * t, t3 = t2 * t; out.push([0, 1].map(i => 0.5 * (2 * b[i] + (-a[i] + c[i]) * t + (2 * a[i] - 5 * b[i] + 4 * c[i] - d[i]) * t2 + (-a[i] + 3 * b[i] - 3 * c[i] + d[i]) * t3))); }
+    }
+    out.push(closed ? out[0] : pts[n - 1]);
+    return out;
+  };
+  // An outlined tube along a path (a sleeve, a trouser leg): its width from start to end, round ends.
+  const tube = (pts, w0, w1) => {
+    const n = pts.length, left = [], right = [];
+    for (let k = 0; k < n; k++) {
+      const a = pts[Math.max(0, k - 1)], b = pts[Math.min(n - 1, k + 1)], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, w = (w0 + (w1 - w0) * k / Math.max(1, n - 1)) / 2;
+      left.push([pts[k][0] - dy / l * w, pts[k][1] + dx / l * w]); right.push([pts[k][0] + dy / l * w, pts[k][1] - dx / l * w]);
+    }
+    const cap = (c, w, from) => Array.from({length: 7}, (_, s) => { const a = from - Math.PI * s / 6; return [c[0] + Math.cos(a) * w / 2, c[1] + Math.sin(a) * w / 2]; });
+    const end = Math.atan2(pts[n - 1][1] - pts[n - 2][1], pts[n - 1][0] - pts[n - 2][0]), start = Math.atan2(pts[1][1] - pts[0][1], pts[1][0] - pts[0][0]);
+    return [...left, ...cap(pts[n - 1], w1, end + Math.PI / 2), ...right.reverse(), ...cap(pts[0], w0, start - Math.PI / 2), left[0]];
+  };
+  function drawPerson(st, progress) {
+    const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u * 1.06, dir = st.dir, look = st.look;
+    // Dry-erase boards draw caricatures: a bigger head on the same body.
+    const J0 = skeleton(st.A, h, K.WB === 'dry-erase' ? 'caricature' : 'drawn'), lift = st.A.lift * h, J = {};
+    for (const key of ['hip', 'kf', 'ff', 'kb', 'fb', 'neck', 'sh', 'head', 'ef', 'hf', 'eb', 'hb']) J[key] = [st.x + J0[key][0] * dir, st.y + J0[key][1] - lift];
+    const R = J0.R, lw = Math.max(3 * u, h * 0.0105), head = K.frame(J.head[0], J.head[1], R, dir, J0.tiltRad * dir), pose = K.POSE[st.pose] || {};
+    const seed = K.hashText(`${look.color}${look.hair}${look.hairColor}${look.outfit}`);
+    const skin = ['#F3D3B8', '#E2B48D', '#C68E63', '#8D5A3B'][seed % 4];
+    const shirt = look.color ? K.col(look.color) : ['#5B7FA6', '#C8553D', '#6A994E', '#E9C46A', '#8E7DBE'][seed % 5];
+    const suit = look.outfit === 'suit', coat = look.outfit === 'lab-coat';
+    const top = suit ? '#2E3440' : coat ? '#FFFFFF' : shirt, trousers = suit ? '#2E3440' : ['#3E4A5C', '#5C4B3E', '#2F3E46'][seed % 3];
+    const longSleeves = suit || coat || ['hoodie', 'uniform'].includes(look.outfit) || seed % 3 === 0;
+    const axis = [J.neck[0] - J.hip[0], J.neck[1] - J.hip[1]], al = Math.hypot(axis[0], axis[1]) || 1, nrm = [-axis[1] / al, axis[0] / al];
+    const along = (f, w) => [J.hip[0] + axis[0] * f + nrm[0] * w, J.hip[1] + axis[1] * f + nrm[1] * w];
+    const shift = (pts, w) => pts.map(p => [p[0] + nrm[0] * w, p[1] + nrm[1] * w]);
+    const [armF, armB] = [shift([J.sh, J.ef, J.hf], 0.045 * h * dir), shift([J.sh, J.eb, J.hb], -0.045 * h * dir)];
+    const [legF, legB] = [shift([J.hip, J.kf, J.ff], 0.04 * h * dir), shift([J.hip, J.kb, J.fb], -0.04 * h * dir)];
+    const L = [], line = {px: lw};
+    const arm = pts => {
+      L.push({pts: tube(pts.slice(0, 2), 0.07 * h, 0.06 * h), fill: top, ...line});
+      L.push({pts: tube(pts.slice(1), 0.056 * h, 0.046 * h), fill: longSleeves ? top : skin, ...line});
+      const [ex, ey] = pts[1], [wx, wy] = pts[2], a = Math.atan2(wy - ey, wx - ex), c = [wx + Math.cos(a) * 0.022 * h, wy + Math.sin(a) * 0.022 * h], f = K.frame(c[0], c[1], h, 1, a);
+      L.push({pts: f.ring(0, 0, 0.034, 0.027, 18), fill: skin, ...line}, {pts: f.pts([[-0.012, 0.02], [0.006, 0.036]]), px: lw * 0.8});
+    };
+    const leg = pts => {
+      L.push({pts: tube(pts, 0.085 * h, 0.064 * h), fill: trousers, ...line});
+      const [fx, fy] = pts[2], f = K.frame(fx + 0.03 * h * dir, fy + 0.006 * h, h, 1);
+      L.push({pts: f.ring(0, 0, 0.058, 0.026, 18), fill: '#2B2B2B', ...line});
+    };
+    // Back to front: the far arm and leg, the neck, the shirt, the near leg, the head, the near arm.
+    if (!pose.armBehind) arm(armB); else arm(armF);
+    leg(legB);
+    L.push({pts: tube([along(0.95, 0), J.head], 0.05 * h, 0.046 * h), fill: skin, ...line});
+    const body = [along(1.0, -0.035 * h), along(0.96, -0.1 * h), along(0.84, -0.11 * h), along(0.45, -0.086 * h), along(coat ? -0.35 : -0.05, -0.092 * h), along(coat ? -0.35 : -0.05, 0.092 * h), along(0.45, 0.086 * h), along(0.84, 0.11 * h), along(0.96, 0.1 * h), along(1.0, 0.035 * h)];
+    L.push({pts: smooth(body), fill: top, ...line});
+    L.push({pts: [along(1.0, -0.035 * h), along(0.86, 0), along(1.0, 0.035 * h)], px: lw * 0.9});
+    if (suit) L.push({pts: [along(0.99, -0.012 * h), along(0.99, 0.012 * h), along(0.55, 0.016 * h), along(0.5, 0), along(0.55, -0.016 * h), along(0.99, -0.012 * h)], fill: C.red, px: lw * 0.8});
+    if (!coat) L.push({pts: [along(0.03, -0.09 * h), along(0.03, 0.09 * h)], px: lw * 0.9});
+    leg(legF);
+    if (look.outfit === 'apron') L.push({pts: smooth([along(0.7, -0.06 * h), along(0.7, 0.06 * h), along(-0.25, 0.075 * h), along(-0.25, -0.075 * h)]), fill: '#FFFFFF', ...line});
+    if (String(look.outfit).startsWith('kit:')) L.push(...outfit(J, look, h, dir, 'front', st).map(item => ({...item, px: lw})));
+    L.push(...hairBack(head, look, st).map(item => ({...item, px: lw})));
+    L.push({pts: head.ring(0, 0, 0.84, 1.0, 40), fill: K.EXPR[st.expression]?.tint || skin, ...line});
+    L.push({pts: head.ring(-0.6, 0.06, 0.15, 0.22, 16), fill: skin, px: lw * 0.9});
+    L.push({pts: head.pts([[0.66, -0.06], [0.86, 0.2], [0.64, 0.26]]), px: lw * 0.9});
+    // The face a little larger than a stick figure's, so it reads on a small head.
+    L.push({draw: () => face(K.frame(J.head[0], J.head[1] + 0.04 * R, R * 1.2, dir, J0.tiltRad * dir), R * 1.2, st.expression, st, 'stick')});
+    L.push(...hairFront(head, look, st).map(item => ({...item, px: item.px || lw})));
+    L.push(...eyewear(head, look).map(item => ({...item, px: item.px || lw})));
+    if (!pose.armBehind) arm(armF); else arm(armB);
+    K.render(L, progress, st.seed);
+    const holds = st.holds || pose.hold;
+    let hand = armF[2];
+    if (holds && K.propOf(holds) && progress >= 1) {
+      const at = pose.holdAt === 'chest' ? along(0.6, 0.06 * h * dir) : [armF[2][0] + 0.05 * h * dir, armF[2][1] + 0.01 * h];
+      K.render(K.propOf(holds)(K.frame(at[0], at[1], (pose.holdScale || 1) * 0.26 * h, dir), {tl: st.tl, seed: st.seed}), 1, st.seed + 5);
+      hand = at;
+    }
+    const emoteName = st.emote && st.emote !== 'none' ? st.emote : (K.EXPR[st.expression]?.emote || (['sleep'].includes(st.pose) ? 'zzz' : 'none'));
+    if (progress >= 1) emote(emoteName, J.head[0], J.head[1], R, dir, st.tl);
+    const xs = Object.values(J).map(p => p[0]), ys = Object.values(J).map(p => p[1]);
+    return {head: [J.head[0], J.head[1], R], hand, box: [Math.min(...xs) - R, Math.min(...ys) - R, Math.max(...xs) + R, Math.max(...ys)]};
+  }
+
   K.drawFigure = (st, progress = 1) => {
+    if (K.FIN === 'wb' && (st.look.body || 'stick') === 'stick') return drawPerson(st, progress);
     const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u, dir = st.dir, look = st.look, body = look.body || 'stick', engine = st.engine;
     // Storybook people have bean bodies: a filled rounded torso under a big round head.
     const bean = K.FIN === 'story' && body === 'stick';
-    // Hand-drawn people are cartoon people, not stick figures: a smaller head with a skin tone, clothes on the
-    // body, arms and legs as filled sleeves and trousers, hands and shoes (the illustrated-explainer look).
-    const person = engine === 'handdrawn' && body === 'stick';
+    // Illustrated people (the stickman engine's illustrated look): a smaller head with a skin tone, clothes on the
+    // body, arms and legs as filled sleeves and trousers, hands and shoes.
+    const person = K.FIN === 'ink' && body === 'stick';
     const J0 = skeleton(st.A, h, bean ? 'bean' : person ? 'person' : body), lift = st.A.lift * h;
     const J = {};
     for (const key of ['hip', 'kf', 'ff', 'kb', 'fb', 'neck', 'sh', 'head', 'ef', 'hf', 'eb', 'hb']) J[key] = [st.x + J0[key][0] * dir, st.y + J0[key][1] - lift];
-    const R = J0.R, line = K.PAL.line, lw = Math.max(5 * u, h * (engine === 'handdrawn' ? 0.022 : K.FIN === 'doodle' ? 0.036 : bean ? 0.024 : 0.031)), hdir = J0.tiltRad * dir;
+    const R = J0.R, line = K.PAL.line, lw = Math.max(5 * u, h * (K.FIN === 'ink' ? 0.022 : K.FIN === 'doodle' ? 0.036 : bean ? 0.024 : 0.031)), hdir = J0.tiltRad * dir;
     const head = K.frame(J.head[0], J.head[1], R, dir, hdir);
     const pose = K.POSE[st.pose] || {};
     const L = [];
     // Ground shadow, and a chair for seated poses.
-    if (engine !== 'handdrawn' && !st.A.rotate) L.push({pts: K.frame(st.x, st.y, h, 1).ring(0, 0, 0.17 * (1 - Math.min(0.5, st.A.lift * 3)), 0.025, 24), fill: K.PAL.shadow, stroke: false});
+    if (!['ink', 'wb'].includes(K.FIN) && !st.A.rotate) L.push({pts: K.frame(st.x, st.y, h, 1).ring(0, 0, 0.17 * (1 - Math.min(0.5, st.A.lift * 3)), 0.025, 24), fill: K.PAL.shadow, stroke: false});
     if (pose.seat) { const s = 0.43 * h; K.render(K.PROPS.chair(K.frame(J.hip[0] - 0.03 * h * dir, J.hip[1] - 0.04 * s + 0.02 * h, s, -dir), {tl: st.tl, seed: 1}), 1, 9); }
     const limbStyle = {px: lw};
     const shirt = look.color ? K.col(look.color) : '#5B7FA6', trousers = '#3E4A5C', skin = ['#F3D3B8', '#E2B48D', '#C68E63', '#8D5A3B'][K.hashText(`${look.color}${look.hair}${look.hairColor}`) % 4];
-    const limb = (pts, inner = shirt) => (engine === 'handdrawn' ? [{pts, px: lw * 3.2}, {pts, px: lw * 1.8, color: person ? inner : K.PAL.bg === '#FFFFFF' ? '#FFFFFF' : K.mix(K.PAL.bg, '#FFFFFF', 0.4)}] : [{pts, ...limbStyle}]);
+    const limb = (pts, inner = shirt) => (K.FIN === 'ink' ? [{pts, px: lw * 3.2}, {pts, px: lw * 1.8, color: person ? inner : K.PAL.bg === '#FFFFFF' ? '#FFFFFF' : K.mix(K.PAL.bg, '#FFFFFF', 0.4)}] : [{pts, ...limbStyle}]);
     L.push(...outfit(J, look, h, dir, 'back', st));
     L.push(...hairBack(head, look, st).map(item => ({...item, width: (lw * 0.75) / K.LW()})));
     L.push(...limb([J.sh, J.eb, J.hb]), ...limb([J.hip, J.kb, J.fb], trousers));
     if (person) L.push({pts: K.frame(J.hb[0], J.hb[1], h, 1).ring(0, 0, 0.026), fill: skin, px: lw * 0.8}, {pts: K.frame(J.fb[0] + 0.02 * h * dir, J.fb[1], h, 1).ring(0, 0, 0.045, 0.022), fill: '#2E2E2E', px: lw * 0.8});
     if (body === 'robot') L.push({pts: K.frame(...J.neck, h, dir, st.A.lean * D * dir).rrect(-0.08, 0.02, 0.16, 0.26, 0.03), fill: C.metal, px: lw * 0.8});
-    else if (engine === 'handdrawn') { const n = J.neck, p = J.hip, w = 0.075 * h, b = 0.03 * h; L.push({pts: [[n[0] - w, n[1]], [n[0] + w, n[1]], [p[0] + w * 0.92, p[1] + b], [p[0] - w * 0.92, p[1] + b], [n[0] - w, n[1]]], fill: shirt, px: lw}); }
+    else if (K.FIN === 'ink') { const n = J.neck, p = J.hip, w = 0.075 * h, b = 0.03 * h; L.push({pts: [[n[0] - w, n[1]], [n[0] + w, n[1]], [p[0] + w * 0.92, p[1] + b], [p[0] - w * 0.92, p[1] + b], [n[0] - w, n[1]]], fill: shirt, px: lw}); }
     else if (bean) {
       const n = J.neck, p = J.hip, angle = Math.atan2(n[0] - p[0], p[1] - n[1]), torso = K.frame((n[0] + p[0]) / 2, (n[1] + p[1]) / 2, h, 1, angle);
       L.push({pts: torso.rrect(-0.085, -0.15, 0.17, 0.31, 0.075), fill: look.color ? K.col(look.color) : '#7D8C9A', px: lw});

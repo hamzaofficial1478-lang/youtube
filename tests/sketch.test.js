@@ -36,10 +36,10 @@ test('Claude\'s near-misses are repaired with a warning; the owner\'s own edits 
   assert.equal(Sk.validate({elements: [{kind: 'fx', effect: 'highlight'}]}, {lenient: true, warn: message => near.push(message)}).elements[0].effect, 'circle');
   assert.match(near[0], /"highlight" is drawn as "circle"/);
   assert.throws(() => Sk.validate({elements: [{kind: 'fx', effect: 'highlight'}]}), /effect must be one of/);
-  const face = Sk.validate({elements: [{kind: 'figure', pose: 'stand', expression: 'curious', then: [{at: 'later', expression: 'terrified'}]}]}, {lenient: true, warn: message => near.push(message)}).elements[0];
-  assert.deepEqual([face.expression, face.then[0].expression], ['thinking', 'scared']);
-  assert.match(near.join(' '), /"curious" is drawn as "thinking"/);
-  assert.throws(() => Sk.validate({elements: [{kind: 'figure', pose: 'stand', expression: 'curious'}]}), /expression must be one of/);
+  const face = Sk.validate({elements: [{kind: 'figure', pose: 'stand', expression: 'wondering', then: [{at: 'later', expression: 'horrified'}]}]}, {lenient: true, warn: message => near.push(message)}).elements[0];
+  assert.deepEqual([face.expression, face.then[0].expression], ['curious', 'terrified']);
+  assert.match(near.join(' '), /"wondering" is drawn as "curious"/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'figure', pose: 'stand', expression: 'wondering'}]}), /expression must be one of/);
   // Any drawing engine may draw a shot in any video; Claude decides and says why (engines.js).
   assert.equal(Sk.validate({engine: 'handdrawn', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'stickman'}).engine, 'handdrawn');
   assert.equal(Sk.validate({engine: 'stickman', elements: [{kind: 'prop', prop: 'map'}]}, {primary: 'montage'}).engine, 'stickman');

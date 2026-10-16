@@ -18,6 +18,7 @@ const {ConnectorSlots} = require('../connectors');
 const {EditingRoom} = require('../editing-room');
 const {SkillsEngine} = require('../skills');
 const B = require('../editing-brain');
+const T = require('../transitions');
 const Cap = require('../captions');
 const R = require('../render');
 const {createApp} = require('../server');
@@ -148,14 +149,14 @@ test('the transition brain: one primary between related scenes, an accent for a 
   const story = {...SPEC, transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom'], maxDurationMs: 600}, motion: {...SPEC.motion, intensity: 60}};
   const related = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets, spec: story});
   assert.equal(joinInto(related, 'sc2').type, 'cut');
-  assert.deepEqual([joinInto(related, 'sc3').type, joinInto(related, 'sc3').frames], ['push', 12]);
-  assert.match(joinInto(related, 'sc3').reason, /Related scenes share the primary transition \(medium energy: push/);
+  assert.deepEqual([joinInto(related, 'sc3').type, joinInto(related, 'sc3').frames], ['push-left', 12]);
+  assert.match(joinInto(related, 'sc3').reason, /Related scenes share the primary transition \(medium energy: push-left/);
   const turn = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'turn', 'close']), assets, spec: story});
-  assert.equal(joinInto(turn, 'sc3').type, 'zoom');
+  assert.equal(joinInto(turn, 'sc3').type, 'zoom-in');
   // Calm (hand-drawn): crossfades between related scenes, a wipe at a change of topic.
   const calm = {...SPEC, transitions: {allowed: ['cut', 'crossfade', 'dip-to-black', 'wipe'], maxDurationMs: 600}, motion: {...SPEC.motion, intensity: 20}};
   assert.deepEqual([joinInto(B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets, spec: calm}), 'sc3').type], ['crossfade']);
-  assert.equal(joinInto(B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'example', 'close']), assets, spec: calm}), 'sc3').type, 'wipe');
+  assert.equal(joinInto(B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'example', 'close']), assets, spec: calm}), 'sc3').type, 'wipe-left');
   // A drawing that opens with its own move is the transition: the edit cuts into it.
   const drawn = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: withPurposes(['hook', 'context', 'explain', 'close']), assets: {...assets, e: {...assets.e, sketch: {transition: 'ink'}}}, spec: story});
   assert.match(joinInto(drawn, 'sc3').reason, /opens with its own ink move/);
@@ -193,13 +194,41 @@ test('the critic names the boring, lazy and amateur choices with a fix', () => {
   assert.ok(after.some(item => item.code === 'clip-freeze'), 'a too-short clip needs a new visual, so it stays listed');
   assert.match(fixed.clips.find(clip => clip.id === 'cl_b').reason, /^Changed by the editing brain: /);
   assert.deepEqual(B.autoFix(fixed, SPEC).fixed, [], 'nothing is fixed twice');
-  // Overused soft transitions inside scenes become cuts; section breaks keep theirs.
+  // Transitions are a creative choice (owner review 2026-10-16): a transition on every change is flagged for the
+  // owner with a one-click fix, but the brain never removes chosen transitions by itself, and variety is not a fault.
   const soft = structuredClone(fixed);
-  soft.joins = soft.joins.map(join => ({...join, type: 'crossfade', frames: 6}));
+  soft.joins = soft.joins.map((join, k) => ({...join, type: ['crossfade', 'iris-open', 'whip-pan', 'flash'][k % 4], frames: 6}));
   const calmer = B.autoFix(soft, SPEC);
-  assert.ok(calmer.fixed.some(item => item.code === 'transition-overuse'));
-  assert.equal(B.critique(calmer.timeline, SPEC).findings.some(item => item.code === 'transition-overuse'), false);
-  assert.ok(calmer.timeline.joins.every((join, k) => join.type === 'cut' || calmer.timeline.clips[k].sceneId !== calmer.timeline.clips[k + 1].sceneId));
+  assert.equal(calmer.fixed.some(item => item.code.startsWith('transition-')), false);
+  assert.deepEqual(calmer.timeline.joins.map(join => join.type), soft.joins.map(join => join.type));
+  const listed = B.critique(soft, SPEC).findings;
+  assert.ok(listed.some(item => item.code === 'transition-overuse' && item.op?.transition === 'cut'));
+  assert.equal(listed.some(item => item.code === 'transition-variety'), false);
+});
+
+test("Claude chooses each scene's transition from the whole catalogue; the brain decides only where it did not", () => {
+  const {sentences, scenes, assets, narrationSeconds} = fixture();
+  const joinInto = (edit, id) => edit.joins[edit.clips.findIndex(clip => clip.sceneId === id) - 1];
+  const all = {...SPEC, transitions: {allowed: ['cut', ...Object.keys(T.CATALOG)], default: 'cut', maxDurationMs: 800}, motion: {...SPEC.motion, intensity: 60}};
+  const chosen = {sc2: 'iris-open', sc3: 'glitch', sc4: 'dip-to-black'};
+  const edit = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: scenes.map(scene => ({...scene, ...(chosen[scene.id] ? {transition: chosen[scene.id]} : {})})), assets, spec: all});
+  for (const [id, name] of Object.entries(chosen)) {
+    const join = joinInto(edit, id);
+    assert.equal(join.type, name, `${id} keeps Claude's ${name}, even after the hook and next to another transition`);
+    assert.ok(join.frames >= 2 && join.frames <= Math.round(T.secondsOf(name) * 30));
+    assert.match(join.reason, new RegExp(`The scene plan chose ${name} here`));
+  }
+  assert.equal(B.validateTimeline(edit), true);
+  // A choice the style does not allow, or a cut, is respected the same way: the brain decides only the first.
+  const narrow = {...all, transitions: {...all.transitions, allowed: ['cut', 'crossfade']}};
+  const other = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: scenes.map(scene => ({...scene, ...(scene.id === 'sc3' ? {transition: 'pixelize'} : scene.id === 'sc4' ? {transition: 'cut'} : {})})), assets, spec: narrow});
+  assert.equal(joinInto(other, 'sc3').type === 'pixelize', false);
+  assert.match(joinInto(other, 'sc4').reason, /The scene plan cuts/);
+  // Older names still work, and every name maps to a drawable FFmpeg transition.
+  assert.equal(T.xfadeOf('push'), 'slideleft');
+  assert.ok(T.NAMES.every(name => /^[a-z]+$/.test(T.xfadeOf(name))));
+  assert.ok(B.TRANSITIONS.length > 40);
+  assert.match(T.guide(['cut', 'wipe', 'flash']), /^wipe-left \(.*\); flash \(/);
 });
 
 test('owner edits are checked before anything changes, and scene repair touches one scene', () => {

@@ -32,7 +32,14 @@ test('a stickman look briefs the planner in its own way, only where stick figure
   assert.match(E.promptGuide('handdrawn', {mix: true, look: 'doodle'}), /STICKMAN LOOK: doodle\. .*visual gag/);
   assert.doesNotMatch(E.promptGuide('stickman', {look: 'classic'}), /STICKMAN LOOK/);
   assert.doesNotMatch(E.promptGuide('motion', {look: 'whiteboard'}), /STICKMAN LOOK/, 'a motion-graphics video is not told how its stick-figure guests look');
-  assert.deepEqual(Object.keys(E.LOOKS), ['classic', 'whiteboard', 'storybook', 'doodle']);
+  assert.deepEqual(Object.keys(E.LOOKS), ['classic', 'whiteboard', 'storybook', 'illustrated', 'doodle']);
+});
+
+test('the hand-drawn engine is whiteboard animation with its own looks; taste is Claude\'s, never a rule', () => {
+  assert.deepEqual(Object.keys(E.BOARDS), ['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']);
+  assert.match(E.promptGuide('handdrawn', {board: 'dry-erase'}), /WHITEBOARD LOOK: /);
+  assert.doesNotMatch(E.promptGuide('stickman', {board: 'dry-erase'}), /WHITEBOARD LOOK/, 'a stickman video is not told about whiteboard looks');
+  for (const engine of ['stickman', 'handdrawn', 'motion']) assert.match(E.promptGuide(engine), /TASTE: references are ideas, never rules/);
 });
 
 test('a style learned from an approved study briefs the planner in its own words', () => {

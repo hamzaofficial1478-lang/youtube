@@ -11,10 +11,11 @@ const STYLE_LABELS = {
   both: 'Burned in + sidecar', bottom: 'Bottom', center: 'Center', top: 'Top', 'stock-video': 'Stock video', 'stock-image': 'Stock images',
   'ai-image': 'AI images', 'ai-video': 'AI video', 'generated-graphics': 'Generated graphics', 'maps-and-diagrams': 'Maps & diagrams',
   'archival-public-domain': 'Public-domain archive', 'review-per-asset': 'Review per asset', 'always-disclose': 'Always disclose',
-  classic: 'Classic cartoon', whiteboard: 'Whiteboard', storybook: 'Storybook', doodle: 'Doodle',
+  classic: 'Classic cartoon', whiteboard: 'Whiteboard', storybook: 'Storybook', doodle: 'Doodle', illustrated: 'Illustrated',
+  cartoon: 'Colour cartoon', marker: 'Black marker', pencil: 'Pencil sketch', framed: 'Framed board', 'dry-erase': 'Dry-erase markers',
   none: 'None', subtle: 'Subtle', accent: 'Accent hits', rich: 'Rich sound design', draft: 'Draft · needs review', approved: 'Approved', retired: 'Retired',
 };
-const styleLabel = value => STYLE_LABELS[value] || String(value);
+const styleLabel = value => STYLE_LABELS[value] || String(value).replace(/-/g, ' ').replace(/^./, letter => letter.toUpperCase());
 
 function styleProfiles() { return state.styles?.profiles || []; }
 function styleRevisionById(id) {
@@ -45,16 +46,21 @@ function styleRendererBadge(spec) {
 }
 // What the style's engine can do, and for stick figures the look and the hand this style uses.
 function styleFeatures(spec) {
-  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, stick = ['ffmpeg-sketch', 'story-mix'].includes(spec.renderer.adapter);
-  const chosen = stick ? `<p class="hint">Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}</p>` : '';
+  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter);
+  const chosen = stick || board ? `<p class="hint">${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}</p>` : '';
   return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen;
+}
+// A style that allows every transition says so in one line; Claude picks one per scene from all of them.
+function transitionList(spec) {
+  const all = state.styles.vocabulary.transitions, allowed = spec.transitions.allowed;
+  return all.every(name => allowed.includes(name)) ? `All ${all.length - 1} transitions and cuts (Claude chooses per scene)` : allowed.map(styleLabel).join(', ');
 }
 function styleFacts(spec) {
   const aspects = spec.formats.map(format => `${styleLabel(format)} ${state.styles.vocabulary.aspect[format]}`).join(' · ');
   return `<dl class="style-facts">
     <div><dt>Canvas</dt><dd>${esc(aspects)} · ${spec.canvas.frameRate} fps</dd></div>
     <div><dt>Pacing</dt><dd>${spec.pacing.shotMinSeconds}-${spec.pacing.shotMaxSeconds}s shots · hook ≤ ${spec.pacing.hookShotMaxSeconds}s</dd></div>
-    <div><dt>Transitions</dt><dd>${esc(spec.transitions.allowed.map(styleLabel).join(', '))}</dd></div>
+    <div><dt>Transitions</dt><dd>${esc(transitionList(spec))}</dd></div>
     <div><dt>Captions</dt><dd>${esc(styleLabel(spec.captions.mode))} · ${spec.captions.maxLines}×${spec.captions.maxCharsPerLine} chars · ${esc(styleLabel(spec.captions.position))}</dd></div>
     <div><dt>Visuals</dt><dd>${esc(spec.visuals.sources.map(styleLabel).join(', '))}</dd></div>
     <div><dt>Audio</dt><dd>${esc(spec.audio.musicMoods.join(', '))} · ${spec.audio.targetLufs} LUFS · SFX ${esc(styleLabel(spec.audio.sfxUsage).toLowerCase())}</dd></div>
@@ -150,7 +156,7 @@ function styleEditorBody(spec) {
     ${styleNumber('s.maxStaticHoldSeconds', 'Longest static hold (s)', spec.pacing.maxStaticHoldSeconds, 1, 30, 0.1)}
   </div></fieldset>
   <fieldset class="editor-section"><legend>Transitions &amp; motion</legend><div class="form-grid">
-    <div class="full"><span class="field-label">Allowed transitions <span class="hint">A straight cut is always required.</span></span>${styleChecks('s.transitions', v.transitions, spec.transitions.allowed)}</div>
+    <div class="full"><span class="field-label">Allowed transitions <span class="hint">A straight cut is always required.</span></span>${styleChecks('s.transitions', [...new Set([...v.transitions, ...spec.transitions.allowed])], spec.transitions.allowed)}</div>
     <label>Default transition<select name="s.defaultTransition">${styleOptions(v.transitions, spec.transitions.default)}</select></label>
     ${styleNumber('s.maxTransitionMs', 'Longest transition (ms)', spec.transitions.maxDurationMs, 0, 2000, 1)}
     <div class="full"><span class="field-label">Camera moves</span>${styleChecks('s.cameraMoves', v.cameraMoves, spec.motion.cameraMoves)}</div>
@@ -187,8 +193,9 @@ function styleEditorBody(spec) {
     ${styleNumber('s.truePeakDbtp', 'True-peak ceiling (dBTP)', spec.audio.truePeakDbtp, -3, -0.5, 0.1)}
     <label>Sound effects<select name="s.sfxUsage">${styleOptions(v.sfxUsage, spec.audio.sfxUsage)}</select></label>
   </div></fieldset>
-  ${['ffmpeg-sketch', 'story-mix'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>Stickman engine features</legend><div class="form-grid">
-    <label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: classic cartoon, whiteboard, illustrated storybook or marker doodle.</span></label>
+  ${['ffmpeg-sketch', 'story-mix', 'canvas-frames'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>${spec.renderer.adapter === 'canvas-frames' ? 'Hand-drawn engine features' : spec.renderer.adapter === 'story-mix' ? 'Drawing features' : 'Stickman engine features'}</legend><div class="form-grid">
+    ${spec.renderer.adapter !== 'canvas-frames' ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: classic cartoon, whiteboard, storybook, marker doodle or illustrated.</span></label>` : ''}
+    ${spec.renderer.adapter !== 'ffmpeg-sketch' ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: colour cartoon, black marker, pencil sketch, framed board or dry-erase markers.</span></label>` : ''}
     <label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>
     ${spec.renderer.adapter === 'ffmpeg-sketch' ? '<p class="hint full">Choosing a look fills in its recommended colours, shot lengths and transitions below; you can still change them.</p>' : ''}
   </div></fieldset>` : ''}
@@ -226,7 +233,7 @@ function collectStyleSpec(form) {
     visuals: {sources: checked('s.sources'), primarySource: value('s.primarySource'), aiDisclosure: value('s.aiDisclosure'), characterConsistency: form.elements['s.characterConsistency'].checked},
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
-    ...(form.elements['s.drawingLook'] ? {drawing: {look: value('s.drawingLook'), hand: form.elements['s.drawingHand'].checked}} : {}),
+    ...(form.elements['s.drawingHand'] ? {drawing: {look: form.elements['s.drawingLook'] ? value('s.drawingLook') : 'classic', hand: form.elements['s.drawingHand'].checked, ...(form.elements['s.drawingBoard'] ? {board: value('s.drawingBoard')} : {})}} : {}),
     ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
     originality: {referenceSharePercent: num('s.referenceSharePercent'), prohibited: list('s.prohibited', /\r?\n/)},
@@ -261,7 +268,7 @@ function styleSpecRows(spec) {
     ['Formats', spec.formats.map(format => `${styleLabel(format)} (${state.styles.vocabulary.aspect[format]})`).join(', ')],
     ['Resolution', [spec.canvas.longFormResolution && `Long-form ${spec.canvas.longFormResolution}`, spec.canvas.shortsResolution && `Shorts ${spec.canvas.shortsResolution}`].filter(Boolean).join(' · ') + ` · ${spec.canvas.frameRate} fps`],
     ['Pacing', `Shots ${spec.pacing.shotMinSeconds}-${spec.pacing.shotMaxSeconds}s · hook shot ≤ ${spec.pacing.hookShotMaxSeconds}s · static hold ≤ ${spec.pacing.maxStaticHoldSeconds}s`],
-    ['Transitions', `${spec.transitions.allowed.map(styleLabel).join(', ')} · default ${styleLabel(spec.transitions.default)} · ≤ ${spec.transitions.maxDurationMs} ms`],
+    ['Transitions', `${transitionList(spec)} · default ${styleLabel(spec.transitions.default)} · ≤ ${spec.transitions.maxDurationMs} ms`],
     ['Motion', `${spec.motion.cameraMoves.map(styleLabel).join(', ')} · intensity ${spec.motion.intensity}/100 · ${styleLabel(spec.motion.easing)}`],
     ['Typography', `${spec.typography.headingFont} / ${spec.typography.bodyFont} · ≤ ${spec.typography.maxWordsOnScreen} words · ${styleLabel(spec.typography.textCase)} · ≥ ${spec.typography.minTextHeightPercent}% height`],
     ['Palette', `${spec.palette.background} background · ${spec.palette.primary} primary · ${spec.palette.accent} accent · ${spec.palette.text} text`],

@@ -9,7 +9,8 @@ const E = require('./engines');
 const Kit = require('./kit');
 
 const POSES = Object.freeze(['stand', 'talk', 'point', 'present', 'think', 'shock', 'cheer', 'facepalm', 'shrug', 'cross-arms', 'hands-hips', 'wave', 'walk', 'run', 'sit', 'type', 'hold', 'carry', 'phone', 'read', 'beg', 'fall', 'lie', 'sneak', 'dance', 'fist', 'cower', 'scratch-head', 'clap', 'thumbs-up', 'stop', 'jump', 'sleep', 'fight', 'reach', 'push', 'pull', 'throw', 'kneel', 'lean']);
-const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'grin', 'laugh', 'excited', 'sad', 'cry', 'angry', 'rage', 'scared', 'shocked', 'surprised', 'worried', 'nervous', 'smug', 'suspicious', 'confused', 'thinking', 'sleepy', 'dead', 'love', 'starstruck', 'evil', 'disgusted', 'determined', 'bored']);
+const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'grin', 'laugh', 'excited', 'sad', 'cry', 'angry', 'rage', 'scared', 'shocked', 'surprised', 'worried', 'nervous', 'smug', 'suspicious', 'confused', 'thinking', 'sleepy', 'dead', 'love', 'starstruck', 'evil', 'disgusted', 'determined', 'bored',
+  'panic', 'terrified', 'furious', 'exhausted', 'embarrassed', 'proud', 'skeptical', 'hopeful', 'awkward', 'relieved', 'curious', 'amazed', 'jealous', 'guilty', 'sick', 'dizzy', 'focused', 'shy', 'mischievous']);
 const EMOTES = Object.freeze(['none', 'sweat', 'tears', 'anger', 'sparkle', 'zzz', 'hearts', 'question', 'exclamation', 'idea', 'dizzy', 'steam', 'music', 'cash', 'shine']);
 const LOOK = Object.freeze({
   body: ['stick', 'creature', 'robot'],
@@ -33,21 +34,21 @@ const PROPS = Object.freeze([
   'question', 'exclamation', 'check', 'cross', 'dollar', 'percent', 'plus', 'minus', 'arrow-up', 'arrow-down', 'warning', 'no-sign',
 ]);
 const SETS = Object.freeze(['none', 'room', 'office', 'home', 'bedroom', 'kitchen', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'ocean', 'night', 'space', 'storm', 'stage', 'abstract']);
-const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'danger', 'cold', 'money']);
-const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right']);
-const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'zoom', 'pop', 'ink', 'glitch', 'slide-up']);
+const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'danger', 'cold', 'money', 'warm', 'sunset', 'night', 'mystery', 'calm', 'hope', 'retro']);
+const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'crash-zoom', 'dolly-in', 'handheld', 'ken-burns']);
+const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'whip-up', 'whip-down', 'zoom', 'zoom-out', 'pop', 'ink', 'glitch', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'drop', 'iris', 'flash', 'shake']);
 const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
 const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout', 'keyword', 'versus']);
-const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars']);
+const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars', 'impact', 'lightning', 'explosion', 'fire', 'dust', 'wind', 'spiral', 'crack']);
 // Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
-const FACE_NEAR = Object.freeze({curious: 'thinking', wondering: 'thinking', focused: 'determined', serious: 'determined', puzzled: 'confused', afraid: 'scared', terrified: 'scared', anxious: 'nervous', amazed: 'starstruck', impressed: 'surprised', astonished: 'shocked', horrified: 'shocked', joyful: 'happy', cheerful: 'happy', delighted: 'happy', proud: 'smug', calm: 'neutral', skeptical: 'suspicious', frustrated: 'angry', mad: 'angry', upset: 'sad', tired: 'sleepy'});
-const FX_NEAR = Object.freeze({highlight: 'circle', sparkle: 'sparkles', star: 'stars', heart: 'hearts', explosion: 'burst', boom: 'burst', lightning: 'flash', zoom: 'punch', money: 'money-rain', splat: 'ink-splat', wave: 'shockwave', ring: 'circle', tick: 'check', 'x': 'cross'});
+const FACE_NEAR = Object.freeze({wondering: 'curious', serious: 'focused', puzzled: 'confused', afraid: 'scared', anxious: 'nervous', impressed: 'amazed', astonished: 'shocked', horrified: 'terrified', joyful: 'happy', cheerful: 'happy', delighted: 'happy', calm: 'relieved', frustrated: 'angry', mad: 'furious', upset: 'sad', tired: 'exhausted', ashamed: 'guilty', envious: 'jealous', nauseous: 'sick', scheming: 'mischievous', bashful: 'shy', hopeless: 'sad', overwhelmed: 'panic'});
+const FX_NEAR = Object.freeze({highlight: 'circle', sparkle: 'sparkles', star: 'stars', heart: 'hearts', boom: 'impact', pow: 'impact', bang: 'impact', bolt: 'lightning', thunder: 'lightning', flames: 'fire', flame: 'fire', puff: 'dust', breeze: 'wind', swirl: 'spiral', hypno: 'spiral', cracks: 'crack', zoom: 'punch', money: 'money-rain', splat: 'ink-splat', wave: 'shockwave', ring: 'circle', tick: 'check', 'x': 'cross'});
 const PROP_MOTIONS = Object.freeze(['auto', 'spin', 'pulse', 'float', 'shake', 'bounce', 'swing', 'none']);
 const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/12';
+const VERSION = 'drawn-scene/13';
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -205,7 +206,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -308,8 +309,11 @@ function carryOne(a, b, name) {
   return fixes;
 }
 // Only the carry (never a change of place or position), for drawings of an existing plan at render time.
+// A shot in the same place as the shot before keeps that place on screen from its first frame (holdSet): the pen
+// only draws a new place, so a cut on the same street never flashes white (demo review 2026-10-16).
 function carry(shots, cast = []) {
   const name = id => cast.find(item => item.id === id)?.name || id;
+  shots.forEach((shot, k) => { if (k && shot.sketch && shots[k - 1].sketch && shot.sketch.set !== 'none' && shot.sketch.set === shots[k - 1].sketch.set) shot.sketch.holdSet = true; });
   return shots.flatMap((shot, k) => (k ? carryOne(shots[k - 1], shot, name) : []));
 }
 
@@ -393,7 +397,7 @@ function promptGuide(primary = 'stickman') {
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
     `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts; keyword is one big hand-lettered word in a top corner that names the beat; versus is a divider down the frame for comparing two things, its text in the middle circle, e.g. "VS"; the prop head is a head in profile to put a thought or a scene inside), "x", "y", "size", "accent"?}`,
-    `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
+    `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan, impact, lightning, explosion, fire, dust, spiral, crack), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',

@@ -5,9 +5,11 @@
 // shakes) and the opening transition. Engines: stickman = cartoon finish, handdrawn = ink, motion = flat.
 (function () {
   const K = window.DK, C = K.COL, TAU = Math.PI * 2, clamp01 = K.clamp01, ease = K.ease;
-  const FINISH = {stickman: 'cartoon', handdrawn: 'ink', motion: 'flat'};
+  const FINISH = {stickman: 'cartoon', handdrawn: 'wb', motion: 'flat'};
   // The stickman engine's looks (the style's drawing.look): each its own finish.
-  const LOOKS = {classic: 'cartoon', whiteboard: 'board', storybook: 'story', doodle: 'doodle'};
+  const LOOKS = {classic: 'cartoon', whiteboard: 'board', storybook: 'story', doodle: 'doodle', illustrated: 'ink'};
+  // Finishes whose words and labels are handwritten.
+  const handwritten = () => K.FIN === 'ink' || K.FIN === 'wb';
   const WRITTEN = new Set(['title', 'label', 'highlight', 'keyword']);
   // Words are written out at a writing pace.
   const writeSeconds = text => Math.min(1.6, Math.max(0.4, 0.25 + String(text).length * 0.045));
@@ -18,7 +20,7 @@
   const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, none: 0};
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
   const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : ENTER_SECONDS[enter] ?? 0.34);
-  const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch']);
+  const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind']);
   const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse']);
   const MARKS = new Set(['underline', 'circle', 'cross', 'check', 'spotlight']);
   // The doodle look's ground: a bold strip under the action, coloured by the place.
@@ -30,7 +32,7 @@
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
-    if (engine === 'handdrawn' || PEN) return el.kind === 'fx' ? 'pop' : 'draw';
+    if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
     if (el.kind === 'figure') return engine === 'motion' ? 'slide' : 'pop';
     if (el.kind === 'text' && ['stamp', 'number', 'counter', 'note', 'headline', 'chapter', 'versus'].includes(el.style)) return 'none';
@@ -89,7 +91,7 @@
       // A character who is in the shot from its start is there on the first frame and arrives with the shot's
       // transition, so the place never shows empty before the person (owner review 2026-10-10). Hand-drawn
       // still draws the character on, first.
-      const drawsOn = engine === 'handdrawn' || PEN;
+      const drawsOn = engine === 'handdrawn' || PEN || K.FIN === 'ink';
       if (ts == null && item.kind === 'figure' && (!item.enter || item.enter === 'auto')) { ts = drawsOn ? 0.05 : 0; if (!drawsOn) enter = 'none'; }
       if (ts == null) { ts = drawsOn ? 0.05 + order * Math.min(0.5, Math.max(0.18, dur * 0.45 / Math.max(1, uncued))) : 0.03 + order * 0.08; order++; }
       ts = Math.max(0, Math.min(ts, dur - 0.3));
@@ -115,7 +117,7 @@
     // A lone object on a plain backdrop gets a stage: a lit disc with slow rays behind it, so it never reads as a
     // still icon pasted on a page.
     const props = d.elements.map((item, i) => i).filter(i => d.elements[i].kind === 'prop' && !['cloud', 'rainbow'].includes(d.elements[i].prop));
-    const stage = K.FIN !== 'ink' && !d.elements.some(item => item.kind === 'figure') && (!d.set || ['abstract', 'none'].includes(d.set)) && props.length && props.length <= 2 ? props.reduce((a, b) => (est[b].r > est[a].r ? b : a)) : null;
+    const stage = !d.elements.some(item => item.kind === 'figure') && (!d.set || ['abstract', 'none'].includes(d.set)) && props.length && props.length <= 2 ? props.reduce((a, b) => (est[b].r > est[a].r ? b : a)) : null;
     const focus = (d.focus || []).map((item, k) => ({...item, t: times.focus?.[k] != null ? Math.max(0, times.focus[k] - 0.15) : dur * (k + 1) / ((d.focus || []).length + 1)})).sort((a, b) => a.t - b.t);
     const impulses = [];
     d.elements.forEach((item, i) => {
@@ -123,7 +125,11 @@
       if (item.kind === 'text' && item.style === 'stamp') impulses.push({kind: 'shake', t: el[i].ts + 0.16, amount: 0.6});
       if (item.kind === 'prop' && el[i].enter === 'drop' && ['l', 'xl'].includes(item.size)) impulses.push({kind: 'shake', t: el[i].ts + ENTER_SECONDS.drop, amount: 0.5});
       if (item.kind === 'fx' && item.effect === 'flash') impulses.push({kind: 'punch', t: el[i].ts, amount: 0.5});
+      if (item.kind === 'fx' && item.effect === 'explosion') impulses.push({kind: 'shake', t: el[i].ts + 0.05, amount: 1.1});
+      if (item.kind === 'fx' && item.effect === 'impact') impulses.push({kind: 'punch', t: el[i].ts, amount: 0.7});
+      if (item.kind === 'fx' && item.effect === 'lightning') impulses.push({kind: 'shake', t: el[i].ts, amount: 0.5});
     });
+    if (d.transition === 'shake') impulses.push({kind: 'shake', t: 0, amount: 1.2});
     return {est, textAt, el, focus, impulses, stage, anchors: []};
   }
 
@@ -139,6 +145,12 @@
       case 'shake': z = 1.05; ox = K.noise(t * 7) * 0.008 * W; oy = K.noise(t * 9 + 4) * 0.008 * H; break;
       case 'pan-left': z = 1.08; ox = (e - 0.5) * 0.07 * W; break;
       case 'pan-right': z = 1.08; ox = (0.5 - e) * 0.07 * W; break;
+      case 'tilt-up': z = 1.08; oy = (e - 0.5) * 0.07 * H; break;
+      case 'tilt-down': z = 1.08; oy = (0.5 - e) * 0.07 * H; break;
+      case 'crash-zoom': z = 1 + 0.16 * ease.outExpo(clamp01(t / 0.35)); break;
+      case 'dolly-in': z = 1 + 0.15 * e; break;
+      case 'handheld': z = 1.05; ox = K.noise(t * 1.3) * 0.006 * W; oy = K.noise(t * 1.1 + 9) * 0.006 * H; break;
+      case 'ken-burns': z = 1.02 + 0.06 * e; ox = (0.5 - e) * 0.03 * W; oy = (0.5 - e) * 0.02 * H; break;
       default: break;
     }
     const cur = {x: W / 2, y: H / 2, z: 1};
@@ -157,6 +169,13 @@
       case 'zoom': Z *= 1 + 0.3 * (1 - ease.outCubic(q(0.25))); break;
       case 'pop': Z *= 0.86 + 0.14 * ease.outBack(q(0.22)); break;
       case 'slide-up': oy += (1 - ease.outCubic(q(0.26))) * H; break;
+      case 'whip-up': oy += (1 - ease.outCubic(q(0.24))) * H * 0.85; break;
+      case 'whip-down': oy -= (1 - ease.outCubic(q(0.24))) * H * 0.85; break;
+      case 'slide-down': oy -= (1 - ease.outCubic(q(0.26))) * H; break;
+      case 'slide-left': ox += (1 - ease.outCubic(q(0.26))) * W; break;
+      case 'slide-right': ox -= (1 - ease.outCubic(q(0.26))) * W; break;
+      case 'zoom-out': Z *= 1 + 0.45 * (1 - ease.inOutCubic(q(0.45))); break;
+      case 'drop': oy -= (1 - ease.outBack(q(0.38))) * H * 0.55; break;
       default: break;
     }
     const shown = kind => D.elements.map((el, i) => (el.kind === kind && t >= LAYOUT.el[i].ts && (LAYOUT.el[i].te === null || t < LAYOUT.el[i].te) ? LAYOUT.est[i] : null)).filter(Boolean);
@@ -225,7 +244,7 @@
   }
   // A soft contact shadow keeps feet and objects on the ground (not on the hand-drawn ink finish).
   function shadow(x, y, rx) {
-    if (K.FIN === 'ink' || rx <= 0) return;
+    if (handwritten() || rx <= 0) return;
     const {ctx} = K;
     ctx.save(); ctx.fillStyle = K.alpha('#000000', K.DARK ? 0.28 : 0.13); ctx.beginPath(); ctx.ellipse(x, y, rx, rx * 0.16, 0, 0, TAU); ctx.fill(); ctx.restore();
   }
@@ -261,7 +280,7 @@
     ctx.restore();
     LAYOUT.anchors[i] = LAYOUT.est[i];
     if (el.label && el.prop !== 'sign' && p >= 1) {
-      if (K.FIN !== 'ink') K.pill(el.label, cx, cy - 0.62 * s, 46 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
+      if (!handwritten()) K.pill(el.label, cx, cy - 0.62 * s, 46 * K.u, {color: el.accent ? K.PAL.accent : K.PAL.ink});
       else {
         // Illustrated: a handwritten capital label beside the thing, with a small curved arrow to it.
         const size = 40 * K.u, w = K.measure(el.label.toUpperCase(), size, {weight: 700}), ly = Math.max(K.M * 0.6 + size, cy - 0.62 * s);
@@ -281,7 +300,18 @@
     for (const word of String(text).split(/\s+/)) { const next = line ? `${line} ${word}` : word; if (line && K.measure(next, size, {weight: 800}) > max) { lines.push(line); line = word; } else line = next; }
     return [...lines, line].slice(0, 4);
   }
-  // ------------------------------------------------------------ the drawing hand (stickman option)
+  // A framed whiteboard: an aluminium frame round the picture and the marker tray along the bottom.
+  function drawBoardFrame(context) {
+    const {ctx} = K, cw = ctx.canvas.width, ch = ctx.canvas.height, b = ch * 0.03;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const g = ctx.createLinearGradient(0, 0, 0, ch); g.addColorStop(0, '#E4E7EA'); g.addColorStop(0.5, '#B9BEC4'); g.addColorStop(1, '#D6DADE');
+    ctx.fillStyle = g; ctx.beginPath(); ctx.rect(0, 0, cw, ch); ctx.roundRect(b, b, cw - 2 * b, ch - 2 * b, b * 0.4); ctx.fill('evenodd');
+    ctx.strokeStyle = 'rgba(60,66,74,0.55)'; ctx.lineWidth = b * 0.12; ctx.beginPath(); ctx.roundRect(b, b, cw - 2 * b, ch - 2 * b, b * 0.4); ctx.stroke();
+    const ty = ch - b * 0.95; ctx.fillStyle = '#A9AFB6'; ctx.fillRect(cw * 0.3, ty - b * 0.35, cw * 0.4, b * 0.7);
+    [['#1E1E1E', 0.4], ['#2F6FE0', 0.47], ['#D9534F', 0.54]].forEach(([colour, x]) => { ctx.fillStyle = colour; ctx.beginPath(); ctx.roundRect(cw * x, ty - b * 0.3, cw * 0.055, b * 0.36, b * 0.18); ctx.fill(); });
+    ctx.restore();
+  }
+  // ------------------------------------------------------------ the drawing hand (stickman and hand-drawn option)
   // Where the pen is through the whole shot: the elements are drawn once per shot on a throwaway canvas at 15
   // samples a second and the pen's tip is kept. A pure function of the shot, so every frame agrees on it.
   function penTrack(context) {
@@ -349,7 +379,8 @@
     ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.translate(pose.at[0], pose.at[1]); ctx.rotate(angle); ctx.scale(s, s); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.save(); ctx.translate(10 + 16 * pose.lift, 12 + 18 * pose.lift); ctx.globalAlpha = 0.15 - 0.05 * pose.lift; ctx.fillStyle = '#000000'; ctx.fill(H.shadow); ctx.restore();
-    shape(H.nib, '#1E1E1E', 2); shape(H.collar, K.PAL.ink === '#1F1F1F' ? K.PAL.accent : K.PAL.ink, 2.4); shape(H.barrel, '#F4F4F2', 2.4);
+    const pencil = K.FIN === 'wb' && K.WB === 'pencil';
+    shape(H.nib, pencil ? '#5A5A5A' : '#1E1E1E', 2); shape(H.collar, pencil ? '#E8C9A0' : K.PAL.ink === '#1F1F1F' ? K.PAL.accent : K.PAL.ink, 2.4); shape(H.barrel, pencil ? '#F2C14E' : '#F4F4F2', 2.4);
     shape(H.sleeve, '#3D5A80'); shape(H.cuff, '#2F4766');
     shape(H.back, SKIN, 0);
     ctx.save(); ctx.clip(H.back); ctx.fillStyle = '#E7AE8C'; ctx.fill(H.shade); ctx.fillStyle = '#FBE0CB'; ctx.fill(H.light); ctx.restore();
@@ -394,7 +425,7 @@
         words.forEach((word, k) => { const q = clamp01((local - k * 0.1) / 0.25); if (q > 0) { const z = ease.outBack(q); ctx.save(); ctx.translate(cursor + widths[k] * fit / 2, y); ctx.scale(z, z); K.text(word, 0, 0, size * fit, {color: k === words.length - 1 && el.accent ? K.PAL.accent : color}); ctx.restore(); } cursor += widths[k] * fit; });
         break;
       }
-      case 'label': if (K.FIN === 'ink') { K.text(el.text.toUpperCase(), x, y, size * 1.15, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: false, maxWidth: K.W - 2 * K.M}); break; } { const w = at.width + size * 0.8, h = size * 1.5; ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.restore(); K.text(el.text, x, y, size, {color: K.PAL.bg, outline: false}); break; }
+      case 'label': if (handwritten()) { K.text(el.text.toUpperCase(), x, y, size * 1.15, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: false, maxWidth: K.W - 2 * K.M}); break; } { const w = at.width + size * 0.8, h = size * 1.5; ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.restore(); K.text(el.text, x, y, size, {color: K.PAL.bg, outline: false}); break; }
       case 'sticky': case 'tag': case 'callout': {
         // Illustrated annotations: a sticky note, a price tag on its string, an arrow-shaped callout. They pop on.
         const q = clamp01(local / 0.3), z = ease.outBack(q), rand = K.seeded(LAYOUT.el[i].seed), pad = size * 0.55;
@@ -426,7 +457,7 @@
         ctx.restore();
         break;
       }
-      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !K.DARK && K.FIN !== 'ink', maxWidth: K.W * 0.5}); break; }
+      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !K.DARK && !handwritten(), maxWidth: K.W * 0.5}); break; }
       case 'versus': {
         // A comparison divider: a hand-drawn line down the frame with the word in a circle at its middle.
         const q = clamp01(local / 0.5), r = size * 0.85, rand = K.seeded(LAYOUT.el[i].seed), line = Array.from({length: 13}, (_, k) => [x + (rand() - 0.5) * 6 * u, K.H * (0.08 + 0.84 * k / 12)]);
@@ -530,6 +561,16 @@
       case 'scan': { const f = (local / 1.2) % 1, y = g.cy - g.h * 0.6 + g.h * 1.2 * f; ctx.save(); ctx.fillStyle = K.alpha(C.green, 0.12); ctx.fillRect(g.cx - g.w * 0.65, g.cy - g.h * 0.6, g.w * 1.3, g.h * 1.2); ctx.shadowColor = C.green; ctx.shadowBlur = 16 * u; ctx.fillStyle = C.green; ctx.fillRect(g.cx - g.w * 0.65, y, g.w * 1.3, 5 * u); ctx.restore(); K.render([{pts: K.frame(g.cx, g.cy, 1).rect(-g.w * 0.65, -g.h * 0.6, g.w * 1.3, g.h * 1.2), color: C.green, px: 3 * u}]); break; }
       case 'ink-splat': { const z = ease.outBack(clamp01(local / 0.25)), rand = K.seeded(seed), f = K.frame(g.cx, g.cy, r * 0.7 * z); K.render([{pts: f.blob(0, 0, 0.8, 0.7, 9, 0.25), fill: color || K.PAL.ink, stroke: false}, ...Array.from({length: 6}, () => { const a = rand() * TAU, d = 1.1 + rand() * 0.5; return {pts: f.ring(Math.cos(a) * d, Math.sin(a) * d, 0.1 + rand() * 0.1), fill: color || K.PAL.ink, stroke: false}; })]); break; }
       case 'progress': { const w = Math.min(W * 0.5, W - 2 * K.M), h = 46 * u, q = ease.outCubic(clamp01(local / 1.1)) * (el.value ?? 0) / 100, x = Math.min(W - K.M - w / 2, Math.max(K.M + w / 2, g.cx)); ctx.save(); ctx.fillStyle = K.alpha(K.PAL.ink, 0.12); ctx.beginPath(); ctx.roundRect(x - w / 2, g.cy - h / 2, w, h, h / 2); ctx.fill(); ctx.fillStyle = color || C.green; ctx.beginPath(); ctx.roundRect(x - w / 2, g.cy - h / 2, Math.max(h, w * q), h, h / 2); ctx.fill(); ctx.strokeStyle = K.PAL.line; ctx.lineWidth = 4 * u; ctx.beginPath(); ctx.roundRect(x - w / 2, g.cy - h / 2, w, h, h / 2); ctx.stroke(); ctx.restore(); K.text(`${Math.round(q * 100)}%`, x, g.cy - h * 1.3, 52 * u, {color: K.PAL.ink}); break; }
+      // 0.32 effects (owner review 2026-10-16).
+      case 'impact': { const z = ease.outBack(clamp01(local / 0.18)), fade = 1 - clamp01((local - 0.6) / 0.3), f = K.frame(g.cx, g.cy, r * z, 1, 0.2); if (fade <= 0) break; K.render([{pts: f.star(0, 0, 1.15, 0.55, 11), fill: '#FFFFFF', color: color || C.red, px: 7 * u, alpha: fade}, {pts: f.star(0, 0, 0.72, 0.38, 11), fill: color || C.yellow, stroke: false, alpha: fade}]); ctx.save(); ctx.strokeStyle = K.alpha(K.PAL.ink, 0.7 * fade); ctx.lineWidth = 5 * u; ctx.lineCap = 'round'; for (let k = 0; k < 10; k++) { const a = k * TAU / 10 + 0.15, d0 = r * (1.25 + 0.15 * ease.outCubic(clamp01(local / 0.3))); ctx.beginPath(); ctx.moveTo(g.cx + Math.cos(a) * d0, g.cy + Math.sin(a) * d0); ctx.lineTo(g.cx + Math.cos(a) * (d0 + r * 0.35), g.cy + Math.sin(a) * (d0 + r * 0.35)); ctx.stroke(); } ctx.restore(); break; }
+      case 'lightning': { if (local > 0.9) break; const rand = K.seeded(seed + Math.floor(local * 12)), top = Math.max(0, g.cy - H * 0.75), pts = [[g.cx + (rand() - 0.5) * r, top]]; for (let k = 1; k <= 6; k++) pts.push([g.cx + (k % 2 ? 1 : -1) * r * 0.22 * (0.6 + rand() * 0.6), top + (g.cy - g.h * 0.3 - top) * k / 6]); pts[6][0] = g.cx; const on = K.noise(local * 30 + seed) > -0.6 ? 1 : 0.25; ctx.save(); ctx.shadowColor = C.yellow; ctx.shadowBlur = 26 * u; K.render([{pts: K.partial(pts, ease.outCubic(clamp01(local / 0.12))), color: C.yellow, px: 16 * u, alpha: on}, {pts: K.partial(pts, ease.outCubic(clamp01(local / 0.12))), color: '#FFFFFF', px: 6 * u, alpha: on}]); ctx.restore(); break; }
+      case 'explosion': { const z = ease.outBack(clamp01(local / 0.28)), fade = 1 - clamp01((local - 0.9) / 0.5), f = K.frame(g.cx, g.cy, r * 1.35 * z, 1, local * 0.3); // Smoke rolls out from behind the fireball and stays when it fades.
+        for (let k = 0; k < 7; k++) { const q = clamp01((local - 0.2 - k * 0.04) / 1.3); if (q <= 0 || q >= 1) continue; const a = k * TAU / 7 + 0.3, d = r * (0.9 + 1.1 * ease.outCubic(q)); K.render([{pts: K.frame(g.cx + Math.cos(a) * d, g.cy + Math.sin(a) * d * 0.7 - q * r * 0.4, r * (0.3 + 0.25 * q)).ring(0, 0, 1, 1, 24), fill: '#D9D9D9', color: K.alpha(K.PAL.ink, 0.5), px: 3 * u, alpha: 1 - q}]); }
+        if (fade > 0) K.render([{pts: f.blob(0, 0, 1, 1, 9, 0.35), fill: C.fire, color: K.PAL.ink, px: 6 * u, alpha: fade}, {pts: f.blob(0, 0, 0.68, 0.68, 7, 0.3), fill: C.orange, stroke: false, alpha: fade}, {pts: f.blob(0, 0, 0.38, 0.38, 6, 0.25), fill: C.flame, stroke: false, alpha: fade}]); break; }
+      case 'fire': { const base = g.cy + g.h * 0.45, w = Math.max(r * 0.9, g.w * 0.7); for (let k = 0; k < 5; k++) { const x = g.cx + (k - 2) / 2 * w * 0.5, hgt = r * (0.75 + 0.35 * K.noise(local * 6 + k * 3)) * (k === 2 ? 1.35 : 1), sw = w * 0.22; const flame = (s, colour) => ({pts: [[x - sw * s, base], ...K.frame(0, 0, 1).curve(x - sw * s, base, x - sw * 0.6 * s + K.noise(local * 5 + k) * 8 * u, base - hgt * s * 0.6, x + K.noise(local * 7 + k) * 10 * u, base - hgt * s, 12), ...K.frame(0, 0, 1).curve(x, base - hgt * s, x + sw * 0.6 * s, base - hgt * s * 0.5, x + sw * s, base, 12), [x - sw * s, base]], fill: colour, stroke: false}); K.render([flame(1, C.fire), flame(0.66, C.orange), flame(0.36, C.flame)]); } break; }
+      case 'dust': for (let k = 0; k < 8; k++) { const q = clamp01((local - k * 0.03) / 0.9); if (q <= 0 || q >= 1) continue; const side = k % 2 ? 1 : -1, d = (g.w * 0.4 + r * 0.9 * ease.outCubic(q)) * side, y = g.cy + g.h * 0.48 - q * r * 0.25 * (1 + (k % 3) * 0.3); K.render([{pts: K.frame(g.cx + d * (0.6 + (k % 4) * 0.15), y, r * (0.14 + 0.2 * q)).ring(0, 0, 1, 0.8, 22), fill: '#E6DCCB', color: K.alpha(K.PAL.ink, 0.35), px: 2.5 * u, alpha: 1 - q}]); } break;
+      case 'spiral': { const pts = Array.from({length: 120}, (_, k) => { const a = k * 0.17 - local * 5, rr = r * 0.9 * k / 120; return [g.cx + Math.cos(a) * rr, g.cy + Math.sin(a) * rr]; }); K.render([{pts: K.partial(pts, ease.outCubic(clamp01(local / 0.4))), color: color || C.purple, px: 6 * u}]); break; }
+      case 'crack': { const rand = K.seeded(seed), q = ease.outCubic(clamp01(local / 0.3)), lines = []; for (let k = 0; k < 7; k++) { let a = k * TAU / 7 + rand() * 0.5, x = g.cx, y = g.cy; const pts = [[x, y]], n = 5, len = r * (1 + rand() * 0.7); for (let s = 1; s <= n; s++) { a += (rand() - 0.5) * 0.7; x += Math.cos(a) * len / n; y += Math.sin(a) * len / n; pts.push([x, y]); } lines.push({pts: K.partial(pts, q), color: K.PAL.ink, px: (5 - k % 3) * u}); } K.render(lines); break; }
       case 'stars': { const c = g.head ? [g.head[0], g.head[1] - g.head[2] * 1.05] : [g.cx, g.cy - g.h * 0.5], rr = g.head ? g.head[2] : r * 0.5; for (let k = 0; k < 3; k++) { const a = local * 4 + k * TAU / 3; K.render([{pts: K.frame(c[0] + Math.cos(a) * rr, c[1] + Math.sin(a) * rr * 0.28, rr * 0.2).star(0, 0, 1, 0.42), fill: C.yellow, px: 2 * u}]); } break; }
       default: break;
     }
@@ -545,6 +586,7 @@
       case 'rain': ctx.save(); ctx.strokeStyle = 'rgba(120,170,230,0.6)'; ctx.lineWidth = 2.5 * u; for (let k = 0; k < 90; k++) { const x = rand() * W * 1.1, f = (local * (1.4 + rand() * 0.4) + rand()) % 1; ctx.beginPath(); ctx.moveTo(x, f * H); ctx.lineTo(x - 10 * u, f * H + 34 * u); ctx.stroke(); } ctx.restore(); break;
       case 'snow': ctx.save(); ctx.fillStyle = 'rgba(255,255,255,0.9)'; for (let k = 0; k < 70; k++) { const x = rand() * W + Math.sin(local + k) * 20 * u, f = (local * (0.1 + rand() * 0.1) + rand()) % 1; ctx.beginPath(); ctx.arc(x, f * H, (3 + rand() * 4) * u, 0, TAU); ctx.fill(); } ctx.restore(); break;
       case 'glitch': if (local < 0.35 || (local % 2.2) < 0.12) glitch(tm.seed + Math.floor(t * 30)); break;
+      case 'wind': ctx.save(); ctx.strokeStyle = K.alpha(K.DARK ? '#FFFFFF' : K.PAL.ink, 0.28); ctx.lineCap = 'round'; for (let k = 0; k < 16; k++) { const y = rand() * H, l = (0.12 + rand() * 0.18) * W, x = ((local * (0.9 + rand() * 0.6) + rand()) % 1.4 - 0.2) * W; ctx.lineWidth = (2 + rand() * 3) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.bezierCurveTo(x + l * 0.4, y - 12 * u, x + l * 0.7, y + 10 * u, x + l, y - 4 * u); ctx.stroke(); } ctx.restore(); break;
       default: break;
     }
   }
@@ -593,7 +635,7 @@
     ctx.save();
     ctx.globalAlpha *= a;
     // Hand-drawn: words are written out left to right by the pen, at a writing pace.
-    if ((K.FIN === 'ink' || PEN) && enter === 'draw' && el.kind === 'text' && WRITTEN.has(el.style)) {
+    if ((handwritten() || PEN) && enter === 'draw' && el.kind === 'text' && WRITTEN.has(el.style)) {
       const at = LAYOUT.textAt[i], q = clamp01(local / writeSeconds(el.text));
       if (q < 1) {
         const half = at.width / 2 + at.size * 0.6, left = at.x - half, edge = left + 2 * half * q;
@@ -619,7 +661,7 @@
     const look = D.engine === 'stickman' ? P.drawing?.look : null;
     const params = {...P, finish: (look && LOOKS[look]) || FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
-    HAND = D.engine === 'stickman' && P.drawing?.hand === true;
+    HAND = (D.engine === 'stickman' || D.engine === 'handdrawn') && P.drawing?.hand === true;
     PEN = HAND || look === 'whiteboard';
     K.PEN = HAND; LASTHAND = null;
     const key = P;
@@ -629,6 +671,12 @@
     const {ctx, W, H, u} = K;
     ctx.fillStyle = K.PAL.bg; ctx.fillRect(0, 0, W, H);
     if (K.FIN === 'ink') { const rand = K.seeded(11); ctx.fillStyle = K.alpha(K.PAL.ink, 0.018); for (let k = 0; k < 420; k++) ctx.fillRect(rand() * W, rand() * H, 1 + rand() * 2, 1 + rand() * 2); }
+    if (K.FIN === 'wb') {
+      const g = ctx.createRadialGradient(W * 0.45, H * 0.4, H * 0.2, W / 2, H / 2, H * 1.1);
+      g.addColorStop(0, K.alpha('#FFFFFF', 0)); g.addColorStop(1, K.alpha('#8A96A3', 0.12)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const rand = K.seeded(31); ctx.fillStyle = K.alpha('#7F8C99', 0.035);
+      for (let k = 0; k < 7; k++) { ctx.beginPath(); ctx.ellipse(rand() * W, rand() * H, (0.05 + rand() * 0.12) * W, (0.02 + rand() * 0.05) * H, rand() * 3, 0, Math.PI * 2); ctx.fill(); }
+    }
     // Storybook: warm paper with a fine grain.
     if (K.FIN === 'story') { const rand = K.seeded(23); ctx.fillStyle = K.alpha('#7A5A40', 0.045); for (let k = 0; k < 900; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     const cam = camera(t);
@@ -643,16 +691,16 @@
       layerCtx.save(); applyCamera(layerCtx, cam, 0.7);
       K.ctx = layerCtx;
       // Ink draws the place on; under the pen it fades in, so the hand only draws the action.
-      const reveal = K.FIN === 'ink' && !PEN ? clamp01(t / 0.6) : 1, pen = K.PEN;
-      K.PEN = false; K.SKETCH = K.FIN === 'board' || K.FIN === 'ink';
+      const reveal = K.FIN === 'ink' && !PEN && !D.holdSet ? clamp01(t / 0.6) : 1, pen = K.PEN;
+      K.PEN = false; K.SKETCH = K.FIN === 'board';
       K.render(setOf(D.set)(t), reveal, 77);
       K.PEN = pen; K.SKETCH = false; K.ctx = ctx;
       layerCtx.restore();
       // Storybook places are illustrated, so they are drawn at nearly full strength.
       // Storybook places are illustrated (nearly full strength, warm and muted); a doodle page keeps only a hint of
       // the place and a bold ground.
-      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : K.FIN === 'ink' ? strength * 0.6 : strength;
-      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = shown * (PEN ? clamp01(t / 0.3) : 1);
+      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : strength;
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = shown * (PEN && !D.holdSet ? clamp01(t / 0.3) : 1);
       if (K.FIN === 'story') ctx.filter = 'sepia(0.45) saturate(0.72)';
       ctx.drawImage(layerCanvas, 0, 0); ctx.restore();
       const ground = K.FIN === 'doodle' ? DOODLE_GROUND[D.set] : null;
@@ -669,16 +717,19 @@
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();
-    // On the hand-drawn engine's white paper a mood is a light touch, never a tint over the page.
-    ctx.save(); if (K.FIN === 'ink') ctx.globalAlpha *= 0.35; K.mood(D.mood, t); ctx.restore();
+    K.mood(D.mood, t);
     if (K.FIN === 'story') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(60,40,25,0)'); g.addColorStop(1, 'rgba(60,40,25,0.16)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (HAND) drawHand(t, context);
+    if (K.FIN === 'wb' && K.WB === 'framed') drawBoardFrame(context);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && SCREEN_FX.has(el.effect)) drawScreenFx(el, i, t); });
     // The opening transition's own marks: speed streaks on a whip, an ink wipe, a glitch, a flash on a pop.
     const tr = D.transition;
     if ((tr === 'whip-left' || tr === 'whip-right') && t < 0.24) { const q = 1 - t / 0.24, rand = K.seeded(5); ctx.save(); ctx.strokeStyle = K.alpha(K.DARK ? '#FFFFFF' : K.PAL.ink, 0.35 * q); ctx.lineCap = 'round'; for (let k = 0; k < 22; k++) { const y = rand() * H, l = (0.2 + rand() * 0.5) * W, x = rand() * W; ctx.lineWidth = (2 + rand() * 7) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + l, y); ctx.stroke(); } ctx.restore(); }
     if (tr === 'ink' && t < 0.3) { const rr = Math.hypot(W, H) * (0.12 + 0.5 * ease.outCubic(t / 0.3)), f = K.frame(W / 2, H / 2, 1); ctx.save(); ctx.fillStyle = K.PAL.bg; ctx.beginPath(); ctx.rect(0, 0, W, H); const ring = f.blob(0, 0, rr, rr, 9, 0.08, 72); ring.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath(); ctx.fill('evenodd'); ctx.restore(); }
     if (tr === 'glitch' && t < 0.25) glitch(Math.floor(t * 30) + 3);
+    if (tr === 'iris' && t < 0.4) { const rr = Math.hypot(W, H) * 0.55 * ease.inOutCubic(t / 0.4); ctx.save(); ctx.fillStyle = K.DARK ? '#000000' : K.PAL.ink; ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.arc(W / 2, H / 2, Math.max(1, rr), 0, TAU, true); ctx.fill('evenodd'); ctx.restore(); }
+    if (tr === 'flash' && t < 0.2) { ctx.fillStyle = `rgba(255,255,255,${0.95 * (1 - t / 0.2)})`; ctx.fillRect(0, 0, W, H); }
+    if ((tr === 'whip-up' || tr === 'whip-down') && t < 0.24) { const q = 1 - t / 0.24, rand = K.seeded(6); ctx.save(); ctx.strokeStyle = K.alpha(K.DARK ? '#FFFFFF' : K.PAL.ink, 0.35 * q); ctx.lineCap = 'round'; for (let k = 0; k < 22; k++) { const x = rand() * W, l = (0.2 + rand() * 0.5) * H, y = rand() * H; ctx.lineWidth = (2 + rand() * 7) * u; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + l); ctx.stroke(); } ctx.restore(); }
     if (tr === 'pop' && t < 0.12) { ctx.fillStyle = `rgba(255,255,255,${0.45 * (1 - t / 0.12)})`; ctx.fillRect(0, 0, W, H); }
     return true;
   }

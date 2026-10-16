@@ -7,11 +7,12 @@
 // what it writes. A study changes nothing until the owner approves it by name and turns it into a style draft,
 // which is reviewed and approved in the Style Library like any other. Pure: no I/O.
 const {copiedPhrases} = require('./intel-sources');
+const T = require('./transitions');
 
 const SCHEMA = 'ytprod.style-study/1';
 const ENGINES = Object.freeze(['stickman', 'handdrawn', 'motion', 'atelier', 'montage']);
 const LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle']);
-const TRANSITIONS = Object.freeze(['cut', 'crossfade', 'dip-to-black', 'push', 'slide', 'zoom', 'whip-pan', 'wipe']);
+const TRANSITIONS = Object.freeze(['cut', ...Object.keys(T.CATALOG)]);
 const LIMITS = Object.freeze({summary: 400, aspect: 300, item: 160, brief: 1200, learn: 6, ours: 14, avoid: 6});
 // The launch style a study starts from: one per engine (a stickman look is a feature of the Stickman style, set by
 // drawing.look in the draft).
@@ -61,7 +62,7 @@ function validate(raw, {title = '', channel = '', notes = '', measured = null} =
     if (shotMin !== min || shotMax !== max) warnings.push(`Shot lengths come from the measured cuts (${min}-${max} s).`);
     shotMin = min; shotMax = max;
   }
-  const transitions = [...new Set(['cut', ...(Array.isArray(raw.transitions) ? raw.transitions : []).filter(item => TRANSITIONS.includes(item))])];
+  const transitions = [...new Set(['cut', ...(Array.isArray(raw.transitions) ? raw.transitions : []).map(item => T.resolve(item)).filter(item => TRANSITIONS.includes(item))])];
   const learn = list(raw.learn, LIMITS.learn, 'learn'), ours = list(raw.ours, LIMITS.ours, 'ours'), avoid = list(raw.avoid, LIMITS.avoid, 'avoid');
   if (!learn.length) problems.push('learn needs at least one technique');
   if (learn.length * 7 > ours.length * 3) problems.push(`30/70 rule: ${learn.length} learned techniques need at least ${Math.ceil(learn.length * 7 / 3)} contributions of our own (got ${ours.length})`);
@@ -83,8 +84,9 @@ function validate(raw, {title = '', channel = '', notes = '', measured = null} =
   return {study, warnings};
 }
 
-// An approved study as a style spec draft: the base launch style with the study's palette, pacing, transitions,
-// look and planning brief. Every change is re-validated by the Style Library; one that does not pass is skipped
+// An approved study as a style spec draft: the base launch style with the study's palette, pacing, look and
+// planning brief. The reference's transitions are a hint in the brief, never a limit (owner review 2026-10-16:
+// every engine may use every transition). Every change is re-validated by the Style Library; one that does not pass is skipped
 // and listed. validateStyleSpec is passed in to keep this module free of the library.
 function draftSpec(study, base, {validateStyleSpec, name}) {
   let spec = structuredClone(base);
@@ -96,9 +98,9 @@ function draftSpec(study, base, {validateStyleSpec, name}) {
   };
   attempt('palette', candidate => { candidate.palette = {...study.palette}; });
   if (study.pacing.shotMinSeconds) attempt('pacing', candidate => { candidate.pacing = {...candidate.pacing, shotMinSeconds: study.pacing.shotMinSeconds, shotMaxSeconds: study.pacing.shotMaxSeconds, hookShotMaxSeconds: Math.min(candidate.pacing.hookShotMaxSeconds, study.pacing.shotMaxSeconds), maxStaticHoldSeconds: Math.max(study.pacing.shotMaxSeconds, Math.min(candidate.pacing.maxStaticHoldSeconds, 15))}; candidate.qc = {...candidate.qc, maxFrozenSeconds: Math.max(candidate.qc.maxFrozenSeconds, Math.min(15, study.pacing.shotMaxSeconds))}; });
-  attempt('transitions', candidate => { candidate.transitions = {...candidate.transitions, allowed: study.transitions, default: study.transitions.includes(candidate.transitions.default) ? candidate.transitions.default : 'cut'}; });
   if (study.engine === 'stickman') attempt('look', candidate => { candidate.drawing = {look: study.look || 'classic', hand: study.look === 'whiteboard' || !!candidate.drawing?.hand}; });
-  attempt('brief', candidate => { candidate.brief = study.brief; });
+  const soft = study.transitions.filter(item => item !== 'cut');
+  attempt('brief', candidate => { candidate.brief = trim(`${study.brief}${soft.length ? ` The reference moves between scenes with ${soft.join(', ')}; use them where they serve the story, and any other transition where it serves better.` : ''}`, 1200); });
   spec.name = name;
   spec.summary = trim(`Learned from a reference study: ${study.summary}`, 400);
   spec.originality = {...spec.originality, referenceSharePercent: Math.min(30, spec.originality.referenceSharePercent)};
