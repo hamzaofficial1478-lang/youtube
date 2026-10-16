@@ -1,7 +1,7 @@
 {
-  "version": "0.32.0",
+  "version": "0.33.0",
   "updated": "2026-10-16",
-  "nextAction": "Show the owner the 0.32 whiteboard demo and the new effects sheet; ask whether AI pictures revealed by the drawing hand are wanted (needs an image key and per-image cost). Then a full video in each stickman look and whiteboard look with a Claude plan, and the next engine in his order.",
+  "nextAction": "Show the owner the 0.33 whiteboard showcase (every look, paid next to free). Ask whether he wants an OpenAI API key for photo-like pictures later. Then full videos in each look with ElevenLabs narration, and the next engine in his order.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -372,6 +372,13 @@
           "status": "testing",
           "remaining": "Owner verdict on the whiteboard demo; full videos in each whiteboard look; a live ElevenLabs narration and music on a whiteboard video; AI pictures revealed by the hand only after the owner decides (image key, cost).",
           "evidence": "0.32.0 (2026-10-16): 36 s whiteboard demo planned by Claude (58,340 tokens) with its own scene transitions, moods, camera and new faces; render QC passed except clipping of the free demo voice; same-place cut flash found in the demo and fixed; Style Library card and editor checked in the browser; npm test 272/272 passed."
+        },
+        {
+          "id": "P06n",
+          "title": "Paid pictures inside drawn shots: Claude illustrates the shots that deserve it, the hand traces them; the planner decides where; Room 04 upgrades one shot",
+          "status": "testing",
+          "remaining": "Owner verdict on the 40-second showcase; OpenAI images inside drawn shots need an API key; a full video with ElevenLabs narration and pictures.",
+          "evidence": "0.33.0 (2026-10-16): 39.5 s 720p showcase - Claude chose 3 pictures, 2 more added with Room 04 'Paid picture', every whiteboard look one paid and one free; render QC passed; three program faults found by the demo and fixed (lost pictures on a stop, a plan discarded over its reservation, picture pacing); Room 04 checked in the browser; npm test 276/276 passed."
         },
         {
           "id": "S02",

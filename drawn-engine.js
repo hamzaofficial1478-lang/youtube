@@ -31,6 +31,7 @@
 
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
+    if (el.kind === 'picture') return 'draw';
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
@@ -41,7 +42,20 @@
   const figureH = el => K.FIGURE_SIZE[el.size || 'm'] * K.u;
   const propS = el => PROP_SIZE[el.size || 'm'] * K.u;
   const textSize = el => TEXT_BASE[el.style] * TEXT_SCALE[el.size || 'm'] * K.u;
+  // A picture (0.33): its width from its size, its height from its own proportions, kept inside the frame.
+  const PICTURE_W = {s: 0.3, m: 0.42, l: 0.56, xl: 0.74};
+  // The hand traces a picture's outlines in 2.2-4.2 s (more shapes take longer), but never more than 45% of the time
+  // the picture is on screen, so the finished picture holds for most of it (demo review 2026-10-16: colour arrived
+  // just before the cut, and a picture cued on a later word only finished as the shot ended).
+  const pictureSeconds = (el, ts = 0) => (el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
+    if (el.kind === 'picture') {
+      const [vw, vh] = el.art?.viewBox || [3, 2], maxH = 0.72 * K.H;
+      let w = PICTURE_W[el.size || 'l'] * K.W, h = w * vh / vw;
+      if (h > maxH) { w *= maxH / h; h = maxH; }
+      const x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.86 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
+      return {box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], center: [x, y], r: Math.min(w, h) / 2, w, h};
+    }
     if (el.kind === 'figure') { const h = figureH(el), x = el.x * K.W, y = el.y * K.H, dir = el.facing === 'left' ? -1 : 1; return {box: [x - 0.28 * h, y - 1.02 * h, x + 0.28 * h, y], center: [x, y - 0.55 * h], head: [x + 0.04 * h * dir, y - 0.8 * h, 0.165 * h], r: 0.3 * h}; }
     if (el.kind === 'prop') { const s = propS(el), x = el.x * K.W, y = Math.min(el.y * K.H, 0.86 * K.H - 0.45 * s); return {box: [x - 0.5 * s, y - 0.5 * s, x + 0.5 * s, y + 0.5 * s], center: [x, y], r: 0.45 * s}; }
     const x = (el.x ?? 0.5) * K.W, y = (el.y ?? 0.5) * K.H, s = el.kind === 'text' ? textSize(el) : el.kind === 'fx' ? FX_SIZE[el.size || 'm'] * K.u : 60 * K.u;
@@ -65,7 +79,7 @@
         est[i] = {...e, box: [cx - 0.5 * s, cy - 0.5 * s, cx + 0.5 * s, cy + 0.5 * s], center: [cx, cy]};
       }
     });
-    const solid = d.elements.map((el, i) => (['figure', 'prop'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
+    const solid = d.elements.map((el, i) => (['figure', 'prop', 'picture'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
       if (el.kind !== 'text') return null;
@@ -109,7 +123,7 @@
     if (PEN) {
       let end = 0;
       d.elements.map((item, i) => i).filter(i => el[i].enter === 'draw').sort((a, b) => el[a].ts - el[b].ts).forEach(i => {
-        const item = d.elements[i], busy = item.kind === 'text' && WRITTEN.has(item.style) ? writeSeconds(item.text) : enterSeconds('draw', engine) * (item.kind === 'figure' ? 1.25 : 1);
+        const item = d.elements[i], busy = item.kind === 'text' && WRITTEN.has(item.style) ? writeSeconds(item.text) : item.kind === 'picture' ? pictureSeconds(item, el[i].ts) : enterSeconds('draw', engine) * (item.kind === 'figure' ? 1.25 : 1);
         if (el[i].ts < end && (!el[i].cued || end - el[i].ts <= 0.6)) el[i].ts = Math.min(end, dur - 0.3);
         end = Math.max(end, el[i].ts + busy);
       });
@@ -130,7 +144,7 @@
       if (item.kind === 'fx' && item.effect === 'lightning') impulses.push({kind: 'shake', t: el[i].ts, amount: 0.5});
     });
     if (d.transition === 'shake') impulses.push({kind: 'shake', t: 0, amount: 1.2});
-    return {est, textAt, el, focus, impulses, stage, anchors: []};
+    return {est, textAt, el, focus, impulses, stage, anchors: [], pics: []};
   }
 
   // ------------------------------------------------------------ camera
@@ -299,6 +313,75 @@
     const lines = []; let line = '';
     for (const word of String(text).split(/\s+/)) { const next = line ? `${line} ${word}` : word; if (line && K.measure(next, size, {weight: 800}) > max) { lines.push(line); line = word; } else line = next; }
     return [...lines, line].slice(0, 4);
+  }
+  // ------------------------------------------------------------ pictures (0.33)
+  // A picture's shapes as Path2D with their lengths and boxes, measured once per shot on hidden SVG paths (the
+  // path data was checked in Node: commands and numbers only).
+  let SVG_ROOT = null;
+  function pictureGeom(el, i) {
+    if (!el.art) return null;
+    if (LAYOUT.pics[i]) return LAYOUT.pics[i];
+    const NS = 'http://www.w3.org/2000/svg';
+    if (!SVG_ROOT || !SVG_ROOT.isConnected) { SVG_ROOT = document.createElementNS(NS, 'svg'); SVG_ROOT.setAttribute('width', '0'); SVG_ROOT.setAttribute('height', '0'); (document.body || document.documentElement).appendChild(SVG_ROOT); }
+    const est = LAYOUT.est[i], [vw, vh] = el.art.viewBox, s = Math.min(est.w / vw, est.h / vh);
+    let total = 0;
+    const paths = el.art.paths.map(item => {
+      const node = document.createElementNS(NS, 'path');
+      node.setAttribute('d', item.d); SVG_ROOT.appendChild(node);
+      const len = item.stroke !== 'none' ? node.getTotalLength() : 0;
+      let box = [0, 0, vw, vh];
+      try { const b = node.getBBox(); box = [b.x, b.y, b.width, b.height]; } catch { /* an empty shape keeps the whole box */ }
+      // A background shape that fills the picture (sky, wall, ground) is laid down as colour, never outlined, so a
+      // picture never reads as a card stuck on the board (demo review 2026-10-16).
+      const backdrop = box[2] >= 0.9 * vw && box[3] >= 0.5 * vh, traced = backdrop ? 0 : len;
+      const from = total; total += traced;
+      return {...item, ...(backdrop ? {stroke: 'none'} : {}), p2d: new Path2D(item.d), len: traced, from, node, box, big: box[2] * box[3] > 0.04 * vw * vh};
+    });
+    LAYOUT.pics[i] = {x0: est.center[0] - vw * s / 2, y0: est.center[1] - vh * s / 2, s, paths, total};
+    return LAYOUT.pics[i];
+  }
+  // The hand traces every outline in the illustrator's order (later shapes cover earlier lines, as on paper), then the
+  // colour washes in. Each whiteboard look shows it its own way: black marker keeps it line art, pencil is grey and
+  // pale, dry-erase colours the big shapes in with marker strokes.
+  function drawPicture(el, i, local, enter) {
+    const g = pictureGeom(el, i);
+    if (!g) return;
+    const {ctx, u} = K, look = K.FIN === 'wb' ? K.WB : 'cartoon', draws = enter === 'draw', lines = draws ? pictureSeconds(el, LAYOUT.el[i].ts) : 0;
+    const q = lines ? clamp01(local / lines) : 1, done = q * g.total;
+    // Each shape's colour washes in just behind the pen, once its outline is done (a shape without one, when the pen
+    // reaches its place in the drawing order).
+    const colourOf = path => (draws ? ease.inOutSine(clamp01((local - lines * (path.from + path.len) / Math.max(1, g.total) - 0.12) / 0.4)) : 1);
+    const ink = K.DARK ? '#F2F2F2' : '#1E1E1E', paper = K.PAL.bg;
+    const strokeOf = path => (look === 'marker' ? ink : look === 'pencil' ? K.mix(path.stroke, '#FFFFFF', 0.3) : path.stroke);
+    const fillOf = path => (look === 'marker' ? null : look === 'pencil' ? K.mix(path.fill, '#FFFFFF', 0.55) : path.fill);
+    const widthOf = path => Math.max(1.1 * u / g.s, path.width * (look === 'pencil' ? 0.7 : look === 'dry-erase' ? 1.3 : 1));
+    ctx.save(); ctx.translate(g.x0, g.y0); ctx.scale(g.s, g.s);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (const path of g.paths) {
+      const traced = path.len ? clamp01((done - path.from) / path.len) : 0, colour = colourOf(path);
+      if (path.fill !== 'none') {
+        // A finished outline hides the lines behind it (paper inside it); its colour arrives with the wash.
+        if (path.stroke !== 'none' && traced >= 1) { ctx.globalAlpha = 1; ctx.fillStyle = paper; ctx.fill(path.p2d); }
+        const paint = fillOf(path);
+        if (paint && colour > 0 && (path.stroke === 'none' || traced >= 1)) {
+          ctx.globalAlpha = colour;
+          if (look === 'dry-erase' && path.big) {
+            const [bx, by, bw, bh] = path.box, gap = 6.5 * u / g.s;
+            ctx.save(); ctx.clip(path.p2d); ctx.strokeStyle = paint; ctx.lineWidth = gap * 0.85; ctx.beginPath();
+            for (let x = bx - bh; x < bx + bw + gap; x += gap) { ctx.moveTo(x, by + bh + gap); ctx.lineTo(x + bh * 0.55, by - gap); }
+            ctx.stroke(); ctx.restore();
+          } else { ctx.fillStyle = paint; ctx.fill(path.p2d); }
+          ctx.globalAlpha = 1;
+        }
+      }
+      if (path.stroke !== 'none' && traced > 0) {
+        ctx.strokeStyle = strokeOf(path); ctx.lineWidth = widthOf(path);
+        if (traced < 1) ctx.setLineDash([traced * path.len, path.len + 1]);
+        ctx.stroke(path.p2d); ctx.setLineDash([]);
+        if (traced < 1) { const pt = path.node.getPointAtLength(traced * path.len); K.penAt(pt.x, pt.y); }
+      }
+    }
+    ctx.restore();
   }
   // A framed whiteboard: an aluminium frame round the picture and the marker tray along the bottom.
   function drawBoardFrame(context) {
@@ -544,7 +627,9 @@
   function drawFx(el, i, t, local, p) {
     const {ctx, u, W, H} = K, g = fxTarget(el, i), color = el.accent ? K.PAL.accent : null, seed = LAYOUT.el[i].seed;
     // On a wide target (a line of words) a round effect stays about two text-heights across, not the whole line.
-    const r = Math.min(Math.max(g.w, g.h), Math.min(g.w, g.h) * 2.2) * 0.62;
+    // An effect on a picture keeps its own size: it marks a spot in the picture, never covers all of it (0.33 demo).
+    const onPicture = Number.isInteger(el.on) && D.elements[el.on - 1]?.kind === 'picture';
+    const fit = Math.min(Math.max(g.w, g.h), Math.min(g.w, g.h) * 2.2) * 0.62, r = onPicture ? Math.min(fit, FX_SIZE[el.size || 'm'] * K.u * 0.62) : fit;
     switch (el.effect) {
       case 'burst': { const z = ease.outBack(clamp01(local / 0.3)), f = K.frame(g.cx, g.cy, r * z, 1, local * 0.25); K.render([{pts: f.star(0, 0, 1.08, 0.68, 14), fill: color || C.yellow, px: 6 * u}, {pts: f.star(0, 0, 0.8, 0.5, 14, 0.2), fill: K.mix(color || C.yellow, '#FFFFFF', 0.45), stroke: false}]); break; }
       case 'speedlines': { const rand = K.seeded(seed + Math.floor(K.T * 15)), n = 46, inner = Math.max(r * 1.1, Math.min(W, H) * 0.28); ctx.save(); ctx.strokeStyle = K.alpha(K.PAL.ink, 0.32 * clamp01(local / 0.15)); ctx.lineCap = 'round'; for (let k = 0; k < n; k++) { const a = (k + rand() * 0.6) * TAU / n, r1 = inner * (1 + rand() * 0.35), r2 = Math.max(W, H) * 1.1; ctx.lineWidth = (2 + rand() * 6) * u; ctx.beginPath(); ctx.moveTo(g.cx + Math.cos(a) * r1, g.cy + Math.sin(a) * r1); ctx.lineTo(g.cx + Math.cos(a) * r2, g.cy + Math.sin(a) * r2); ctx.stroke(); } ctx.restore(); break; }
@@ -618,7 +703,7 @@
     if (exitAt !== null && t > exitAt + 0.22) return;
     const local = t - tm.ts, enter = el.kind === 'fx' ? 'none' : tm.enter, d = enterSeconds(enter);
     let sx = 1, sy = 1, dx = 0, dy = 0, a = 1, p = 1;
-    if (d && local < d) {
+    if (d && local < d && el.kind !== 'picture') {
       const q = local / d;
       if (enter === 'pop') sx = sy = ease.outBack(q);
       if (enter === 'grow') sx = sy = ease.outCubic(q);
@@ -651,6 +736,7 @@
     else if (el.kind === 'text') drawText(el, i, t, local, p);
     else if (el.kind === 'arrow') drawArrow(el, i, t, local, p);
     else if (el.kind === 'bubble') drawBubble(el, i, t, local, p);
+    else if (el.kind === 'picture') drawPicture(el, i, local, tm.enter);
     else if (el.kind === 'fx' && !SCREEN_FX.has(el.effect) && !['shake', 'punch'].includes(el.effect)) drawFx(el, i, t, local, p);
     ctx.restore();
   }
@@ -661,6 +747,7 @@
     const look = D.engine === 'stickman' ? P.drawing?.look : null;
     const params = {...P, finish: (look && LOOKS[look]) || FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
+    if (D.board) K.WB = D.board;
     HAND = (D.engine === 'stickman' || D.engine === 'handdrawn') && P.drawing?.hand === true;
     PEN = HAND || look === 'whiteboard';
     K.PEN = HAND; LASTHAND = null;

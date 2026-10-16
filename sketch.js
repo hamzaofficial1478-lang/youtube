@@ -6,6 +6,7 @@
 // builds one from the narration. Pure: no I/O. The drawing itself is drawn-engine.js, in the local browser.
 
 const E = require('./engines');
+const Il = require('./illustrate');
 const Kit = require('./kit');
 
 const POSES = Object.freeze(['stand', 'talk', 'point', 'present', 'think', 'shock', 'cheer', 'facepalm', 'shrug', 'cross-arms', 'hands-hips', 'wave', 'walk', 'run', 'sit', 'type', 'hold', 'carry', 'phone', 'read', 'beg', 'fall', 'lie', 'sneak', 'dance', 'fist', 'cower', 'scratch-head', 'clap', 'thumbs-up', 'stop', 'jump', 'sleep', 'fight', 'reach', 'push', 'pull', 'throw', 'kneel', 'lean']);
@@ -48,7 +49,10 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/13';
+const VERSION = 'drawn-scene/16';
+// 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
+const MAX_PICTURES = 1;
+const BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']);
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -188,6 +192,16 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       elements.push({kind: 'bubble', text: value, x: c.coord(item.x, `${label} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `${label} y`, 0.08, 0.7, 0.25), thought: item.thought === true, ...(Number.isInteger(on) ? {on} : {}), ...base});
       return;
     }
+    if (item.kind === 'picture') {
+      const describe = clean(item.describe ?? item.prompt, Il.LIMITS.describe);
+      if (!describe || describe.length < 10) { if (!lenient) fail(`${label} needs "describe": what the picture shows (10-${Il.LIMITS.describe} characters).`); warn(`${label}: a picture without a description was left out.`); return; }
+      if (elements.filter(el => el.kind === 'picture').length >= MAX_PICTURES) { if (!lenient) fail(`A shot holds at most ${MAX_PICTURES} picture.`); warn(`${label}: a shot holds one picture; the extra one was left out.`); return; }
+      // The drawing itself comes from the illustrator (or a stored plan) and is checked again every time.
+      let art;
+      if (item.art !== undefined) { const checked = Il.validateArt(item.art); art = checked.art; if (!art) { if (!lenient) fail(`${label} picture: ${checked.issues[0]}`); warn(`${label}: its picture did not pass its checks (${checked.issues[0]}), so it will be drawn again.`); } }
+      elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...base});
+      return;
+    }
     if (item.kind === 'fx') {
       // A near-miss name keeps Claude's intent (named in the warnings); an owner edit must use the real name.
       const near = lenient && FX_NEAR[item.effect];
@@ -199,14 +213,14 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
         ...(effect === 'progress' ? {value: Math.round(Math.min(100, Math.max(0, Number(item.value) || 0)))} : {}), ...base});
       return;
     }
-    c.problem(`${label} kind must be figure, prop, text, arrow, bubble or fx.`);
+    c.problem(`${label} kind must be figure, prop, text, arrow, bubble, picture or fx.`);
   });
   if (!elements.length) fail('A drawn scene needs at least one element the engine can draw.');
   const focus = (Array.isArray(raw.focus) ? raw.focus : []).slice(0, MAX_FOCUS).map((item, k) => (item && typeof item === 'object' ? {...(phrase(item.at) ? {at: phrase(item.at)} : {}), x: c.coord(item.x, `Focus ${k + 1} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `Focus ${k + 1} y`, 0.1, 0.9, 0.5), zoom: Math.round(Math.min(2.5, Math.max(1, Number(item.zoom) || 1.4)) * 100) / 100} : c.problem(`Focus ${k + 1} must be an object.`, null))).filter(Boolean);
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -383,7 +397,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman') {
+function promptGuide(primary = 'stickman', {pictures = false} = {}) {
   const engines = E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
@@ -398,6 +412,7 @@ function promptGuide(primary = 'stickman') {
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
     `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts; keyword is one big hand-lettered word in a top corner that names the beat; versus is a divider down the frame for comparing two things, its text in the middle circle, e.g. "VS"; the prop head is a head in profile to put a thought or a scene inside), "x", "y", "size", "accent"?}`,
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan, impact, lightning, explosion, fire, dust, spiral, crack), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
+    ...(pictures ? [`- {"kind": "picture", "describe": what the picture shows (10-${Il.LIMITS.describe} characters: the subject, what happens, the place, the feeling; no words in it), "x"?: centre 0.15-0.85, "y"?: centre 0.2-0.75, "size"?: s|m|l|xl (l), "at"?} - a detailed illustration drawn for this shot by an illustrator and traced by the hand (PAID: see PICTURES; at most ${MAX_PICTURES} per shot). Other elements (labels, arrows, words, effects, characters) may sit around it.`] : []),
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
@@ -410,4 +425,4 @@ function promptGuide(primary = 'stickman') {
   ].join('\n');
 }
 
-module.exports = {worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {MAX_PICTURES, BOARDS, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

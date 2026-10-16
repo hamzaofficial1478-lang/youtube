@@ -116,3 +116,37 @@ test('a scene setting is shared by its shots, and continuity notes catch place j
   assert.deepEqual(Sk.mend(carried, cast).map(item => item.fix), ['Max stays on screen from S02A instead of appearing again.']);
   assert.deepEqual([carried[1].sketch.elements[0].at, carried[1].sketch.elements[0].enter], [undefined, 'none']);
 });
+
+test('a picture is data, never code: path data and colours only, checked before anything draws it', () => {
+  const Il = require('../illustrate');
+  const shape = (d, extra = {}) => ({d, fill: '#E5484D', stroke: '#1E1E1E', width: 3, ...extra});
+  const good = {viewBox: [600, 400], paths: [shape('M10 10 L100 10 L100 100 Z'), shape('M20 20 C40 0 60 0 80 20'), shape('M5 5 A20 20 0 1 1 4.9 5 Z'), shape('M1 1 L2 2', {stroke: 'none'}), shape('M3 3 Q4 4 5 3'), shape('M6 6 h10 v10 z')]};
+  const {art, issues} = Il.validateArt('Here it is:\n```json\n' + JSON.stringify(good) + '\n```');
+  assert.deepEqual(issues, []);
+  assert.deepEqual([art.version, art.viewBox, art.paths.length, art.paths[3].width], [Il.VERSION, [600, 400], 6, undefined]);
+  const bad = (change, pattern) => assert.match(Il.validateArt({...good, paths: good.paths.map((item, k) => (k ? item : {...item, ...change}))}).issues.join(' '), pattern);
+  bad({d: 'M0 0 L10 10 <script>alert(1)</script>'}, /SVG path data/);
+  bad({d: 'url(http://example.com/x.svg)'}, /SVG path data/);
+  bad({fill: 'red'}, /"fill" must be "#RRGGBB"/);
+  bad({fill: 'none', stroke: 'none'}, /neither a fill nor a stroke/);
+  bad({width: 400}, /at most 5% of the picture/);
+  assert.match(Il.validateArt({viewBox: [600, 400], paths: good.paths.slice(0, 3)}).issues[0], /at least 6 shapes/);
+  assert.match(Il.validateArt({viewBox: [600, 400], paths: Array.from({length: 300}, () => good.paths[0])}).issues[0], /at most 220/);
+  assert.match(Il.validateArt({viewBox: [600, 400], paths: good.paths.map(item => ({...item, stroke: 'none'}))}).issues.join(' '), /dark outline/);
+  assert.match(Il.validateArt('no picture').issues[0], /one JSON object/);
+  // In a drawing: one picture per shot, checked again from a stored plan; a shot may name its own whiteboard look.
+  const shot = Sk.validate({engine: 'handdrawn', board: 'dry-erase', elements: [{kind: 'picture', describe: 'A coffee cup on a table', art: good}]}, {primary: 'handdrawn'});
+  assert.deepEqual([shot.board, shot.elements[0].art.paths.length, shot.elements[0].size], ['dry-erase', 6, 'l']);
+  assert.throws(() => Sk.validate({board: 'chalk', elements: [{kind: 'text', text: 'Hi'}]}), /Whiteboard look/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'picture', describe: 'A coffee cup on a table', art: {...good, paths: [{d: 'javascript:1'}]}}]}), /picture/);
+  const warned = [];
+  assert.equal(Sk.validate({elements: [{kind: 'picture', describe: 'A coffee cup on a table', art: {viewBox: [1, 1]}}, {kind: 'text', text: 'Hi'}]}, {lenient: true, warn: message => warned.push(message)}).elements[0].art, undefined);
+  assert.match(warned[0], /did not pass its checks/);
+  // The illustrator is told the look, the words and the rules; the planner learns the element only when offered.
+  const asked = Il.messages({describe: 'A coffee cup', words: 'Every cup starts here.', board: 'marker', aspect: 1.5}).map(item => item.content).join('\n');
+  assert.match(asked, /black marker line art/);
+  assert.match(asked, /NO text, letters, numbers/);
+  assert.match(asked, /ORDER IS THE DRAWING ORDER/);
+  assert.match(Sk.promptGuide('handdrawn', {pictures: true}), /"kind": "picture"/);
+  assert.doesNotMatch(Sk.promptGuide('handdrawn'), /"kind": "picture"/);
+});

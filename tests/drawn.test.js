@@ -166,6 +166,34 @@ test('a cut to the same place keeps the place on screen under the drawing hand; 
   }
 });
 
+test('a picture is traced by the hand line by line, then coloured in, in each whiteboard look', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const O = '#1E1E1E', art = {viewBox: [600, 400], paths: [
+    {d: 'M60 330 Q300 300 540 330 L540 360 Q300 390 60 360 Z', fill: '#C9A77C', stroke: O, width: 4}, {d: 'M190 140 L410 140 L390 320 Q300 340 210 320 Z', fill: '#FFFFFF', stroke: O, width: 4},
+    {d: 'M200 170 L400 170 L392 230 L208 230 Z', fill: '#E5484D', stroke: O, width: 3}, {d: 'M410 170 C480 170 480 270 400 270', fill: 'none', stroke: O, width: 10},
+    {d: 'M250 110 C230 80 270 60 250 30', fill: 'none', stroke: '#8A96A3', width: 5}, {d: 'M215 240 L240 240 L232 310 Q222 312 214 306 Z', fill: '#E6E6E6'}]};
+  const shot = board => ({engine: 'handdrawn', ...(board ? {board} : {}), set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'picture', describe: 'A cup of coffee on a table', x: 0.5, y: 0.48, art}]});
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const hand = {primary: 'handdrawn', drawing: {look: 'classic', hand: true}};
+    await frame(renderer, shot(), 1.0, hand);
+    // The pen is reported in frame pixels (320 wide), the layout in the 1920-wide drawing space.
+    const mid = await renderer.evaluate('DRAWN.layout()'), box = mid.est[0].box.map(value => value * 320 / 1920);
+    assert.ok(mid.tip && mid.tip[0] >= box[0] - 2 && mid.tip[0] <= box[2] + 2 && mid.tip[1] >= box[1] - 2 && mid.tip[1] <= box[3] + 2, 'the pen is on the picture while it is traced');
+    // The hand traces for at most 45% of the shot (3 s here), each shape's colour right behind it.
+    const early = await frame(renderer, shot(), 0.4, hand), lines = await frame(renderer, shot(), 0.9, hand), done = await frame(renderer, shot(), 2.6, hand);
+    assert.ok(!early.equals(lines) && !lines.equals(done), 'more lines, then colour');
+    assert.ok(done.equals(await frame(renderer, shot(), 2.9, hand)), 'finished well before the shot ends');
+    const looks = {};
+    for (const board of ['cartoon', 'marker', 'pencil', 'dry-erase']) looks[board] = await frame(renderer, shot(board), 4.0, hand);
+    const all = Object.values(looks);
+    assert.ok(all.every((png, k) => all.every((other, j) => j === k || !png.equals(other))), 'each whiteboard look shows the picture its own way');
+    assert.ok(looks.pencil.equals(await frame(renderer, shot(), 4.0, {primary: 'handdrawn', drawing: {look: 'classic', hand: true, board: 'pencil'}})), 'a shot\'s own look is the same as the style\'s look');
+  } finally {
+    await renderer.close();
+  }
+});
+
 test('a drawing browser that is restarted (a stall during a render) draws again on the same renderer', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async t => {
   const renderer = new MotionRenderer({browser}), out = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'restart-'));
   t.after(() => require('node:fs').rmSync(out, {recursive: true, force: true}));

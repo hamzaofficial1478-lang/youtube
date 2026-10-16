@@ -239,6 +239,87 @@ test('Claude chooses each scene\'s transition: offered from the style, kept thro
   assert.equal(payload.payload.scenes[0].transition, 'push-left', 'older short names are stored by their full name');
 });
 
+test('pictures (paid): Claude spends the video\'s picture budget, the illustrator draws each one once, a failed one is asked again, the rest is drawn free', async t => {
+  const art = {viewBox: [600, 400], paths: [
+    {d: 'M100 300 L500 300 L500 360 L100 360 Z', fill: '#C9A77C', stroke: '#1E1E1E', width: 4}, {d: 'M200 120 L400 120 L380 300 L220 300 Z', fill: '#FFFFFF', stroke: '#1E1E1E', width: 4},
+    {d: 'M210 160 L390 160 L384 220 L216 220 Z', fill: '#E5484D', stroke: '#1E1E1E', width: 3}, {d: 'M400 160 C470 160 470 260 390 260', fill: 'none', stroke: '#1E1E1E', width: 10},
+    {d: 'M250 100 C230 70 270 50 250 20', fill: 'none', stroke: '#8A96A3', width: 5}, {d: 'M225 230 L245 230 L240 290 L226 288 Z', fill: '#E6E6E6'}]};
+  const asked = [];
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw?.startsWith('PICTURE: ')) {
+      const packet = JSON.parse(input.raw.slice(9, input.raw.indexOf('\n'))), retry = /FAILED THESE CHECKS/.test(input.raw);
+      asked.push(`${packet.picture.slice(0, 12)}${retry ? ':retry' : ''}`);
+      assert.equal(packet.look, 'cartoon');
+      assert.match(input.raw, /NO text, letters, numbers/);
+      if (packet.picture.startsWith('Harbour') && !retry) return 'Here is my idea for the picture.';
+      if (packet.picture.startsWith('Broken')) return 'No picture today.';
+      return art;
+    }
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A rich place is worth a picture.',
+      sketch: {engine: 'handdrawn', elements: [{kind: 'picture', describe: `${start === 1 ? 'Harbour' : 'Market'} at dawn with traders and boats, scene from sentence ${start}`, size: 'l'}, {kind: 'text', style: 'keyword', text: `Part ${start}`}]}}]});
+    return {summary: 'Pictures where they count.', cast: [], scenes};
+  }});
+  const {room, content, ids, store, family, narrate} = setup(t, network, {styleKey: 'hand-drawn-canvas', withVoice: false, storyMap: false});
+  narrate(40);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  const plans = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
+  assert.ok(plans.every(text => /PICTURES \(paid\): up to \d+ drawn shots/.test(text) && /"kind": "picture"/.test(text)), 'the planner knows the budget and the picture element');
+  const manifest = latestManifest(room, content.id), pictured = shots(manifest).filter(shot => shot.sketch?.elements.some(item => item.kind === 'picture'));
+  const budget = Math.round(40 / 60 * room.settings(family.id).picturesPerMinute);
+  assert.equal(pictured.length, budget, 'the budget holds');
+  assert.ok(pictured.every(shot => shot.sketch.elements.find(item => item.kind === 'picture').art.paths.length === art.paths.length), 'every kept picture carries its checked drawing');
+  assert.equal(manifest.plan.pictures.drawn, budget);
+  assert.ok(manifest.plan.pictures.notes.some(item => /past the video's budget of \d+ pictures; the program draws this shot itself/.test(item)));
+  assert.ok(shots(manifest).filter(shot => !pictured.includes(shot)).every(shot => shot.sketch.elements.some(item => item.kind === 'text')), 'a shot past the budget keeps its free drawing');
+  assert.ok(asked.includes('Harbour at d') && asked.includes('Harbour at d:retry'), 'a failed picture is asked again once with its findings');
+  const rows = store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='picture'").all();
+  assert.deepEqual([rows.length, rows.every(row => row.status === 'settled')], [asked.length, true], 'each picture answer is reserved and settled on its own');
+  // A retry of the same plan job keeps the pictures already drawn: no new answer, no new tokens.
+  const row = room.planJobRow(queued.job.id), before = asked.length;
+  const raw = {summary: 'again', cast: [], scenes: manifest.plan.scenes.map(scene => ({...scene, shots: scene.shots.map(shot => ({...shot, sketch: {...shot.sketch, elements: shot.sketch.elements.map(({art: drawn, ...rest}) => rest)}}))}))};
+  const again = await room.illustrate({...row, scope: JSON.parse(row.scope)}, raw, () => {});
+  assert.equal(asked.length, before, 'kept pictures are not asked for again');
+  assert.equal(again.pictures.drawn, budget);
+  assert.ok(again.pictures.notes.some(item => /kept from an earlier attempt/.test(item)));
+  // The owner upgrades one free shot with a paid picture: only that shot changes, its words stay.
+  const free = shots(manifest).find(shot => !pictured.includes(shot)), others = shots(manifest).filter(shot => shot.id !== free.id);
+  const picked = room.pictureForShot(manifest.id, {shotId: free.id, describe: 'A quiet harbour at night with lanterns on the boats', size: 'xl', replace: true, requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(picked.job.id)).status, 'completed');
+  assert.equal(room.publicPlanJob(room.planJobRow(picked.job.id)).picture.label, free.label);
+  const upgraded = latestManifest(room, content.id), shot = shots(upgraded).find(item => item.id === free.id);
+  assert.deepEqual(shot.sketch.elements.map(item => item.kind), ['picture', 'text'], 'the picture replaces the drawings; the words stay');
+  assert.ok(shot.sketch.elements[0].art && shot.sketch.elements[0].size === 'xl');
+  assert.deepEqual(shots(upgraded).filter(item => item.id !== free.id).map(item => JSON.stringify(item.sketch)), others.map(item => JSON.stringify(item.sketch)), 'every other shot is unchanged');
+  assert.equal(upgraded.plan.pictures.drawn, budget + 1);
+  // A picture that fails its checks twice changes nothing.
+  const broken = room.pictureForShot(upgraded.id, {shotId: free.id, describe: 'Broken picture of a harbour', requestedBy: 'Owner', connector: ids.claude, expectedRevision: upgraded.revision});
+  await room.processNextPlan();
+  const failed = room.publicPlanJob(room.planJobRow(broken.job.id));
+  assert.equal(failed.status, 'quality_failed');
+  assert.match(failed.error, /was not drawn .*so the shot keeps its drawing/);
+  assert.equal(latestManifest(room, content.id).id, upgraded.id);
+  // Switched off, the planner is not offered pictures.
+  room.saveSettings(family.id, {...room.settings(family.id), picturesPerMinute: 0, revision: room.settings(family.id).revision});
+  const input = {family: {}, style: {name: 'S', summary: '', engine: 'handdrawn', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
+  assert.doesNotMatch(planMessages(input)[0].content, /PICTURES \(paid\)|"kind": "picture"/);
+});
+
+test('a plan stopped mid-way marks its picture and frame reservations unknown too, never left reserved', t => {
+  const {room, store, content, family} = setup(t);
+  const at = new Date().toISOString();
+  store.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES('job1',?,?,'running','{}',1,'Owner',?,?)").run(family.id, content.id, at, at);
+  for (const key of ['job1', 'job1:picture:S01A:1:1', 'job1:frame:S02A:1:1', 'other']) store.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'picture','2026-10','reserved',1000,?,?)").run(key, family.id, at, at);
+  room.recoverInterrupted();
+  assert.equal(room.planJobRow('job1').status, 'interrupted');
+  assert.deepEqual(store.db.prepare('SELECT job_id, status FROM intelligence_usage ORDER BY job_id').all().map(row => `${row.job_id} ${row.status}`), ['job1 unknown', 'job1:frame:S02A:1:1 unknown', 'job1:picture:S01A:1:1 unknown', 'other reserved']);
+});
+
 test('with frame composing switched off, the planner does not read the atelier guide', () => {
   const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
   assert.match(planMessages(input)[0].content, /ATELIER SHOTS/);
