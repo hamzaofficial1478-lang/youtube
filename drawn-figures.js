@@ -450,7 +450,9 @@
   }
 
   K.drawFigure = (st, progress = 1) => {
-    if (K.FIN === 'wb' && (st.look.body || 'stick') === 'stick') return drawPerson(st, progress);
+    // Whiteboard and motion-design people are drawn as people (0.35: flat design without outlines in the flat finish,
+    // thin outlines in the infographic finish), never stick figures.
+    if (['wb', 'flat', 'info'].includes(K.FIN) && (st.look.body || 'stick') === 'stick') return drawPerson(st, progress);
     const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u, dir = st.dir, look = st.look, body = look.body || 'stick', engine = st.engine;
     // Storybook people have bean bodies: a filled rounded torso under a big round head.
     const bean = K.FIN === 'story' && body === 'stick';

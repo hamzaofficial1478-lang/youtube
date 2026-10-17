@@ -57,7 +57,7 @@ test('the stickman drawing setting: a look and the drawing hand, optional, check
   assert.throws(() => validateStyleSpec({...stickman(), brief: 'x'.repeat(1300)}), /Planning brief/);
   // The looks are features of the one Stickman style: no separate launch styles, and every look's preset is a valid
   // stickman spec (colours, shot lengths, transitions the sketch renderer can do).
-  assert.deepEqual(LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => item.key), ['hand-drawn-canvas'], 'only the whiteboard launch style names its drawing (a hand and a whiteboard look)');
+  assert.deepEqual(LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => item.key), ['hand-drawn-canvas', 'motion-graphics'], 'only the whiteboard launch style names its drawing (a hand and a whiteboard look)');
   for (const [look, preset] of Object.entries(DRAWING_PRESETS)) {
     const spec = validateStyleSpec({...stickman(), palette: preset.palette, pacing: preset.pacing, transitions: preset.transitions, motion: {...stickman().motion, intensity: preset.intensity}, drawing: {look, hand: preset.hand}});
     assert.equal(spec.drawing.look, look);
@@ -83,6 +83,15 @@ test('Mix is a choice in each engine with looks: stickman looks and whiteboard l
   assert.equal(validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: true, board: 'mix'}}).drawing.board, 'mix');
   assert.ok(RENDERERS['ffmpeg-sketch'].features.some(item => /Mix of all looks/.test(item)) && RENDERERS['canvas-frames'].features.some(item => /Mix of all looks/.test(item)));
   assert.ok(['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics'].every(key => RENDERERS[key].features.some(item => /Paid pictures where they count/.test(item))), 'every drawing engine lists paid pictures');
+});
+
+test('motion engine v2: five designs or a mix, chosen in the style; launch library v9', () => {
+  const motion = LAUNCH_PROFILES.find(item => item.key === 'motion-graphics').spec;
+  assert.equal(validateStyleSpec(structuredClone(motion)).drawing.design, 'mix');
+  for (const design of ['vector', 'infographic', 'kinetic', 'collage', 'data']) assert.equal(validateStyleSpec({...structuredClone(motion), drawing: {look: 'classic', hand: false, design}}).drawing.design, design);
+  assert.throws(() => validateStyleSpec({...structuredClone(motion), drawing: {look: 'classic', hand: false, design: 'neon'}}), /motion design/);
+  assert.ok(RENDERERS['motion-graphics'].features.some(item => /Documentary collage, Data desk, or Mix of all designs/.test(item)));
+  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v9');
 });
 
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {

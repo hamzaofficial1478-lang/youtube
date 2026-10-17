@@ -39,7 +39,7 @@ const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'dange
 const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'crash-zoom', 'dolly-in', 'handheld', 'ken-burns']);
 const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'whip-up', 'whip-down', 'zoom', 'zoom-out', 'pop', 'ink', 'glitch', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'drop', 'iris', 'flash', 'shake']);
 const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
-const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout', 'keyword', 'versus']);
+const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout', 'keyword', 'versus', 'statement', 'poster']);
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars', 'impact', 'lightning', 'explosion', 'fire', 'dust', 'wind', 'spiral', 'crack']);
 // Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
 const FACE_NEAR = Object.freeze({wondering: 'curious', serious: 'focused', puzzled: 'confused', afraid: 'scared', anxious: 'nervous', impressed: 'amazed', astonished: 'shocked', horrified: 'terrified', joyful: 'happy', cheerful: 'happy', delighted: 'happy', calm: 'relieved', frustrated: 'angry', mad: 'furious', upset: 'sad', tired: 'exhausted', ashamed: 'guilty', envious: 'jealous', nauseous: 'sick', scheming: 'mischievous', bashful: 'shy', hopeless: 'sad', overwhelmed: 'panic'});
@@ -49,12 +49,16 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/17';
+const VERSION = 'drawn-scene/18';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
 // 0.34: a stickman shot's own look, for videos that mix the stickman looks.
 const STICK_LOOKS = Object.freeze(Object.keys(E.LOOKS));
+// 0.35: a motion shot's own design, charts that build on the words, and timelines.
+const DESIGNS = Object.freeze(Object.keys(E.DESIGNS));
+const CHART_TYPES = Object.freeze(['bar', 'line', 'area', 'pie', 'donut', 'rating']);
+const MAX_SERIES = 8, MAX_EVENTS = 6;
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -176,9 +180,11 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       return;
     }
     if (item.kind === 'text') {
-      const value = clean(item.text, 48);
+      // A kinetic statement is a whole sentence (key words between *stars*); other words stay short.
+      const value = clean(item.text, item.style === 'statement' ? 90 : 48);
       if (!value) { c.problem(`${label} needs text.`); return; }
-      elements.push({kind: 'text', text: value, style: c.pick(item.style, TEXT_STYLES, `${label} style`, 'title'), x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.5), y: c.coord(item.y, `${label} y`, 0.06, 0.8, 0.16), size: c.pick(item.size, SIZES, `${label} size`, 'm'), ...base});
+      const style = c.pick(item.style, TEXT_STYLES, `${label} style`, 'title'), centred = ['statement', 'poster'].includes(style);
+      elements.push({kind: 'text', text: value, style, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.5), y: c.coord(item.y, `${label} y`, 0.06, 0.8, centred ? 0.45 : 0.16), size: c.pick(item.size, SIZES, `${label} size`, 'm'), ...base});
       return;
     }
     if (item.kind === 'arrow') {
@@ -192,6 +198,30 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       if (!value) { c.problem(`${label} needs text.`); return; }
       const on = item.on === undefined ? undefined : ref(item.on, `${label} on`);
       elements.push({kind: 'bubble', text: value, x: c.coord(item.x, `${label} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `${label} y`, 0.08, 0.7, 0.25), thought: item.thought === true, ...(Number.isInteger(on) ? {on} : {}), ...base});
+      return;
+    }
+    if (item.kind === 'chart') {
+      const values = (Array.isArray(item.values) ? item.values : []).slice(0, MAX_SERIES).map(Number).filter(Number.isFinite);
+      if (!values.length) { if (!lenient) fail(`${label} needs "values": 1-${MAX_SERIES} numbers.`); warn(`${label}: a chart without numbers was left out.`); return; }
+      const type = c.pick(item.type, CHART_TYPES, `${label} chart type`, 'bar');
+      const labels = (Array.isArray(item.labels) ? item.labels : []).slice(0, values.length).map(value => clean(value, 14));
+      elements.push({kind: 'chart', type, values: type === 'rating' ? [Math.min(5, Math.max(0, values[0]))] : ['pie', 'donut'].includes(type) ? values.map(value => Math.max(0, value)) : values,
+        ...(labels.some(Boolean) ? {labels} : {}), ...(clean(item.title, 40) ? {title: clean(item.title, 40)} : {}), ...(clean(item.unit, 6) ? {unit: clean(item.unit, 6)} : {}),
+        ...(Number.isInteger(item.highlight) && item.highlight >= 0 && item.highlight < values.length ? {highlight: item.highlight} : {}),
+        x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.48), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...base});
+      return;
+    }
+    if (item.kind === 'timeline') {
+      const events = (Array.isArray(item.events) ? item.events : []).slice(0, MAX_EVENTS).map(event => (event && typeof event === 'object' && clean(event.label, 18) ? {label: clean(event.label, 18), ...(clean(event.when, 10) ? {when: clean(event.when, 10)} : {})} : null)).filter(Boolean);
+      if (events.length < 2) { if (!lenient) fail(`${label} needs 2-${MAX_EVENTS} events with a label.`); warn(`${label}: a timeline needs two events or more, so it was left out.`); return; }
+      elements.push({kind: 'timeline', events, ...(Number.isInteger(item.now) && item.now >= 0 && item.now < events.length ? {now: item.now} : {}), y: c.coord(item.y, `${label} y`, 0.25, 0.75, 0.5), ...base});
+      return;
+    }
+    if (item.kind === 'network') {
+      const nodes = (Array.isArray(item.nodes) ? item.nodes : []).slice(0, MAX_EVENTS).map(node => (node && typeof node === 'object' && clean(node.label, 18) ? {label: clean(node.label, 18), ...(node.icon && (PROPS.includes(propName(node.icon)) || kitRef(node.icon, 'prop')) ? {icon: kitRef(node.icon, 'prop') || propName(node.icon)} : {})} : null)).filter(Boolean);
+      if (nodes.length < 2) { if (!lenient) fail(`${label} needs 2-${MAX_EVENTS} nodes with a label.`); warn(`${label}: a network needs two nodes or more, so it was left out.`); return; }
+      const links = (Array.isArray(item.links) ? item.links : []).slice(0, 12).filter(pair => Array.isArray(pair) && pair.length === 2 && pair.every(n => Number.isInteger(n) && n >= 1 && n <= nodes.length) && pair[0] !== pair[1]).map(([a, b]) => [a - 1, b - 1]);
+      elements.push({kind: 'network', nodes, links, x: c.coord(item.x, `${label} x`, 0.2, 0.8, 0.5), y: c.coord(item.y, `${label} y`, 0.25, 0.7, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...base});
       return;
     }
     if (item.kind === 'picture') {
@@ -215,14 +245,14 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
         ...(effect === 'progress' ? {value: Math.round(Math.min(100, Math.max(0, Number(item.value) || 0)))} : {}), ...base});
       return;
     }
-    c.problem(`${label} kind must be figure, prop, text, arrow, bubble, picture or fx.`);
+    c.problem(`${label} kind must be figure, prop, text, arrow, bubble, picture, chart, timeline, network or fx.`);
   });
   if (!elements.length) fail('A drawn scene needs at least one element the engine can draw.');
   const focus = (Array.isArray(raw.focus) ? raw.focus : []).slice(0, MAX_FOCUS).map((item, k) => (item && typeof item === 'object' ? {...(phrase(item.at) ? {at: phrase(item.at)} : {}), x: c.coord(item.x, `Focus ${k + 1} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `Focus ${k + 1} y`, 0.1, 0.9, 0.5), zoom: Math.round(Math.min(2.5, Math.max(1, Number(item.zoom) || 1.4)) * 100) / 100} : c.problem(`Focus ${k + 1} must be an object.`, null))).filter(Boolean);
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, STICK_LOOKS, 'Stickman look', 'classic')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, STICK_LOOKS, 'Stickman look', 'classic')} : {}), ...(raw.design !== undefined ? {design: c.pick(raw.design, DESIGNS, 'Motion design', 'vector')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -399,7 +429,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false} = {}) {
+function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false, designs = false} = {}) {
   const engines = E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
@@ -411,12 +441,17 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     'Sets that are easy to misread: ocean is under water (light rays, seaweed, the sea floor), for divers and sea life; ships, sailors and the sea surface go on beach (sky, sea and sand) or storm with ship and waves props. space is outer space, night is a city at night, abstract and none are plain backdrops.',
     ...(looks ? [`A stickman shot of a video that mixes the stickman looks names its look: "look": ${list(STICK_LOOKS)}.`] : []),
     ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(BOARDS)}.`] : []),
+    ...(designs ? [`A motion shot of a video that mixes the motion designs names its design: "design": ${list(DESIGNS)}.`] : []),
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
     `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts; keyword is one big hand-lettered word in a top corner that names the beat; versus is a divider down the frame for comparing two things, its text in the middle circle, e.g. "VS"; the prop head is a head in profile to put a thought or a scene inside), "x", "y", "size", "accent"?}`,
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan, impact, lightning, explosion, fire, dust, spiral, crack), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
     ...(pictures ? [`- {"kind": "picture", "describe": what the picture shows (10-${Il.LIMITS.describe} characters: the subject, what happens, the place, the feeling; no words in it), "x"?: centre 0.15-0.85, "y"?: centre 0.2-0.75, "size"?: s|m|l|xl (l), "at"?} - a detailed illustration drawn for this shot by an illustrator and traced by the hand (PAID: see PICTURES; at most ${MAX_PICTURES} per shot). Other elements (labels, arrows, words, effects, characters) may sit around it.`] : []),
+    `- {"kind": "chart", "type": ${list(CHART_TYPES)}, "values": 1-${MAX_SERIES} numbers, "labels"?: one short label per value, "title"?: what it shows, "unit"?: e.g. "$", "%", "M", "highlight"?: the index of the value that matters, "x"?, "y"?, "size"?, "at"?} - builds on its words (bars grow, a line draws, a pie sweeps, stars fill: rating is one value 0-5). Use only numbers the narration says; never invent data.`,
+    `- {"kind": "timeline", "events": 2-${MAX_EVENTS} [{"label": up to 18 chars, "when"?: a year or date}], "now"?: the index of the current event, "y"?, "at"?} - a bar with a medallion for each event, drawn left to right.`,
+    '- A text with style "statement" is a whole sentence of up to 90 characters (key words between *stars* light up): kinetic type that builds word by word; give it the frame or most of it. Style "poster" is one or two giant words across the frame; list it before a picture or figure so it sits behind them.',
+    `- {"kind": "network", "nodes": 2-${MAX_EVENTS} [{"label": up to 18 chars, "icon"?: a prop}], "links": [[node number, node number], ...] (numbers start at 1), "x"?, "y"?, "size"?, "at"?} - who is connected to whom: nodes appear, then the links draw with a flow along them.`,
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
@@ -429,4 +464,4 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
   ].join('\n');
 }
 
-module.exports = {MAX_PICTURES, BOARDS, STICK_LOOKS, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

@@ -17,7 +17,7 @@ const ENGINES = Object.freeze({
   stickman: {name: 'Stickman animation', draws: true, finish: 'cartoon', strengths: 'people and situations acted out: emotions, mistakes, reactions, humour, cause and effect, "you" moments, energy', risks: 'cartoon tone can undercut a grave or sensitive subject'},
   handdrawn: {name: 'Hand-drawn whiteboard animation', draws: true, finish: 'wb', plan: 'Whiteboard animation: a hand draws every picture line by line on the narrator\'s words, writes the words, colours the drawing in, and the board moves on to the next picture (owner references: whiteboard-animation tutorials and After Skool). The people are drawn as people (proportions, clothes, hands, expressive faces), never stick figures. Build each picture so it explains the line: a person and what they think or feel, the object the words name, handwritten labels and arrows, a keyword, a comparison. A picture may grow across several lines (add to the same board on each cue) before the board moves on. Places, colour and composition are your choice: make every picture appealing and catchy for this audience.', strengths: 'explaining ideas, psychology, self-improvement, business and stories with a hand that draws in front of the viewer; people with real expressions; words and diagrams written as they are said', risks: 'drawing takes time, so give each picture room to be drawn; a stick figure beside a drawn person can look like two different films'},
   atelier: {name: 'Atelier (designed per shot)', draws: false, composes: true, finish: null, strengths: 'anything designed from scratch for this video: kinetic typography, a number that must hit, a diagram or chart assembling, an abstract visual metaphor, a comparison, a list, a title; a look nobody else has', risks: 'each shot costs Claude tokens to design; it cannot keep the drawn cast (people stay in stickman or hand-drawn shots); many atelier shots in a row read as slides unless the beats and framings vary'},
-  motion: {name: 'Motion graphics', draws: true, finish: 'flat', strengths: 'numbers, comparisons, lists, processes, timelines, kinetic words and emphasis; clean and fast', risks: 'with no person or place it can feel cold; long runs of it read as slides'},
+  motion: {name: 'Motion graphics', draws: true, finish: 'flat', strengths: 'numbers, charts, comparisons, lists, processes, timelines, kinetic words and emphasis; flat-design people and places; clean and fast', risks: 'with no person or place it can feel cold; long runs of charts or words read as slides'},
 });
 
 // The story mix draws a shot without a named engine as stickman (the cast's home), but no engine leads.
@@ -46,6 +46,16 @@ const LOOKS = Object.freeze({
   doodle: {name: 'doodle', plan: 'Marker doodles on a white page with a bold ground. Show every line literally with a visual gag (to explain that water was far away, a man carries a whole pond on his head). Reactions in face close-ups (a figure size xl, focus zoom on the face, big expressions, sweat or shock emotes). Objects may have faces. Very quick cuts (1-3 s), no camera moves beyond a punch-in.'},
 });
 
+// The motion engine's designs (the style's drawing.design, 0.35; research/motion-graphics-references.md): each its own
+// backdrop, people and way of building a shot. Experience to plan with, not rules.
+const DESIGNS = Object.freeze({
+  vector: {name: 'vector world', plan: 'Flat illustrated scenes with depth: a gradient backdrop with soft glow and floating particles, flat people without outlines acting in the scene (often seen from behind, looking into it), big simple shapes, warm light against deep colour, a timeline bar for history. Use it for wonder, big ideas, history and science: places and moments the viewer should feel.'},
+  infographic: {name: 'infographic cartoon', plan: 'Bright flat sets with proportioned people in thin outlines who act and talk (speech bubbles), surrounded by icons, score dials, star ratings, counters and versus splits. Fast: a new idea every 2-3 seconds. Use it for stories about people, money, products and comparisons.'},
+  kinetic: {name: 'kinetic type', plan: 'The words carry the shot: a bold sentence builds word by word (text style "statement", key words between *stars* light up in the accent), big numbers count up, a stamp lands; strong colour fields and one or two icons at most. Use it for hooks, claims, turning points and lists the viewer must remember.'},
+  collage: {name: 'documentary collage', plan: 'Cinematic collage: cut-outs (a picture with a white sticker edge, a person, a product) on a bold colour field with halftone and paper grain, giant poster words behind them (text style "poster", placed before the cut-out so it sits behind), stamps and headline cards, spotlights and falling particles for drama. Use it for the turns of a business or history story: a reveal, a rise, a scandal, a rivalry.'},
+  data: {name: 'data desk', plan: 'Dark panels with titled charts that build on the words (chart: bar, line, area, pie, donut, rating), number callouts, date stamps and timelines. Use only numbers the narration says; one chart is the hero of its shot and its title says what it shows. Use it for evidence: growth, decline, shares, before and after.'},
+});
+
 // The hand-drawn engine's whiteboard looks (the style's drawing.board, 0.32; owner references 2026-10-16).
 const BOARDS = Object.freeze({
   cartoon: {name: 'colour cartoon', plan: 'Clean black line art coloured in with flat colour after the line, on a white board.'},
@@ -72,9 +82,9 @@ function plannerSources(spec, executable) {
 // The mix of an engine's own looks (owner request 2026-10-17: "the user can select the specific one, or the mix: the
 // program uses all features of that engine in one video"). Claude picks the look per scene, for a reason.
 const MIX_RULE = 'Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
-function promptGuide(primary, {mix = false, look = null, board = null, brief = null} = {}) {
+function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null} = {}) {
   const stickman = LOOKS[look] && look !== 'classic' && (mix || primary === 'stickman');
-  const stickMix = look === 'mix' && (mix || primary === 'stickman'), boardMix = board === 'mix' && (mix || primary === 'handdrawn');
+  const stickMix = look === 'mix' && (mix || primary === 'stickman'), boardMix = board === 'mix' && (mix || primary === 'handdrawn'), motionMain = mix || primary === 'motion';
   return [
     mix ? 'ENGINES. This video is a story mix: no engine leads. Each beat gets the engine that serves its job best (see the story director), and the video must still feel like one film.'
       : `ENGINES. This video's main look is ${ENGINES[primary].name} (${primary}). You decide, shot by shot, which engine and source serve the line best; the video must still feel like one film.`,
@@ -86,6 +96,8 @@ function promptGuide(primary, {mix = false, look = null, board = null, brief = n
     ...(stickman ? [`STICKMAN LOOK: ${LOOKS[look].name}. ${LOOKS[look].plan}`] : []),
     ...(stickMix ? [`STICKMAN LOOKS (mix): this video uses every stickman look. Give each stickman shot its look in sketch.look, chosen for what its scene needs: ${Object.entries(LOOKS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(primary === 'handdrawn' || mix ? [`HAND-DRAWN SHOTS: ${ENGINES.handdrawn.plan}${BOARDS[board] ? ` WHITEBOARD LOOK: ${BOARDS[board].name}. ${BOARDS[board].plan}` : ''}`] : []),
+    ...(DESIGNS[design] && motionMain ? [`MOTION DESIGN: ${DESIGNS[design].name}. ${DESIGNS[design].plan}`] : []),
+    ...(design === 'mix' && motionMain ? [`MOTION DESIGNS (mix): this video uses every motion design. Give each motion shot its design in sketch.design, chosen for what its scene needs: ${Object.entries(DESIGNS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(boardMix ? [`WHITEBOARD LOOKS (mix): this video uses every whiteboard look. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${Object.entries(BOARDS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
@@ -93,4 +105,4 @@ function promptGuide(primary, {mix = false, look = null, board = null, brief = n
   ].join('\n');
 }
 
-module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, primaryEngine, isMix, drawEngines, plannerSources, promptGuide};
+module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, primaryEngine, isMix, drawEngines, plannerSources, promptGuide};

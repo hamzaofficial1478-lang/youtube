@@ -54,3 +54,11 @@ test('Mix: an engine with several looks can use all of them in one video, chosen
   assert.doesNotMatch(E.promptGuide('stickman', {look: 'storybook'}), /\(mix\)/);
   assert.doesNotMatch(E.promptGuide('motion', {look: 'mix', board: 'mix'}), /\(mix\)/, 'a motion-graphics video is not told about other engines\' looks');
 });
+
+test('motion designs brief the planner, and their mix only where motion leads or mixes', () => {
+  assert.deepEqual(Object.keys(E.DESIGNS), ['vector', 'infographic', 'kinetic', 'collage', 'data']);
+  assert.match(E.promptGuide('motion', {design: 'data'}), /MOTION DESIGN: data desk\. .*Use only numbers the narration says/);
+  assert.match(E.promptGuide('motion', {design: 'mix'}), /MOTION DESIGNS \(mix\): .*sketch\.design.*collage \(documentary collage\)/);
+  assert.doesNotMatch(E.promptGuide('stickman', {design: 'mix'}), /MOTION DESIGN/, 'a stickman video is not told about motion designs');
+  assert.match(E.promptGuide('motion', {mix: true, design: 'kinetic'}), /MOTION DESIGN: kinetic type/);
+});

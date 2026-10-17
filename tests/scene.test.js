@@ -320,6 +320,18 @@ test('a plan stopped mid-way marks its picture and frame reservations unknown to
   assert.deepEqual(store.db.prepare('SELECT job_id, status FROM intelligence_usage ORDER BY job_id').all().map(row => `${row.job_id} ${row.status}`), ['job1 unknown', 'job1:frame:S02A:1:1 unknown', 'job1:picture:S01A:1:1 unknown', 'other reserved']);
 });
 
+test('a plan answer cut off because Claude thought too long says so, with the setting that fixes it; plans get up to 64,000 tokens', async t => {
+  const network = fakeNetwork({claudePlan: () => '{"summary": "Thinking long', claudeUsage: {prompt_tokens: 20000, completion_tokens: 63500, total_tokens: 83500}});
+  const {room, content, ids, family} = setup(t, network, {storyMap: false});
+  assert.equal(room.settings(family.id).plannerTokenLimit, 100000);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  assert.ok(JSON.parse(room.planJobRow(queued.job.id).scope).parts.every(part => part.maxCompletionTokens <= 64000 && part.maxCompletionTokens > 32000));
+  await room.processNextPlan();
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'quality_failed');
+  assert.match(job.error, /Claude ran out of room: it thought for about [\d,]+ tokens and the plan was cut off\. Raise the scene planner token limit/);
+});
+
 test('with frame composing switched off, the planner does not read the atelier guide', () => {
   const input = {family: {}, style: {name: 'S', summary: '', engine: 'stickman', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
   assert.match(planMessages(input)[0].content, /ATELIER SHOTS/);

@@ -14,7 +14,7 @@
   // Words are written out at a writing pace.
   const writeSeconds = text => Math.min(1.6, Math.max(0.4, 0.25 + String(text).length * 0.045));
   const PROP_SIZE = {s: 150, m: 230, l: 330, xl: 460};
-  const TEXT_BASE = {title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
+  const TEXT_BASE = {statement: 88, poster: 300, title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
   const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, none: 0};
@@ -32,6 +32,7 @@
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
     if (el.kind === 'picture') return 'draw';
+    if (['chart', 'timeline', 'network'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
@@ -49,6 +50,12 @@
   // just before the cut, and a picture cued on a later word only finished as the shot ended).
   const pictureSeconds = (el, ts = 0) => (el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
+    if (el.kind === 'chart' || el.kind === 'network') {
+      const w = PICTURE_W[el.size || 'l'] * K.W * (el.kind === 'network' ? 1.15 : 1), h = Math.min(0.7 * K.H, w * (el.kind === 'network' ? 0.55 : 0.62));
+      const x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.84 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
+      return {box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], center: [x, y], r: Math.min(w, h) / 2, w, h};
+    }
+    if (el.kind === 'timeline') { const y = el.y * K.H, h = 0.24 * K.H; return {box: [0.08 * K.W, y - h / 2, 0.92 * K.W, y + h / 2], center: [K.W / 2, y], r: h / 2}; }
     if (el.kind === 'picture') {
       const [vw, vh] = el.art?.viewBox || [3, 2], maxH = 0.72 * K.H;
       let w = PICTURE_W[el.size || 'l'] * K.W, h = w * vh / vw;
@@ -83,6 +90,18 @@
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
       if (el.kind !== 'text') return null;
+      if (el.style === 'statement' || el.style === 'poster') {
+        // Kinetic type (0.35): the sentence wraps into at most four centred lines; a poster is one line across the frame.
+        const words = el.text.split(/\s+/).filter(Boolean).map(word => ({text: word.replace(/\*/g, ''), hot: word.includes('*')})).filter(word => word.text);
+        let size = TEXT_BASE[el.style] * TEXT_SCALE[el.size || 'm'] * K.u, lines = wrapStatement(words, size, el.style === 'poster' ? Infinity : 0.84 * K.W);
+        if (el.style === 'poster') size *= Math.min(1, 0.94 * K.W / Math.max(1, lines[0].width));
+        else for (let k = 0; k < 6 && (lines.length > 4 || lines.some(line => line.width > 0.9 * K.W)); k++) { size *= 0.86; lines = wrapStatement(words, size, 0.84 * K.W); }
+        lines = wrapStatement(words, size, el.style === 'poster' ? Infinity : 0.84 * K.W);
+        const width = Math.max(...lines.map(line => line.width)), height = lines.length * size * 1.18, x = K.W / 2;
+        const y = Math.min(0.82 * K.H - height / 2, Math.max(0.06 * K.H + height / 2, el.y * K.H));
+        est[i] = {box: [x - width / 2, y - height / 2, x + width / 2, y + height / 2], center: [x, y], r: width / 2};
+        return {x, y, size, width, lines};
+      }
       // Words always fit inside the frame, even at the camera's closest zoom: a long line gets a smaller font.
       const base = textSize(el), safe = (K.W - 2 * K.M) / 1.12, natural = K.measure(el.text, base, {weight: 800}) * 1.08;
       const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
@@ -309,11 +328,172 @@
   }
   const NUMBER = /(-?\d[\d,]*(?:\.\d+)?)/;
   // Words wrapped into lines no wider than max.
+  function wrapStatement(words, size, max) {
+    const space = K.measure(' ', size, {weight: 900}), lines = [];
+    let line = {words: [], width: 0};
+    for (const word of words) {
+      const w = K.measure(word.text, size, {weight: 900});
+      if (line.words.length && line.width + space + w > max) { lines.push(line); line = {words: [], width: 0}; }
+      line.width += (line.words.length ? space : 0) + w; line.words.push({...word, w});
+    }
+    lines.push(line);
+    return lines;
+  }
   function wrapWords(text, size, max) {
     const lines = []; let line = '';
     for (const word of String(text).split(/\s+/)) { const next = line ? `${line} ${word}` : word; if (line && K.measure(next, size, {weight: 800}) > max) { lines.push(line); line = word; } else line = next; }
     return [...lines, line].slice(0, 4);
   }
+  // ------------------------------------------------------------ motion design (0.35; research/motion-graphics-references.md)
+  // Each design's backdrop, from the video's own palette so every design stays the same film. Pure functions of time.
+  function drawBackdrop(t) {
+    const {ctx, W, H, u} = K, bg = K.PAL.bg, acc = K.PAL.accent, ink = K.DARK ? '#FFFFFF' : K.PAL.ink;
+    ctx.save();
+    if (K.DESIGN === 'vector') {
+      const g = ctx.createRadialGradient(W * 0.5, H * 0.42, H * 0.05, W * 0.5, H * 0.5, H * 0.95);
+      g.addColorStop(0, K.mix(bg, acc, 0.22)); g.addColorStop(1, K.mix(bg, '#000000', 0.35)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const rand = K.seeded(41);
+      for (let k = 0; k < 22; k++) {
+        const x0 = rand() * W, y0 = rand() * H, s = (2 + rand() * 5) * u, speed = 0.01 + rand() * 0.03, y = (((y0 / H - t * speed) % 1) + 1) % 1 * H;
+        ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(t * 1.3 + k)); ctx.fillStyle = K.mix(acc, '#FFFFFF', 0.5); ctx.shadowColor = acc; ctx.shadowBlur = 10 * u;
+        ctx.beginPath(); ctx.arc(x0 + Math.sin(t * 0.5 + k) * 12 * u, y, s, 0, TAU); ctx.fill();
+      }
+    } else if (K.DESIGN === 'infographic') {
+      ctx.fillStyle = K.alpha(ink, 0.05);
+      for (let y = 24 * u, row = 0; y < H; y += 48 * u, row++) for (let x = (row % 2) * 24 * u; x < W; x += 48 * u) { ctx.beginPath(); ctx.arc(x, y, 3 * u, 0, TAU); ctx.fill(); }
+    } else if (K.DESIGN === 'kinetic') {
+      for (let k = 0; k < 3; k++) { const a = t * 0.15 + k * 2.1; ctx.fillStyle = K.alpha(acc, 0.08); ctx.beginPath(); ctx.arc(W * (0.2 + k * 0.3) + Math.cos(a) * 40 * u, H * (0.5 + 0.3 * Math.sin(k * 1.7)) + Math.sin(a) * 30 * u, H * (0.35 + k * 0.15), 0, TAU); ctx.fill(); }
+    } else if (K.DESIGN === 'data') {
+      ctx.fillStyle = K.mix(bg, '#000000', 0.2); ctx.fillRect(0, 0, W, H);
+      ctx.strokeStyle = K.alpha(ink, 0.06); ctx.lineWidth = 1.5 * u; ctx.beginPath();
+      for (let x = 0; x < W; x += 64 * u) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+      for (let y = 0; y < H; y += 64 * u) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+      ctx.stroke();
+      const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.35)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    } else if (K.DESIGN === 'collage') {
+      // A bold colour field with halftone dots fading across it, paper grain and a dark edge.
+      ctx.fillStyle = K.mix(acc, bg, 0.15); ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = K.alpha('#000000', 0.09);
+      for (let y = 11 * u; y < H; y += 22 * u) for (let x = 11 * u; x < W; x += 22 * u) { ctx.beginPath(); ctx.arc(x, y, 3.2 * u * (x / W), 0, TAU); ctx.fill(); }
+      const rand = K.seeded(57); ctx.fillStyle = K.alpha('#3B2A14', 0.06);
+      for (let k = 0; k < 320; k++) ctx.fillRect(rand() * W, rand() * H, 2 * u, 2 * u);
+      const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, H * 1.05); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.4)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    }
+    ctx.restore();
+  }
+  // Panels for charts, from the design: a dark data panel, a white card, or nothing on a kinetic field.
+  function panelStyle() {
+    if (K.DESIGN === 'data' || K.DARK) return {fill: K.mix(K.PAL.bg, '#000000', 0.35), line: K.alpha('#FFFFFF', 0.12), text: '#F2F4F5', sub: K.alpha('#F2F4F5', 0.65)};
+    if (K.DESIGN === 'kinetic') return {fill: null, line: null, text: K.PAL.ink, sub: K.alpha(K.PAL.ink, 0.65)};
+    return {fill: K.alpha('#FFFFFF', 0.94), line: K.FIN === 'info' ? K.PAL.ink : K.alpha(K.PAL.ink, 0.14), text: K.PAL.ink, sub: K.alpha(K.PAL.ink, 0.62)};
+  }
+  const fmtValue = (v, unit) => { const n = Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('en-US') : String(Math.round(v * 10) / 10); return unit ? (/^[$£€¥₹]/.test(unit) ? unit + n : n + unit) : n; };
+  const SERIES = () => [K.PAL.accent, C.blue, C.green, C.yellow, C.pink, C.purple, C.orange, C.teal];
+  // A chart builds on its words: bars grow one after another, a line draws, a pie sweeps, stars fill.
+  function drawChart(el, i, local) {
+    const {ctx, u} = K, [x0, y0, x1, y1] = LAYOUT.est[i].box, w = x1 - x0, h = y1 - y0, st = panelStyle(), acc = K.PAL.accent;
+    const inQ = ease.outCubic(clamp01(local / 0.3)), pad = Math.min(w, h) * 0.08, titleH = el.title ? h * 0.13 : 0, labelH = el.labels ? h * 0.1 : 0;
+    const px0 = x0 + pad, px1 = x1 - pad, py0 = y0 + pad + titleH + h * 0.04, py1 = y1 - pad - labelH, n = el.values.length, t0 = 0.25;
+    const muted = K.mix(st.text, st.fill || K.PAL.bg, 0.55), colours = SERIES();
+    ctx.save(); ctx.globalAlpha *= inQ; ctx.translate(0, (1 - inQ) * 24 * u);
+    if (st.fill) { ctx.fillStyle = st.fill; ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 18 * u); ctx.fill(); if (st.line) { ctx.strokeStyle = st.line; ctx.lineWidth = 3 * u; ctx.stroke(); } }
+    if (el.title) K.text(el.title, x0 + pad, y0 + pad + titleH * 0.45, titleH * 0.62, {color: st.text, align: 'left', outline: false, maxWidth: w - 2 * pad});
+    const label = (k, x, max) => { if (el.labels?.[k]) K.text(el.labels[k], x, py1 + labelH * 0.55, Math.min(h * 0.055, max * 0.2), {color: st.sub, weight: 700, outline: false, maxWidth: max * 0.95}); };
+    if (el.type === 'bar') {
+      const max = Math.max(...el.values.map(Math.abs), 1e-9), slot = (px1 - px0) / n, bw = slot * 0.62, vh = (py1 - py0) * 0.86;
+      el.values.forEach((v, k) => {
+        const q = ease.outCubic(clamp01((local - t0 - k * 0.12) / 0.6)), bh = vh * Math.max(0, v) / max * q, bx = px0 + slot * k + (slot - bw) / 2;
+        ctx.fillStyle = el.highlight === k || (el.highlight === undefined && n === 1) ? acc : el.highlight === undefined ? K.mix(acc, muted, 0.35) : muted;
+        if (bh > 0) { ctx.beginPath(); ctx.roundRect(bx, py1 - bh, bw, bh, Math.min(10 * u, bw / 4, bh / 2)); ctx.fill(); }
+        if (q > 0.5) K.text(fmtValue(v * q, el.unit), bx + bw / 2, py1 - bh - 20 * u, Math.min(bw * 0.4, h * 0.075), {color: st.text, outline: false, maxWidth: slot});
+        label(k, bx + bw / 2, slot);
+      });
+      ctx.strokeStyle = K.alpha(st.text, 0.3); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(px0, py1); ctx.lineTo(px1, py1); ctx.stroke();
+    } else if (el.type === 'line' || el.type === 'area') {
+      const min = Math.min(...el.values, 0), max = Math.max(...el.values), span = max - min || 1;
+      const pts = el.values.map((v, k) => [px0 + (px1 - px0) * (n === 1 ? 0.5 : k / (n - 1)), py1 - (py1 - py0) * 0.86 * (v - min) / span]);
+      const q = ease.inOutSine(clamp01((local - t0) / 1.1)), part = K.partial(pts, q);
+      if (el.type === 'area' && part.length > 1) { ctx.fillStyle = K.alpha(acc, 0.28); ctx.beginPath(); ctx.moveTo(part[0][0], py1); part.forEach(p => ctx.lineTo(p[0], p[1])); ctx.lineTo(part[part.length - 1][0], py1); ctx.closePath(); ctx.fill(); }
+      ctx.strokeStyle = acc; ctx.lineWidth = 7 * u; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.beginPath(); part.forEach((p, k) => (k ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.stroke();
+      pts.forEach((p, k) => {
+        label(k, p[0], (px1 - px0) / n);
+        if (n > 1 && q < k / (n - 1)) return;
+        ctx.fillStyle = el.highlight === k ? acc : st.fill || K.PAL.bg; ctx.strokeStyle = acc; ctx.lineWidth = 4 * u; ctx.beginPath(); ctx.arc(p[0], p[1], 9 * u, 0, TAU); ctx.fill(); ctx.stroke();
+        if (k === n - 1 || el.highlight === k) K.text(fmtValue(el.values[k], el.unit), p[0], p[1] - 34 * u, h * 0.08, {color: st.text, outline: false});
+      });
+    } else if (el.type === 'pie' || el.type === 'donut') {
+      const single = el.values.length === 1, values = single ? [el.values[0], Math.max(0, 100 - el.values[0])] : el.values, total = values.reduce((a, b) => a + b, 0) || 1;
+      const r = Math.min((px1 - px0) * (el.labels ? 0.32 : 0.45), (y1 - pad - py0) * 0.48), cx = el.labels ? px0 + r * 1.1 : (px0 + px1) / 2, cy = (py0 + y1 - pad) / 2, q = ease.inOutCubic(clamp01((local - t0) / 1.0));
+      let a = -Math.PI / 2;
+      values.forEach((v, k) => {
+        const sweep = TAU * v / total * q;
+        ctx.fillStyle = single && k === 1 ? K.alpha(st.text, 0.12) : el.highlight === undefined || el.highlight === k ? colours[k % colours.length] : muted;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a, a + sweep); ctx.closePath(); ctx.fill(); a += sweep;
+      });
+      if (el.type === 'donut') { ctx.fillStyle = st.fill || K.PAL.bg; ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, TAU); ctx.fill(); K.text(fmtValue((single ? el.values[0] : el.values[el.highlight ?? 0]) * q, el.unit ?? (single ? '%' : '')), cx, cy, r * 0.38, {color: st.text, outline: false}); }
+      (el.labels || []).forEach((name, k) => {
+        if (!name) return;
+        const ly = cy - r * 0.8 + k * Math.min(r * 0.42, 52 * u), lx = cx + r * 1.25;
+        ctx.fillStyle = el.highlight === undefined || el.highlight === k ? colours[k % colours.length] : muted; ctx.beginPath(); ctx.roundRect(lx, ly - 12 * u, 24 * u, 24 * u, 6 * u); ctx.fill();
+        K.text(`${name} ${fmtValue(el.values[k], el.unit)}`, lx + 36 * u, ly, Math.min(36 * u, h * 0.07), {color: st.text, align: 'left', weight: 700, outline: false, maxWidth: x1 - pad - lx - 36 * u});
+      });
+    } else if (el.type === 'rating') {
+      const v = el.values[0], q = clamp01((local - t0) / 0.9), size = Math.min((px1 - px0) / 5.6, (py1 - py0) * 0.6), cy = (py0 + py1) / 2, start = (px0 + px1) / 2 - size * 2.5;
+      const star = (cx, fill) => { const pts = K.frame(cx, cy, size * 0.46).star(0, 0, 1, 0.45, 5); ctx.beginPath(); pts.forEach(([px, py], k) => (k ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
+      for (let k = 0; k < 5; k++) {
+        const cx = start + size * (k + 0.5), part = clamp01(v * q - k);
+        star(cx, K.alpha(st.text, 0.15));
+        if (part > 0) { ctx.save(); ctx.beginPath(); ctx.rect(cx - size / 2, cy - size / 2, size * part, size); ctx.clip(); star(cx, C.yellow); ctx.restore(); }
+      }
+      K.text(`${(v * q).toFixed(1)} / 5`, (px0 + px1) / 2, Math.min(py1 + labelH * 0.5, cy + size * 0.85), size * 0.38, {color: st.text, outline: false});
+    }
+    ctx.restore();
+  }
+  // A timeline: the bar draws left to right, each event's medallion pops as the bar reaches it, the current one in the accent.
+  function drawTimeline(el, i, local) {
+    const {ctx, u} = K, [x0, , x1] = LAYOUT.est[i].box, y = LAYOUT.est[i].center[1], st = panelStyle(), n = el.events.length, acc = K.PAL.accent;
+    const q = ease.inOutSine(clamp01(local / (0.6 + 0.25 * n))), xb = x0 + (x1 - x0) * q, slot = (x1 - x0) / n, nowX = el.now !== undefined ? x0 + slot * (el.now + 0.5) : null;
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = K.alpha(st.text, 0.25); ctx.lineWidth = 14 * u; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(xb, y); ctx.stroke();
+    if (nowX !== null) { ctx.strokeStyle = acc; ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(Math.min(xb, nowX), y); ctx.stroke(); }
+    el.events.forEach((ev, k) => {
+      const ex = x0 + slot * (k + 0.5), p = clamp01((xb - ex) / (slot * 0.4) + 0.5);
+      if (p <= 0) return;
+      const hot = el.now === k, r = (hot ? 34 : 26) * u * ease.outBack(p);
+      ctx.save(); ctx.globalAlpha *= clamp01(p * 1.5);
+      ctx.fillStyle = hot ? acc : st.fill || K.mix(K.PAL.bg, '#FFFFFF', 0.2); ctx.strokeStyle = hot ? '#FFFFFF' : acc; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(ex, y, Math.max(0.5, r), 0, TAU); ctx.fill(); ctx.stroke();
+      K.text(ev.label, ex, y + (k % 2 ? 74 : -74) * u, 34 * u, {color: st.fill && !K.DARK ? K.PAL.ink : st.text, outline: !K.DARK, maxWidth: slot * 0.95});
+      if (ev.when) K.pill(ev.when, ex, y + (k % 2 ? -64 : 64) * u, 28 * u, {color: hot ? acc : K.mix(st.text, K.PAL.bg, 0.25)});
+      ctx.restore();
+    });
+    ctx.restore();
+  }
+  // A network: nodes pop in around the centre, then their links draw with a pulse flowing along each one.
+  function drawNetwork(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [cx, cy] = est.center, n = el.nodes.length, st = panelStyle(), acc = K.PAL.accent;
+    const rx = est.w * 0.38, ry = est.h * 0.36, r = Math.min(76 * u, est.h * 0.17);
+    const at = k => (n === 2 ? [cx + (k ? 1 : -1) * rx, cy] : [cx + Math.cos(-Math.PI / 2 + k * TAU / n) * rx, cy + Math.sin(-Math.PI / 2 + k * TAU / n) * ry]);
+    ctx.save(); ctx.lineCap = 'round';
+    el.links.forEach(([a, b], j) => {
+      const q = ease.inOutSine(clamp01((local - 0.15 * n - j * 0.18) / 0.5));
+      if (q <= 0) return;
+      const pa = at(a), pb = at(b), end = [pa[0] + (pb[0] - pa[0]) * q, pa[1] + (pb[1] - pa[1]) * q];
+      ctx.strokeStyle = acc; ctx.lineWidth = 5 * u; ctx.shadowColor = acc; ctx.shadowBlur = 12 * u; ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(end[0], end[1]); ctx.stroke(); ctx.shadowBlur = 0;
+      if (q >= 1) { const f = (local * 0.6 + j * 0.37) % 1; ctx.fillStyle = K.mix(acc, '#FFFFFF', 0.5); ctx.beginPath(); ctx.arc(pa[0] + (pb[0] - pa[0]) * f, pa[1] + (pb[1] - pa[1]) * f, 7 * u, 0, TAU); ctx.fill(); }
+    });
+    el.nodes.forEach((node, k) => {
+      const p = ease.outBack(clamp01((local - k * 0.15) / 0.35));
+      if (p <= 0) return;
+      const [x, y] = at(k);
+      ctx.save(); ctx.translate(x, y); ctx.scale(p, p);
+      ctx.fillStyle = st.fill || K.mix(K.PAL.bg, '#FFFFFF', 0.15); ctx.strokeStyle = acc; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill(); ctx.stroke();
+      ctx.restore();
+      if (node.icon && p > 0.6) K.render(K.propOf(node.icon)(K.frame(x, y, r * 1.55, 1), {tl: local, seed: k}), 1, 31 + k);
+      if (p > 0.3) K.pill(node.label, x, y + r + 38 * u, 38 * u, {color: K.mix(st.text, K.PAL.bg, 0.2)});
+    });
+    ctx.restore();
+  }
+
   // ------------------------------------------------------------ pictures (0.33)
   // A picture's shapes as Path2D with their lengths and boxes, measured once per shot on hidden SVG paths (the
   // path data was checked in Node: commands and numbers only).
@@ -390,6 +570,12 @@
   function buildPicture(g, seconds, local) {
     const {ctx} = K, n = g.paths.length;
     ctx.save(); ctx.translate(g.x0, g.y0); ctx.scale(g.s, g.s); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // Documentary collage: the picture is a cut-out with a white sticker edge and a soft shadow (under every shape that is in).
+    if (K.DESIGN === 'collage') {
+      ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.35)'; ctx.shadowBlur = 18 * K.u / g.s; ctx.shadowOffsetY = 6 * K.u; ctx.fillStyle = '#FFFFFF'; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 16 * K.u / g.s;
+      g.paths.forEach((path, k) => { if (!seconds || local >= seconds * k / n) { ctx.stroke(path.p2d); ctx.fill(path.p2d); } });
+      ctx.restore();
+    }
     g.paths.forEach((path, k) => {
       const p = seconds ? clamp01((local - seconds * k / n) / 0.32) : 1;
       if (p <= 0) return;
@@ -497,6 +683,29 @@
     const at = LAYOUT.textAt[i], {ctx, u} = K, color = el.accent || ['number', 'counter'].includes(el.style) ? K.PAL.accent : K.PAL.ink;
     const {x, y, size} = at;
     switch (el.style) {
+      case 'statement': case 'poster': {
+        // Word by word: a statement pops each word in with key words on an accent bar; a poster lands as one block.
+        const lh = size * 1.18, space = K.measure(' ', size, {weight: 900}), onAccent = K.lum(K.PAL.accent) > 0.55 ? '#141414' : '#FFFFFF';
+        let k = 0;
+        at.lines.forEach((line, li) => {
+          const ly = y + (li - (at.lines.length - 1) / 2) * lh;
+          let cx = x - line.width / 2;
+          for (const [wi, word] of line.words.entries()) {
+            const joined = word.hot && line.words[wi + 1]?.hot; // neighbouring key words share one bar
+            const q = el.style === 'poster' ? clamp01(local / 0.4) : clamp01((local - k * 0.08) / 0.22);
+            k++;
+            if (q > 0) {
+              const z = el.style === 'poster' ? 1 + 0.18 * (1 - ease.outCubic(q)) : ease.outBack(q);
+              ctx.save(); ctx.translate(cx + word.w / 2, ly); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 2);
+              if (word.hot && el.style === 'statement') { ctx.fillStyle = K.PAL.accent; ctx.beginPath(); ctx.roundRect(-word.w / 2 - size * 0.12, -size * 0.6, word.w + size * 0.24 + (joined ? space : 0), size * 1.14, size * 0.12); ctx.fill(); }
+              K.text(word.text, 0, 0, size, {color: word.hot && el.style === 'statement' ? onAccent : el.style === 'poster' ? (el.accent ? K.PAL.accent : K.alpha(K.PAL.ink, 0.9)) : word.hot ? K.PAL.accent : color, weight: 900, outline: el.style !== 'poster'});
+              ctx.restore();
+            }
+            cx += word.w + space;
+          }
+        });
+        break;
+      }
       case 'note': { const n = Math.ceil(el.text.length * clamp01(local * 28 / Math.max(1, el.text.length))); K.text(el.text.slice(0, n), x, y, size, {color, weight: 700, maxWidth: K.W - 2 * K.M}); break; }
       case 'number': { const q = clamp01(local / 0.25), z = 1 + 0.7 * (1 - ease.outCubic(q)); ctx.save(); ctx.translate(x, y); ctx.rotate(-0.08 * (1 - q)); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 3); K.text(el.text, 0, 0, size, {color, maxWidth: K.W - 2 * K.M}); ctx.restore(); break; }
       case 'counter': {
@@ -757,6 +966,9 @@
     else if (el.kind === 'arrow') drawArrow(el, i, t, local, p);
     else if (el.kind === 'bubble') drawBubble(el, i, t, local, p);
     else if (el.kind === 'picture') drawPicture(el, i, local, tm.enter);
+    else if (el.kind === 'chart') drawChart(el, i, local);
+    else if (el.kind === 'timeline') drawTimeline(el, i, local);
+    else if (el.kind === 'network') drawNetwork(el, i, local);
     else if (el.kind === 'fx' && !SCREEN_FX.has(el.effect) && !['shake', 'punch'].includes(el.effect)) drawFx(el, i, t, local, p);
     ctx.restore();
   }
@@ -764,11 +976,15 @@
     P = context.P; D = P.data;
     K.KIT = D.kit || {};
     K.TIP = null;
-    // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise.
-    const look = D.engine === 'stickman' ? D.look || (P.drawing?.look !== 'mix' ? P.drawing?.look : null) || 'classic' : null;
-    const params = {...P, finish: (look && LOOKS[look]) || FINISH[D.engine] || 'cartoon'};
+    // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise. A motion shot its
+    // design (0.35), the same way.
+    const own = value => (value && value !== 'mix' ? value : null);
+    const look = D.engine === 'stickman' ? D.look || own(P.drawing?.look) || 'classic' : null;
+    const design = D.engine === 'motion' ? own(D.design) || own(P.drawing?.design) || 'vector' : null;
+    const params = {...P, finish: (look && LOOKS[look]) || (design === 'infographic' ? 'info' : FINISH[D.engine]) || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
     if (D.board) K.WB = D.board;
+    K.DESIGN = design;
     HAND = (D.engine === 'stickman' || D.engine === 'handdrawn') && P.drawing?.hand === true;
     PEN = HAND || look === 'whiteboard';
     K.PEN = HAND; LASTHAND = null;
@@ -785,6 +1001,7 @@
       const rand = K.seeded(31); ctx.fillStyle = K.alpha('#7F8C99', 0.035);
       for (let k = 0; k < 7; k++) { ctx.beginPath(); ctx.ellipse(rand() * W, rand() * H, (0.05 + rand() * 0.12) * W, (0.02 + rand() * 0.05) * H, rand() * 3, 0, Math.PI * 2); ctx.fill(); }
     }
+    if (K.DESIGN) drawBackdrop(t);
     // Storybook: warm paper with a fine grain.
     if (K.FIN === 'story') { const rand = K.seeded(23); ctx.fillStyle = K.alpha('#7A5A40', 0.045); for (let k = 0; k < 900; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     const cam = camera(t);

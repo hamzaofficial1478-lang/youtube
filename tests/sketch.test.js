@@ -168,3 +168,23 @@ test('a shot may name its own stickman look (videos that mix the looks); picture
   assert.deepEqual(Il.validateArt(flat, {outlines: false}).issues, []);
   assert.match(Il.validateArt(flat).issues.join(' '), /dark outline/);
 });
+
+test('motion tools: charts, timelines, networks, kinetic statements and posters are checked; a motion shot names its design', () => {
+  const shot = elements => Sk.validate({engine: 'motion', design: 'data', elements}, {primary: 'motion'});
+  const chart = shot([{kind: 'chart', type: 'bar', values: [3, 5, '9'], labels: ['2019', '2021', '2023', 'extra'], title: 'Shops opened', unit: '$', highlight: 2}]);
+  assert.deepEqual([chart.design, chart.elements[0].values, chart.elements[0].labels.length, chart.elements[0].highlight], ['data', [3, 5, 9], 3, 2]);
+  assert.deepEqual(shot([{kind: 'chart', type: 'rating', values: [7]}]).elements[0].values, [5], 'a rating stays within five stars');
+  assert.throws(() => shot([{kind: 'chart', type: 'bar', values: []}]), /chart|values/);
+  assert.throws(() => shot([{kind: 'chart', type: 'radar', values: [1]}]), /chart type/);
+  const line = shot([{kind: 'timeline', events: [{label: 'Founded', when: '1971'}, {label: 'Today'}], now: 1}]).elements[0];
+  assert.deepEqual([line.events.length, line.now, line.events[1].when], [2, 1, undefined]);
+  assert.throws(() => shot([{kind: 'timeline', events: [{label: 'Alone'}]}]), /timeline|events/);
+  const net = shot([{kind: 'network', nodes: [{label: 'Bank', icon: 'bank'}, {label: 'You'}, {label: 'Shop', icon: 'dragon'}], links: [[1, 2], [2, 3], [3, 3], [1, 9]]}]).elements[0];
+  assert.deepEqual([net.nodes[0].icon, net.nodes[2].icon, net.links], ['building', undefined, [[0, 1], [1, 2]]], 'icons from the props, links by node number, bad links dropped');
+  const words = shot([{kind: 'text', style: 'statement', text: 'The farmer keeps only *ten cents* of every cup you buy, every single morning'}, {kind: 'text', style: 'poster', text: 'BILLIONS'}]);
+  assert.deepEqual([words.elements[0].text.length > 48, words.elements[0].y, words.elements[1].style], [true, 0.45, 'poster'], 'a statement keeps its whole sentence and sits in the middle');
+  assert.throws(() => Sk.validate({design: 'neon', elements: [{kind: 'text', text: 'Hi'}]}), /Motion design/);
+  const guide = Sk.promptGuide('motion', {designs: true});
+  assert.match(guide, /"kind": "chart"[\s\S]*never invent data[\s\S]*"kind": "timeline"[\s\S]*style "statement"[\s\S]*"kind": "network"/);
+  assert.match(guide, /names its design: "design": vector/);
+});

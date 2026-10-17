@@ -215,6 +215,35 @@ test('Mix: a shot draws in its own look; a style set to mix draws the classic lo
   }
 });
 
+test('motion engine v2: every design draws its own way; charts, timelines and networks build on their words; people are flat design', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const motion = {primary: 'motion', palette: {bg: '#16193A', ink: '#F4F1EA', accent: '#F2A541'}};
+    const shot = (design, elements) => ({engine: 'motion', design, set: 'none', camera: 'still', transition: 'cut', elements});
+    const scene = [{kind: 'text', style: 'title', text: 'Coffee'}, {kind: 'prop', prop: 'cup', x: 0.5, y: 0.55, size: 'l'}];
+    const designs = [];
+    for (const design of ['vector', 'infographic', 'kinetic', 'collage', 'data']) designs.push(await frame(renderer, shot(design, scene), 2, motion));
+    assert.ok(designs.every((png, k) => designs.every((other, j) => j === k || !png.equals(other))), 'each design has its own backdrop and finish');
+    assert.ok(designs[0].equals(await frame(renderer, shot(undefined, scene), 2, {...motion, drawing: {look: 'classic', hand: false, design: 'vector'}})), 'the style\'s design when the shot names none');
+    for (const element of [
+      {kind: 'chart', type: 'bar', values: [1, 3, 5], labels: ['a', 'b', 'c'], title: 'Bars'},
+      {kind: 'chart', type: 'line', values: [1, 4, 2, 6]}, {kind: 'chart', type: 'area', values: [2, 3, 5]},
+      {kind: 'chart', type: 'pie', values: [10, 30, 60], labels: ['x', 'y', 'z']}, {kind: 'chart', type: 'donut', values: [62]}, {kind: 'chart', type: 'rating', values: [4]},
+      {kind: 'timeline', events: [{label: 'Start', when: '1990'}, {label: 'Now', when: '2025'}], now: 1},
+      {kind: 'network', nodes: [{label: 'A', icon: 'coin'}, {label: 'B'}, {label: 'C'}], links: [[1, 2], [2, 3]]},
+      {kind: 'text', style: 'statement', text: 'Only *ten cents* reach the farmer'}, {kind: 'text', style: 'poster', text: 'BILLIONS'},
+    ]) {
+      const early = await frame(renderer, shot('data', [element]), 0.35, motion), late = await frame(renderer, shot('data', [element]), 2.8, motion);
+      assert.ok(!early.equals(late), `${element.type || element.style || element.kind} builds over time`);
+    }
+    const person = [{kind: 'figure', pose: 'stand', x: 0.5, size: 'l'}];
+    assert.ok(!(await frame(renderer, shot('vector', person), 1.5, motion)).equals(await frame(renderer, {...shot('vector', person), engine: 'stickman'}, 1.5, motion)), 'a motion person is not a stick figure');
+  } finally {
+    await renderer.close();
+  }
+});
+
 test('a drawing browser that is restarted (a stall during a render) draws again on the same renderer', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async t => {
   const renderer = new MotionRenderer({browser}), out = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'restart-'));
   t.after(() => require('node:fs').rmSync(out, {recursive: true, force: true}));

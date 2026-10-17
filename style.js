@@ -51,7 +51,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
-    features: ['Kinetic words, counters, charts, timelines and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
+    features: ['Designs: Vector world, Infographic cartoon, Kinetic type, Documentary collage, Data desk, or Mix of all designs (choose in the style)', 'Charts, timelines, networks and kinetic sentences that build on the narrator\'s words; flat-design people and places', 'Kinetic words, counters and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
@@ -84,11 +84,13 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v8';
+const LAUNCH_VERSION = 'Launch library v9';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
 const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
 const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase', 'mix']);
+// The motion engine's designs (0.35), or a mix of them.
+const DRAWING_DESIGNS = Object.freeze(['vector', 'infographic', 'kinetic', 'collage', 'data', 'mix']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -140,7 +142,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'motion-graphics', upgrade: 'Launch library v3 (0.21): the motion-graphics engine draws its own shots; Claude decides when a stick figure, an ink sketch or stock footage serves a line better.', spec: {
+  {key: 'motion-graphics', upgrade: 'Launch library v9 (0.35): motion engine v2 - five designs (vector world, infographic cartoon, kinetic type, documentary collage, data desk) used as a mix, charts, timelines, networks and kinetic sentences, flat-design people (research/motion-graphics-references.md). Claude still decides when a stick figure, an ink sketch or stock footage serves a line better.', spec: {
     name: 'Motion Graphics',
     summary: 'Fast, text-safe animated graphics with stable scene IDs; built for strong hooks, workflows and product concepts.',
     bestFit: ['Fast hooks and Shorts', 'Workflows and tutorials', 'Tech and product concepts'],
@@ -155,6 +157,7 @@ const LAUNCH_PROFILES = [
     visuals: {sources: ['generated-graphics', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: false},
     audio: {musicMoods: ['energetic', 'electronic', 'driving'], duckingDb: -16, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'motion-graphics'},
+    drawing: {look: 'classic', hand: false, design: 'mix'},
     qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
@@ -371,7 +374,7 @@ function validateStyleSpec(input) {
   // Optional: a style without it draws the classic look without the hand.
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
-    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')})};
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'motion design')})};
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
@@ -617,7 +620,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -805,4 +808,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS};

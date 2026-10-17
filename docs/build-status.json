@@ -1,7 +1,7 @@
 {
-  "version": "0.34.0",
+  "version": "0.35.0",
   "updated": "2026-10-16",
-  "nextAction": "Build the motion-graphics engine to full depth (research first), with its looks, Mix and paid pictures; then a demo video; show the owner.",
+  "nextAction": "Draw and render the planned motion demo (scratchpad demo7: node flow.js draw, then edit, then overlay.js) and show the owner; ask about the map data package; then the OverSimplified-inspired stickman look.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -386,6 +386,13 @@
           "status": "testing",
           "remaining": "A full Claude-planned video in Mix; the owner's verdict.",
           "evidence": "0.34.0 (2026-10-17): one picture checked in all five stickman looks and motion graphics; npm test 280/280 passed."
+        },
+        {
+          "id": "P06p",
+          "title": "Motion engine v2: five designs or a mix, charts, timelines, networks and kinetic type, flat-design people",
+          "status": "testing",
+          "remaining": "Render the planned demo and show the owner; maps need a data package and the owner's go-ahead.",
+          "evidence": "0.35.0 (2026-10-17): designs and tools rendered and checked; a live Claude plan completed with designs chosen per scene; npm test 284/284 passed."
         },
         {
           "id": "S02",

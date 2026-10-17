@@ -42,7 +42,7 @@
       PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
       head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };
-  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6, wb: 3.8};
+  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6, wb: 3.8, info: 3.4};
   K.LW = () => (K.FIN === 'wb' && K.WB === 'pencil' ? 2.6 : LINE[K.FIN] || 5.2) * K.u;
   // Background colours sit back so the foreground reads: pastel on light styles, dim on dark ones.
   K.tone = (c, k = 0.3) => K.mix(K.col(c), K.PAL.bg, K.DARK ? 0.72 : k);
