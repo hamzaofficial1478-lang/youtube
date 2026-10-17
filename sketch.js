@@ -8,6 +8,7 @@
 const E = require('./engines');
 const Il = require('./illustrate');
 const Kit = require('./kit');
+const Maps = require('./maps');
 
 const POSES = Object.freeze(['stand', 'talk', 'point', 'present', 'think', 'shock', 'cheer', 'facepalm', 'shrug', 'cross-arms', 'hands-hips', 'wave', 'walk', 'run', 'sit', 'type', 'hold', 'carry', 'phone', 'read', 'beg', 'fall', 'lie', 'sneak', 'dance', 'fist', 'cower', 'scratch-head', 'clap', 'thumbs-up', 'stop', 'jump', 'sleep', 'fight', 'reach', 'push', 'pull', 'throw', 'kneel', 'lean']);
 const EXPRESSIONS = Object.freeze(['neutral', 'happy', 'grin', 'laugh', 'excited', 'sad', 'cry', 'angry', 'rage', 'scared', 'shocked', 'surprised', 'worried', 'nervous', 'smug', 'suspicious', 'confused', 'thinking', 'sleepy', 'dead', 'love', 'starstruck', 'evil', 'disgusted', 'determined', 'bored',
@@ -17,10 +18,10 @@ const LOOK = Object.freeze({
   body: ['stick', 'creature', 'robot'],
   hair: ['none', 'short', 'messy', 'spiky', 'curly', 'long', 'bun', 'ponytail', 'mohawk', 'afro', 'bald', 'side-part', 'bob', 'pigtails'],
   hairColor: ['black', 'brown', 'blonde', 'ginger', 'grey', 'white', 'red', 'blue', 'pink', 'purple', 'green'],
-  headwear: ['none', 'cap', 'beanie', 'fedora', 'top-hat', 'hard-hat', 'crown', 'chef-hat', 'graduation', 'cowboy', 'helmet', 'headband', 'party-hat', 'hood', 'beret', 'police-cap', 'wizard'],
+  headwear: ['none', 'cap', 'beanie', 'fedora', 'top-hat', 'hard-hat', 'crown', 'chef-hat', 'graduation', 'cowboy', 'helmet', 'headband', 'party-hat', 'hood', 'beret', 'police-cap', 'wizard', 'tricorn', 'bicorne', 'bowler', 'peaked-cap', 'spiked-helmet', 'turban', 'laurel'],
   eyewear: ['none', 'glasses', 'sunglasses', 'monocle', 'eyepatch', 'goggles'],
-  facial: ['none', 'mustache', 'beard', 'stubble', 'goatee'],
-  outfit: ['none', 'tie', 'bowtie', 'scarf', 'cape', 'lab-coat', 'suit', 'apron', 'vest', 'backpack', 'badge', 'dress', 'hoodie', 'uniform'],
+  facial: ['none', 'mustache', 'beard', 'stubble', 'goatee', 'handlebar'],
+  outfit: ['none', 'tie', 'bowtie', 'scarf', 'cape', 'lab-coat', 'suit', 'apron', 'vest', 'backpack', 'badge', 'dress', 'hoodie', 'uniform', 'officer', 'armor', 'robe'],
   mark: ['none', 'bandage', 'scar', 'freckles', 'blush'],
   color: ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'grey', 'brown', 'gold', 'teal'],
 });
@@ -49,7 +50,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/18';
+const VERSION = 'drawn-scene/19';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -59,6 +60,10 @@ const STICK_LOOKS = Object.freeze(Object.keys(E.LOOKS));
 const DESIGNS = Object.freeze(Object.keys(E.DESIGNS));
 const CHART_TYPES = Object.freeze(['bar', 'line', 'area', 'pie', 'donut', 'rating']);
 const MAX_SERIES = 8, MAX_EVENTS = 6;
+// 0.36: maps (countries, routes, pins on real geography, maps.js) and crowds (an army, a nation, a protest).
+const MAP_VIEWS = Object.freeze(['fit', ...Object.keys(Maps.VIEWS)]);
+const MAX_AREAS = 8, MAX_ROUTES = 4, MAX_PINS = 6, MAX_CROWD = 24;
+const CROWD_POSES = Object.freeze(['stand', 'cheer', 'fist', 'shock', 'wave', 'walk', 'run', 'talk', 'cower', 'clap', 'fight']);
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -220,8 +225,52 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
     if (item.kind === 'network') {
       const nodes = (Array.isArray(item.nodes) ? item.nodes : []).slice(0, MAX_EVENTS).map(node => (node && typeof node === 'object' && clean(node.label, 18) ? {label: clean(node.label, 18), ...(node.icon && (PROPS.includes(propName(node.icon)) || kitRef(node.icon, 'prop')) ? {icon: kitRef(node.icon, 'prop') || propName(node.icon)} : {})} : null)).filter(Boolean);
       if (nodes.length < 2) { if (!lenient) fail(`${label} needs 2-${MAX_EVENTS} nodes with a label.`); warn(`${label}: a network needs two nodes or more, so it was left out.`); return; }
-      const links = (Array.isArray(item.links) ? item.links : []).slice(0, 12).filter(pair => Array.isArray(pair) && pair.length === 2 && pair.every(n => Number.isInteger(n) && n >= 1 && n <= nodes.length) && pair[0] !== pair[1]).map(([a, b]) => [a - 1, b - 1]);
+      const links = (Array.isArray(item.links) ? item.links : []).slice(0, 12).filter(pair => Array.isArray(pair) && pair.length === 2 && pair.every(n => Number.isInteger(n) && n >= 1 && n <= nodes.length) && pair[0] !== pair[1]);
       elements.push({kind: 'network', nodes, links, x: c.coord(item.x, `${label} x`, 0.2, 0.8, 0.5), y: c.coord(item.y, `${label} y`, 0.25, 0.7, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...base});
+      return;
+    }
+    if (item.kind === 'crowd') {
+      const colors = (Array.isArray(item.colors) ? item.colors : [item.colors]).filter(Boolean).slice(0, 3).map(color => c.pick(color, LOOK.color, `${label} colour`, null)).filter(Boolean);
+      const banner = clean(item.banner, 24);
+      elements.push({kind: 'crowd', count: Math.round(Math.min(MAX_CROWD, Math.max(3, Number(item.count) || 9))), pose: c.pick(item.pose, CROWD_POSES, `${label} pose`, 'stand'), expression: c.pick((lenient && FACE_NEAR[item.expression]) || item.expression, EXPRESSIONS, `${label} expression`, 'neutral'),
+        ...(colors.length ? {colors} : {}), headwear: c.pick(item.headwear, LOOK.headwear, `${label} headwear`, 'none'), ...(banner ? {banner} : {}),
+        x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.55, 0.9, 0.82), width: c.coord(item.width, `${label} width`, 0.2, 1, 0.6), size: c.pick(item.size, ['s', 'm'], `${label} size`, 's'), facing: c.pick(item.facing, ['left', 'right'], `${label} facing`, 'right'), ...base});
+      return;
+    }
+    if (item.kind === 'map') {
+      if (elements.some(el => el.kind === 'map')) { if (!lenient) fail('A shot holds one map.'); warn(`${label}: a shot holds one map; the extra one was left out.`); return; }
+      // A map that was checked before (stored in a plan, drawn again at render) carries its steps and fitted view:
+      // read them back as areas, routes and pins in the same order, so checking twice gives the same map.
+      if (Array.isArray(item.steps) && !item.areas && !item.routes && !item.pins) {
+        const of = type => item.steps.filter(step => step?.type === type);
+        item = {...item, areas: of('area'), routes: of('route'), pins: of('pin')};
+      }
+      const where = (value, what) => { const at = Maps.place(value); if (!at) c.problem(`${what}: "${clean(Array.isArray(value) ? value.join(', ') : value, 40)}" is not a country on the map (or [longitude, latitude]).`); return at; };
+      const steps = [], named = [], points = [];
+      (Array.isArray(item.areas) ? item.areas : []).slice(0, MAX_AREAS).forEach((area, k) => {
+        const names = (Array.isArray(area?.countries) ? area.countries : [area?.countries ?? area?.country]).filter(Boolean).slice(0, 20);
+        const countries = [...new Set(names.map(name => Maps.country(name) || c.problem(`${label} area ${k + 1}: "${clean(name, 40)}" is not a country on the map (today's countries).`, null)).filter(Boolean))];
+        if (!countries.length) return;
+        named.push(...countries);
+        steps.push({type: 'area', countries, ...(clean(area.label, 24) ? {label: clean(area.label, 24)} : {}), color: c.pick(area.color, LOOK.color, `${label} area colour`, ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'teal', 'pink'][k % 8]),
+          ...(area.face ? {face: c.pick((lenient && FACE_NEAR[area.face]) || area.face, EXPRESSIONS, `${label} area face`, 'neutral')} : {}), ...(phrase(area.at) ? {at: phrase(area.at)} : {})});
+      });
+      (Array.isArray(item.routes) ? item.routes : []).slice(0, MAX_ROUTES).forEach((route, k) => {
+        const from = where(route?.from, `${label} route ${k + 1} from`), to = where(route?.to, `${label} route ${k + 1} to`);
+        if (!from || !to) return;
+        points.push(from, to);
+        steps.push({type: 'route', from, to, ...(clean(route.label, 24) ? {label: clean(route.label, 24)} : {}), ...(phrase(route.at) ? {at: phrase(route.at)} : {})});
+      });
+      (Array.isArray(item.pins) ? item.pins : []).slice(0, MAX_PINS).forEach((pin, k) => {
+        const at = where(pin?.place, `${label} pin ${k + 1}`);
+        if (!at) return;
+        points.push(at);
+        steps.push({type: 'pin', place: at, ...(clean(pin.label, 24) ? {label: clean(pin.label, 24)} : {}), ...(phrase(pin.at) ? {at: phrase(pin.at)} : {})});
+      });
+      const box = Array.isArray(item.view) && item.view.length === 4 && item.view.every(Number.isFinite) && item.view[2] > item.view[0] && item.view[3] > item.view[1] ? [Math.max(-200, item.view[0]), Math.max(-60, item.view[1]), Math.min(200, item.view[2]), Math.min(84, item.view[3])] : null;
+      const view = box ? 'box' : c.pick(item.view, MAP_VIEWS, `${label} view`, 'fit');
+      if (!steps.length && view === 'fit') { if (!lenient) fail(`${label} needs countries, routes or pins, or a view.`); warn(`${label}: a map with nothing on it was left out.`); return; }
+      elements.push({kind: 'map', view: box || (view === 'fit' ? Maps.fit(named, points) : [...Maps.VIEWS[view]]), steps, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.48), size: c.pick(item.size, SIZES, `${label} size`, 'xl'), ...base});
       return;
     }
     if (item.kind === 'picture') {
@@ -245,7 +294,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
         ...(effect === 'progress' ? {value: Math.round(Math.min(100, Math.max(0, Number(item.value) || 0)))} : {}), ...base});
       return;
     }
-    c.problem(`${label} kind must be figure, prop, text, arrow, bubble, picture, chart, timeline, network or fx.`);
+    c.problem(`${label} kind must be figure, prop, text, arrow, bubble, picture, chart, timeline, network, map, crowd or fx.`);
   });
   if (!elements.length) fail('A drawn scene needs at least one element the engine can draw.');
   const focus = (Array.isArray(raw.focus) ? raw.focus : []).slice(0, MAX_FOCUS).map((item, k) => (item && typeof item === 'object' ? {...(phrase(item.at) ? {at: phrase(item.at)} : {}), x: c.coord(item.x, `Focus ${k + 1} x`, 0.1, 0.9, 0.5), y: c.coord(item.y, `Focus ${k + 1} y`, 0.1, 0.9, 0.5), zoom: Math.round(Math.min(2.5, Math.max(1, Number(item.zoom) || 1.4)) * 100) / 100} : c.problem(`Focus ${k + 1} must be an object.`, null))).filter(Boolean);
@@ -384,7 +433,7 @@ function timing(sketch, words) {
   const list = (words || []).map(word => ({token: tokens(word.text).join(''), start: Math.max(0, word.start)})).filter(word => word.token);
   let cursor = 0;
   const at = value => { if (!value) return null; const hit = findPhrase(list, value, cursor); if (!hit) return null; cursor = hit.index; return Math.round(hit.seconds * 1000) / 1000; };
-  const elements = sketch.elements.map(el => ({t0: at(el.at), t1: el.until ? findPhrase(list, el.until, cursor)?.seconds ?? null : null, then: (el.then || []).map(step => at(step.at))}));
+  const elements = sketch.elements.map(el => ({t0: at(el.at), t1: el.until ? findPhrase(list, el.until, cursor)?.seconds ?? null : null, then: (el.then || el.steps || []).map(step => at(step.at))}));
   return {elements, focus: (sketch.focus || []).map(item => at(item.at))};
 }
 
@@ -408,6 +457,20 @@ const MOOD_EXPRESSION = {shock: 'shocked', think: 'thinking', point: 'excited', 
 
 // A deliberate, honest scene from the shot's narration: a set, the narrator character acting the line, up to two
 // props it mentions (alive on their own), its number as a counter, and a motion accent on a hook.
+// Countries a line names, as said and as the map knows them. Short names (US, UK) are skipped: they read as words.
+function countriesIn(narration) {
+  const words = String(narration).match(/[A-Za-zÀ-ſ'.-]+/g) || [], found = [];
+  for (let k = 0; k < words.length; k++) {
+    for (const n of [3, 2, 1]) {
+      const said = words.slice(k, k + n).join(' ').replace(/[.']+$/, '').replace(/'s$/, '');
+      if (n === 1 && said.length < 4) continue;
+      if (!/^[A-Z]/.test(said)) continue;
+      const name = Maps.country(said);
+      if (name && !found.some(item => item.name === name)) { found.push({name, said}); k += n - 1; break; }
+    }
+  }
+  return found;
+}
 function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null} = {}) {
   const lower = ` ${String(narration).toLowerCase()} `;
   const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(shotIndex % 2 ? 1 : 0).slice(0, 2);
@@ -415,6 +478,14 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
   const pose = POSE_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (shotIndex % 2 ? 'point' : 'talk');
   const left = shotIndex % 2 === 1, number = String(narration).match(/\b\d[\d,.]*%?/)?.[0];
   const engine = E.drawEngines(primary)[0] || 'motion', who = cast[0]?.id;
+  // A line that names countries gets a map (0.36): each colours in as it is said, a character points at it.
+  const named = countriesIn(narration).slice(0, 4);
+  if (named.length) {
+    return validate({engine, set: 'none', camera: 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements: [
+      {kind: 'map', areas: named.map(({name, said}) => ({countries: [name], label: said, at: said})), size: 'xl'},
+      ...(engine !== 'motion' || cast.length ? [{kind: 'figure', ...(who ? {who} : {}), pose: 'point', expression: MOOD_EXPRESSION[pose] || 'neutral', x: 0.12, y: 0.86, size: 'm'}] : []),
+    ]}, {primary, cast});
+  }
   const elements = [];
   if (engine !== 'motion' || cast.length) elements.push({kind: 'figure', ...(who ? {who} : {}), pose, expression: MOOD_EXPRESSION[pose] || 'neutral', x: left ? 0.72 : 0.27, y: 0.8, size: 'l', facing: left ? 'left' : 'right'});
   props.forEach((prop, k) => elements.push({kind: 'prop', prop, x: left ? 0.3 + k * 0.2 : 0.6 + k * 0.2, y: k ? 0.56 : 0.42, size: k ? 'm' : 'l', accent: k === 0}));
@@ -452,6 +523,8 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     `- {"kind": "timeline", "events": 2-${MAX_EVENTS} [{"label": up to 18 chars, "when"?: a year or date}], "now"?: the index of the current event, "y"?, "at"?} - a bar with a medallion for each event, drawn left to right.`,
     '- A text with style "statement" is a whole sentence of up to 90 characters (key words between *stars* light up): kinetic type that builds word by word; give it the frame or most of it. Style "poster" is one or two giant words across the frame; list it before a picture or figure so it sits behind them.',
     `- {"kind": "network", "nodes": 2-${MAX_EVENTS} [{"label": up to 18 chars, "icon"?: a prop}], "links": [[node number, node number], ...] (numbers start at 1), "x"?, "y"?, "size"?, "at"?} - who is connected to whom: nodes appear, then the links draw with a flow along them.`,
+    `- {"kind": "map", "areas"?: [{"countries": [names], "label"?, "color"?, "face"?: an expression (the country becomes a character), "at"?}] (max ${MAX_AREAS}; an empire or an alliance is one area made of today's countries), "routes"?: [{"from": a country or [longitude, latitude], "to": ..., "label"?, "at"?}] (max ${MAX_ROUTES}: a march, a trade route, an invasion arrow), "pins"?: [{"place": a country or [longitude, latitude], "label", "at"?}] (max ${MAX_PINS}), "view"?: ${list(MAP_VIEWS)} (fit = around what it names), "size"?: xl fills the frame (default), "at"?} - a real map: countries colour in on their words, arrows sweep, pins drop. Country names are today's.`,
+    `- {"kind": "crowd", "count": 3-${MAX_CROWD}, "pose"?: ${list(CROWD_POSES)}, "expression"?, "colors"?: up to 3 colours (an army's uniform), "headwear"?: one for all, "banner"?: a sign held up (up to 24 chars), "x"?, "y"?: ground, "width"?: 0.2-1 of the frame, "size"?: s|m, "facing"?} - a nation, an army, voters, a mob.`,
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
@@ -464,4 +537,4 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
   ].join('\n');
 }
 
-module.exports = {MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {MAP_VIEWS, CROWD_POSES, MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

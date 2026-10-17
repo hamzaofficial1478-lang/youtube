@@ -7,7 +7,7 @@
   const K = window.DK, C = K.COL, TAU = Math.PI * 2, clamp01 = K.clamp01, ease = K.ease;
   const FINISH = {stickman: 'cartoon', handdrawn: 'wb', motion: 'flat'};
   // The stickman engine's looks (the style's drawing.look): each its own finish.
-  const LOOKS = {classic: 'cartoon', whiteboard: 'board', storybook: 'story', doodle: 'doodle', illustrated: 'ink'};
+  const LOOKS = {classic: 'cartoon', whiteboard: 'board', storybook: 'story', doodle: 'doodle', illustrated: 'ink', chronicle: 'chron'};
   // Finishes whose words and labels are handwritten.
   const handwritten = () => K.FIN === 'ink' || K.FIN === 'wb';
   const WRITTEN = new Set(['title', 'label', 'highlight', 'keyword']);
@@ -32,7 +32,7 @@
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
     if (el.kind === 'picture') return 'draw';
-    if (['chart', 'timeline', 'network'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
+    if (['chart', 'timeline', 'network', 'map', 'crowd'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
@@ -50,6 +50,13 @@
   // just before the cut, and a picture cued on a later word only finished as the shot ended).
   const pictureSeconds = (el, ts = 0) => (el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
+    // A map (0.36) at size xl is the whole frame; smaller maps are panels like charts.
+    if (el.kind === 'map' && (el.size || 'xl') === 'xl') return {box: [0, 0, K.W, K.H], center: [K.W / 2, K.H / 2], r: K.H / 2, w: K.W, h: K.H};
+    if (el.kind === 'map') {
+      const w = PICTURE_W[el.size] * K.W * 1.15, h = w * 0.62, x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.84 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
+      return {box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], center: [x, y], r: Math.min(w, h) / 2, w, h};
+    }
+    if (el.kind === 'crowd') { const h = K.FIGURE_SIZE[el.size || 's'] * K.u * 1.15, w = el.width * K.W, x = Math.min(K.W - w / 2, Math.max(w / 2, el.x * K.W)), y = el.y * K.H; return {box: [x - w / 2, y - h, x + w / 2, y], center: [x, y - h / 2], r: w / 2, w, h}; }
     if (el.kind === 'chart' || el.kind === 'network') {
       const w = PICTURE_W[el.size || 'l'] * K.W * (el.kind === 'network' ? 1.15 : 1), h = Math.min(0.7 * K.H, w * (el.kind === 'network' ? 0.55 : 0.62));
       const x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.84 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
@@ -86,7 +93,7 @@
         est[i] = {...e, box: [cx - 0.5 * s, cy - 0.5 * s, cx + 0.5 * s, cy + 0.5 * s], center: [cx, cy]};
       }
     });
-    const solid = d.elements.map((el, i) => (['figure', 'prop', 'picture'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
+    const solid = d.elements.map((el, i) => (['figure', 'prop', 'picture', 'crowd'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
       if (el.kind !== 'text') return null;
@@ -103,7 +110,10 @@
         return {x, y, size, width, lines};
       }
       // Words always fit inside the frame, even at the camera's closest zoom: a long line gets a smaller font.
-      const base = textSize(el), safe = (K.W - 2 * K.M) / 1.12, natural = K.measure(el.text, base, {weight: 800}) * 1.08;
+      // Words placed side by side (a split: "this" left, "that" right) share the width instead of sliding together
+      // (motion demo 2026-10-17: two titles of a split were drawn over each other).
+      const split = d.elements.reduce((m, o, j) => (j !== i && o.kind === 'text' && !['statement', 'poster', 'chapter', 'headline', 'versus'].includes(o.style) && Math.abs(o.x - el.x) >= 0.2 && Math.abs(o.y - el.y) < 0.12 ? Math.min(m, Math.abs(o.x - el.x) * K.W * 0.92) : m), Infinity);
+      const base = textSize(el), safe = Math.min((K.W - 2 * K.M) / 1.12, split), natural = K.measure(el.text, base, {weight: 800}) * 1.08;
       const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
       const x = ['headline', 'chapter'].includes(el.style) ? K.W / 2 : el.style === 'keyword' ? (el.x <= 0.5 ? K.M + 0.05 * K.W + half : K.W - K.M - 0.05 * K.W - half) : el.style === 'versus' ? Math.min(0.8, Math.max(0.2, el.x)) * K.W : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
       const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
@@ -112,6 +122,31 @@
       const y = ['chapter', 'versus'].includes(el.style) ? K.H / 2 : el.style === 'keyword' ? Math.max(top, 0.13 * K.H) : el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
       est[i] = {box: [x - half, y - size * 0.55, x + half, y + size * 0.55], center: [x, y], r: half};
       return {x, y, size, width};
+    });
+    // A chart, network or map makes room for words above it (motion demo 2026-10-17: a counter sat on a chart's title).
+    d.elements.forEach((item, i) => {
+      if (!['chart', 'network', 'map'].includes(item.kind)) return;
+      const e = est[i];
+      let top = e.box[1];
+      d.elements.forEach((other, j) => { const b = est[j].box; if (other.kind === 'text' && other.style !== 'poster' && b[2] > e.box[0] && b[0] < e.box[2] && b[3] > e.box[1] && est[j].center[1] < e.center[1]) top = Math.max(top, b[3] + 0.02 * K.H); });
+      if (top > e.box[1]) {
+        const h = Math.max(0.25 * K.H, e.box[3] - top), w = (e.box[2] - e.box[0]) * h / (e.box[3] - e.box[1]), cx = e.center[0];
+        est[i] = {...e, box: [cx - w / 2, top, cx + w / 2, top + h], center: [cx, top + h / 2], r: Math.min(w, h) / 2, w, h};
+      }
+      // ...and steps aside for a character beside it, shrinking only when the frame has no room (demo: a rating panel
+      // covered a customer).
+      let [x1, y1, x2, y2] = est[i].box;
+      d.elements.forEach((other, j) => {
+        if (other.kind !== 'figure') return;
+        const f = est[j].box;
+        if (Math.min(x2, f[2]) - Math.max(x1, f[0]) <= 0 || Math.min(y2, f[3]) - Math.max(y1, f[1]) <= 0) return;
+        if ((f[0] + f[2]) / 2 > (x1 + x2) / 2) { const right = f[0] - 0.01 * K.W, shift = Math.min(x1 - K.M, x2 - right); x1 -= shift; x2 -= shift; if (x2 > right) x2 = right; }
+        else { const left = f[2] + 0.01 * K.W, shift = Math.min(K.W - K.M - x2, left - x1); x1 += shift; x2 += shift; if (x1 < left) x1 = left; }
+      });
+      if (x2 - x1 < (est[i].box[2] - est[i].box[0]) - 1 || x1 !== est[i].box[0]) {
+        const w = Math.max(0.2 * K.W, x2 - x1), h = (y2 - y1) * Math.min(1, w / (est[i].box[2] - est[i].box[0])), cy = (y1 + y2) / 2;
+        est[i] = {...est[i], box: [x1, cy - h / 2, x1 + w, cy + h / 2], center: [x1 + w / 2, cy], r: Math.min(w, h) / 2, w, h};
+      }
     });
     const uncued = d.elements.filter((el, i) => times.elements?.[i]?.t0 == null).length;
     let order = 0;
@@ -131,12 +166,21 @@
       const te = cue.t1 != null && cue.t1 > ts + 0.25 ? cue.t1 : null;
       // A change of pose or face anticipates its word by a beat, as an animator would key it.
       const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] != null ? Math.max(ts, cue.then[k] - 0.1) : ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
-      return {ts, te, enter, steps, cued: cue.t0 != null, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
+      // A map's areas, routes and pins arrive on their own words, one after another when they have none.
+      let last = ts + 0.15;
+      const marks = item.kind === 'map' ? item.steps.map((step, k) => (last = cue.then?.[k] != null ? Math.max(ts + 0.1, cue.then[k] - 0.15) : last + (k ? 0.6 : 0.2))) : null;
+      return {ts, te, enter, steps, marks, cued: cue.t0 != null, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
     });
-    // A shot never opens on an empty frame: when nothing would be on screen for the first 0.6 s, the first
+    // Two words never sit on each other: when a later text lands on an earlier one, the earlier one leaves as it comes.
+    d.elements.forEach((a, i) => d.elements.forEach((b, j) => {
+      if (a.kind !== 'text' || b.kind !== 'text' || a.style === 'poster' || b.style === 'poster' || el[j].ts <= el[i].ts) return;
+      const p = est[i].box, q = est[j].box;
+      if (Math.min(p[2], q[2]) > Math.max(p[0], q[0]) && Math.min(p[3], q[3]) > Math.max(p[1], q[1]) && (el[i].te == null || el[i].te > el[j].ts)) el[i].te = Math.max(el[i].ts + 0.4, el[j].ts - 0.12);
+    }));
+    // A shot never opens on an empty frame: when nothing would be on screen for the first 0.35 s, the first
     // character (or else the first thing) is there from the start.
     const shownIdx = d.elements.map((item, i) => i).filter(i => !['fx', 'arrow'].includes(d.elements[i].kind));
-    if (shownIdx.length && Math.min(...shownIdx.map(i => el[i].ts)) > 0.6) el[shownIdx.find(i => d.elements[i].kind === 'figure') ?? shownIdx.reduce((a, b) => (el[b].ts < el[a].ts ? b : a))].ts = 0.05;
+    if (shownIdx.length && Math.min(...shownIdx.map(i => el[i].ts)) > 0.35) el[shownIdx.find(i => d.elements[i].kind === 'figure') ?? shownIdx.reduce((a, b) => (el[b].ts < el[a].ts ? b : a))].ts = 0.05;
     // One pen draws one thing at a time: under the pen a drawing waits for the one before it to finish (a drawing on
     // a word waits a moment only, so it never drifts far from its word).
     if (PEN) {
@@ -468,6 +512,162 @@
     });
     ctx.restore();
   }
+  // ------------------------------------------------------------ maps (0.36)
+  // Natural Earth country shapes (maps.js, window.DMAP) on a Mercator view fitted to the map's box. Countries colour in
+  // from their middle on their words, routes sweep as arrows, pins drop; a country with a face reacts.
+  const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-80, Math.min(84, lat)) * Math.PI / 360));
+  let mapBoxes = null;
+  const shapeBoxes = () => (mapBoxes ??= Object.fromEntries(Object.entries(window.DMAP?.countries || {}).map(([name, polys]) => [name, polys.map(poly => { const r = poly[0]; return [Math.min(...r.map(p => p[0])), Math.max(...r.map(p => p[0]))]; })])));
+  function mapView(el, box) {
+    const [w, s, e, n] = el.view, [x0, y0, x1, y1] = box, want = (x1 - x0) / (y1 - y0), R = Math.PI / 180;
+    let a0 = w * R, a1 = e * R, b0 = mercY(s), b1 = mercY(n);
+    if ((a1 - a0) / (b1 - b0) < want) { const c = (a0 + a1) / 2, half = (b1 - b0) * want / 2; a0 = c - half; a1 = c + half; }
+    else { const c = (b0 + b1) / 2, half = (a1 - a0) / want / 2; b0 = c - half; b1 = c + half; }
+    const k = (x1 - x0) / (a1 - a0);
+    return {k, west: a0 / R, east: a1 / R, P: ([lon, lat]) => [x0 + (lon * R - a0) * k, y0 + (b1 - mercY(lat)) * k]};
+  }
+  // Traces a country (every part, and its copy across the date line when the view shows it) into the current path.
+  function traceCountry(name, view) {
+    const {ctx} = K, polys = window.DMAP?.countries?.[name], boxes = shapeBoxes()[name];
+    if (!polys) return;
+    polys.forEach((poly, k) => {
+      for (const shift of [0, -360, 360]) {
+        const [lo, hi] = boxes[k];
+        if (hi + shift < view.west - 1 || lo + shift > view.east + 1) continue;
+        poly.forEach(ring => ring.forEach(([lon, lat], j) => { const [x, y] = view.P([lon + shift, lat]); if (j) ctx.lineTo(x, y); else ctx.moveTo(x, y); }));
+      }
+    });
+  }
+  function mapStyle() {
+    const F = K.FIN;
+    if (F === 'wb' || F === 'board' || F === 'doodle') return {sea: K.PAL.bg, land: '#FFFFFF', border: K.PAL.ink, coast: K.PAL.ink, lw: 2.4, ink: true};
+    if (F === 'story' || F === 'chron' || F === 'ink') return {sea: '#9CC6D4', land: '#EFE2BF', border: '#A08B63', coast: '#5E4E36', lw: 1.6, paper: true};
+    if (K.DARK) return {sea: K.mix(K.PAL.bg, '#0B3B5C', 0.55), land: K.mix(K.PAL.bg, '#FFFFFF', 0.16), border: K.mix(K.PAL.bg, '#FFFFFF', 0.34), coast: K.mix(K.PAL.bg, '#FFFFFF', 0.5), lw: 1.4};
+    return {sea: '#BFE1F2', land: '#F5F1E6', border: '#B7B0A0', coast: '#7F7A6C', lw: 1.5};
+  }
+  function drawMap(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, full = (el.size || 'xl') === 'xl', st = mapStyle(), view = mapView(el, est.box), marks = LAYOUT.el[i].marks || [];
+    const all = Object.keys(window.DMAP?.countries || {}), q0 = clamp01(local / 0.35), placed = [];
+    // Labels never pile up: one that would sit on another moves down (or up) until it is free.
+    const pill = (text, x, y, size, color) => {
+      const w = K.measure(text, size, {weight: 800}) + size * 0.9, h = size * 1.5;
+      let py = y;
+      for (let n = 0; n < 6; n++) { if (!placed.some(b => Math.abs(b[0] - x) < (b[2] + w) / 2 && Math.abs(b[1] - py) < (b[3] + h) / 2)) break; py = y + (n % 2 ? -1 : 1) * Math.ceil((n + 1) / 2) * h * 1.05; }
+      placed.push([x, py, w, h]); K.pill(text, x, py, size, color ? {color} : {});
+    };
+    ctx.save(); ctx.globalAlpha *= q0;
+    if (!full) { ctx.fillStyle = K.alpha('#000000', 0.18); ctx.beginPath(); ctx.roundRect(x0 + 8 * u, y0 + 12 * u, x1 - x0, y1 - y0, 22 * u); ctx.fill(); }
+    ctx.beginPath(); if (full) ctx.rect(x0 - K.W, y0 - K.H, (x1 - x0) + 2 * K.W, (y1 - y0) + 2 * K.H); else ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 22 * u); ctx.clip();
+    ctx.fillStyle = st.sea; ctx.fillRect(x0 - K.W, y0 - K.H, 3 * K.W, 3 * K.H);
+    // Faint latitude lines on the sea, and the land with its borders.
+    ctx.strokeStyle = K.alpha(st.coast, 0.12); ctx.lineWidth = 1.5 * u; ctx.beginPath();
+    for (let lat = -60; lat <= 80; lat += 20) { const y = view.P([0, lat])[1]; ctx.moveTo(x0 - K.W, y); ctx.lineTo(x1 + K.W, y); }
+    ctx.stroke();
+    ctx.beginPath(); all.forEach(name => traceCountry(name, view));
+    ctx.fillStyle = st.land; ctx.fill('evenodd'); ctx.lineJoin = 'round';
+    ctx.strokeStyle = st.border; ctx.lineWidth = st.lw * u; ctx.stroke();
+    if (st.paper) { const rand = K.seeded(71); ctx.fillStyle = K.alpha('#7A5A40', 0.05); for (let k = 0; k < 500; k++) ctx.fillRect(x0 + rand() * (x1 - x0), y0 + rand() * (y1 - y0), 2 * u, 2 * u); }
+    // Areas colour in from their middle, then get a darker edge.
+    el.steps.forEach((step, k) => {
+      if (step.type !== 'area') return;
+      const q = ease.outCubic(clamp01((local - marks[k]) / 0.55));
+      if (q <= 0) return;
+      const col = K.col(step.color), [cx, cy] = areaSpot(step, view, est.box).point;
+      ctx.save(); ctx.beginPath(); step.countries.forEach(name => traceCountry(name, view)); ctx.clip('evenodd');
+      ctx.fillStyle = st.ink ? K.alpha(col, 0.72) : st.paper ? K.mix(col, st.land, 0.18) : col;
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(1, q * Math.hypot(K.W, K.H)), 0, TAU); ctx.fill(); ctx.restore();
+      ctx.save(); ctx.beginPath(); step.countries.forEach(name => traceCountry(name, view)); ctx.globalAlpha *= q; ctx.strokeStyle = K.mix(col, '#000000', 0.45); ctx.lineWidth = 3.2 * u; ctx.stroke(); ctx.restore();
+    });
+    ctx.restore();
+    ctx.save(); ctx.globalAlpha *= q0;
+    // Routes sweep as thick arrows on a curve; pins drop; then the labels and faces.
+    el.steps.forEach((step, k) => {
+      if (step.type !== 'route') return;
+      const q = ease.inOutSine(clamp01((local - marks[k]) / 0.9));
+      if (q <= 0) return;
+      const a = view.P(step.from), b = view.P(step.to), len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, bend = 0.18 * len;
+      const c = [(a[0] + b[0]) / 2 + (a[1] - b[1]) / len * bend * Math.sign(b[0] - a[0] || 1), (a[1] + b[1]) / 2 - Math.abs(b[0] - a[0]) / len * bend];
+      const at = f => [(1 - f) ** 2 * a[0] + 2 * (1 - f) * f * c[0] + f * f * b[0], (1 - f) ** 2 * a[1] + 2 * (1 - f) * f * c[1] + f * f * b[1]];
+      const pts = Array.from({length: 41}, (_, n) => at(q * n / 40)), tip = pts[40], prev = at(Math.max(0, q - 0.03)), ang = Math.atan2(tip[1] - prev[1], tip[0] - prev[0]);
+      const red = st.ink ? C.red : K.FIN === 'flat' || K.FIN === 'info' ? K.PAL.accent : '#C8302A', wdt = Math.min(16 * u, Math.max(8 * u, len * 0.035));
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const [col, w] of [[K.alpha('#000000', 0.55), wdt + 5 * u], [red, wdt]]) {
+        ctx.strokeStyle = col; ctx.lineWidth = w; ctx.beginPath(); pts.forEach(([x, y], n) => (n ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+        ctx.fillStyle = col; const s = w * 1.9; ctx.beginPath(); ctx.moveTo(tip[0] + Math.cos(ang) * s, tip[1] + Math.sin(ang) * s); ctx.lineTo(tip[0] + Math.cos(ang + 2.3) * s, tip[1] + Math.sin(ang + 2.3) * s); ctx.lineTo(tip[0] + Math.cos(ang - 2.3) * s, tip[1] + Math.sin(ang - 2.3) * s); ctx.closePath(); ctx.fill();
+      }
+      if (step.label && q >= 1) pill(step.label, at(0.5)[0], at(0.5)[1] - wdt * 2.4, 30 * u);
+    });
+    el.steps.forEach((step, k) => {
+      const q = clamp01((local - marks[k]) / 0.4);
+      if (q <= 0) return;
+      if (step.type === 'pin') {
+        const [x, y] = view.P(step.place), dy = (1 - ease.outBack(q)) * -60 * u, r = 15 * u;
+        ctx.save(); ctx.translate(x, y + dy);
+        ctx.fillStyle = K.alpha('#000000', 0.25 * q); ctx.beginPath(); ctx.ellipse(0, -dy, r * 0.8, r * 0.3, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = C.red; ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3.5 * u; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, -2.2 * r, r, Math.PI * 0.78, Math.PI * 2.22); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.arc(0, -2.2 * r, r * 0.4, 0, TAU); ctx.fill(); ctx.restore();
+        if (step.label && q >= 1) pill(step.label, x, y - 4.6 * r, 30 * u);
+      }
+      if (step.type === 'area' && (step.label || step.face) && q > 0.5) {
+        const {point: [x, y], size} = areaSpot(step, view, est.box), z = ease.outBack(clamp01((q - 0.5) * 2));
+        let ly = y;
+        if (step.face) { const R = Math.min(130 * u, Math.max(52 * u, size * 0.26)) * z; K.faceAt(x, y, Math.max(1, R), step.face, {tl: local, seed: k}); ly = y + R * 1.5; }
+        if (step.label) { ctx.save(); ctx.translate(x, ly); ctx.scale(z, z); ctx.translate(-x, -ly); pill(step.label, x, ly, 34 * u, K.mix(K.col(step.color), '#000000', 0.35)); ctx.restore(); }
+      }
+    });
+    if (!full) { ctx.strokeStyle = st.ink ? K.PAL.ink : K.alpha(st.coast, 0.6); ctx.lineWidth = 4 * u; ctx.beginPath(); ctx.roundRect(x0, y0, x1 - x0, y1 - y0, 22 * u); ctx.stroke(); }
+    ctx.restore();
+    LAYOUT.anchors[i] = est;
+  }
+  // A country's middle (its main shape's centroid), from the page's own data.
+  const labelPoints = {};
+  function countryPoint(name) {
+    if (labelPoints[name]) return labelPoints[name];
+    const polys = window.DMAP?.countries?.[name] || [[[[0, 0]]]], area = r => Math.abs(r.reduce((sum, [x, y], k) => { const [x2, y2] = r[(k + 1) % r.length]; return sum + x * y2 - x2 * y; }, 0));
+    const main = polys.map(p => p[0]).reduce((a, b) => (area(b) > area(a) ? b : a));
+    let cx = 0, cy = 0, a2 = 0;
+    main.forEach(([x, y], k) => { const [x2, y2] = main[(k + 1) % main.length], f = x * y2 - x2 * y; a2 += f; cx += (x + x2) * f; cy += (y + y2) * f; });
+    return (labelPoints[name] = a2 ? [cx / (3 * a2), cy / (3 * a2)] : main[0], labelPoints[name]);
+  }
+  function areaSpot(step, view, box) {
+    const [x0, y0, x1, y1] = box, inside = ([x, y]) => x > x0 + 0.06 * (x1 - x0) && x < x1 - 0.06 * (x1 - x0) && y > y0 + 0.1 * (y1 - y0) && y < y1 - 0.16 * (y1 - y0);
+    const spots = step.countries.map(name => { const boxes = shapeBoxes()[name] || [[0, 0]], [lon, lat] = countryPoint(name), span = boxes.reduce((m, [lo, hi]) => Math.max(m, hi - lo), 0), a = view.P([lon - span / 2, lat]), b = view.P([lon + span / 2, lat]); return {point: view.P([lon, lat]), size: Math.min(b[0] - a[0], (y1 - y0) * 0.5)}; });
+    const best = (spots.filter(spot => inside(spot.point)).length ? spots.filter(spot => inside(spot.point)) : spots).reduce((a, b) => (b.size > a.size ? b : a));
+    return {point: [Math.min(x1 - 0.1 * (x1 - x0), Math.max(x0 + 0.1 * (x1 - x0), best.point[0])), Math.min(y1 - 0.22 * (y1 - y0), Math.max(y0 + 0.14 * (y1 - y0), best.point[1]))], size: best.size};
+  }
+
+  // ------------------------------------------------------------ crowds (0.36)
+  // A nation, an army or a mob: rows of people (the style's own characters) with varied looks, the front row
+  // biggest, each with its own rhythm; a banner held up over them.
+  const CROWD_HAIR = ['short', 'messy', 'bald', 'curly', 'long', 'side-part', 'bun', 'spiky'], CROWD_COLOURS = ['blue', 'red', 'green', 'grey', 'brown', 'purple', 'orange', 'teal'];
+  function drawCrowd(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [x0, , x1] = est.box, rows = el.count <= 6 ? 1 : el.count <= 14 ? 2 : 3, seed = LAYOUT.el[i].seed, rand = K.seeded(seed);
+    const people = Array.from({length: el.count}, (_, k) => ({k, row: rows - 1 - (k % rows)})), dir = el.facing === 'left' ? -1 : 1;
+    // Back rows first, so the front row stands in front.
+    for (let row = rows - 1; row >= 0; row--) {
+      const inRow = people.filter(p => p.row === row), scale = 1 - row * 0.12, y = est.box[3] - row * 0.055 * K.H;
+      inRow.forEach((person, n) => {
+        const q = clamp01((local - person.k * 0.035) / 0.3);
+        if (q <= 0) return;
+        const x = x0 + (x1 - x0) * ((n + 0.5 + (row % 2) * 0.35) / (inRow.length + (row % 2) * 0.35)) + (rand() - 0.5) * 18 * u;
+        const look = {body: 'stick', hair: CROWD_HAIR[(seed + person.k * 3) % CROWD_HAIR.length], hairColor: ['black', 'brown', 'blonde', 'ginger', 'grey'][(seed + person.k) % 5], headwear: el.headwear || 'none', eyewear: 'none', facial: person.k % 4 === 1 ? 'mustache' : 'none', outfit: el.colors?.length && el.headwear !== 'none' ? 'uniform' : 'none', mark: 'none', color: el.colors?.length ? el.colors[person.k % el.colors.length] : CROWD_COLOURS[(seed + person.k * 5) % CROWD_COLOURS.length]};
+        const tl = local + person.k * 0.41, A = K.poseAngles(el.pose, tl, person.k);
+        ctx.save(); ctx.translate(x, y); ctx.scale(scale * ease.outBack(q), scale * ease.outBack(q)); ctx.translate(-x, -y);
+        K.drawFigure({x, y, dir, size: el.size || 's', A, pose: el.pose, expression: el.expression, emote: 'none', talk: el.pose === 'talk', tl, seed: seed + person.k, look, engine: D.engine}, 1);
+        ctx.restore();
+      });
+    }
+    if (el.banner && local > 0.3) {
+      const z = ease.outBack(clamp01((local - 0.3) / 0.35)), cx = (x0 + x1) / 2, top = est.box[1] - 0.02 * K.H, size = 40 * u, w = K.measure(el.banner, size, {weight: 800}) + size * 1.2, h = size * 1.7;
+      ctx.save(); ctx.translate(cx, top); ctx.scale(z, z); ctx.rotate(Math.sin(local * 2.2) * 0.03);
+      ctx.strokeStyle = '#7A5230'; ctx.lineWidth = 7 * u; ctx.beginPath(); [-1, 1].forEach(side => { ctx.moveTo(side * w * 0.36, 0); ctx.lineTo(side * w * 0.36, 0.2 * K.H); }); ctx.stroke();
+      ctx.fillStyle = '#FFF8E7'; ctx.strokeStyle = K.DARK ? '#23272E' : K.PAL.ink; ctx.lineWidth = 4 * u; ctx.beginPath(); ctx.rect(-w / 2, -h, w, h); ctx.fill(); ctx.stroke();
+      K.text(el.banner, 0, -h / 2, size, {color: '#23272E', outline: false, maxWidth: w - size * 0.6});
+      ctx.restore();
+    }
+    LAYOUT.anchors[i] = est;
+  }
+
   // A network: nodes pop in around the centre, then their links draw with a pulse flowing along each one.
   function drawNetwork(el, i, local) {
     const {ctx, u} = K, est = LAYOUT.est[i], [cx, cy] = est.center, n = el.nodes.length, st = panelStyle(), acc = K.PAL.accent;
@@ -477,7 +677,8 @@
     el.links.forEach(([a, b], j) => {
       const q = ease.inOutSine(clamp01((local - 0.15 * n - j * 0.18) / 0.5));
       if (q <= 0) return;
-      const pa = at(a), pb = at(b), end = [pa[0] + (pb[0] - pa[0]) * q, pa[1] + (pb[1] - pa[1]) * q];
+      // Links name their nodes from 1, as the planner wrote them (checking a stored plan again gives the same links).
+      const pa = at(a - 1), pb = at(b - 1), end = [pa[0] + (pb[0] - pa[0]) * q, pa[1] + (pb[1] - pa[1]) * q];
       ctx.strokeStyle = acc; ctx.lineWidth = 5 * u; ctx.shadowColor = acc; ctx.shadowBlur = 12 * u; ctx.beginPath(); ctx.moveTo(pa[0], pa[1]); ctx.lineTo(end[0], end[1]); ctx.stroke(); ctx.shadowBlur = 0;
       if (q >= 1) { const f = (local * 0.6 + j * 0.37) % 1; ctx.fillStyle = K.mix(acc, '#FFFFFF', 0.5); ctx.beginPath(); ctx.arc(pa[0] + (pb[0] - pa[0]) * f, pa[1] + (pb[1] - pa[1]) * f, 7 * u, 0, TAU); ctx.fill(); }
     });
@@ -744,7 +945,8 @@
         const lines = el.style === 'sticky' ? wrapWords(el.text.toUpperCase(), size, size * 6.5) : [el.text], w = Math.max(...lines.map(line => K.measure(line, size, {weight: 800}))) + pad * 2, h = lines.length * size * 1.2 + pad * 1.4;
         const bx = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, x));
         ctx.save(); ctx.translate(bx, y); ctx.scale(z, z); ctx.rotate(el.style === 'sticky' ? (rand() - 0.5) * 0.12 : 0);
-        const ink = K.PAL.ink, lw = Math.max(2.5 * u, size * 0.06);
+        // Paper, tags and callouts are light, so a dark palette's light ink is written dark on them.
+        const ink = K.DARK ? '#23272E' : K.PAL.ink, lw = Math.max(2.5 * u, size * 0.06);
         ctx.lineWidth = lw; ctx.strokeStyle = ink; ctx.lineJoin = 'round';
         if (el.style === 'sticky') {
           const paper = el.accent ? K.mix(K.PAL.accent, '#FFFFFF', 0.55) : ['#FFE680', '#BDE8B0', '#B9DDF5', '#FFC9A8'][LAYOUT.el[i].seed % 4], fold = size * 0.7;
@@ -969,6 +1171,8 @@
     else if (el.kind === 'chart') drawChart(el, i, local);
     else if (el.kind === 'timeline') drawTimeline(el, i, local);
     else if (el.kind === 'network') drawNetwork(el, i, local);
+    else if (el.kind === 'map') drawMap(el, i, local);
+    else if (el.kind === 'crowd') drawCrowd(el, i, local);
     else if (el.kind === 'fx' && !SCREEN_FX.has(el.effect) && !['shake', 'punch'].includes(el.effect)) drawFx(el, i, t, local, p);
     ctx.restore();
   }
@@ -1003,6 +1207,7 @@
     }
     if (K.DESIGN) drawBackdrop(t);
     // Storybook: warm paper with a fine grain.
+    if (K.FIN === 'chron') { const rand = K.seeded(29); ctx.fillStyle = K.alpha('#7A5A40', 0.03); for (let k = 0; k < 600; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     if (K.FIN === 'story') { const rand = K.seeded(23); ctx.fillStyle = K.alpha('#7A5A40', 0.045); for (let k = 0; k < 900; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     const cam = camera(t);
     // The set: drawn at full strength on its own layer, laid back behind the action, moving a little slower.
@@ -1024,9 +1229,13 @@
       // Storybook places are illustrated, so they are drawn at nearly full strength.
       // Storybook places are illustrated (nearly full strength, warm and muted); a doodle page keeps only a hint of
       // the place and a bold ground.
-      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : strength;
+      // A motion design draws its place as a flat illustration at full strength (motion demo 2026-10-17: a bakery laid
+      // back over the dark vector backdrop read as mud); its own backdrop shows only when there is no place.
+      const strength = (K.SET_STRENGTH[D.set] ?? 0.55) * (K.DARK ? 0.9 : 1), shown = K.DESIGN || K.FIN === 'chron' ? 1 : K.FIN === 'story' ? Math.min(1, strength + 0.3) : K.FIN === 'doodle' ? strength * 0.45 : K.FIN === 'board' ? Math.min(1, strength + 0.25) : strength;
       ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = shown * (PEN && !D.holdSet ? clamp01(t / 0.3) : 1);
       if (K.FIN === 'story') ctx.filter = 'sepia(0.45) saturate(0.72)';
+      // History cartoon places are painted: a little warmer and softer than the classic look.
+      if (K.FIN === 'chron') ctx.filter = 'sepia(0.12) saturate(1.05)';
       ctx.drawImage(layerCanvas, 0, 0); ctx.restore();
       const ground = K.FIN === 'doodle' ? DOODLE_GROUND[D.set] : null;
       if (ground) {
@@ -1043,6 +1252,7 @@
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);
+    if (K.FIN === 'chron') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.5, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(70,45,25,0)'); g.addColorStop(1, 'rgba(70,45,25,0.12)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (K.FIN === 'story') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(60,40,25,0)'); g.addColorStop(1, 'rgba(60,40,25,0.16)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (HAND) drawHand(t, context);
     if (K.FIN === 'wb' && K.WB === 'framed') drawBoardFrame(context);

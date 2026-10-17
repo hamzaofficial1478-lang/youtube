@@ -78,7 +78,7 @@ test('stickman looks: whiteboard, storybook, doodle and illustrated each draw di
     await renderer.start();
     const scene = {set: 'street', camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'point', x: 0.35, look: {color: 'red'}}, {kind: 'prop', prop: 'coin', x: 0.75, y: 0.4}]};
     const looks = {};
-    for (const look of ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']) looks[look] = await frame(renderer, scene, 2.8, {drawing: {look, hand: false}});
+    for (const look of ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'chronicle']) looks[look] = await frame(renderer, scene, 2.8, {drawing: {look, hand: false}});
     const all = Object.values(looks);
     assert.ok(all.every((png, k) => all.every((other, j) => j === k || !png.equals(other))), 'every look has its own finish');
     assert.ok(looks.classic.equals(await frame(renderer, scene, 2.8)), 'no setting is the classic look');
@@ -253,6 +253,39 @@ test('a drawing browser that is restarted (a stall during a render) draws again 
     assert.equal((await draw()).frames, 2);
     await renderer.close(); await renderer.start();
     assert.equal((await draw()).frames, 2, 'the restarted browser gets the drawing code again');
+  } finally {
+    await renderer.close();
+  }
+});
+
+test('0.36: maps colour in on their words, countries get faces, crowds and history people draw, words never sit on words, charts make room', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const view = {kind: 'map', view: 'europe'};
+    const lit = {...view, areas: [{countries: ['France'], label: 'France', at: 'France'}]};
+    const cue = {elements: [{t0: null, t1: null, then: [1.5]}]};
+    const plain = await frame(renderer, {set: 'none', camera: 'still', elements: [view]}, 1.0);
+    assert.ok(plain.equals(await frame(renderer, {set: 'none', camera: 'still', elements: [lit]}, 1.0, {times: cue})), 'a country is not coloured before its word');
+    const coloured = await frame(renderer, {set: 'none', camera: 'still', elements: [lit]}, 2.6, {times: cue});
+    assert.ok(!coloured.equals(await frame(renderer, {set: 'none', camera: 'still', elements: [view]}, 2.6)), 'then it colours in');
+    const face = {...lit, areas: [{...lit.areas[0], face: 'angry'}]};
+    assert.ok(!coloured.equals(await frame(renderer, {set: 'none', camera: 'still', elements: [face]}, 2.6, {times: cue})), 'a country with a face reacts');
+    // Routes, the date line and every engine draw without an error.
+    for (const primary of ['stickman', 'handdrawn', 'motion']) await frame(renderer, {set: 'none', elements: [{kind: 'map', areas: [{countries: ['Russia', 'Japan']}], routes: [{from: 'China', to: 'USA', label: 'Trade'}], view: 'world'}]}, 2.5, {primary});
+    // A crowd fills the street; the history cartoon draws its people with a big head.
+    const street = {set: 'street', camera: 'still', elements: [{kind: 'prop', prop: 'sign', x: 0.85, y: 0.3, size: 's'}]};
+    assert.ok(!(await frame(renderer, street, 1.5)).equals(await frame(renderer, {...street, elements: [...street.elements, {kind: 'crowd', count: 12, pose: 'cheer', headwear: 'spiked-helmet', colors: ['blue'], banner: 'Home by Christmas'}]}, 1.5)));
+    const general = {set: 'room', camera: 'still', elements: [{kind: 'figure', pose: 'point', x: 0.4, look: {headwear: 'bicorne', outfit: 'officer', facial: 'handlebar', color: 'blue'}}]};
+    assert.ok(!(await frame(renderer, general, 1.5, {drawing: {look: 'chronicle', hand: false}})).equals(await frame(renderer, general, 1.5, {drawing: {look: 'classic', hand: false}})));
+    // A later text on the same spot replaces the earlier one instead of sitting on it.
+    const words = (texts, t0s) => [{set: 'abstract', camera: 'still', elements: texts.map(text => ({kind: 'text', style: 'title', text, x: 0.5, y: 0.2}))}, {elements: t0s.map(t0 => ({t0, t1: null, then: []}))}];
+    const [both, bothTimes] = words(['Bake what sells', 'Throw nothing away'], [0.2, 1.5]), [one, oneTimes] = words(['Throw nothing away'], [1.5]);
+    assert.ok((await frame(renderer, both, 2.5, {times: bothTimes})).equals(await frame(renderer, one, 2.5, {times: oneTimes})));
+    // A chart under a headline moves down to make room for it.
+    await frame(renderer, {set: 'abstract', camera: 'still', elements: [{kind: 'text', style: 'counter', text: '$300,000', x: 0.5, y: 0.12, size: 'l'}, {kind: 'chart', type: 'bar', values: [100, 300], x: 0.5, y: 0.4, size: 'xl'}]}, 2.5, {primary: 'motion'});
+    const {est} = await renderer.evaluate('DRAWN.layout()');
+    assert.ok(est[1].box[1] >= est[0].box[3], 'the chart starts below the number');
   } finally {
     await renderer.close();
   }

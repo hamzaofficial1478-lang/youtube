@@ -62,7 +62,7 @@ test('the stickman drawing setting: a look and the drawing hand, optional, check
     const spec = validateStyleSpec({...stickman(), palette: preset.palette, pacing: preset.pacing, transitions: preset.transitions, motion: {...stickman().motion, intensity: preset.intensity}, drawing: {look, hand: preset.hand}});
     assert.equal(spec.drawing.look, look);
   }
-  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']);
+  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'chronicle']);
 });
 
 test('every engine may use every transition; the whiteboard look is checked; launch library v8', () => {

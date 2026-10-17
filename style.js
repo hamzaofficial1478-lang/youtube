@@ -39,7 +39,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all looks (choose in the style)', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, History cartoon, or Mix of all looks (choose in the style)', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
@@ -51,7 +51,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
-    features: ['Designs: Vector world, Infographic cartoon, Kinetic type, Documentary collage, Data desk, or Mix of all designs (choose in the style)', 'Charts, timelines, networks and kinetic sentences that build on the narrator\'s words; flat-design people and places', 'Kinetic words, counters and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
+    features: ['Designs: Vector world, Infographic cartoon, Kinetic type, Documentary collage, Data desk, or Mix of all designs (choose in the style)', 'Charts, timelines, networks and kinetic sentences that build on the narrator\'s words; flat-design people and places; real maps', 'Kinetic words, counters and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
@@ -86,7 +86,7 @@ const STANDARD_PROHIBITED = [
 // added as a draft revision (never approved or assigned automatically).
 const LAUNCH_VERSION = 'Launch library v9';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
-const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
+const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'chronicle', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
 const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase', 'mix']);
 // The motion engine's designs (0.35), or a mix of them.
@@ -100,6 +100,7 @@ const LOOK_PRESETS = Object.freeze({
   storybook: {hand: false, palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 30},
   doodle: {hand: false, palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'}, pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 55},
   illustrated: {hand: false, palette: {background: '#FFFFFF', primary: '#222222', accent: '#D9534F', text: '#222222'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 5.5, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 25},
+  chronicle: {hand: false, palette: {background: '#F4EBD8', primary: '#2E2A24', accent: '#C0392B', text: '#2E2A24'}, pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4.5}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 50},
 });
 // Launch profiles that are gone from the library (0.29's separate stickman looks). A copy the owner never
 // approved, assigned or revised is retired automatically, so it leaves the library list.

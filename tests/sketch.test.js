@@ -180,11 +180,57 @@ test('motion tools: charts, timelines, networks, kinetic statements and posters 
   assert.deepEqual([line.events.length, line.now, line.events[1].when], [2, 1, undefined]);
   assert.throws(() => shot([{kind: 'timeline', events: [{label: 'Alone'}]}]), /timeline|events/);
   const net = shot([{kind: 'network', nodes: [{label: 'Bank', icon: 'bank'}, {label: 'You'}, {label: 'Shop', icon: 'dragon'}], links: [[1, 2], [2, 3], [3, 3], [1, 9]]}]).elements[0];
-  assert.deepEqual([net.nodes[0].icon, net.nodes[2].icon, net.links], ['building', undefined, [[0, 1], [1, 2]]], 'icons from the props, links by node number, bad links dropped');
+  assert.deepEqual([net.nodes[0].icon, net.nodes[2].icon, net.links], ['building', undefined, [[1, 2], [2, 3]]], 'icons from the props, links by node number, bad links dropped');
   const words = shot([{kind: 'text', style: 'statement', text: 'The farmer keeps only *ten cents* of every cup you buy, every single morning'}, {kind: 'text', style: 'poster', text: 'BILLIONS'}]);
   assert.deepEqual([words.elements[0].text.length > 48, words.elements[0].y, words.elements[1].style], [true, 0.45, 'poster'], 'a statement keeps its whole sentence and sits in the middle');
   assert.throws(() => Sk.validate({design: 'neon', elements: [{kind: 'text', text: 'Hi'}]}), /Motion design/);
   const guide = Sk.promptGuide('motion', {designs: true});
   assert.match(guide, /"kind": "chart"[\s\S]*never invent data[\s\S]*"kind": "timeline"[\s\S]*style "statement"[\s\S]*"kind": "network"/);
   assert.match(guide, /names its design: "design": vector/);
+});
+
+test('0.36 maps: everyday country names, date-line shapes, fitted views, and map and crowd elements checked like the rest', () => {
+  const Maps = require('../maps');
+  assert.equal(Maps.country('USA'), 'United States of America');
+  assert.equal(Maps.country('England'), 'United Kingdom');
+  assert.equal(Maps.country("Cote d'Ivoire"), "Côte d'Ivoire");
+  assert.equal(Maps.country('Ottoman Empire'), null);
+  const world = Maps.load();
+  assert.ok(world.meta.Russia.box[2] > 180 && world.meta.Russia.point[0] > 60 && world.meta.Russia.point[0] < 140, 'Russia is unwrapped across the date line, its middle in Siberia');
+  assert.ok(Object.values(world.countries).every(polys => polys.every(poly => poly.every(ring => ring.every(Array.isArray)))), 'no ring around the pole is kept');
+  const [w, s, e, n] = Maps.fit(['France']), france = world.meta.France.box;
+  assert.ok(w < france[0] && s < france[1] && e > france[2] && n > france[3] && e - w < 40, 'a fitted view holds the country with room around it, without French Guiana');
+  const map = {kind: 'map', areas: [{countries: ['Germany', 'Austria'], label: 'Central Powers', face: 'angry', at: 'Germany'}, {countries: ['France'], at: 'France'}], routes: [{from: 'Germany', to: [4.35, 50.85], label: 'March'}], pins: [{place: 'Japan', label: 'Tokyo'}]};
+  const sk = Sk.validate({elements: [map, {kind: 'crowd', count: 99, pose: 'cheer', colors: ['blue'], headwear: 'spiked-helmet', banner: 'Home by Christmas'}]});
+  const [m, crowd] = sk.elements;
+  assert.deepEqual(m.steps.map(step => step.type), ['area', 'area', 'route', 'pin']);
+  assert.equal(m.size, 'xl');
+  assert.deepEqual(m.steps[2].to, [4.35, 50.85]);
+  assert.deepEqual(m.steps[3].place, world.meta.Japan.point);
+  assert.equal(crowd.count, 24, 'a crowd holds at most 24 people');
+  assert.deepEqual(Sk.timing(sk, [{text: 'Germany', start: 0.4}, {text: 'and', start: 0.8}, {text: 'France', start: 1.1}]).elements[0].then, [0.4, 1.1, null, null], 'each area arrives on its own words');
+  assert.throws(() => Sk.validate({elements: [{kind: 'map', areas: [{countries: ['Ottoman Empire']}]}]}), /not a country on the map/);
+  const warnings = [];
+  const kept = Sk.validate({elements: [{kind: 'map', areas: [{countries: ['Ottoman Empire', 'Turkey']}]}]}, {lenient: true, warn: message => warnings.push(message)});
+  assert.deepEqual(kept.elements[0].steps[0].countries, ['Turkey']);
+  assert.match(warnings[0], /Ottoman Empire/);
+  assert.match(Sk.promptGuide('stickman'), /"kind": "map"[\s\S]*"kind": "crowd"/);
+  // A free plan of a line that names countries draws a map; short words like "us" are never read as a country.
+  const free = Sk.fromText('In 1914, Germany marched through Belgium toward France.');
+  assert.deepEqual(free.elements[0].steps.map(step => [step.countries[0], step.at]), [['Germany', 'Germany'], ['Belgium', 'Belgium'], ['France', 'France']]);
+  assert.ok(!Sk.fromText('Let us talk about money.').elements.some(el => el.kind === 'map'));
+});
+
+test('a checked drawing checked again is the same drawing: every element kind survives a stored plan being drawn again', () => {
+  const sketch = {engine: 'stickman', look: 'chronicle', set: 'street', elements: [
+    {kind: 'figure', who: 'c1', pose: 'point', expression: 'happy', then: [{at: 'later', pose: 'cheer'}], label: 'Max, narrator'},
+    {kind: 'prop', prop: 'coin', x: 0.7, y: 0.4, face: true}, {kind: 'text', style: 'statement', text: 'A *big* idea'}, {kind: 'arrow', from: 1, to: [0.8, 0.3]},
+    {kind: 'chart', type: 'bar', values: [1, 60], labels: ['cost', 'sale']}, {kind: 'timeline', events: [{label: 'Leave', when: '1497'}, {label: 'India', when: '1498'}], now: 1},
+    {kind: 'network', nodes: [{label: 'Venice'}, {label: 'Lisbon'}], links: [[1, 2]]},
+    {kind: 'map', areas: [{countries: ['Portugal'], face: 'happy', at: 'Portugal'}], routes: [{from: 'Portugal', to: 'India', label: 'Around Africa'}], pins: [{place: [72.88, 19.08], label: 'Calicut'}]},
+    {kind: 'crowd', count: 7, pose: 'cheer', colors: ['red'], banner: 'Pepper!'}, {kind: 'fx', effect: 'burst', on: 2},
+  ]};
+  const once = Sk.validate(sketch, {cast}), twice = Sk.validate(once, {cast});
+  assert.deepEqual(twice, once);
+  assert.deepEqual(once.elements.find(el => el.kind === 'network').links, [[1, 2]]);
 });

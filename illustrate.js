@@ -32,6 +32,7 @@ const STICK_NOTES = Object.freeze({
   storybook: 'a storybook illustration: warm, muted colours, soft shading shapes, round-headed deadpan characters',
   doodle: 'bold thick marker doodles with flat bright colours and simple shapes',
   illustrated: 'ink line art with coloured-pencil shading',
+  chronicle: 'a comic history cartoon: big-headed cartoon people in period costume, painted places with soft colour washes, clean dark outlines',
 });
 const MOTION_NOTE = 'flat vector motion design: bold geometric shapes, no outlines or very thin ones, a limited palette (use the video\'s palette), clean shadows as darker flat shapes';
 

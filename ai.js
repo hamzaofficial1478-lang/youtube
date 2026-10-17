@@ -19,8 +19,9 @@ const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-
 const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', research: 'support', competitors: 'support', frames: 'main', illustrate: 'main'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
 // A frame's design is already settled by the plan (blueprint, beats, motions); writing it needs less deliberation
-// (live 0.25 run: about 10k thinking tokens per frame at high).
-const TASK_EFFORT = Object.freeze({frames: 'medium'});
+// (live 0.25 run: about 10k thinking tokens per frame at high). A picture's subject is settled by the plan too
+// (owner question 2026-10-17; the same picture: high 26k tokens, medium 13k with nearly the same detail, low 4k and plain).
+const TASK_EFFORT = Object.freeze({frames: 'medium', illustrate: 'medium'});
 // Answers up to this size come back in one response; longer ones (a 30-minute script) are streamed, so the
 // request never meets the SDK's timeout for long non-streaming calls.
 const NON_STREAMING_MAX_TOKENS = 16000;

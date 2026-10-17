@@ -95,6 +95,7 @@ test('tasks route to the two models and the two models work side by side, one ca
   assert.equal(TASK_ROLE.script, 'main');
   assert.equal(TASK_ROLE.research, 'support');
   assert.equal(new Ai(null).model({}, 'frames').effort, 'medium', 'frame workers think less than the plan');
+  assert.equal(new Ai(null).model({}, 'illustrate').effort, 'medium', 'the illustrator draws a subject the plan already chose');
   fake.reply({ok: 1}, {delayMs: 400});
   const messages = [{role: 'system', content: 'S'}, {role: 'user', content: 'U'}];
   const [script, niche, research] = await Promise.all([

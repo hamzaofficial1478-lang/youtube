@@ -1,7 +1,7 @@
 {
-  "version": "0.35.0",
+  "version": "0.36.0",
   "updated": "2026-10-16",
-  "nextAction": "Draw and render the planned motion demo (scratchpad demo7: node flow.js draw, then edit, then overlay.js) and show the owner; ask about the map data package; then the OverSimplified-inspired stickman look.",
+  "nextAction": "Show the owner the all-styles demo (scratchpad demo8) and the motion demo; then continue with the owner's next engine request. Historical borders and motion overlays on footage remain open.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -390,9 +390,16 @@
         {
           "id": "P06p",
           "title": "Motion engine v2: five designs or a mix, charts, timelines, networks and kinetic type, flat-design people",
+          "status": "done",
+          "remaining": "Motion overlays on stock footage need stock or AI keys.",
+          "evidence": "0.35.0 (2026-10-17): designs and tools rendered and checked; a live Claude plan completed with designs chosen per scene; npm test 284/284 passed. The demo rendered (47.4 s, all QC checks passed); its review led to the 0.36 readability fixes."
+        },
+        {
+          "id": "P06q",
+          "title": "History cartoon look, real maps and crowds for every engine",
           "status": "testing",
-          "remaining": "Render the planned demo and show the owner; maps need a data package and the owner's go-ahead.",
-          "evidence": "0.35.0 (2026-10-17): designs and tools rendered and checked; a live Claude plan completed with designs chosen per scene; npm test 284/284 passed."
+          "remaining": "Historical borders; owner review of the all-styles demo.",
+          "evidence": "0.36.0 (2026-10-17): look, maps (four finishes, date line) and crowds rendered and checked; map and crowd validation, free maps and drawing tests added."
         },
         {
           "id": "S02",

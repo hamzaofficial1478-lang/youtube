@@ -96,7 +96,9 @@
   // Joints for angles A at height h, facing right, feet on the ground at (0, 0).
   function skeleton(A, h, body) {
     // A whiteboard person ('drawn') has human proportions: longer legs and body, a small head on a neck.
-    const drawn = body === 'drawn' || body === 'caricature', thigh = (drawn ? 0.22 : 0.19) * h, shin = (drawn ? 0.21 : 0.18) * h, torso = (drawn ? 0.29 : 0.25) * h, upper = (drawn ? 0.16 : 0.155) * h, fore = 0.15 * h, R = (body === 'robot' ? 0.15 : body === 'bean' ? 0.19 : body === 'person' ? 0.115 : body === 'caricature' ? 0.13 : drawn ? 0.09 : 0.165) * h, neckGap = drawn ? 0.04 * h : 0;
+    const drawn = body === 'drawn' || body === 'caricature', chibi = body === 'chibi';
+    const thigh = (chibi ? 0.15 : drawn ? 0.22 : 0.19) * h, shin = (chibi ? 0.14 : drawn ? 0.21 : 0.18) * h, torso = (chibi ? 0.23 : drawn ? 0.29 : 0.25) * h, upper = (chibi ? 0.125 : drawn ? 0.16 : 0.155) * h, fore = (chibi ? 0.115 : 0.15) * h;
+    const R = (body === 'robot' ? 0.15 : body === 'bean' ? 0.19 : chibi ? 0.2 : body === 'person' ? 0.115 : body === 'caricature' ? 0.13 : drawn ? 0.09 : 0.165) * h, neckGap = drawn ? 0.04 * h : chibi ? 0.01 * h : 0;
     const limb = ([x, y], a, len) => [x + Math.sin(a * D) * len, y + Math.cos(a * D) * len];
     const hip = [0, 0], kf = limb(hip, A.lf[0], thigh), ff = limb(kf, A.lf[1], shin), kb = limb(hip, A.lb[0], thigh), fb = limb(kb, A.lb[1], shin);
     const lean = A.lean * D, neck = [Math.sin(lean) * torso, -Math.cos(lean) * torso], sh = [neck[0] * 0.88, neck[1] * 0.88];
@@ -223,6 +225,7 @@
       case 'beard': shape([...f.arc(0, 0, 1.02, 1.02, Math.PI * 0.08, Math.PI * 0.92, 24), ...f.arc(0.12, 0.08, 0.66, 0.62, Math.PI * 0.86, Math.PI * 0.1, 20)], {fill: hair, width: lw * 0.6, stroke: ink}); break;
       case 'stubble': { const rand = K.seeded(77); for (let n = 0; n < 22; n++) { const a = 0.25 + rand() * 2.3, r = 0.62 + rand() * 0.28; shape(f.ring(0.08 + Math.cos(a) * r, 0.1 + Math.sin(a) * r * 0.8, 0.018, 0.018, 6), {fill: K.alpha(K.PAL.face, 0.6)}); } break; }
       case 'goatee': shape(f.pts([[0.06, 0.62], [0.3, 0.62], [0.18, 0.86]]), {fill: hair, width: lw * 0.6, stroke: ink}); break;
+      case 'handlebar': [-1, 1].forEach(sd => { const x = v => 0.17 + sd * v; shape([...f.curve(x(0), 0.26, x(0.22), 0.16, x(0.46), 0.26), ...f.curve(x(0.46), 0.26, x(0.62), 0.3, x(0.6), 0.12), ...f.curve(x(0.6), 0.12, x(0.7), 0.42, x(0.4), 0.38), ...f.curve(x(0.4), 0.38, x(0.18), 0.36, x(0), 0.32)], {fill: hair === K.HAIR.white ? '#DDDDDD' : hair, width: lw * 0.6, stroke: ink}); }); break;
       default: break;
     }
     const mark = look.mark;
@@ -284,6 +287,14 @@
       case 'hood': L.push({pts: f.arc(-0.08, -0.02, 1.32, 1.3, Math.PI * 0.62, Math.PI * 1.75, 20), color: K.mix(col, '#000000', 0.25), width: 1.2}); break;
       case 'beret': L.push({pts: K.frame(...f.p(-0.1, -0.88), f.s, f.dir, f.rot - 0.25 * f.dir).ring(0, 0, 1.0, 0.32), fill: col === K.COL.blue ? C.red : col}, {pts: f.pts([[-0.1, -1.22], [-0.05, -1.4]]), width: 1}); break;
       case 'police-cap': L.push({pts: f.pts([[-0.85, -0.62], [-1.0, -1.15], [1.0, -1.15], [0.85, -0.62]]), fill: '#24324F'}, {pts: f.pts([[0.2, -0.62], [1.4, -0.52], [0.9, -0.42], [0.2, -0.5]]), fill: '#111111'}, {pts: f.star(0, -0.88, 0.18, 0.08), fill: C.gold, width: 0.5}); break;
+      // 0.36 history headwear.
+      case 'tricorn': L.push({pts: f.pts([[-1.3, -0.68], [-0.75, -1.25], [0.05, -1.42], [0.85, -1.22], [1.35, -0.66], [0.62, -0.9], [0.05, -0.8], [-0.6, -0.92], [-1.3, -0.68]]), fill: '#2B2622'}, {pts: f.pts([[-1.22, -0.72], [-0.6, -0.95], [0.05, -0.84], [0.62, -0.93], [1.28, -0.7]]), color: C.gold, width: 0.7}); break;
+      case 'bicorne': L.push({pts: [...f.curve(-1.75, -0.72, -0.1, -2.35, 1.75, -0.72), ...f.curve(1.75, -0.72, 0, -1.02, -1.75, -0.72)], fill: '#24211F'}, {pts: f.ring(0.35, -1.12, 0.2, 0.2, 18), fill: C.red}, {pts: f.ring(0.35, -1.12, 0.1, 0.1, 14), fill: '#FFFFFF', stroke: false}); break;
+      case 'bowler': L.push({pts: f.arc(0, -0.64, 0.78, 0.66, Math.PI, Math.PI * 2, 22), fill: '#2A2A2A'}, brim(-0.66, 1.12, 0.13, '#2A2A2A', 0.05)); break;
+      case 'peaked-cap': L.push({pts: f.pts([[-0.92, -0.62], [-1.22, -1.22], [1.08, -1.3], [0.92, -0.62]]), fill: K.mix(col, '#000000', 0.35)}, {pts: f.rect(-0.94, -0.8, 1.88, 0.2), fill: C.red, stroke: false}, {pts: f.pts([[0.25, -0.62], [1.5, -0.5], [1.0, -0.38], [0.25, -0.5]]), fill: '#141414'}, {pts: f.star(0.05, -1.0, 0.16, 0.07), fill: C.gold, width: 0.5}); break;
+      case 'spiked-helmet': L.push({pts: f.arc(0, -0.38, 1.08, 0.98, Math.PI * 0.98, Math.PI * 2.02, 22), fill: '#3B3B3B'}, {pts: f.pts([[0.2, -0.4], [1.42, -0.32], [1.0, -0.22], [0.2, -0.3]]), fill: '#1C1C1C'}, {pts: f.pts([[-0.14, -1.3], [0, -1.95], [0.14, -1.3]]), fill: C.gold}, {pts: f.star(0.1, -0.85, 0.2, 0.09, 6), fill: C.gold, width: 0.5}); break;
+      case 'turban': L.push({pts: f.blob(-0.05, -0.72, 1.18, 0.62, 6, 0.07), fill: col === K.COL.blue ? '#F2EEE3' : col}, {pts: f.curve(-1.0, -0.5, -0.1, -1.05, 1.1, -0.62), color: K.alpha(K.PAL.line, 0.5), width: 0.6}, {pts: f.ring(0.62, -0.78, 0.14, 0.16, 14), fill: C.red, width: 0.5}); break;
+      case 'laurel': for (let k = 0; k < 9; k++) { const a = (195 + k * 18.5) * D, side = k < 4.5 ? -1 : 1; L.push({pts: K.frame(...f.p(Math.cos(a) * 1.02, Math.sin(a) * 1.02), f.s, f.dir, f.rot + a + side * 0.5).ring(0, 0, 0.2, 0.09, 12), fill: '#6BA539', width: 0.5}); } break;
       case 'wizard': L.push({pts: f.pts([[-0.8, -0.78], [0.35, -2.4], [0.8, -0.78], [-0.8, -0.78]]), fill: C.purple}, brim(-0.78, 1.35, 0.18, C.purple, 0), ...[[0.0, -1.3], [0.3, -1.75], [-0.2, -1.0]].map(([x, y]) => ({pts: f.star(x, y, 0.13, 0.05), fill: C.yellow, stroke: false}))); break;
       default: break;
     }
@@ -329,6 +340,9 @@
     if (o === 'tie') { const n = along(0.92), t = along(0.4); L.push({pts: [n, [n[0] + 0.016 * h, n[1] + 0.03 * h], [t[0], t[1]], [n[0] - 0.016 * h, n[1] + 0.03 * h], n], fill: col === K.COL.blue ? C.red : col, width: 0.5}); }
     if (o === 'bowtie') { const n = along(0.9); L.push({pts: K.frame(n[0], n[1], h, dir).pts([[0, 0], [-0.04, -0.025], [-0.04, 0.025], [0, 0], [0.04, -0.025], [0.04, 0.025], [0, 0]]), fill: col === K.COL.blue ? C.red : col, width: 0.5}); }
     if (o === 'scarf') { const n = along(0.92), sw = Math.sin(st.tl * 4) * 0.02 * h; L.push({pts: [[n[0] - 0.05 * h, n[1] - 0.01 * h], [n[0] + 0.05 * h, n[1] - 0.01 * h], [n[0] + 0.05 * h, n[1] + 0.03 * h], [n[0] - 0.05 * h, n[1] + 0.03 * h]], fill: col === K.COL.blue ? C.red : col}, {pts: [[n[0] - 0.03 * h * dir, n[1] + 0.02 * h], [n[0] - 0.12 * h * dir + sw, n[1] + 0.1 * h], [n[0] - 0.08 * h * dir + sw, n[1] + 0.12 * h], [n[0] - 0.01 * h * dir, n[1] + 0.03 * h]], fill: col === K.COL.blue ? C.red : col}); }
+    if (o === 'officer') { L.push(body(0.072, 0.066, 0.92, -0.06, col)); const n = along(0.9); [-1, 1].forEach(side => L.push({pts: K.frame(n[0] + side * 0.06 * h, n[1] + 0.005 * h, h, dir).rrect(-0.03, -0.012, 0.06, 0.024, 0.012), fill: C.gold, width: 0.4})); L.push({pts: [along(0.9), along(0.2)], color: C.red, width: 1.6}); }
+    if (o === 'armor') { L.push(body(0.075, 0.068, 0.92, -0.04, C.metal)); [0.66, 0.42].forEach(f => { const [a, b] = perp(along(f), 0.07 * h); L.push({pts: [a, b], width: 0.5}); }); }
+    if (o === 'robe') { const [a, b] = perp(along(0.92), 0.06 * h); L.push({pts: [a, b, [J.hip[0] + 0.12 * h, J.hip[1] + 0.3 * h], [J.hip[0] - 0.12 * h, J.hip[1] + 0.3 * h], a], fill: col}); }
     if (o === 'badge') { const c = along(0.72); L.push({pts: K.frame(c[0] + 0.02 * h * dir, c[1], h, dir).star(0, 0, 0.03, 0.013), fill: C.gold, width: 0.4}); }
     return L;
   }
@@ -388,15 +402,17 @@
   function drawPerson(st, progress) {
     const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u * 1.06, dir = st.dir, look = st.look;
     // Dry-erase boards draw caricatures: a bigger head on the same body.
-    const J0 = skeleton(st.A, h, K.WB === 'dry-erase' ? 'caricature' : 'drawn'), lift = st.A.lift * h, J = {};
+    // History cartoon people (0.36, finish chron): a big round head on a short body, in costume.
+    const chibi = K.FIN === 'chron';
+    const J0 = skeleton(st.A, h, chibi ? 'chibi' : K.WB === 'dry-erase' ? 'caricature' : 'drawn'), lift = st.A.lift * h, J = {};
     for (const key of ['hip', 'kf', 'ff', 'kb', 'fb', 'neck', 'sh', 'head', 'ef', 'hf', 'eb', 'hb']) J[key] = [st.x + J0[key][0] * dir, st.y + J0[key][1] - lift];
     const R = J0.R, lw = Math.max(3 * u, h * 0.0105), head = K.frame(J.head[0], J.head[1], R, dir, J0.tiltRad * dir), pose = K.POSE[st.pose] || {};
     const seed = K.hashText(`${look.color}${look.hair}${look.hairColor}${look.outfit}`);
     const skin = ['#F3D3B8', '#E2B48D', '#C68E63', '#8D5A3B'][seed % 4];
     const shirt = look.color ? K.col(look.color) : ['#5B7FA6', '#C8553D', '#6A994E', '#E9C46A', '#8E7DBE'][seed % 5];
-    const suit = look.outfit === 'suit', coat = look.outfit === 'lab-coat';
-    const top = suit ? '#2E3440' : coat ? '#FFFFFF' : shirt, trousers = suit ? '#2E3440' : ['#3E4A5C', '#5C4B3E', '#2F3E46'][seed % 3];
-    const longSleeves = suit || coat || ['hoodie', 'uniform'].includes(look.outfit) || seed % 3 === 0;
+    const suit = look.outfit === 'suit', coat = look.outfit === 'lab-coat', officer = ['officer', 'uniform'].includes(look.outfit), armor = look.outfit === 'armor', robe = look.outfit === 'robe';
+    const top = suit ? '#2E3440' : coat ? '#FFFFFF' : armor ? C.metal : shirt, trousers = suit ? '#2E3440' : officer ? K.mix(shirt, '#000000', 0.45) : ['#3E4A5C', '#5C4B3E', '#2F3E46'][seed % 3];
+    const longSleeves = suit || coat || officer || armor || robe || look.outfit === 'hoodie' || seed % 3 === 0;
     const axis = [J.neck[0] - J.hip[0], J.neck[1] - J.hip[1]], al = Math.hypot(axis[0], axis[1]) || 1, nrm = [-axis[1] / al, axis[0] / al];
     const along = (f, w) => [J.hip[0] + axis[0] * f + nrm[0] * w, J.hip[1] + axis[1] * f + nrm[1] * w];
     const shift = (pts, w) => pts.map(p => [p[0] + nrm[0] * w, p[1] + nrm[1] * w]);
@@ -415,23 +431,34 @@
       L.push({pts: f.ring(0, 0, 0.058, 0.026, 18), fill: '#2B2B2B', ...line});
     };
     // Back to front: the far arm and leg, the neck, the shirt, the near leg, the head, the near arm.
+    if (look.outfit === 'cape') L.push(...outfit(J, look, h, dir, 'back', st).map(item => ({...item, px: lw})));
     if (!pose.armBehind) arm(armB); else arm(armF);
     leg(legB);
-    L.push({pts: tube([along(0.95, 0), J.head], 0.05 * h, 0.046 * h), fill: skin, ...line});
-    const body = [along(1.0, -0.035 * h), along(0.96, -0.1 * h), along(0.84, -0.11 * h), along(0.45, -0.086 * h), along(coat ? -0.35 : -0.05, -0.092 * h), along(coat ? -0.35 : -0.05, 0.092 * h), along(0.45, 0.086 * h), along(0.84, 0.11 * h), along(0.96, 0.1 * h), along(1.0, 0.035 * h)];
+    // A robe reaches the feet, so both legs go behind it.
+    if (robe) leg(legF);
+    if (!chibi) L.push({pts: tube([along(0.95, 0), J.head], 0.05 * h, 0.046 * h), fill: skin, ...line});
+    const hem = coat ? -0.35 : robe ? -1.12 : -0.05, flare = robe ? 0.15 : 0.092;
+    const body = [along(1.0, -0.035 * h), along(0.96, -0.1 * h), along(0.84, -0.11 * h), along(0.45, -0.086 * h), along(hem, -flare * h), along(hem, flare * h), along(0.45, 0.086 * h), along(0.84, 0.11 * h), along(0.96, 0.1 * h), along(1.0, 0.035 * h)];
     L.push({pts: smooth(body), fill: top, ...line});
+    if (officer) {
+      L.push(...[0.74, 0.54, 0.34].map(f => ({pts: K.frame(...along(f, 0), h, 1).ring(0, 0, 0.011, 0.011, 10), fill: C.gold, px: lw * 0.5})));
+      if (look.outfit === 'officer') L.push(...[-1, 1].map(side => ({pts: K.frame(...along(0.96, side * 0.1 * h), h, 1).rrect(-0.035, -0.014, 0.07, 0.028, 0.014), fill: C.gold, px: lw * 0.7})), {pts: [along(0.95, -0.08 * h), along(0.95, -0.05 * h), along(0.12, 0.09 * h), along(0.2, 0.06 * h)], fill: shirt === C.red ? C.blue : C.red, px: lw * 0.6});
+    }
+    if (armor) L.push(...[0.66, 0.42].map(f => ({pts: [along(f, -0.09 * h), along(f + 0.03, 0), along(f, 0.09 * h)], px: lw * 0.8})));
     L.push({pts: [along(1.0, -0.035 * h), along(0.86, 0), along(1.0, 0.035 * h)], px: lw * 0.9});
     if (suit) L.push({pts: [along(0.99, -0.012 * h), along(0.99, 0.012 * h), along(0.55, 0.016 * h), along(0.5, 0), along(0.55, -0.016 * h), along(0.99, -0.012 * h)], fill: C.red, px: lw * 0.8});
-    if (!coat) L.push({pts: [along(0.03, -0.09 * h), along(0.03, 0.09 * h)], px: lw * 0.9});
-    leg(legF);
+    if (!coat && !robe) L.push({pts: [along(0.03, -0.09 * h), along(0.03, 0.09 * h)], px: lw * 0.9});
+    if (!robe) leg(legF);
+    L.push(...outfit(J, {...look, outfit: ['tie', 'bowtie', 'badge', 'scarf'].includes(look.outfit) ? look.outfit : 'none'}, h, dir, 'front', st).map(item => ({...item, px: lw * 0.7})));
     if (look.outfit === 'apron') L.push({pts: smooth([along(0.7, -0.06 * h), along(0.7, 0.06 * h), along(-0.25, 0.075 * h), along(-0.25, -0.075 * h)]), fill: '#FFFFFF', ...line});
     if (String(look.outfit).startsWith('kit:')) L.push(...outfit(J, look, h, dir, 'front', st).map(item => ({...item, px: lw})));
     L.push(...hairBack(head, look, st).map(item => ({...item, px: lw})));
-    L.push({pts: head.ring(0, 0, 0.84, 1.0, 40), fill: K.EXPR[st.expression]?.tint || skin, ...line});
-    L.push({pts: head.ring(-0.6, 0.06, 0.15, 0.22, 16), fill: skin, px: lw * 0.9});
-    L.push({pts: head.pts([[0.66, -0.06], [0.86, 0.2], [0.64, 0.26]]), px: lw * 0.9});
-    // The face a little larger than a stick figure's, so it reads on a small head.
-    L.push({draw: () => face(K.frame(J.head[0], J.head[1] + 0.04 * R, R * 1.2, dir, J0.tiltRad * dir), R * 1.2, st.expression, st, 'stick')});
+    L.push({pts: chibi ? head.ring(0, 0, 1, 0.96, 44) : head.ring(0, 0, 0.84, 1.0, 40), fill: K.EXPR[st.expression]?.tint || skin, ...line});
+    L.push({pts: chibi ? head.ring(-0.78, 0.1, 0.13, 0.18, 14) : head.ring(-0.6, 0.06, 0.15, 0.22, 16), fill: skin, px: lw * 0.9});
+    if (!chibi) L.push({pts: head.pts([[0.66, -0.06], [0.86, 0.2], [0.64, 0.26]]), px: lw * 0.9});
+    // The face a little larger than a stick figure's, so it reads on a small head (a history cartoon's big head keeps its own).
+    const faceR = chibi ? R * 0.95 : R * 1.2;
+    L.push({draw: () => face(K.frame(J.head[0], J.head[1] + 0.04 * R, faceR, dir, J0.tiltRad * dir), faceR, st.expression, st, 'stick')});
     L.push(...hairFront(head, look, st).map(item => ({...item, px: item.px || lw})));
     L.push(...eyewear(head, look).map(item => ({...item, px: item.px || lw})));
     if (!pose.armBehind) arm(armF); else arm(armB);
@@ -449,10 +476,13 @@
     return {head: [J.head[0], J.head[1], R], hand, box: [Math.min(...xs) - R, Math.min(...ys) - R, Math.max(...xs) + R, Math.max(...ys)]};
   }
 
+  // A face drawn on anything (0.36: a country on a map that reacts): st = {tl, seed}.
+  K.faceAt = (x, y, R, expression, st) => face(K.frame(x, y, R, 1, 0), R, expression, {look: {}, ...st}, 'stick');
+
   K.drawFigure = (st, progress = 1) => {
     // Whiteboard and motion-design people are drawn as people (0.35: flat design without outlines in the flat finish,
     // thin outlines in the infographic finish), never stick figures.
-    if (['wb', 'flat', 'info'].includes(K.FIN) && (st.look.body || 'stick') === 'stick') return drawPerson(st, progress);
+    if (['wb', 'flat', 'info', 'chron'].includes(K.FIN) && (st.look.body || 'stick') === 'stick') return drawPerson(st, progress);
     const {u} = K, h = K.FIGURE_SIZE[st.size || 'm'] * u, dir = st.dir, look = st.look, body = look.body || 'stick', engine = st.engine;
     // Storybook people have bean bodies: a filled rounded torso under a big round head.
     const bean = K.FIN === 'story' && body === 'stick';

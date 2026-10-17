@@ -163,6 +163,12 @@ Rather than presenting untested upstream features as ready, the first release re
 - Read again at `9327439db69021ab4b0e2776729bf3b58fdb5a87` (2026-10-03). AGPL-3.0: nothing copied.
 - Its method restated in our own code: taste direction (design read, three dials, signature device) as the atelier art direction; bespoke composition as the atelier engine; the five-aspect scene checklist and scene distinctness in the scene-plan prompt; reviewer plus repair-only-what-failed for frames.
 
+### topojson/world-atlas (0.36, maps)
+
+- Source: npm package `world-atlas` 2.0.2 (exact pin), <https://github.com/topojson/world-atlas>. License: ISC (Michael Bostock); the data is Natural Earth's 1:110m admin-0 country boundaries, version 4.1.0, public domain.
+- Used: `countries-110m.json` only, read from `node_modules` by `maps.js`, decoded from TopoJSON in our own code (no topojson-client, no d3-geo); the drawing page receives the decoded shapes as data (`window.DMAP`). Owner go-ahead 2026-10-17 ("add that").
+- Not used: the 50m and 10m files and `land-*.json` (installed with the package, never loaded).
+
 ### bradautomates/claude-video (0.14.1)
 
 - Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.

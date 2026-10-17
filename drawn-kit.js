@@ -42,10 +42,10 @@
       PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
       head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };
-  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6, wb: 3.8, info: 3.4};
+  const LINE = {ink: 4.4, flat: 4.2, board: 4.6, story: 3.6, doodle: 6.6, wb: 3.8, info: 3.4, chron: 3.8};
   K.LW = () => (K.FIN === 'wb' && K.WB === 'pencil' ? 2.6 : LINE[K.FIN] || 5.2) * K.u;
   // Background colours sit back so the foreground reads: pastel on light styles, dim on dark ones.
-  K.tone = (c, k = 0.3) => K.mix(K.col(c), K.PAL.bg, K.DARK ? 0.72 : k);
+  K.tone = (c, k = 0.3) => K.mix(K.col(c), K.PAL.bg, K.DARK ? (K.DESIGN ? 0.42 : 0.72) : k);
 
   // ------------------------------------------------------------ strokes and fills
   K.polyLen = pts => { let n = 0; for (let k = 1; k < pts.length; k++) n += Math.hypot(pts[k][0] - pts[k - 1][0], pts[k][1] - pts[k - 1][1]); return n; };
@@ -209,7 +209,9 @@
     if (fit < 1) ctx.font = K.font(size * fit, {heading, weight});
     ctx.textAlign = align; ctx.textBaseline = baseline; ctx.lineJoin = 'round';
     if (outline) {
-      if (K.DARK) { ctx.shadowColor = K.alpha('#000000', 0.6); ctx.shadowBlur = 14 * u; }
+      // Dark palettes: a glow and a dark edge, so light words also read over a bright place (motion designs draw places
+      // at full strength since 0.36).
+      if (K.DARK) { ctx.shadowColor = K.alpha('#000000', 0.6); ctx.shadowBlur = 14 * u; ctx.strokeStyle = K.alpha('#000000', 0.55); ctx.lineWidth = Math.max(3 * u, size * fit * 0.1); ctx.strokeText(value, x, y); }
       else { ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(4 * u, size * fit * 0.16); ctx.strokeText(value, x, y); }
     }
     ctx.fillStyle = color; ctx.fillText(value, x, y);
@@ -221,7 +223,8 @@
     const {ctx, u} = K, w = K.measure(value, size, {weight: 800}) + size * 0.9, h = size * 1.45, px = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, x));
     ctx.save(); ctx.fillStyle = K.alpha('#FFFFFF', 0.94); ctx.strokeStyle = K.alpha(K.PAL.ink, 0.85); ctx.lineWidth = Math.max(2 * u, size * 0.06);
     ctx.beginPath(); ctx.roundRect(px - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.stroke(); ctx.restore();
-    K.text(value, px, y, size, {color, outline: false});
+    // The chip is white, so light words (a dark palette's ink) are written dark (motion demo 2026-10-17: unreadable labels).
+    K.text(value, px, y, size, {color: K.lum(K.col(color)) > 0.62 ? '#23272E' : color, outline: false});
   };
   K.measure = (value, size, opts = {}) => { K.ctx.save(); K.ctx.font = K.font(size, opts); const w = K.ctx.measureText(value).width; K.ctx.restore(); return w; };
 }());
