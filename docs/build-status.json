@@ -1,7 +1,7 @@
 {
-  "version": "0.33.0",
+  "version": "0.34.0",
   "updated": "2026-10-16",
-  "nextAction": "Show the owner the 0.33 whiteboard showcase (every look, paid next to free). Ask whether he wants an OpenAI API key for photo-like pictures later. Then full videos in each look with ElevenLabs narration, and the next engine in his order.",
+  "nextAction": "Build the motion-graphics engine to full depth (research first), with its looks, Mix and paid pictures; then a demo video; show the owner.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -379,6 +379,13 @@
           "status": "testing",
           "remaining": "Owner verdict on the 40-second showcase; OpenAI images inside drawn shots need an API key; a full video with ElevenLabs narration and pictures.",
           "evidence": "0.33.0 (2026-10-16): 39.5 s 720p showcase - Claude chose 3 pictures, 2 more added with Room 04 'Paid picture', every whiteboard look one paid and one free; render QC passed; three program faults found by the demo and fixed (lost pictures on a stop, a plan discarded over its reservation, picture pacing); Room 04 checked in the browser; npm test 276/276 passed."
+        },
+        {
+          "id": "P06o",
+          "title": "Mix of an engine's looks (stickman, hand-drawn) and paid pictures in every engine, each in its own style",
+          "status": "testing",
+          "remaining": "A full Claude-planned video in Mix; the owner's verdict.",
+          "evidence": "0.34.0 (2026-10-17): one picture checked in all five stickman looks and motion graphics; npm test 280/280 passed."
         },
         {
           "id": "S02",

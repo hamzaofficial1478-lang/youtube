@@ -4,6 +4,7 @@
 // toast, saveForm, date, localeName) come from app.js and are only used inside functions.
 
 const STYLE_LABELS = {
+  mix: 'Mix: every look, chosen per scene',
   'long-form': 'Long-form', shorts: 'Shorts', cut: 'Cut', crossfade: 'Crossfade', 'dip-to-black': 'Dip to black', push: 'Push', slide: 'Slide',
   zoom: 'Zoom', 'whip-pan': 'Whip pan', 'match-cut': 'Match cut', wipe: 'Wipe', morph: 'Morph', static: 'Static', 'ken-burns': 'Ken Burns',
   pan: 'Pan', parallax: 'Parallax', 'handheld-sim': 'Handheld feel', tracking: 'Tracking', linear: 'Linear', 'ease-in-out': 'Ease in-out',
@@ -194,8 +195,8 @@ function styleEditorBody(spec) {
     <label>Sound effects<select name="s.sfxUsage">${styleOptions(v.sfxUsage, spec.audio.sfxUsage)}</select></label>
   </div></fieldset>
   ${['ffmpeg-sketch', 'story-mix', 'canvas-frames'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>${spec.renderer.adapter === 'canvas-frames' ? 'Hand-drawn engine features' : spec.renderer.adapter === 'story-mix' ? 'Drawing features' : 'Stickman engine features'}</legend><div class="form-grid">
-    ${spec.renderer.adapter !== 'canvas-frames' ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: classic cartoon, whiteboard, storybook, marker doodle or illustrated.</span></label>` : ''}
-    ${spec.renderer.adapter !== 'ffmpeg-sketch' ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: colour cartoon, black marker, pencil sketch, framed board or dry-erase markers.</span></label>` : ''}
+    ${spec.renderer.adapter !== 'canvas-frames' ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: one look (classic cartoon, whiteboard, storybook, marker doodle or illustrated), or Mix: the program uses every look in one video and picks the right one for each scene.</span></label>` : ''}
+    ${spec.renderer.adapter !== 'ffmpeg-sketch' ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: one look (colour cartoon, black marker, pencil sketch, framed board or dry-erase markers), or Mix: every look in one video, picked for each scene.</span></label>` : ''}
     <label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>
     ${spec.renderer.adapter === 'ffmpeg-sketch' ? '<p class="hint full">Choosing a look fills in its recommended colours, shot lengths and transitions below; you can still change them.</p>' : ''}
   </div></fieldset>` : ''}

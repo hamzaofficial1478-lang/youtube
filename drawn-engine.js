@@ -346,15 +346,17 @@
   function drawPicture(el, i, local, enter) {
     const g = pictureGeom(el, i);
     if (!g) return;
-    const {ctx, u} = K, look = K.FIN === 'wb' ? K.WB : 'cartoon', draws = enter === 'draw', lines = draws ? pictureSeconds(el, LAYOUT.el[i].ts) : 0;
+    // Each engine shows a picture its own way (0.34): the whiteboard looks, the stickman looks, motion design.
+    const {ctx, u} = K, look = K.FIN === 'wb' ? K.WB : {board: 'marker', story: 'story', doodle: 'doodle', ink: 'ink', flat: 'flat'}[K.FIN] || 'cartoon', draws = enter === 'draw', lines = draws ? pictureSeconds(el, LAYOUT.el[i].ts) : 0;
+    if (look === 'flat') return buildPicture(g, draws ? lines : 0, local);
     const q = lines ? clamp01(local / lines) : 1, done = q * g.total;
     // Each shape's colour washes in just behind the pen, once its outline is done (a shape without one, when the pen
     // reaches its place in the drawing order).
     const colourOf = path => (draws ? ease.inOutSine(clamp01((local - lines * (path.from + path.len) / Math.max(1, g.total) - 0.12) / 0.4)) : 1);
     const ink = K.DARK ? '#F2F2F2' : '#1E1E1E', paper = K.PAL.bg;
-    const strokeOf = path => (look === 'marker' ? ink : look === 'pencil' ? K.mix(path.stroke, '#FFFFFF', 0.3) : path.stroke);
-    const fillOf = path => (look === 'marker' ? null : look === 'pencil' ? K.mix(path.fill, '#FFFFFF', 0.55) : path.fill);
-    const widthOf = path => Math.max(1.1 * u / g.s, path.width * (look === 'pencil' ? 0.7 : look === 'dry-erase' ? 1.3 : 1));
+    const strokeOf = path => (['marker', 'doodle', 'ink'].includes(look) ? ink : look === 'pencil' ? K.mix(path.stroke, '#FFFFFF', 0.3) : path.stroke);
+    const fillOf = path => (look === 'marker' ? null : look === 'pencil' ? K.mix(path.fill, '#FFFFFF', 0.55) : look === 'story' ? K.mix(path.fill, K.PAL.bg, 0.22) : look === 'ink' ? K.mix(path.fill, '#FFFFFF', 0.2) : path.fill);
+    const widthOf = path => Math.max(1.1 * u / g.s, path.width * ({pencil: 0.7, 'dry-erase': 1.3, doodle: 1.8, ink: 0.85}[look] || 1));
     ctx.save(); ctx.translate(g.x0, g.y0); ctx.scale(g.s, g.s);
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const path of g.paths) {
@@ -381,6 +383,24 @@
         if (traced < 1) { const pt = path.node.getPointAtLength(traced * path.len); K.penAt(pt.x, pt.y); }
       }
     }
+    ctx.restore();
+  }
+  // Motion design: the picture builds in shape by shape, each growing into place from its own centre (no hand, no
+  // tracing); a background shape fades in. Outlines come with their shape.
+  function buildPicture(g, seconds, local) {
+    const {ctx} = K, n = g.paths.length;
+    ctx.save(); ctx.translate(g.x0, g.y0); ctx.scale(g.s, g.s); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    g.paths.forEach((path, k) => {
+      const p = seconds ? clamp01((local - seconds * k / n) / 0.32) : 1;
+      if (p <= 0) return;
+      const backdrop = path.stroke === 'none' && path.box[2] * path.box[3] > 0.45 * g.paths[0].box[2] * g.paths[0].box[3] && k < 3;
+      const z = backdrop ? 1 : ease.outBack(p), cx = path.box[0] + path.box[2] / 2, cy = path.box[1] + path.box[3] / 2;
+      ctx.save(); ctx.globalAlpha *= backdrop ? p : Math.min(1, p * 2);
+      ctx.translate(cx, cy); ctx.scale(Math.max(0.001, z), Math.max(0.001, z)); ctx.translate(-cx, -cy);
+      if (path.fill !== 'none') { ctx.fillStyle = path.fill; ctx.fill(path.p2d); }
+      if (path.stroke !== 'none') { ctx.strokeStyle = path.stroke; ctx.lineWidth = Math.max(1.1 * K.u / g.s, path.width); ctx.stroke(path.p2d); }
+      ctx.restore();
+    });
     ctx.restore();
   }
   // A framed whiteboard: an aluminium frame round the picture and the marker tray along the bottom.
@@ -744,7 +764,8 @@
     P = context.P; D = P.data;
     K.KIT = D.kit || {};
     K.TIP = null;
-    const look = D.engine === 'stickman' ? P.drawing?.look : null;
+    // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise.
+    const look = D.engine === 'stickman' ? D.look || (P.drawing?.look !== 'mix' ? P.drawing?.look : null) || 'classic' : null;
     const params = {...P, finish: (look && LOOKS[look]) || FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
     if (D.board) K.WB = D.board;

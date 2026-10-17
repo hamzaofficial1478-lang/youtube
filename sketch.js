@@ -49,10 +49,12 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/16';
+const VERSION = 'drawn-scene/17';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
-const BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']);
+const BOARDS = Object.freeze(Object.keys(E.BOARDS));
+// 0.34: a stickman shot's own look, for videos that mix the stickman looks.
+const STICK_LOOKS = Object.freeze(Object.keys(E.LOOKS));
 
 // Common near-misses map onto the library instead of failing a whole plan.
 const PROP_SYNONYMS = Object.freeze({
@@ -198,7 +200,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       if (elements.filter(el => el.kind === 'picture').length >= MAX_PICTURES) { if (!lenient) fail(`A shot holds at most ${MAX_PICTURES} picture.`); warn(`${label}: a shot holds one picture; the extra one was left out.`); return; }
       // The drawing itself comes from the illustrator (or a stored plan) and is checked again every time.
       let art;
-      if (item.art !== undefined) { const checked = Il.validateArt(item.art); art = checked.art; if (!art) { if (!lenient) fail(`${label} picture: ${checked.issues[0]}`); warn(`${label}: its picture did not pass its checks (${checked.issues[0]}), so it will be drawn again.`); } }
+      if (item.art !== undefined) { const checked = Il.validateArt(item.art, {outlines: false}); art = checked.art; if (!art) { if (!lenient) fail(`${label} picture: ${checked.issues[0]}`); warn(`${label}: its picture did not pass its checks (${checked.issues[0]}), so it will be drawn again.`); } }
       elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...base});
       return;
     }
@@ -220,7 +222,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, STICK_LOOKS, 'Stickman look', 'classic')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -397,7 +399,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman', {pictures = false} = {}) {
+function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false} = {}) {
   const engines = E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
@@ -407,6 +409,8 @@ function promptGuide(primary = 'stickman', {pictures = false} = {}) {
     'For each drawn shot return "cue": the first words spoken when this shot starts (the picture changes on them), and "sketch":',
     `{"engine": ${list(engines)}, "set": ${list(SETS)}, "mood": ${list(MOODS)}, "camera": ${list(CAMERAS)}, "transition": ${list(TRANSITIONS)}, "focus"?: [{"at": words, "x": 0-1, "y": 0-1, "zoom": 1-2.5}] (max ${MAX_FOCUS}), "elements": [1-${MAX_ELEMENTS}, back to front]}`,
     'Sets that are easy to misread: ocean is under water (light rays, seaweed, the sea floor), for divers and sea life; ships, sailors and the sea surface go on beach (sky, sea and sand) or storm with ship and waves props. space is outer space, night is a city at night, abstract and none are plain backdrops.',
+    ...(looks ? [`A stickman shot of a video that mixes the stickman looks names its look: "look": ${list(STICK_LOOKS)}.`] : []),
+    ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(BOARDS)}.`] : []),
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
@@ -425,4 +429,4 @@ function promptGuide(primary = 'stickman', {pictures = false} = {}) {
   ].join('\n');
 }
 
-module.exports = {MAX_PICTURES, BOARDS, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {MAX_PICTURES, BOARDS, STICK_LOOKS, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

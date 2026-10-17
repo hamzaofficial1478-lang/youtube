@@ -150,3 +150,21 @@ test('a picture is data, never code: path data and colours only, checked before 
   assert.match(Sk.promptGuide('handdrawn', {pictures: true}), /"kind": "picture"/);
   assert.doesNotMatch(Sk.promptGuide('handdrawn'), /"kind": "picture"/);
 });
+
+test('a shot may name its own stickman look (videos that mix the looks); pictures are drawn in each engine\'s own style', () => {
+  assert.equal(Sk.validate({engine: 'stickman', look: 'doodle', elements: [{kind: 'text', text: 'Hi'}]}).look, 'doodle');
+  assert.equal(Sk.validate({elements: [{kind: 'text', text: 'Hi'}]}).look, undefined);
+  assert.throws(() => Sk.validate({look: 'mix', elements: [{kind: 'text', text: 'Hi'}]}), /Stickman look/);
+  assert.match(Sk.promptGuide('stickman', {looks: true}), /names its look: "look": classic/);
+  assert.doesNotMatch(Sk.promptGuide('stickman'), /names its look/);
+  assert.match(Sk.promptGuide('handdrawn', {boards: true}), /names its look: "board": cartoon/);
+  const Il = require('../illustrate');
+  const read = options => Il.messages({describe: 'A cafe at dawn', ...options}).map(item => item.content).join('\n');
+  assert.match(read({engine: 'stickman', look: 'storybook'}), /stickman-animation video[\s\S]*storybook illustration[\s\S]*stick characters/);
+  assert.match(read({engine: 'motion'}), /motion-graphics video[\s\S]*build in one after another[\s\S]*no outline/);
+  assert.match(read({engine: 'handdrawn', board: 'marker'}), /whiteboard-animation video[\s\S]*black marker line art/);
+  // Motion design needs no outlines; a traced picture does.
+  const flat = {viewBox: [600, 400], paths: Array.from({length: 6}, (_, k) => ({d: `M${k} ${k} L${k + 50} ${k} L${k + 50} ${k + 50} Z`, fill: '#3E7BFA'}))};
+  assert.deepEqual(Il.validateArt(flat, {outlines: false}).issues, []);
+  assert.match(Il.validateArt(flat).issues.join(' '), /dark outline/);
+});

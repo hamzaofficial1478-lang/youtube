@@ -302,10 +302,10 @@ function planMessages(input) {
     ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, brief: input.style.brief})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
-    ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
+    ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
     ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
       : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
-    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
+    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, looks: input.style.look === 'mix', boards: input.style.board === 'mix'}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
   ].join('\n');
@@ -327,7 +327,7 @@ function reviewMessages(input) {
     '(5) WORLD - the shot obeys the story\'s world (input "world": its era and rules) and plain physics: people stand on ground or floors and are under water only when diving, ships float on the surface, things keep their size and era, and what the words name is shown (use the kit, input "kit", for what the vocabulary lacks).',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
-    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, brief: input.brief}), Sk.promptGuide(input.engine, {pictures: input.pictures === true}),
+    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, brief: input.brief}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix', boards: input.board === 'mix'}),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -616,7 +616,7 @@ class SceneRoom {
     // The budget holds when atelier is a guest engine; an atelier video designs every shot (no budget).
     const engines = D.availableEngines({sources, frames}), designedShots = !frames ? 0 : inputs.engine === 'atelier' ? null : D.designedBudget(inputs.voice.durationSeconds, perMinute);
     // Pictures (0.33): only where the program draws; at least one when they are on.
-    const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = pictureRate > 0 && sources.includes('generated-graphics') && E.ENGINES[inputs.engine]?.draws ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
+    const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = pictureRate > 0 && sources.includes('generated-graphics') ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
       style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {})} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
@@ -899,21 +899,22 @@ class SceneRoom {
     for (const target of [...targets].sort((a, b) => b.si - a.si || b.hi - a.hi || b.ei - a.ei)) {
       const {si, hi, item, shot} = target, label = shotLabel(si, hi);
       if (!keep.has(target)) { drop(target, `past the video's budget of ${scope.budget} pictures`); continue; }
-      const board = shot.sketch.board || spec.drawing?.board || 'cartoon', aspect = {s: 1.2, m: 1.3, l: 1.5, xl: 1.78}[item.size || 'l'] || 1.5;
-      const pictureKey = hash({label, describe: item.describe, board, aspect}), stored = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pictureKey);
+      const own = value => (value && value !== 'mix' ? value : null), engine = E.DRAW_ENGINES.includes(shot.sketch.engine) ? shot.sketch.engine : E.ENGINES[inputs.engine]?.draws ? inputs.engine : 'stickman';
+      const board = own(shot.sketch.board) || own(spec.drawing?.board) || 'cartoon', look = own(shot.sketch.look) || own(spec.drawing?.look) || 'classic', aspect = {s: 1.2, m: 1.3, l: 1.5, xl: 1.78}[item.size || 'l'] || 1.5;
+      const pictureKey = hash({label, describe: item.describe, engine, board, look, aspect}), stored = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pictureKey);
       let findings = [], art = stored ? JSON.parse(stored.art) : null;
       if (stored) notes.push(`${label}: its picture was kept from an earlier attempt of this plan (no new tokens).`);
       for (let attempt = 1; attempt <= 2 && !art; attempt++) {
         const key = `${job.id}:picture:${label}:${job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
-        const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', board, palette, world: plan.world || null, cast, aspect, findings});
+        const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', engine, board, look, palette, world: plan.world || null, cast, aspect, findings});
         const maxTokens = Math.min(32000, scope.tokenLimit - messageTokenUpperBound(messages));
         let reply;
         try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens, onStart}); }
         catch (error) { settle(key, null, 'unknown'); findings = [error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer']; break; }
         settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
         report.tokens += reply.usage?.totalTokens || 0;
-        const checked = Il.validateArt(reply.content);
+        const checked = Il.validateArt(reply.content, {outlines: Il.ENGINE_NOTES[engine]?.outlines !== false});
         art = checked.art; findings = checked.issues;
         if (art) this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, pictureKey, JSON.stringify(art), now());
       }
@@ -1048,7 +1049,7 @@ class SceneRoom {
     const scope = this.scopeOf(row, inputs);
     requireValue(scope.current, `${scope.issues[0]} Use “Refresh for current narration and style” first.`, 409);
     const shot = JSON.parse(row.payload).scenes.flatMap(scene => scene.shots).find(item => item.id === input.shotId);
-    requireValue(shot?.sketch && shot.source === 'generated-graphics' && E.ENGINES[inputs.engine]?.draws, 'Only a drawn shot of a drawing style can carry a picture.', 404);
+    requireValue(shot?.sketch && shot.source === 'generated-graphics', 'Only a drawn shot can carry a picture.', 404);
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true), settings = this.settings(inputs.family.id);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
@@ -1105,7 +1106,7 @@ class SceneRoom {
     const review = {chunks, tokenLimit: settings.reviewTokenLimit ?? SETTINGS_DEFAULTS.reviewTokenLimit};
     // New drawings may carry pictures, within what is left of the video's picture budget.
     const rate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, drawnPictures = payload.scenes.flatMap(scene => scene.shots).filter(shot => shot.sketch?.elements?.some(item => item.kind === 'picture' && item.art)).length;
-    const left = rate > 0 && E.ENGINES[inputs.engine]?.draws ? Math.max(0, Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * rate)) - drawnPictures) : 0;
+    const left = rate > 0 && inputs.sources.includes('generated-graphics') ? Math.max(0, Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * rate)) - drawnPictures) : 0;
     const illustrate = left ? {budget: left, tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit} : null;
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);

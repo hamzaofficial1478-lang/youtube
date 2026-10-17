@@ -38,7 +38,7 @@
   // ------------------------------------------------------------ state for the current frame
   K.bind = ({ctx, P, W, H, M}) => {
     const dark = K.lum(P.palette.bg) < 0.45;
-    Object.assign(K, {ctx, P, W, H, M, u: Math.min(W, H) / 1080, FIN: P.finish || 'cartoon', WB: P.drawing?.board || 'cartoon', DARK: dark,
+    Object.assign(K, {ctx, P, W, H, M, u: Math.min(W, H) / 1080, FIN: P.finish || 'cartoon', WB: P.drawing?.board && P.drawing.board !== 'mix' ? P.drawing.board : 'cartoon', DARK: dark,
       PAL: {bg: P.palette.bg, ink: P.palette.ink, accent: P.palette.accent, line: P.palette.ink, // Faces stay light with dark features on every palette (live 0.25 run: dark-palette faces read as black).
       head: dark ? '#F3EEE4' : '#FFFFFF', face: dark ? '#1F1F1F' : P.palette.ink, shadow: dark ? 'rgba(0,0,0,0.35)' : K.alpha(P.palette.ink, 0.13)}});
   };

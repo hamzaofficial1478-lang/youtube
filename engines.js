@@ -69,8 +69,12 @@ function plannerSources(spec, executable) {
 }
 
 // The engines as Claude reads them in the scene-planning prompt.
+// The mix of an engine's own looks (owner request 2026-10-17: "the user can select the specific one, or the mix: the
+// program uses all features of that engine in one video"). Claude picks the look per scene, for a reason.
+const MIX_RULE = 'Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
 function promptGuide(primary, {mix = false, look = null, board = null, brief = null} = {}) {
   const stickman = LOOKS[look] && look !== 'classic' && (mix || primary === 'stickman');
+  const stickMix = look === 'mix' && (mix || primary === 'stickman'), boardMix = board === 'mix' && (mix || primary === 'handdrawn');
   return [
     mix ? 'ENGINES. This video is a story mix: no engine leads. Each beat gets the engine that serves its job best (see the story director), and the video must still feel like one film.'
       : `ENGINES. This video's main look is ${ENGINES[primary].name} (${primary}). You decide, shot by shot, which engine and source serve the line best; the video must still feel like one film.`,
@@ -80,7 +84,9 @@ function promptGuide(primary, {mix = false, look = null, board = null, brief = n
     mix ? `Drawn shots name their engine in sketch.engine: ${DRAW_ENGINES.join(', ')}. An atelier shot carries a "frame" instead of a sketch.`
       : `When a shot leaves the main look (another engine or source), say why in its notes in one sentence. Drawn shots name their engine in sketch.engine: ${drawEngines(primary).join(', ')}. An atelier shot carries a "frame" instead of a sketch.`,
     ...(stickman ? [`STICKMAN LOOK: ${LOOKS[look].name}. ${LOOKS[look].plan}`] : []),
+    ...(stickMix ? [`STICKMAN LOOKS (mix): this video uses every stickman look. Give each stickman shot its look in sketch.look, chosen for what its scene needs: ${Object.entries(LOOKS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(primary === 'handdrawn' || mix ? [`HAND-DRAWN SHOTS: ${ENGINES.handdrawn.plan}${BOARDS[board] ? ` WHITEBOARD LOOK: ${BOARDS[board].name}. ${BOARDS[board].plan}` : ''}`] : []),
+    ...(boardMix ? [`WHITEBOARD LOOKS (mix): this video uses every whiteboard look. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${Object.entries(BOARDS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
     ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : []),

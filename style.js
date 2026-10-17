@@ -33,25 +33,25 @@ const PROFILE_LIMIT = 60;
 // every adapter stays "not_implemented" until its milestone passes real fixtures.
 const RENDERERS = {
   'ffmpeg-montage': {
-    features: ['Stock footage and photos cut to the voice', 'Drawn explainer cutaways where footage cannot show it'],
+    features: ['Stock footage and photos cut to the voice', 'Drawn explainer cutaways where footage cannot show it', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
     name: 'FFmpeg montage', milestone: 'P05', status: 'not_implemented', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated (choose in the style)', 'Option: a hand draws each scene', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all looks (choose in the style)', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
-    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers (choose in the style)', 'People drawn as people: proportions, clothes, hands and expressive faces'],
+    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all looks (choose in the style)', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces'],
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
-    features: ['Kinetic words, counters, charts, timelines and icons'],
+    features: ['Kinetic words, counters, charts, timelines and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
@@ -85,9 +85,10 @@ const STANDARD_PROHIBITED = [
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
 const LAUNCH_VERSION = 'Launch library v8';
-const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']);
+// 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
+const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
-const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase']);
+const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase', 'mix']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.

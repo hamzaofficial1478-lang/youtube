@@ -194,6 +194,27 @@ test('a picture is traced by the hand line by line, then coloured in, in each wh
   }
 });
 
+test('Mix: a shot draws in its own look; a style set to mix draws the classic look and the colour cartoon board by default; a motion picture builds in', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const shot = extra => ({engine: 'stickman', set: 'street', camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'point', x: 0.35}, {kind: 'prop', prop: 'coin', x: 0.75, y: 0.4}], ...extra});
+    const mix = {drawing: {look: 'mix', hand: false}};
+    assert.ok((await frame(renderer, shot({look: 'storybook'}), 2.8, mix)).equals(await frame(renderer, shot(), 2.8, {drawing: {look: 'storybook', hand: false}})), 'the shot\'s own look');
+    assert.ok((await frame(renderer, shot(), 2.8, mix)).equals(await frame(renderer, shot(), 2.8, {drawing: {look: 'classic', hand: false}})), 'no look of its own: classic');
+    const hand = {engine: 'handdrawn', set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'prop', prop: 'truck', x: 0.4, size: 'l'}]};
+    assert.ok((await frame(renderer, hand, 2.6, {primary: 'handdrawn', drawing: {look: 'classic', hand: false, board: 'mix'}})).equals(await frame(renderer, hand, 2.6, {primary: 'handdrawn', drawing: {look: 'classic', hand: false, board: 'cartoon'}})));
+    const art = {viewBox: [600, 400], paths: Array.from({length: 8}, (_, k) => ({d: `M${40 + k * 60} 300 L${80 + k * 60} 120 L${120 + k * 60} 300 Z`, fill: ['#3E7BFA', '#E0753E'][k % 2]}))};
+    const flat = {engine: 'motion', set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'picture', describe: 'Eight flat shapes in a row', x: 0.5, y: 0.5, art}]};
+    const frames = [];
+    for (const t of [0.2, 0.7, 2.9]) frames.push(await frame(renderer, flat, t, {primary: 'motion'}));
+    assert.ok(!frames[0].equals(frames[1]) && !frames[1].equals(frames[2]), 'shapes build in one after another');
+    assert.equal((await renderer.evaluate('DRAWN.layout()')).tip, null, 'no pen in motion design');
+  } finally {
+    await renderer.close();
+  }
+});
+
 test('a drawing browser that is restarted (a stall during a render) draws again on the same renderer', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async t => {
   const renderer = new MotionRenderer({browser}), out = require('node:fs').mkdtempSync(require('node:path').join(require('node:os').tmpdir(), 'restart-'));
   t.after(() => require('node:fs').rmSync(out, {recursive: true, force: true}));

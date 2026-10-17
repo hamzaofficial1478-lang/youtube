@@ -46,3 +46,11 @@ test('a style learned from an approved study briefs the planner in its own words
   assert.match(E.promptGuide('handdrawn', {brief: 'Hold each drawing while its notes arrive.'}), /LEARNED LOOK \(from an approved style study; use the techniques, never copy a channel\): Hold each drawing/);
   assert.doesNotMatch(E.promptGuide('handdrawn'), /LEARNED LOOK/);
 });
+
+test('Mix: an engine with several looks can use all of them in one video, chosen per scene for a reason', () => {
+  const stick = E.promptGuide('stickman', {look: 'mix'}), board = E.promptGuide('handdrawn', {board: 'mix'});
+  assert.match(stick, /STICKMAN LOOKS \(mix\): .*sketch\.look.*classic \(classic cartoon\).*doodle \(doodle\).*never a different look on every shot/);
+  assert.match(board, /WHITEBOARD LOOKS \(mix\): .*sketch\.board.*dry-erase \(dry-erase markers\)/);
+  assert.doesNotMatch(E.promptGuide('stickman', {look: 'storybook'}), /\(mix\)/);
+  assert.doesNotMatch(E.promptGuide('motion', {look: 'mix', board: 'mix'}), /\(mix\)/, 'a motion-graphics video is not told about other engines\' looks');
+});

@@ -77,6 +77,14 @@ test('every engine may use every transition; the whiteboard look is checked; lau
   assert.equal(validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: false}}).drawing.board, undefined, 'the whiteboard look is optional');
 });
 
+test('Mix is a choice in each engine with looks: stickman looks and whiteboard looks', () => {
+  const stick = LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec, hand = LAUNCH_PROFILES.find(item => item.key === 'hand-drawn-canvas').spec;
+  assert.equal(validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false}}).drawing.look, 'mix');
+  assert.equal(validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: true, board: 'mix'}}).drawing.board, 'mix');
+  assert.ok(RENDERERS['ffmpeg-sketch'].features.some(item => /Mix of all looks/.test(item)) && RENDERERS['canvas-frames'].features.some(item => /Mix of all looks/.test(item)));
+  assert.ok(['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics'].every(key => RENDERERS[key].features.some(item => /Paid pictures where they count/.test(item))), 'every drawing engine lists paid pictures');
+});
+
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {
   const store = new Store(':memory:');
   t.after(() => store.close());
