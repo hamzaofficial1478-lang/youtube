@@ -1,7 +1,7 @@
 {
-  "version": "0.37.0",
+  "version": "0.38.0",
   "updated": "2026-10-16",
-  "nextAction": "Owner review of the engine restructure (one engine per style, Documentary engine, motion graphics as a layer); then the motion layer's animation upgrades (typography, backgrounds, layering) and image or stock keys for the footage and painted looks.",
+  "nextAction": "Owner review of the motion layer showcase (scratchpad motion3) and the 0.37 engine restructure; then the next engine or demo the owner asks for.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -407,6 +407,13 @@
           "status": "testing",
           "remaining": "Owner review; motion-layer animation upgrades; AI-painted and footage looks need keys.",
           "evidence": "0.37.0 (2026-10-18): engine scope, documentary looks, period places, backdrops and map fly-in rendered and checked; Style Library checked in the browser; npm test passed (see commit)."
+        },
+        {
+          "id": "P06s",
+          "title": "Motion layer upgrade: word animations, textures, depth layers, map moves",
+          "status": "testing",
+          "remaining": "Owner review of the showcase reel; footage cards need footage.",
+          "evidence": "0.38.0 (2026-10-18): every animation, texture, layer, entrance and map move rendered and checked; showcase reel rendered; tests added (sketch and drawn)."
         },
         {
           "id": "S02",

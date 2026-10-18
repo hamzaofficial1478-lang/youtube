@@ -365,3 +365,35 @@ Owner review (2026-10-18) of the all-styles demo:
 - **Scene building**: the planner's SCENE BUILDING line asks for film-like scenes. Show the place before the people, give a key person the place that says who they are, and keep abstract backdrops rare and never twice in a row. The abstract backdrop now picks one of six patterns per shot (stripes, glow and rings, halftone, soft shapes, grid, waves) from the shot's own seed.
 - **Maps**: the planner's MAPS line asks for at least 3 seconds per map shot, and a shorter map shot is named in the plan's warnings. Maps fly in (the view settles over 1.4 s), and their steps without words wait for it.
 - **Not built**: AI-painted scenes for the painted story (they need an image API key); motion graphics on real footage (they need a stock or image key); further motion-layer upgrades (typography and background animations), which the owner wants next.
+
+## 24. The motion layer, upgraded (0.38.0)
+
+Owner request (2026-10-18): "proceed to upgrade motion graphic animation". This means the motion layer that every engine uses (0.37): typography, background and layering animations as Vox, MagnatesMedia and Dhruv Rathee use them. Research: research/motion-graphics-references.md "Motion layer animation" (Vox and Dhruv Rathee storyboards; tutorial titles that name the techniques). Everything is in the shared vocabulary, so Stickman, Whiteboard, Documentary and the story mix all use it in their own look. Frames stay pure functions of time.
+
+- **Words** (text `animate`; titles, notes, numbers, pops, keywords, highlights, statements and posters; handwritten finishes keep writing with the pen):
+  - `rise`: words rise from a mask line, one after another;
+  - `letters`: letters pop in with a little overshoot;
+  - `typewriter`: typed at 24 letters a second with a blinking cursor;
+  - `wipe`: a highlighter bar sweeps across and pulls back to leave the words;
+  - `slam`: lands hard with motion trails and a camera shake;
+  - `track`: a cinematic title whose letters close in;
+  - `glitch`: red and cyan copies jitter, then settle;
+  - `blur`: a focus pull;
+  - `focus`: a statement builds, then its key words stay while the rest dims and softens, which is the word focus effect.
+- **Textures** (shot `texture`), laid over the finished frame:
+  - `grain`;
+  - `film`: grain, flicker, dust and hairs, vignette;
+  - `paper`;
+  - `vhs`: scanlines, a colour shift and a moving noise band;
+  - `duotone`: a two-colour archive tint;
+  - `leak`: warm light leaks;
+  - `grid`: grid paper behind everything else.
+- **Depth** (element `layer`): the back layer moves at 0.8 of the camera and goes soft (more when the camera pushes in); the front layer moves at 1.25. With a camera move this gives 2.5D parallax. New entrances: `mask` (revealed through a growing circle), `swing` (swings in from its top), `blur` (focuses in) and `rise` (rises into place).
+- **Maps**:
+  - styles `atlas` (black land on grid paper, small-caps labels), `satellite`, `paper` and `night`;
+  - area and pin `zoom` (the map camera flies to that country or pin on its words);
+  - route `icon` (a traveller such as a sailing ship or a plane moves along a dashed trail);
+  - pins send out pulse rings, and once an area lights up the rest of the land steps back.
+- Key words: every word between the opening and the closing star lights up (before, "*redrew the map*" lit only its first and last words); words on the accent bar are drawn without the dark edge, and neighbouring key words share one bar.
+- The planner's MOTION LAYER brief lists these and asks for one or two moves per shot, each on its words.
+- **Not built**: footage cards and 3D globes (they need footage; the drawn engine is 2D).

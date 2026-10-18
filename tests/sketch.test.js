@@ -222,12 +222,12 @@ test('0.36 maps: everyday country names, date-line shapes, fitted views, and map
 });
 
 test('a checked drawing checked again is the same drawing: every element kind survives a stored plan being drawn again', () => {
-  const sketch = {engine: 'motion', design: 'cartoon', set: 'throne', elements: [
-    {kind: 'figure', who: 'c1', pose: 'point', expression: 'happy', then: [{at: 'later', pose: 'cheer'}], label: 'Max, narrator'},
-    {kind: 'prop', prop: 'coin', x: 0.7, y: 0.4, face: true}, {kind: 'text', style: 'statement', text: 'A *big* idea'}, {kind: 'arrow', from: 1, to: [0.8, 0.3]},
+  const sketch = {engine: 'motion', design: 'cartoon', set: 'throne', texture: 'film', elements: [
+    {kind: 'figure', who: 'c1', pose: 'point', expression: 'happy', then: [{at: 'later', pose: 'cheer'}], label: 'Max, narrator', layer: 'front'},
+    {kind: 'prop', prop: 'coin', x: 0.7, y: 0.4, face: true, layer: 'back', enter: 'mask'}, {kind: 'text', style: 'statement', text: 'A *big* idea', animate: 'focus'}, {kind: 'arrow', from: 1, to: [0.8, 0.3]},
     {kind: 'chart', type: 'bar', values: [1, 60], labels: ['cost', 'sale']}, {kind: 'timeline', events: [{label: 'Leave', when: '1497'}, {label: 'India', when: '1498'}], now: 1},
     {kind: 'network', nodes: [{label: 'Venice'}, {label: 'Lisbon'}], links: [[1, 2]]},
-    {kind: 'map', areas: [{countries: ['Portugal'], face: 'happy', at: 'Portugal'}], routes: [{from: 'Portugal', to: 'India', label: 'Around Africa'}], pins: [{place: [72.88, 19.08], label: 'Calicut'}]},
+    {kind: 'map', style: 'atlas', areas: [{countries: ['Portugal'], face: 'happy', zoom: true, at: 'Portugal'}], routes: [{from: 'Portugal', to: 'India', label: 'Around Africa', icon: 'galleon'}], pins: [{place: [72.88, 19.08], label: 'Calicut', zoom: true}]},
     {kind: 'crowd', count: 7, pose: 'cheer', colors: ['red'], banner: 'Pepper!'}, {kind: 'fx', effect: 'burst', on: 2},
   ]};
   const once = Sk.validate(sketch, {cast}), twice = Sk.validate(once, {cast});
@@ -255,4 +255,20 @@ test('0.37: a video draws only with its engines, places of the past, and a story
   assert.match(fixes[0].fix, /place of today, so this early-modern story moved it to the chamber/);
   assert.deepEqual(Sk.worldMend([{label: 'S02A', sketch: Sk.validate({set: 'home', elements: [{kind: 'figure'}]})}], {era: 'modern'}), [], 'a modern story keeps its home');
   assert.equal(Sk.fromText('The king sat alone and wondered what to do.', {primary: 'stickman'}).set, 'throne');
+});
+
+test('0.38 motion layer: word animations, depth layers, textures and map moves are checked like the rest', () => {
+  const shot = Sk.validate({texture: 'vhs', elements: [{kind: 'text', text: 'LANGTANG', animate: 'track', layer: 'front'}, {kind: 'prop', prop: 'globe', enter: 'mask', layer: 'back'},
+    {kind: 'map', style: 'night', areas: [{countries: ['Nepal'], zoom: true}], routes: [{from: 'Portugal', to: 'India', icon: 'sailing-ship'}]}]});
+  assert.equal(shot.texture, 'vhs');
+  assert.deepEqual([shot.elements[0].animate, shot.elements[0].layer, shot.elements[1].enter, shot.elements[1].layer], ['track', 'front', 'mask', 'back']);
+  assert.deepEqual([shot.elements[2].style, shot.elements[2].steps[0].zoom, shot.elements[2].steps[1].icon], ['night', true, 'galleon']);
+  assert.equal('animate' in Sk.validate({elements: [{kind: 'text', text: 'Hi', animate: 'auto'}]}).elements[0], false, 'auto is the style\'s own way');
+  assert.throws(() => Sk.validate({elements: [{kind: 'text', text: 'Hi', animate: 'explode'}]}), /animate must be one of/);
+  assert.throws(() => Sk.validate({texture: 'oil', elements: [{kind: 'text', text: 'Hi'}]}), /Texture must be one of/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'prop', prop: 'coin', layer: 'deep'}]}), /layer must be one of/);
+  const warnings = [];
+  assert.equal(Sk.validate({elements: [{kind: 'text', text: 'Hi', animate: 'explode'}]}, {lenient: true, warn: message => warnings.push(message)}).elements[0].animate, undefined);
+  assert.match(warnings[0], /animate must be one of/);
+  assert.match(Sk.promptGuide('stickman'), /MOTION LAYER: a text may "animate": auto\|rise\|letters/);
 });

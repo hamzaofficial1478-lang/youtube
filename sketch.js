@@ -41,7 +41,13 @@ const SETS = Object.freeze(['none', 'room', 'office', 'home', 'bedroom', 'kitche
 const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'danger', 'cold', 'money', 'warm', 'sunset', 'night', 'mystery', 'calm', 'hope', 'retro']);
 const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'crash-zoom', 'dolly-in', 'handheld', 'ken-burns']);
 const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'whip-up', 'whip-down', 'zoom', 'zoom-out', 'pop', 'ink', 'glitch', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'drop', 'iris', 'flash', 'shake']);
-const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'none']);
+const ENTERS = Object.freeze(['auto', 'pop', 'slide', 'drop', 'draw', 'fade', 'grow', 'mask', 'swing', 'blur', 'rise', 'none']);
+// 0.38 motion layer (owner request 2026-10-18; research/motion-graphics-references.md "Motion layer animation"):
+// how words animate in, which depth layer a thing lives on, the shot's texture, and map styles.
+const TEXT_ANIMS = Object.freeze(['auto', 'rise', 'letters', 'typewriter', 'wipe', 'slam', 'track', 'glitch', 'blur', 'focus']);
+const LAYERS = Object.freeze(['back', 'mid', 'front']);
+const TEXTURES = Object.freeze(['none', 'grain', 'film', 'paper', 'grid', 'vhs', 'duotone', 'leak']);
+const MAP_STYLES = Object.freeze(['auto', 'atlas', 'satellite', 'paper', 'night']);
 const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout', 'keyword', 'versus', 'statement', 'poster']);
 const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars', 'impact', 'lightning', 'explosion', 'fire', 'dust', 'wind', 'spiral', 'crack']);
 // Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
@@ -52,7 +58,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/20';
+const VERSION = 'drawn-scene/21';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -161,7 +167,8 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   raw.elements.slice(0, MAX_ELEMENTS).forEach((item, k) => {
     const label = `Element ${k + 1}`;
     if (!item || typeof item !== 'object') { c.problem(`${label} must be an object.`); return; }
-    const base = {accent: item.accent === true, ...(clean(item.label, 24) ? {label: clean(item.label, 24)} : {}), ...timing(item, label)};
+    const layer = item.layer === undefined || item.layer === 'mid' ? null : c.pick(item.layer, LAYERS, `${label} layer`, null);
+    const base = {accent: item.accent === true, ...(clean(item.label, 24) ? {label: clean(item.label, 24)} : {}), ...timing(item, label), ...(layer && layer !== 'mid' ? {layer} : {})};
     if (item.kind === 'figure') {
       let who = clean(item.who, 12).toLowerCase() || undefined;
       if (who && !castMap.has(who)) who = c.problem(`${label} names ${who}, who is not in the cast.`, undefined);
@@ -192,7 +199,8 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       const value = clean(item.text, item.style === 'statement' ? 90 : 48);
       if (!value) { c.problem(`${label} needs text.`); return; }
       const style = c.pick(item.style, TEXT_STYLES, `${label} style`, 'title'), centred = ['statement', 'poster'].includes(style);
-      elements.push({kind: 'text', text: value, style, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.5), y: c.coord(item.y, `${label} y`, 0.06, 0.8, centred ? 0.45 : 0.16), size: c.pick(item.size, SIZES, `${label} size`, 'm'), ...base});
+      const animate = item.animate === undefined || item.animate === 'auto' ? null : c.pick(item.animate, TEXT_ANIMS, `${label} animate`, null);
+      elements.push({kind: 'text', text: value, style, x: c.coord(item.x, `${label} x`, 0.05, 0.95, 0.5), y: c.coord(item.y, `${label} y`, 0.06, 0.8, centred ? 0.45 : 0.16), size: c.pick(item.size, SIZES, `${label} size`, 'm'), ...(animate && animate !== 'auto' ? {animate} : {}), ...base});
       return;
     }
     if (item.kind === 'arrow') {
@@ -256,24 +264,26 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
         if (!countries.length) return;
         named.push(...countries);
         steps.push({type: 'area', countries, ...(clean(area.label, 24) ? {label: clean(area.label, 24)} : {}), color: c.pick(area.color, LOOK.color, `${label} area colour`, ['red', 'blue', 'green', 'yellow', 'purple', 'orange', 'teal', 'pink'][k % 8]),
-          ...(area.face ? {face: c.pick((lenient && FACE_NEAR[area.face]) || area.face, EXPRESSIONS, `${label} area face`, 'neutral')} : {}), ...(phrase(area.at) ? {at: phrase(area.at)} : {})});
+          ...(area.face ? {face: c.pick((lenient && FACE_NEAR[area.face]) || area.face, EXPRESSIONS, `${label} area face`, 'neutral')} : {}), ...(area.zoom === true ? {zoom: true} : {}), ...(phrase(area.at) ? {at: phrase(area.at)} : {})});
       });
       (Array.isArray(item.routes) ? item.routes : []).slice(0, MAX_ROUTES).forEach((route, k) => {
         const from = where(route?.from, `${label} route ${k + 1} from`), to = where(route?.to, `${label} route ${k + 1} to`);
         if (!from || !to) return;
         points.push(from, to);
-        steps.push({type: 'route', from, to, ...(clean(route.label, 24) ? {label: clean(route.label, 24)} : {}), ...(phrase(route.at) ? {at: phrase(route.at)} : {})});
+        const icon = route.icon ? propName(route.icon) : null;
+        steps.push({type: 'route', from, to, ...(clean(route.label, 24) ? {label: clean(route.label, 24)} : {}), ...(icon && PROPS.includes(icon) ? {icon} : icon ? c.problem(`${label} route ${k + 1} icon must be one of the props.`, {}) : {}), ...(phrase(route.at) ? {at: phrase(route.at)} : {})});
       });
       (Array.isArray(item.pins) ? item.pins : []).slice(0, MAX_PINS).forEach((pin, k) => {
         const at = where(pin?.place, `${label} pin ${k + 1}`);
         if (!at) return;
         points.push(at);
-        steps.push({type: 'pin', place: at, ...(clean(pin.label, 24) ? {label: clean(pin.label, 24)} : {}), ...(phrase(pin.at) ? {at: phrase(pin.at)} : {})});
+        steps.push({type: 'pin', place: at, ...(clean(pin.label, 24) ? {label: clean(pin.label, 24)} : {}), ...(pin.zoom === true ? {zoom: true} : {}), ...(phrase(pin.at) ? {at: phrase(pin.at)} : {})});
       });
       const box = Array.isArray(item.view) && item.view.length === 4 && item.view.every(Number.isFinite) && item.view[2] > item.view[0] && item.view[3] > item.view[1] ? [Math.max(-200, item.view[0]), Math.max(-60, item.view[1]), Math.min(200, item.view[2]), Math.min(84, item.view[3])] : null;
       const view = box ? 'box' : c.pick(item.view, MAP_VIEWS, `${label} view`, 'fit');
       if (!steps.length && view === 'fit') { if (!lenient) fail(`${label} needs countries, routes or pins, or a view.`); warn(`${label}: a map with nothing on it was left out.`); return; }
-      elements.push({kind: 'map', view: box || (view === 'fit' ? Maps.fit(named, points) : [...Maps.VIEWS[view]]), steps, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.48), size: c.pick(item.size, SIZES, `${label} size`, 'xl'), ...base});
+      const mapStyle = item.style === undefined || item.style === 'auto' ? null : c.pick(item.style, MAP_STYLES, `${label} style`, null);
+      elements.push({kind: 'map', view: box || (view === 'fit' ? Maps.fit(named, points) : [...Maps.VIEWS[view]]), steps, ...(mapStyle && mapStyle !== 'auto' ? {style: mapStyle} : {}), x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.48), size: c.pick(item.size, SIZES, `${label} size`, 'xl'), ...base});
       return;
     }
     if (item.kind === 'picture') {
@@ -304,7 +314,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, STICK_LOOKS, 'Stickman look', 'classic')} : {}), ...(raw.design !== undefined ? {design: c.pick(raw.design, DESIGNS, 'Motion design', 'vector')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, BOARDS, 'Whiteboard look', 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, STICK_LOOKS, 'Stickman look', 'classic')} : {}), ...(raw.design !== undefined ? {design: c.pick(raw.design, DESIGNS, 'Motion design', 'vector')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), ...(raw.texture !== undefined && raw.texture !== 'none' ? {texture: c.pick(raw.texture, TEXTURES, 'Texture', 'none')} : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -531,7 +541,8 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(BOARDS)}.`] : []),
     ...(designs ? [`A documentary drawn shot (engine "motion") of a video that mixes the documentary looks names its look: "design": ${list(DESIGNS)}.`] : []),
     'Places of the past: throne (a throne room), castle (a castle above its land, for a kingdom or an empire), chamber (a stone room with a candle and a tapestry), harbor (a port with ships), market (stalls under awnings), village (cottages and a path), battlefield (a field with smoke and banners). Never put a TV, a lamp, a laptop or a car in a story set before electricity.',
-    'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
+    'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + ' (mask: revealed through a growing circle; swing: swings in; blur: focuses in from a blur; rise: rises into place).',
+    `MOTION LAYER: a text may "animate": ${list(TEXT_ANIMS)} (rise: words rise from a mask line; letters: letter by letter; typewriter: typed with a cursor; wipe: a highlighter bar sweeps and reveals; slam: lands hard with motion trails and a shake; track: a cinematic title whose letters close in; glitch: breaks up, then settles; blur: a focus pull; focus: a statement whose key words stay while the rest dims). Any element may sit on a "layer": back (moves slower with the camera and goes soft) or front (moves faster) for 2.5D depth. A shot may carry a "texture": ${list(TEXTURES)} (film grain, an old film, paper, grid paper, VHS lines, a two-colour archive tint, warm light leaks).`,
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
     `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts; keyword is one big hand-lettered word in a top corner that names the beat; versus is a divider down the frame for comparing two things, its text in the middle circle, e.g. "VS"; the prop head is a head in profile to put a thought or a scene inside), "x", "y", "size", "accent"?}`,
@@ -541,7 +552,7 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     `- {"kind": "timeline", "events": 2-${MAX_EVENTS} [{"label": up to 18 chars, "when"?: a year or date}], "now"?: the index of the current event, "y"?, "at"?} - a bar with a medallion for each event, drawn left to right.`,
     '- A text with style "statement" is a whole sentence of up to 90 characters (key words between *stars* light up): kinetic type that builds word by word; give it the frame or most of it. Style "poster" is one or two giant words across the frame; list it before a picture or figure so it sits behind them.',
     `- {"kind": "network", "nodes": 2-${MAX_EVENTS} [{"label": up to 18 chars, "icon"?: a prop}], "links": [[node number, node number], ...] (numbers start at 1), "x"?, "y"?, "size"?, "at"?} - who is connected to whom: nodes appear, then the links draw with a flow along them.`,
-    `- {"kind": "map", "areas"?: [{"countries": [names], "label"?, "color"?, "face"?: an expression (the country becomes a character), "at"?}] (max ${MAX_AREAS}; an empire or an alliance is one area made of today's countries), "routes"?: [{"from": a country or [longitude, latitude], "to": ..., "label"?, "at"?}] (max ${MAX_ROUTES}: a march, a trade route, an invasion arrow), "pins"?: [{"place": a country or [longitude, latitude], "label", "at"?}] (max ${MAX_PINS}), "view"?: ${list(MAP_VIEWS)} (fit = around what it names), "size"?: xl fills the frame (default), "at"?} - a real map: countries colour in on their words, arrows sweep, pins drop. Country names are today's.`,
+    `- {"kind": "map", "style"?: ${list(MAP_STYLES)} (atlas: black land on grid paper with small-caps labels), "areas"?: [{"countries": [names], "label"?, "color"?, "face"?: an expression (the country becomes a character), "zoom"?: true (the map camera flies to it on its words), "at"?}] (max ${MAX_AREAS}; an empire or an alliance is one area made of today's countries), "routes"?: [{"from": a country or [longitude, latitude], "to": ..., "label"?, "icon"?: a prop that travels along it (galleon, plane, car, truck, ship), "at"?}] (max ${MAX_ROUTES}: a march, a trade route, an invasion arrow), "pins"?: [{"place": a country or [longitude, latitude], "label", "zoom"?: true, "at"?}] (max ${MAX_PINS}, pins pulse), "view"?: ${list(MAP_VIEWS)} (fit = around what it names), "size"?: xl fills the frame (default), "at"?} - a real map: countries colour in on their words, arrows sweep, pins drop. Country names are today's.`,
     `- {"kind": "crowd", "count": 3-${MAX_CROWD}, "pose"?: ${list(CROWD_POSES)}, "expression"?, "colors"?: up to 3 colours (an army's uniform), "headwear"?: one for all, "banner"?: a sign held up (up to 24 chars), "x"?, "y"?: ground, "width"?: 0.2-1 of the frame, "size"?: s|m, "facing"?} - a nation, an army, voters, a mob.`,
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
@@ -555,4 +566,4 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
   ].join('\n');
 }
 
-module.exports = {MAP_VIEWS, CROWD_POSES, MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

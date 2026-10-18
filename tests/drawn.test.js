@@ -293,3 +293,45 @@ test('0.36: maps colour in on their words, countries get faces, crowds and histo
     await renderer.close();
   }
 });
+
+test('0.38 motion layer: words animate in their own ways, textures, depth layers and map moves draw and change the frame', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const title = animate => ({engine: 'motion', design: 'kinetic', set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'text', style: 'title', text: 'The spice that built empires', ...(animate ? {animate} : {})}]});
+    const settled = {};
+    for (const animate of ['rise', 'letters', 'typewriter', 'wipe', 'slam', 'track', 'glitch', 'blur']) {
+      const early = await frame(renderer, title(animate), 0.15, {primary: 'motion'});
+      settled[animate] = await frame(renderer, title(animate), 2.5, {primary: 'motion'});
+      assert.ok(!early.equals(settled[animate]), `${animate} moves`);
+      assert.ok(settled[animate].equals(await frame(renderer, title(animate), 2.5, {primary: 'motion'})), `${animate} is a pure function of time`);
+    }
+    assert.ok(settled.rise.equals(settled.blur) && settled.rise.equals(settled.slam), 'once in, the words rest in the same place');
+    const focus = {engine: 'motion', design: 'kinetic', set: 'none', camera: 'still', elements: [{kind: 'text', style: 'statement', text: 'Pepper was worth *more than gold*', animate: 'focus'}]};
+    assert.ok(!(await frame(renderer, focus, 1.2, {primary: 'motion'})).equals(await frame(renderer, focus, 3, {primary: 'motion'})), 'the word focus dims the rest after the build');
+    // A starred span lights every word in it.
+    const span = text => ({engine: 'motion', design: 'kinetic', set: 'none', camera: 'still', elements: [{kind: 'text', style: 'statement', text}]});
+    assert.ok((await frame(renderer, span('Pepper was worth *more than gold*'), 2.5, {primary: 'motion'})).equals(await frame(renderer, span('Pepper was worth *more* *than* *gold*'), 2.5, {primary: 'motion'})));
+    // Textures lie over the finished frame; film grain moves with time.
+    const place = texture => ({set: 'village', camera: 'still', ...(texture ? {texture} : {}), elements: [{kind: 'figure', pose: 'stand', x: 0.4}]});
+    const plain = await frame(renderer, place(null), 1.5);
+    for (const texture of ['grain', 'film', 'paper', 'grid', 'vhs', 'duotone', 'leak']) assert.ok(!plain.equals(await frame(renderer, place(texture), 1.5)), texture);
+    assert.ok(!(await frame(renderer, place('grain'), 1.5)).equals(await frame(renderer, place('grain'), 1.55)), 'grain moves');
+    // Depth: with a moving camera the back layer sits elsewhere than the middle one.
+    const depth = layer => ({set: 'none', camera: 'dolly-in', elements: [{kind: 'prop', prop: 'tree', x: 0.25, y: 0.5, size: 'l', ...(layer ? {layer} : {})}]});
+    assert.ok(!(await frame(renderer, depth('back'), 2.8)).equals(await frame(renderer, depth(null), 2.8)));
+    assert.ok(!(await frame(renderer, depth('front'), 2.8)).equals(await frame(renderer, depth(null), 2.8)));
+    // New entrances.
+    for (const enter of ['mask', 'swing', 'blur', 'rise']) assert.ok(!(await frame(renderer, {set: 'none', camera: 'still', elements: [{kind: 'prop', prop: 'globe', size: 'l', enter}]}, 0.2)).equals(await frame(renderer, {set: 'none', camera: 'still', elements: [{kind: 'prop', prop: 'globe', size: 'l', enter}]}, 1.5)), enter);
+    // Maps: the camera flies to a country on its word; a traveller rides a route; a pin pulses; styles differ.
+    const nepal = zoom => ({set: 'none', camera: 'still', elements: [{kind: 'map', areas: [{countries: ['Nepal'], ...(zoom ? {zoom: true} : {})}], pins: [{place: 'India', label: 'India'}]}]});
+    assert.ok(!(await frame(renderer, nepal(true), 3.2)).equals(await frame(renderer, nepal(false), 3.2)), 'the map camera flew to Nepal');
+    const route = icon => ({set: 'none', camera: 'still', elements: [{kind: 'map', view: 'world', routes: [{from: 'Portugal', to: 'India', ...(icon ? {icon} : {})}]}]});
+    assert.ok(!(await frame(renderer, route('galleon'), 1.6)).equals(await frame(renderer, route(null), 1.6)), 'a traveller rides the route');
+    const pin = {set: 'none', camera: 'still', elements: [{kind: 'map', view: 'europe', pins: [{place: 'France', label: 'Paris'}]}]};
+    assert.ok(!(await frame(renderer, pin, 2.4)).equals(await frame(renderer, pin, 2.9)), 'pins pulse');
+    for (const style of ['atlas', 'satellite', 'paper', 'night']) assert.ok(!(await frame(renderer, {set: 'none', camera: 'still', elements: [{kind: 'map', view: 'europe', style}]}, 2)).equals(await frame(renderer, {set: 'none', camera: 'still', elements: [{kind: 'map', view: 'europe'}]}, 2)), style);
+  } finally {
+    await renderer.close();
+  }
+});

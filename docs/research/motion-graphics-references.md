@@ -71,3 +71,38 @@ Not taken: the channel's art, characters or title style. Its real quality comes 
 The owner placed the documentary channels in one Documentary engine: OverSimplified (cartoon documentary), Vox, MagnatesMedia and Dhruv Rathee (real footage with motion graphics) and StickOrbit (painted history). The designs of 0.35 (vector world, infographic, kinetic type, collage, data desk) are documentary looks. Motion graphics themselves (typography, background animation, layering, map animation) are a layer of every engine, not an engine.
 
 Not taken: any channel's character designs, colour schemes, title cards, intros or catchphrases; real photographs or memes (copyright); historical borders (the map uses today's countries; an empire is drawn as the group of today's countries it covered, and the planner is told so).
+
+## Motion layer animation (owner request 2026-10-18: "upgrade motion graphic animation" - typography, background and layering animations like Vox, MagnatesMedia and Dhruv Rathee)
+
+Storyboard frames read in the browser (nothing downloaded):
+- **Vox, "Why all world maps are wrong"** (with Johnny Harris). Live footage, then:
+  - archival portraits cut out with a dark name tag in italic serif ("Carl Friedrich Gauss");
+  - handwritten maths on paper;
+  - maps as black land on white grid paper with small-caps labels ("MERCATOR", "GALL-PETERS", "REALITY");
+  - dots scaled across the map;
+  - one country (Africa) lifted out of the map and set beside another for size;
+  - a rhumb line drawn across the map;
+  - old maps layered as cut-outs, and archive film tinted in two colours.
+- **Dhruv Rathee, "A Tsunami in the Himalayas"**. The presenter between:
+  - footage in rounded cards with shadows on a dark blurred background, two or three side by side;
+  - a globe zooming down to the region, with a magnitude meter;
+  - big tracked titles over a landscape ("LANGTANG LIRUNG");
+  - a news headline with a red highlight, and a red-tinted news screenshot;
+  - yellow paths drawn over satellite terrain, and speed labels on footage ("120 MPH").
+- **Tutorial titles** that name the techniques editors copy from these channels: the Vox highlighter effect, the word focus effect, map highlight with camera movement, map collage with a 3D camera, the newspaper animation, the stylized timeline transition, animated infographics.
+
+What the program takes (our own animation code; no channel's look, fonts or graphics):
+1. **Typography**:
+   - words rising from a mask line, letters popping in, a typewriter with a cursor;
+   - a highlighter bar that sweeps and reveals, a slam with motion trails, a cinematic tracked title, a glitch;
+   - a focus pull from blur, and the word focus effect (the key words stay, the rest dims).
+2. **Textures and backgrounds**: film grain, film (grain, flicker, dust, vignette), paper, grid paper, VHS lines, a two-colour tint for an archive feel, warm light leaks.
+3. **Layering**:
+   - a back layer that moves slower and goes soft, and a front layer that moves faster (2.5D parallax with the camera);
+   - entrances that reveal through a growing circle, swing in, focus in from blur, or rise.
+4. **Maps**:
+   - the camera zooms to a country or a pin on its words (the globe zoom); others dim when an area lights up;
+   - a traveller (a sailing ship, a plane, an army) moves along a route with a trail; pins send out pulse rings;
+   - an atlas style (black land on grid paper, small-caps labels).
+
+Not taken: real footage cards (they need footage keys); 3D globes and 3D camera tilts (the drawn engine is 2D).
