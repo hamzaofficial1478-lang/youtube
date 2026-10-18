@@ -16,7 +16,7 @@ const TRANSITIONS = Object.freeze(['cut', ...Object.keys(T.CATALOG)]);
 const LIMITS = Object.freeze({summary: 400, aspect: 300, item: 160, brief: 1200, learn: 6, ours: 14, avoid: 6});
 // The launch style a study starts from: one per engine (a stickman look is a feature of the Stickman style, set by
 // drawing.look in the draft).
-const BASE_STYLE = Object.freeze({stickman: 'stickman-sketch-explainer', handdrawn: 'hand-drawn-canvas', motion: 'motion-graphics', atelier: 'atelier', montage: 'documentary-montage'});
+const BASE_STYLE = Object.freeze({stickman: 'stickman-sketch-explainer', handdrawn: 'hand-drawn-canvas', motion: 'documentary-montage', atelier: 'atelier', montage: 'documentary-montage'});
 const baseStyleKey = study => BASE_STYLE[study.engine];
 const HEX = /^#[0-9A-F]{6}$/;
 

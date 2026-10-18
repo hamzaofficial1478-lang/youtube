@@ -336,3 +336,32 @@ Owner request (2026-10-17): explain why two paid pictures cost about 84,000 toke
 - **Checked twice, the same drawing**: a stored plan is checked again when it is drawn and rendered. A map now reads its own stored steps and view back, and network links keep their node numbers from 1 (0.35 shifted them on the second check, so the motion demo's two shops lost their link); a test checks every element kind twice.
 - **The hook**: the planner is told the first 3-5 seconds decide whether the viewer stays - open on the most striking picture for the first words, something moves in the first second, the first cut within 1.5-2.5 s, the best visual (a paid picture, a map reveal, the boldest word) earns its cost there.
 - **Not built**: historical borders (a map uses today's countries); motion overlays on stock footage (needs stock or AI keys).
+
+## 23. One engine per style; motion graphics as a layer; the Documentary engine (0.37.0)
+
+Owner review (2026-10-18) of the all-styles demo:
+- Mix was misunderstood. The story mix of all engines is good and stays. But "mix" inside an engine must use only that engine's features (a stickman video with Mix uses only stickman looks).
+- The owner must see clearly where each kind of mix is chosen.
+- The pepper background repeated. The king stood in a room with a TV; he belongs on his throne, in his castle, shown like a film (the empire, then into the window, then the king thinking).
+- The maps were too short.
+- Motion graphics are not an engine with its own style. They are the motion layer every engine uses: typography, background animation, layering, maps.
+- The documentaries belong in a Documentary engine: the cartoon documentary (OverSimplified), real footage with motion graphics (Vox, MagnatesMedia, Dhruv Rathee) and StickOrbit's painted history.
+
+- **One engine per style** (`engines.js` `engineScope`):
+  - A Stickman or Whiteboard style plans drawn shots of its own engine only: no footage, no atelier frames, no other drawing engine. Claude's other-engine shot is drawn in the style's engine with a named warning, and an owner edit is told plainly.
+  - A Documentary style uses its footage (when a stock or image key is connected) and its drawn looks.
+  - The Story Mix style mixes every engine, each in its own looks.
+  - An atelier style keeps its guests: people stay in drawn engines.
+- **Where the owner chooses**:
+  - Each engine card says that its Mix uses only its own looks, and that the Story Mix style is the mix of every engine. The Story Mix card says "Mix of ALL engines".
+  - The style editor of each engine starts its features with the same explanation. The look picker offers one look, or "Mix: every look of this engine".
+- **Motion graphics** are a layer of every engine (`MOTION_LAYER`, in every planner brief): kinetic words, animated backgrounds and moods, layered depth, maps, charts, timelines, networks, crowds, effects and transitions, drawn in the engine's own look. The Motion Graphics launch style leaves the library (retired when the owner never used it); a style the owner made on it keeps working.
+- **The Documentary engine** (the former Documentary Montage card, adapter `ffmpeg-montage`; the drawn shots keep the internal key `motion`). Looks in the style (`drawing.design`), or Mix of them:
+  - **footage with motion graphics**: stock footage and photos with maps, kinetic headlines, number callouts, layered cut-outs and charts; needs a stock or image key, and Pexels and Pixabay keys are free.
+  - **cartoon documentary**: the 0.36 history cartoon, moved from the stickman looks; finish `chron`.
+  - **painted story**: warm, cinematic painted places, a recurring guide character, slow pushes, maps on tables and scrolls; finish `paint`. StickOrbit paints every scene with an AI image tool, so this look is closest to it with an image connection or many paid pictures.
+  - **vector world**, **infographic**, **kinetic type**, **collage** and **data desk**, from 0.35.
+- **Places of the past** (sets): throne (pillars, banners, a lit window, a red carpet, the throne), castle (a castle with a big lit window above its village and land), chamber (stone, a tapestry, a candle, a table), harbor (sailing ships, docks, crates), market (stalls under striped awnings, spices), village (cottages with smoke, a path), battlefield (smoke, banners). There is a new prop `galleon`, a sailing ship; the old `ship` is a steamship and counts as modern. A story of the past now moves a place of today (room, home, office, street, city and the rest) to its period place, unless the line is about today. `early-modern` counts as the past (the pepper demo's king stood in a room with a TV because 1497 was early-modern).
+- **Scene building**: the planner's SCENE BUILDING line asks for film-like scenes. Show the place before the people, give a key person the place that says who they are, and keep abstract backdrops rare and never twice in a row. The abstract backdrop now picks one of six patterns per shot (stripes, glow and rings, halftone, soft shapes, grid, waves) from the shot's own seed.
+- **Maps**: the planner's MAPS line asks for at least 3 seconds per map shot, and a shorter map shot is named in the plan's warnings. Maps fly in (the view settles over 1.4 s), and their steps without words wait for it.
+- **Not built**: AI-painted scenes for the painted story (they need an image API key); motion graphics on real footage (they need a stock or image key); further motion-layer upgrades (typography and background animations), which the owner wants next.

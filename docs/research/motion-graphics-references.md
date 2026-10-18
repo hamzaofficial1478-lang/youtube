@@ -49,4 +49,25 @@ What they share, and what the program takes (our own drawings, never any channel
 4. **The comedy is in the cut**: a straight line, then the visual punchline (an understatement shown literally, a deadpan reaction close-up, a label on the absurd detail, scale jokes). -> the look's planning brief (`engines.js` LOOKS.chronicle) and the planner's new hook guidance.
 5. **Name cards** for every key person, chapter cards and maps to open chapters. -> the brief asks for a figure label "Name, title", chapter cards and maps.
 
+## Painted history (owner link 2026-10-18: StickOrbit, "that will also take place in documentary engine")
+
+"How the British Took Control of India | East India Company Explained" was read from storyboard frames in the browser (nothing downloaded):
+- Every scene is a detailed, warm, painterly illustration in comic-book style (AI-generated): a Tudor street, Queen Elizabeth's court, ships at sunset, the Taj Mahal and the Red Fort, a spice market with merchants, a Mughal court with the emperor on his throne beside a map of India, battles, handshakes between redcoats and princes.
+- A recurring guide character (a merchant in a black hat and ruff) stands in most scenes.
+- Titles sit on the painting ("East India Company"), a map appears on a board or in a hand, and an hourglass on a table shows time passing.
+- Subtitles are in boxes, and each scene is held about 4-5 s.
+
+What the program takes, in its own drawings: the Documentary look `painted`:
+- warm painted places of the past (throne, castle, harbor, market, village, battlefield, chamber);
+- a recurring guide character;
+- slow camera moves;
+- maps on tables and boards;
+- paid pictures for the scenes that carry the story.
+
+Not taken: the channel's art, characters or title style. Its real quality comes from AI image generation, which the program has only with an image API key (the owner has none yet).
+
+## The Documentary engine (owner decision 2026-10-18)
+
+The owner placed the documentary channels in one Documentary engine: OverSimplified (cartoon documentary), Vox, MagnatesMedia and Dhruv Rathee (real footage with motion graphics) and StickOrbit (painted history). The designs of 0.35 (vector world, infographic, kinetic type, collage, data desk) are documentary looks. Motion graphics themselves (typography, background animation, layering, map animation) are a layer of every engine, not an engine.
+
 Not taken: any channel's character designs, colour schemes, title cards, intros or catchphrases; real photographs or memes (copyright); historical borders (the map uses today's countries; an empire is drawn as the group of today's countries it covered, and the planner is told so).

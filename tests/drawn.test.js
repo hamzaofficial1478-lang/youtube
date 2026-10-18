@@ -277,9 +277,12 @@ test('0.36: maps colour in on their words, countries get faces, crowds and histo
     const street = {set: 'street', camera: 'still', elements: [{kind: 'prop', prop: 'sign', x: 0.85, y: 0.3, size: 's'}]};
     assert.ok(!(await frame(renderer, street, 1.5)).equals(await frame(renderer, {...street, elements: [...street.elements, {kind: 'crowd', count: 12, pose: 'cheer', headwear: 'spiked-helmet', colors: ['blue'], banner: 'Home by Christmas'}]}, 1.5)));
     const general = {set: 'room', camera: 'still', elements: [{kind: 'figure', pose: 'point', x: 0.4, look: {headwear: 'bicorne', outfit: 'officer', facial: 'handlebar', color: 'blue'}}]};
-    assert.ok(!(await frame(renderer, general, 1.5, {drawing: {look: 'chronicle', hand: false}})).equals(await frame(renderer, general, 1.5, {drawing: {look: 'classic', hand: false}})));
+    assert.ok(!(await frame(renderer, {...general, engine: 'motion', design: 'cartoon'}, 1.5, {primary: 'motion'})).equals(await frame(renderer, general, 1.5, {drawing: {look: 'classic', hand: false}})), 'the cartoon documentary draws its own people');
+    // Places of the past draw, and the painted story has its own finish.
+    for (const set of ['throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield']) await frame(renderer, {set, camera: 'still', elements: [{kind: 'fx', effect: 'dust'}]}, 1.0);
+    assert.ok(!(await frame(renderer, {...general, set: 'throne', engine: 'motion', design: 'painted'}, 1.5, {primary: 'motion'})).equals(await frame(renderer, {...general, set: 'throne', engine: 'motion', design: 'cartoon'}, 1.5, {primary: 'motion'})));
     // A later text on the same spot replaces the earlier one instead of sitting on it.
-    const words = (texts, t0s) => [{set: 'abstract', camera: 'still', elements: texts.map(text => ({kind: 'text', style: 'title', text, x: 0.5, y: 0.2}))}, {elements: t0s.map(t0 => ({t0, t1: null, then: []}))}];
+    const words = (texts, t0s) => [{set: 'none', camera: 'still', elements: texts.map(text => ({kind: 'text', style: 'title', text, x: 0.5, y: 0.2}))}, {elements: t0s.map(t0 => ({t0, t1: null, then: []}))}];
     const [both, bothTimes] = words(['Bake what sells', 'Throw nothing away'], [0.2, 1.5]), [one, oneTimes] = words(['Throw nothing away'], [1.5]);
     assert.ok((await frame(renderer, both, 2.5, {times: bothTimes})).equals(await frame(renderer, one, 2.5, {times: oneTimes})));
     // A chart under a headline moves down to make room for it.

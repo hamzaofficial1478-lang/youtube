@@ -33,25 +33,28 @@ const PROFILE_LIMIT = 60;
 // every adapter stays "not_implemented" until its milestone passes real fixtures.
 const RENDERERS = {
   'ffmpeg-montage': {
-    features: ['Stock footage and photos cut to the voice', 'Drawn explainer cutaways where footage cannot show it', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
-    name: 'FFmpeg montage', milestone: 'P05', status: 'not_implemented', firstProof: true,
+    // 0.37 (owner decision 2026-10-18): the Documentary engine - footage with motion graphics, the cartoon documentary,
+    // the painted story and the designed looks that were the motion engine's in 0.35.
+    features: ['Looks: Footage with motion graphics, Cartoon documentary, Painted story, Vector world, Infographic, Collage, Data desk, or Mix of all documentary looks (choose in the style)', 'Mix uses only documentary looks; for every engine at once choose the Story Mix style', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Footage needs a stock or image key (Pexels and Pixabay keys are free); without one the drawn looks carry the video', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
+    name: 'Documentary', milestone: 'P05', status: 'not_implemented', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, History cartoon, or Mix of all looks (choose in the style)', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all Stickman looks (choose in the style)', 'Mix uses only Stickman looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
-    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all looks (choose in the style)', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces'],
+    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all whiteboard looks (choose in the style)', 'Mix uses only whiteboard looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces'],
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
-    features: ['Designs: Vector world, Infographic cartoon, Kinetic type, Documentary collage, Data desk, or Mix of all designs (choose in the style)', 'Charts, timelines, networks and kinetic sentences that build on the narrator\'s words; flat-design people and places; real maps', 'Kinetic words, counters and icons', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
+    // 0.37: no longer an editing style (motion graphics are a layer of every engine); kept so older styles still work.
+    features: ['Not an editing style since 0.37: motion graphics are part of every engine, and these designs are Documentary looks'],
     name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
@@ -63,7 +66,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'story-mix': {
-    features: ['Every engine in one video: the story director picks the engine for each beat'],
+    features: ['Mix of ALL engines: Stickman, Whiteboard, Documentary and Atelier in one video', 'The story director picks the engine for each beat; each engine still uses its own looks'],
     name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
     note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
@@ -84,13 +87,14 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v9';
+const LAUNCH_VERSION = 'Launch library v10';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
-const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'chronicle', 'mix']);
+const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
 const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', 'dry-erase', 'mix']);
-// The motion engine's designs (0.35), or a mix of them.
-const DRAWING_DESIGNS = Object.freeze(['vector', 'infographic', 'kinetic', 'collage', 'data', 'mix']);
+// The Documentary engine's looks (0.37; the motion engine's designs in 0.35), or a mix of them. Footage is a look of the
+// style only (real footage led by motion graphics); the others are drawn.
+const DRAWING_DESIGNS = Object.freeze(['footage', 'cartoon', 'painted', 'vector', 'infographic', 'kinetic', 'collage', 'data', 'mix']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -100,11 +104,12 @@ const LOOK_PRESETS = Object.freeze({
   storybook: {hand: false, palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, pacing: {shotMinSeconds: 1.5, shotMaxSeconds: 3.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 30},
   doodle: {hand: false, palette: {background: '#FFFFFF', primary: '#141414', accent: '#E8A317', text: '#141414'}, pacing: {shotMinSeconds: 1, shotMaxSeconds: 3, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 3}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 55},
   illustrated: {hand: false, palette: {background: '#FFFFFF', primary: '#222222', accent: '#D9534F', text: '#222222'}, pacing: {shotMinSeconds: 2, shotMaxSeconds: 5.5, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 25},
-  chronicle: {hand: false, palette: {background: '#F4EBD8', primary: '#2E2A24', accent: '#C0392B', text: '#2E2A24'}, pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 4.5}, transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800}, intensity: 50},
 });
-// Launch profiles that are gone from the library (0.29's separate stickman looks). A copy the owner never
-// approved, assigned or revised is retired automatically, so it leaves the library list.
-const RETIRED_LAUNCH = Object.freeze(['stickman-whiteboard', 'stickman-storybook', 'stickman-doodle']);
+// Launch profiles that are gone from the library, with the reason. A copy the owner never approved, assigned or
+// revised is retired automatically, so it leaves the library list.
+const LOOKS_MOVED = 'The stickman looks are features of the Stickman engine now: choose them in its style, not as separate styles.';
+const RETIRED_LAUNCH = Object.freeze({'stickman-whiteboard': LOOKS_MOVED, 'stickman-storybook': LOOKS_MOVED, 'stickman-doodle': LOOKS_MOVED,
+  'motion-graphics': 'Motion graphics are not an editing style any more (owner decision 2026-10-18): they are part of every engine, and the motion designs are looks of the Documentary engine.'});
 const LAUNCH_PROFILES = [
   {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
@@ -143,28 +148,9 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'motion-graphics', upgrade: 'Launch library v9 (0.35): motion engine v2 - five designs (vector world, infographic cartoon, kinetic type, documentary collage, data desk) used as a mix, charts, timelines, networks and kinetic sentences, flat-design people (research/motion-graphics-references.md). Claude still decides when a stick figure, an ink sketch or stock footage serves a line better.', spec: {
-    name: 'Motion Graphics',
-    summary: 'Fast, text-safe animated graphics with stable scene IDs; built for strong hooks, workflows and product concepts.',
-    bestFit: ['Fast hooks and Shorts', 'Workflows and tutorials', 'Tech and product concepts'],
-    formats: ['long-form', 'shorts'],
-    canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
-    pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4, hookShotMaxSeconds: 1.2, maxStaticHoldSeconds: 4},
-    transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
-    motion: {cameraMoves: ['static', 'zoom', 'pan', 'parallax', 'tracking'], intensity: 70, easing: 'spring'},
-    typography: {headingFont: 'Inter', bodyFont: 'Inter', maxWordsOnScreen: 5, textCase: 'title', minTextHeightPercent: 5},
-    palette: {background: '#101418', primary: '#F2F4F5', accent: '#37C2A0', text: '#FFFFFF'},
-    captions: {mode: 'burned-in', maxCharsPerLine: 32, maxLines: 2, position: 'center', activeWordHighlight: true, safeAreaPercent: 10},
-    visuals: {sources: ['generated-graphics', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: false},
-    audio: {musicMoods: ['energetic', 'electronic', 'driving'], duckingDb: -16, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
-    renderer: {adapter: 'motion-graphics'},
-    drawing: {look: 'classic', hand: false, design: 'mix'},
-    qc: {maxBlackSeconds: 0.2, maxFrozenSeconds: 3, minSceneSeconds: 1, maxSceneSeconds: 8, contactSheetEverySeconds: 3},
-    originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
-  }},
-  {key: 'story-mix', upgrade: 'Launch library v5 (0.26): new. One long video uses every engine where it serves the story; Claude\'s story director picks the engine for each beat.', spec: {
+  {key: 'story-mix', upgrade: 'Launch library v10 (0.37): the mix of ALL engines - stickman, whiteboard, documentary and atelier - each in its own looks; motion graphics are part of every engine.', spec: {
     name: 'Story Mix · every engine',
-    summary: 'Every engine where it serves the story: stick characters for people and feelings, ink drawings for how things work and history, Claude-designed shots for the numbers and turns, motion graphics for lists and comparisons, footage for the real thing. Built for long videos that must not bore.',
+    summary: 'The mix of all engines: stick characters for people and feelings, whiteboard drawings for how things work, documentary looks for history, places and evidence, Claude-designed shots for the numbers and turns, footage for the real thing. Built for long videos that must not bore.',
     bestFit: ['Long explainers (8 minutes and more)', 'Science, history and money stories', 'Channels that want a look nobody else has'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
@@ -198,9 +184,9 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.3, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'documentary-montage', upgrade: 'Launch library v3 (0.21): drawn explainer cutaways (hand-drawn, motion graphics or stick figures) are available beside the footage; Claude decides where they help, with its reason.', spec: {
-    name: 'Documentary Montage',
-    summary: 'Evidence-led stock and archival shots with per-shot provenance, restrained Ken Burns motion, maps and readable labels; chronology follows the narration.',
+  {key: 'documentary-montage', upgrade: 'Launch library v10 (0.37): the Documentary engine. Looks: footage with motion graphics, cartoon documentary, painted story, vector world, infographic, collage and data desk, or a mix of them (owner decision 2026-10-18); it uses only documentary looks.', spec: {
+    name: 'Documentary',
+    summary: 'Documentary storytelling in its own looks: real footage with motion graphics, a cartoon documentary, painted story scenes, flat vector worlds, infographic people, collage cut-outs and data desks, with real maps and charts; chronology follows the narration.',
     bestFit: ['History and culture', 'Finance and economics stories', 'Sourced factual essays'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
@@ -213,6 +199,7 @@ const LAUNCH_PROFILES = [
     visuals: {sources: ['stock-video', 'stock-image', 'archival-public-domain', 'maps-and-diagrams', 'ai-image', 'generated-graphics'], primarySource: 'stock-video', aiDisclosure: 'always-disclose', characterConsistency: false},
     audio: {musicMoods: ['documentary', 'reflective', 'tense'], duckingDb: -20, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'subtle'},
     renderer: {adapter: 'ffmpeg-montage'},
+    drawing: {look: 'classic', hand: false, design: 'mix'},
     qc: {maxBlackSeconds: 1, maxFrozenSeconds: 6, minSceneSeconds: 2.5, maxSceneSeconds: 15, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
@@ -375,7 +362,7 @@ function validateStyleSpec(input) {
   // Optional: a style without it draws the classic look without the hand.
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
-    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'motion design')})};
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')})};
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
@@ -481,15 +468,15 @@ class StyleLibrary {
   // approve. A revision the owner made is never followed by an automatic one.
   seedLaunchProfiles() {
     this.store.transaction(() => {
-      for (const key of RETIRED_LAUNCH) {
+      for (const [key, reason] of Object.entries(RETIRED_LAUNCH)) {
         const profile = this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(key);
         if (!profile) continue;
         const revisions = this.db.prepare('SELECT id, status, created_by FROM style_revisions WHERE profile_id=?').all(profile.id);
         const used = revisions.some(item => item.status === 'approved' || !item.created_by.startsWith('Launch library')) || this.db.prepare("SELECT 1 FROM style_assignments a JOIN style_revisions r ON r.id=a.revision_id WHERE r.profile_id=? LIMIT 1").get(profile.id);
         if (used || revisions.every(item => item.status === 'retired')) continue;
-        const retirement = JSON.stringify({retiredBy: LAUNCH_VERSION, retiredAt: now(), reason: 'The stickman looks are features of the Stickman engine now: choose them in its style, not as separate styles.'});
+        const retirement = JSON.stringify({retiredBy: LAUNCH_VERSION, retiredAt: now(), reason});
         this.db.prepare("UPDATE style_revisions SET status='retired', retirement=? WHERE profile_id=? AND status<>'retired'").run(retirement, profile.id);
-        this.store.event(`Launch library update: the separate ${key} style was retired (its look is a Stickman feature now)`);
+        this.store.event(`Launch library update: the ${key} style was retired (${reason})`);
       }
       for (const launch of LAUNCH_PROFILES) {
         const spec = validateStyleSpec(structuredClone(launch.spec)), at = now(), existing = this.db.prepare('SELECT id FROM style_profiles WHERE profile_key=?').get(launch.key);

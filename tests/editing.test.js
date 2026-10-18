@@ -861,14 +861,14 @@ test('a planned cue cuts on its word, and a drawn shot plays from its first fram
   assert.notEqual(plain.clips.find(item => item.shotId === 'd').start, clip.start, 'without a cue the breathing pattern decides');
 });
 
-test('documentary partners: hand-drawn cutaways are drawn again at render time on the narrator\'s words', {skip: skip || noBrowser}, async t => {
+test('documentary partners: drawn documentary shots are drawn again at render time on the narrator\'s words', {skip: skip || noBrowser}, async t => {
   const env = setup(t, {seconds: 20});
   const {editing, renders, scenes, store, content, dataRoot} = env;
   let {manifest} = scenes.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
   const targets = manifest.plan.scenes.slice(1, 3).map(scene => scene.shots[0]);
   for (const [k, shot] of targets.entries()) {
     manifest = scenes.editManifest(manifest.id, {op: 'update-shot', shotId: shot.id, source: 'generated-graphics', createdBy: 'Owner', expectedRevision: manifest.revision,
-      sketch: {engine: k ? 'motion' : 'handdrawn', set: 'none', elements: [{kind: 'prop', prop: k ? 'pie-chart' : 'map', x: 0.5, y: 0.45, size: 'xl'}, {kind: 'text', text: k ? '1 in 4' : 'Trade routes', style: k ? 'counter' : 'title', x: 0.5, y: 0.15}]}});
+      sketch: {engine: 'motion', design: k ? 'data' : 'cartoon', set: 'none', elements: [{kind: 'prop', prop: k ? 'pie-chart' : 'map', x: 0.5, y: 0.45, size: 'xl'}, {kind: 'text', text: k ? '1 in 4' : 'Trade routes', style: k ? 'counter' : 'title', x: 0.5, y: 0.15}]}});
   }
   assert.ok(manifest.warnings.some(item => /leaves the main montage look without a reason/.test(item)), 'a drawn cutaway in a documentary asks for its reason');
   scenes.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', confirmations: {coverageReviewed: true, directionReviewed: true}});
@@ -917,7 +917,7 @@ test('documentary partners: hand-drawn cutaways are drawn again at render time o
   const withSfx = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {sfx: {enabled: true, density: 'rich', levelDb: -12}}}]});
   const again = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: withSfx.id});
   const placed = JSON.parse(renders.row(again.id).scope).edit.soundtrack.sfx;
-  assert.ok(placed.some(item => item.kind === 'tick') && placed.some(item => item.kind === 'whoosh'), JSON.stringify(placed.map(item => item.kind)));
+  assert.ok(placed.some(item => item.kind === 'tick') && placed.some(item => item.kind === 'pop'), JSON.stringify(placed.map(item => item.kind)));
   assert.ok(placed.every(item => drawnClips.some(clip => item.seconds >= clip.start / edit.timeline.fps - 0.1 && item.seconds < (clip.start + clip.frames) / edit.timeline.fps)), 'effects only on the drawn shots');
   assert.equal((await renders.processNext())?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(again.id)).error));
   const sfxResult = JSON.parse(renders.row(again.id).result);

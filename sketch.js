@@ -28,14 +28,16 @@ const LOOK = Object.freeze({
 const DEFAULT_LOOK = Object.freeze({body: 'stick', hair: 'messy', hairColor: 'brown', headwear: 'none', eyewear: 'none', facial: 'none', outfit: 'none', mark: 'none', color: 'blue'});
 const PROPS = Object.freeze([
   'sun', 'moon', 'star', 'cloud', 'storm', 'rain', 'snow', 'bolt', 'rainbow', 'tree', 'palm', 'flower', 'mountain', 'volcano', 'waves', 'fire', 'drop', 'planet', 'globe', 'sand', 'thermometer',
-  'house', 'city', 'building', 'castle', 'car', 'bus', 'truck', 'plane', 'rocket', 'ship', 'bike',
+  'house', 'city', 'building', 'castle', 'car', 'bus', 'truck', 'plane', 'rocket', 'ship', 'galleon', 'bike',
   'coin', 'money', 'moneybag', 'card', 'piggy-bank', 'briefcase', 'chart', 'chart-up', 'chart-down', 'pie-chart', 'gold', 'diamond', 'calculator',
   'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'gear', 'lightbulb', 'magnet', 'atom', 'dna', 'microscope', 'flask', 'satellite',
   'brain', 'head', 'heart', 'eye', 'tooth', 'bone', 'pill', 'syringe', 'virus', 'skull',
   'book', 'paper', 'letter', 'newspaper', 'clock', 'hourglass', 'calendar', 'alarm', 'key', 'lock', 'gift', 'trophy', 'medal', 'flag', 'sign', 'map', 'magnifier', 'bomb', 'trash', 'box', 'bag', 'cup', 'burger', 'pizza', 'apple', 'toilet', 'bed', 'chair', 'desk', 'door', 'window', 'ladder', 'hammer', 'wrench', 'pencil', 'megaphone', 'bell', 'target', 'shield', 'sword', 'crown', 'balloon', 'candle', 'glass',
   'question', 'exclamation', 'check', 'cross', 'dollar', 'percent', 'plus', 'minus', 'arrow-up', 'arrow-down', 'warning', 'no-sign',
 ]);
-const SETS = Object.freeze(['none', 'room', 'office', 'home', 'bedroom', 'kitchen', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'ocean', 'night', 'space', 'storm', 'stage', 'abstract']);
+// 0.37: places of the past (owner review 2026-10-18: a king belongs in a throne room or a castle, not a room with a TV).
+const SETS = Object.freeze(['none', 'room', 'office', 'home', 'bedroom', 'kitchen', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'ocean', 'night', 'space', 'storm', 'stage', 'abstract',
+  'throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield']);
 const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'danger', 'cold', 'money', 'warm', 'sunset', 'night', 'mystery', 'calm', 'hope', 'retro']);
 const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'crash-zoom', 'dolly-in', 'handheld', 'ken-burns']);
 const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'whip-up', 'whip-down', 'zoom', 'zoom-out', 'pop', 'ink', 'glitch', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'drop', 'iris', 'flash', 'shake']);
@@ -50,7 +52,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/19';
+const VERSION = 'drawn-scene/20';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -69,7 +71,7 @@ const CROWD_POSES = Object.freeze(['stand', 'cheer', 'fist', 'shock', 'wave', 'w
 const PROP_SYNONYMS = Object.freeze({
   cash: 'money', bill: 'money', banknote: 'money', 'dollar-bill': 'money', computer: 'laptop', pc: 'monitor', screen: 'monitor', mobile: 'phone', smartphone: 'phone', cellphone: 'phone',
   document: 'paper', file: 'paper', contract: 'paper', note: 'paper', envelope: 'letter', mail: 'letter', email: 'letter', airplane: 'plane', aeroplane: 'plane', jet: 'plane', boat: 'ship',
-  earth: 'globe', world: 'globe', lightning: 'bolt', thunder: 'storm', idea: 'lightbulb', bulb: 'lightbulb', 'money-bag': 'moneybag', sack: 'moneybag', 'credit-card': 'card', graph: 'chart-up',
+  earth: 'globe', world: 'globe', 'sailing-ship': 'galleon', 'tall-ship': 'galleon', caravel: 'galleon', carrack: 'galleon', sailship: 'galleon', lightning: 'bolt', thunder: 'storm', idea: 'lightbulb', bulb: 'lightbulb', 'money-bag': 'moneybag', sack: 'moneybag', 'credit-card': 'card', graph: 'chart-up',
   stats: 'chart', statistics: 'chart', coffee: 'cup', mug: 'cup', tea: 'cup', hamburger: 'burger', chest: 'box', package: 'box', parcel: 'box', crate: 'box', potion: 'flask', poison: 'flask',
   bacteria: 'virus', germ: 'virus', medicine: 'pill', needle: 'syringe', vaccine: 'syringe', 'question-mark': 'question', 'exclamation-mark': 'exclamation', tick: 'check', x: 'cross',
   danger: 'warning', caution: 'warning', forbidden: 'no-sign', banned: 'no-sign', skyscraper: 'building', office: 'building', tower: 'building', home: 'house', automobile: 'car', taxi: 'car',
@@ -137,14 +139,15 @@ const propName = value => {
 
 // validate(raw, {primary, cast, lenient, warn}): the normalised drawing. `primary` is the video's primary engine,
 // which decides the engines this shot may use; `cast` resolves each figure's `who` into its look.
-function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}, kit = null} = {}) {
+function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}, kit = null, engines: allowed = null} = {}) {
   const c = checker({lenient, warn});
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('A drawn scene must be an object.');
   // The video's world kit, and the kit a stored drawing already carries (checked again).
   const kits = {...Kit.embedded(raw.kit), ...(kit || {})}, kitRef = kitRefOf(kits);
   if (!Array.isArray(raw.elements) || !raw.elements.length) fail(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
   if (raw.elements.length > MAX_ELEMENTS) c.problem(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
-  const engines = E.drawEngines(primary);
+  // The engines this video may draw with (0.37: a style on one engine allows only that engine).
+  const engines = allowed?.length ? allowed : E.drawEngines(primary);
   const engine = raw.engine === undefined ? engines[0] : engines.includes(raw.engine) ? raw.engine : c.problem(`Engine must be one of: ${engines.join(', ')}.`, engines[0]);
   const castMap = new Map(cast.map(item => [item.id, item]));
   const count = Math.min(raw.elements.length, MAX_ELEMENTS);
@@ -317,9 +320,12 @@ function validateSetting(raw, {strict = false, kit = null} = {}) {
 // continuity review; worldMend moves people who were left under water to the beach (the sea surface).
 const DIVING = /\b(dive[sd]?|diving|divers?|underwater|under water|scuba|snorkel\w*|sea ?floor|seabed|ocean floor|submarine|coral|reefs?|swim\w*|deep sea)\b/i;
 const NOWADAYS = /\b(today|nowadays|these days|modern|now)\b/i;
-const OLD_ERAS = ['prehistoric', 'ancient', 'medieval'];
-const MODERN = Object.freeze({props: ['car', 'bus', 'truck', 'plane', 'rocket', 'bike', 'card', 'calculator', 'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'lightbulb', 'microscope', 'satellite', 'syringe', 'pill', 'newspaper', 'alarm', 'burger', 'pizza', 'megaphone', 'toilet', 'chart', 'chart-up', 'chart-down', 'pie-chart'],
-  outfits: ['tie', 'bowtie', 'lab-coat', 'suit', 'backpack', 'badge', 'hoodie', 'uniform'], sets: ['office', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road']});
+const OLD_ERAS = ['prehistoric', 'ancient', 'medieval', 'early-modern'];
+// A place of today in a story of the past becomes that world's place (0.37: the pepper demo's king stood in a room
+// with a TV and a floor lamp).
+const PAST_PLACE = Object.freeze({room: 'chamber', home: 'chamber', bedroom: 'chamber', kitchen: 'chamber', office: 'chamber', classroom: 'chamber', lab: 'chamber', hospital: 'chamber', bank: 'chamber', shop: 'market', street: 'village', city: 'village', road: 'village'});
+const MODERN = Object.freeze({props: ['ship', 'car', 'bus', 'truck', 'plane', 'rocket', 'bike', 'card', 'calculator', 'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'lightbulb', 'microscope', 'satellite', 'syringe', 'pill', 'newspaper', 'alarm', 'burger', 'pizza', 'megaphone', 'toilet', 'chart', 'chart-up', 'chart-down', 'pie-chart'],
+  outfits: ['tie', 'bowtie', 'lab-coat', 'suit', 'backpack', 'badge', 'hoodie', 'uniform'], sets: Object.keys(PAST_PLACE)});
 const underWater = item => item.sketch?.set === 'ocean' && item.sketch.elements.some(el => el.kind === 'figure') && !DIVING.test(`${item.words || ''} ${item.notes || ''}`);
 function worldNotes(drawn, world = null) {
   const notes = [];
@@ -333,8 +339,15 @@ function worldNotes(drawn, world = null) {
   }
   return notes;
 }
-function worldMend(drawn) {
-  return drawn.filter(underWater).map(item => { item.sketch.set = 'beach'; return {label: item.label, fix: 'People stood on the sea floor (the ocean set is under water), so the shot moved to the beach, at the sea surface.'}; });
+function worldMend(drawn, world = null) {
+  const fixes = drawn.filter(underWater).map(item => { item.sketch.set = 'beach'; return {label: item.label, fix: 'People stood on the sea floor (the ocean set is under water), so the shot moved to the beach, at the sea surface.'}; });
+  if (OLD_ERAS.includes(world?.era)) for (const item of drawn) {
+    const was = item.sketch?.set, now = PAST_PLACE[was];
+    if (!now || NOWADAYS.test(item.words || '')) continue;
+    item.sketch.set = now;
+    fixes.push({label: item.label, fix: `The ${was} set is a place of today, so this ${world.era} story moved it to the ${now}.`});
+  }
+  return fixes;
 }
 
 // Continuity notes across neighbouring drawn shots: a change of place inside one scene, and a character who
@@ -346,7 +359,10 @@ const PLACE_WORDS = Object.freeze({room: ['room'], office: ['office', 'desk', 'b
   hospital: ['hospital', 'doctor', 'nurse', 'patient'], bank: ['bank', 'loan', 'vault', 'savings'], shop: ['shop', 'store', 'buy', 'customer'], street: ['street', 'sidewalk', 'corner'],
   city: ['city', 'town', 'building', 'downtown'], road: ['road', 'car', 'drive', 'highway', 'traffic'], park: ['park', 'bench', 'playground'], nature: ['nature', 'tree', 'forest', 'field', 'grass', 'wild'],
   mountains: ['mountain', 'hill', 'peak', 'climb'], desert: ['desert', 'dune', 'sand'], beach: ['beach', 'sand', 'shore', 'coast', 'sea'], ocean: ['ocean', 'sea', 'ship', 'boat', 'wave', 'underwater'],
-  night: ['night', 'midnight', 'moon'], space: ['space', 'planet', 'earth', 'orbit', 'satellite'], storm: ['storm', 'lightning', 'thunder', 'rain', 'cloud', 'bolt'], stage: ['stage', 'show', 'audience', 'crowd']});
+  night: ['night', 'midnight', 'moon'], space: ['space', 'planet', 'earth', 'orbit', 'satellite'], storm: ['storm', 'lightning', 'thunder', 'rain', 'cloud', 'bolt'], stage: ['stage', 'show', 'audience', 'crowd'],
+  throne: ['king', 'queen', 'throne', 'court', 'emperor', 'empress', 'sultan', 'palace'], castle: ['castle', 'fortress', 'fort', 'kingdom', 'empire', 'walls'], chamber: ['chamber', 'study', 'hall', 'room'],
+  harbor: ['harbor', 'harbour', 'port', 'dock', 'ship', 'ships', 'fleet', 'sail'], market: ['market', 'bazaar', 'merchant', 'trade', 'trader', 'sell', 'buy', 'spice'], village: ['village', 'town', 'peasant', 'farm', 'farmer'],
+  battlefield: ['battle', 'war', 'army', 'armies', 'soldier', 'soldiers', 'fight', 'invade', 'invasion']});
 // Continuity between neighbouring drawn shots of one scene: [{kind, shot, previous, figure?, message}].
 // shots: [{label, sceneId, sketch, words?, notes?}] in order. A graphic beat in another engine or on an abstract
 // backdrop is a deliberate insert, not a change of place; a change of place the shot's words or notes go to is
@@ -449,7 +465,8 @@ const PROP_WORDS = [
   ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(search\w*|find|discover\w*|investigat\w*)\b/], ['lightbulb', /\b(idea|because|reason|explain\w*|means|trick)\b/],
   ['trophy', /\b(win\w*|best|champion\w*|advantage\w*)\b/], ['warning', /\b(danger\w*|warning|risk\w*|careful)\b/], ['pill', /\b(medicine|pills?|drug\w*|doctor\w*|health)\b/], ['car', /\b(car|cars|drive|driving|traffic)\b/],
 ].filter(([prop]) => PROPS.includes(prop));
-const SET_WORDS = [['lab', /\b(science|scientist\w*|experiment\w*|lab|chemical\w*|atoms?)\b/], ['bank', /\b(bank\w*|money|loan\w*|debt|invest\w*)\b/], ['office', /\b(job|work\w*|boss|office|company|business)\b/],
+const SET_WORDS = [['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyage)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
+  ['lab', /\b(science|scientist\w*|experiment\w*|lab|chemical\w*|atoms?)\b/], ['bank', /\b(bank\w*|money|loan\w*|debt|invest\w*)\b/], ['office', /\b(job|work\w*|boss|office|company|business)\b/],
   ['space', /\b(space|planet\w*|stars?|galaxy|universe|orbit)\b/], ['storm', /\b(storm|thunder\w*|lightning)\b/], ['ocean', /\b(ocean|sea|underwater|fish)\b/], ['city', /\b(city|cities|street\w*|town)\b/],
   ['hospital', /\b(doctor\w*|hospital|disease|virus|sick)\b/], ['classroom', /\b(school|teacher|student\w*|learn\w*|class)\b/], ['nature', /\b(nature|forest|trees?|animal\w*)\b/], ['desert', /\b(desert|sand|dune)\b/], ['home', /\b(home|house|family)\b/]];
 const POSE_WORDS = [['shock', /\b(hotter|explode\w*|blinding|kill\w*|danger\w*|melt\w*|split|insane|crazy)\b|!/], ['think', /\b(why|how|what|wonder|imagine|count)\b|\?/], ['point', /\b(this|that|here|there|look|next|every)\b/], ['walk', /\b(creep\w*|walk\w*|travel\w*|move\w*|steps?)\b/], ['cheer', /\b(win\w*|best|success\w*|finally)\b/], ['type', /\b(computer|website\w*|online|hack\w*|type)\b/]];
@@ -500,8 +517,8 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false, designs = false} = {}) {
-  const engines = E.drawEngines(primary);
+function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false, designs = false, engines: allowed = null} = {}) {
+  const engines = allowed?.length ? allowed : E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
     'Return a top-level "cast": every character the script needs (one, ten or more; the same characters return across the whole video): [{"id": "c1", "name": up to 24 chars, "role": up to 60 chars, "look": {' + Object.entries(LOOK).map(([key, values]) => `"${key}": ${list(values)}`).join(', ') + '}}].',
@@ -512,7 +529,8 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     'Sets that are easy to misread: ocean is under water (light rays, seaweed, the sea floor), for divers and sea life; ships, sailors and the sea surface go on beach (sky, sea and sand) or storm with ship and waves props. space is outer space, night is a city at night, abstract and none are plain backdrops.',
     ...(looks ? [`A stickman shot of a video that mixes the stickman looks names its look: "look": ${list(STICK_LOOKS)}.`] : []),
     ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(BOARDS)}.`] : []),
-    ...(designs ? [`A motion shot of a video that mixes the motion designs names its design: "design": ${list(DESIGNS)}.`] : []),
+    ...(designs ? [`A documentary drawn shot (engine "motion") of a video that mixes the documentary looks names its look: "design": ${list(DESIGNS)}.`] : []),
+    'Places of the past: throne (a throne room), castle (a castle above its land, for a kingdom or an empire), chamber (a stone room with a candle and a tapestry), harbor (a port with ships), market (stalls under awnings), village (cottages and a path), battlefield (a field with smoke and banners). Never put a TV, a lamp, a laptop or a car in a story set before electricity.',
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + '.',
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,

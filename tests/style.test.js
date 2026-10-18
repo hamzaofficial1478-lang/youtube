@@ -39,7 +39,7 @@ test('launch library seeds six valid draft profiles once and every launch spec p
   const {store, styles} = setup(t);
   new StyleLibrary(store);
   const profiles = styles.profiles();
-  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'motion-graphics', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid']);
+  assert.deepEqual(profiles.map(item => item.key), ['stickman-sketch-explainer', 'hand-drawn-canvas', 'story-mix', 'atelier', 'documentary-montage', 'cinematic-hybrid'], 'motion graphics left the library in 0.37: a layer of every engine');
   assert.ok(profiles.every(item => item.revisions.length === 1 && item.revisions[0].status === 'draft' && item.origin === 'launch'));
   for (const launch of LAUNCH_PROFILES) assert.deepEqual(validateStyleSpec(structuredClone(launch.spec)).name, launch.spec.name);
   assert.equal(profile(styles, 'documentary-montage').revisions[0].spec.renderer.adapter, 'ffmpeg-montage');
@@ -57,12 +57,12 @@ test('the stickman drawing setting: a look and the drawing hand, optional, check
   assert.throws(() => validateStyleSpec({...stickman(), brief: 'x'.repeat(1300)}), /Planning brief/);
   // The looks are features of the one Stickman style: no separate launch styles, and every look's preset is a valid
   // stickman spec (colours, shot lengths, transitions the sketch renderer can do).
-  assert.deepEqual(LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => item.key), ['hand-drawn-canvas', 'motion-graphics'], 'only the whiteboard launch style names its drawing (a hand and a whiteboard look)');
+  assert.deepEqual(LAUNCH_PROFILES.filter(item => item.spec.drawing).map(item => item.key), ['hand-drawn-canvas', 'documentary-montage'], 'the whiteboard and documentary launch styles name their drawing (a hand and a whiteboard look; the documentary looks)');
   for (const [look, preset] of Object.entries(DRAWING_PRESETS)) {
     const spec = validateStyleSpec({...stickman(), palette: preset.palette, pacing: preset.pacing, transitions: preset.transitions, motion: {...stickman().motion, intensity: preset.intensity}, drawing: {look, hand: preset.hand}});
     assert.equal(spec.drawing.look, look);
   }
-  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'chronicle']);
+  assert.deepEqual(Object.keys(DRAWING_PRESETS), ['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated']);
 });
 
 test('every engine may use every transition; the whiteboard look is checked; launch library v8', () => {
@@ -81,17 +81,23 @@ test('Mix is a choice in each engine with looks: stickman looks and whiteboard l
   const stick = LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec, hand = LAUNCH_PROFILES.find(item => item.key === 'hand-drawn-canvas').spec;
   assert.equal(validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false}}).drawing.look, 'mix');
   assert.equal(validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: true, board: 'mix'}}).drawing.board, 'mix');
-  assert.ok(RENDERERS['ffmpeg-sketch'].features.some(item => /Mix of all looks/.test(item)) && RENDERERS['canvas-frames'].features.some(item => /Mix of all looks/.test(item)));
-  assert.ok(['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics'].every(key => RENDERERS[key].features.some(item => /Paid pictures where they count/.test(item))), 'every drawing engine lists paid pictures');
+  assert.ok(RENDERERS['ffmpeg-sketch'].features.some(item => /Mix of all Stickman looks/.test(item)) && RENDERERS['canvas-frames'].features.some(item => /Mix of all whiteboard looks/.test(item)));
+  // 0.37: each engine says its Mix stays inside it, and where the mix of every engine is.
+  assert.ok(['ffmpeg-sketch', 'canvas-frames', 'ffmpeg-montage'].every(key => RENDERERS[key].features.some(item => /Mix uses only .* looks; for every engine at once choose the Story Mix style/.test(item))));
+  assert.ok(RENDERERS['story-mix'].features.some(item => /Mix of ALL engines/.test(item)));
+  assert.ok(['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames'].every(key => RENDERERS[key].features.some(item => /Paid pictures where they count/.test(item))), 'every drawing engine lists paid pictures');
 });
 
-test('motion engine v2: five designs or a mix, chosen in the style; launch library v9', () => {
-  const motion = LAUNCH_PROFILES.find(item => item.key === 'motion-graphics').spec;
-  assert.equal(validateStyleSpec(structuredClone(motion)).drawing.design, 'mix');
-  for (const design of ['vector', 'infographic', 'kinetic', 'collage', 'data']) assert.equal(validateStyleSpec({...structuredClone(motion), drawing: {look: 'classic', hand: false, design}}).drawing.design, design);
-  assert.throws(() => validateStyleSpec({...structuredClone(motion), drawing: {look: 'classic', hand: false, design: 'neon'}}), /motion design/);
-  assert.ok(RENDERERS['motion-graphics'].features.some(item => /Documentary collage, Data desk, or Mix of all designs/.test(item)));
-  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v9');
+test('the Documentary engine: its looks or a mix of them, chosen in the style; motion graphics are no style; launch library v10', () => {
+  const doc = LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec;
+  assert.equal(doc.name, 'Documentary');
+  assert.equal(validateStyleSpec(structuredClone(doc)).drawing.design, 'mix');
+  for (const design of ['footage', 'cartoon', 'painted', 'vector', 'infographic', 'kinetic', 'collage', 'data']) assert.equal(validateStyleSpec({...structuredClone(doc), drawing: {look: 'classic', hand: false, design}}).drawing.design, design);
+  assert.throws(() => validateStyleSpec({...structuredClone(doc), drawing: {look: 'classic', hand: false, design: 'neon'}}), /documentary look/);
+  assert.throws(() => validateStyleSpec({...structuredClone(doc), drawing: {look: 'chronicle', hand: false}}), /stickman look/, 'the history cartoon left the stickman looks');
+  assert.ok(RENDERERS['ffmpeg-montage'].features.some(item => /Cartoon documentary, Painted story/.test(item)));
+  assert.ok(RENDERERS['motion-graphics'].features.some(item => /Not an editing style/.test(item)));
+  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v10');
 });
 
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {
@@ -110,6 +116,15 @@ test('the separate stickman-look styles of 0.29 leave the library unless the own
   assert.equal(status('stickman-whiteboard'), 'retired', 'an untouched copy is retired');
   assert.equal(status('stickman-doodle'), 'approved', 'an approved copy stays in the library');
   assert.match(styles.profiles().find(item => item.key === 'stickman-whiteboard').revisions[0].retirement.reason, /features of the Stickman engine/);
+  // 0.37: the Motion Graphics style leaves the same way (motion graphics are a layer of every engine).
+  const other = new Store(':memory:');
+  t.after(() => other.close());
+  new StyleLibrary(other);
+  other.db.prepare("INSERT INTO style_profiles(id,profile_key,origin,base_revision_id,created_at) VALUES('p-mg','motion-graphics','launch',NULL,?)").run(new Date().toISOString());
+  other.db.prepare("INSERT INTO style_revisions(id,profile_id,revision,status,spec,spec_hash,change_note,created_by,created_at) VALUES('r-mg','p-mg',1,'draft',?,'hash','Launch profile.','Launch library v9',?)").run(spec, new Date().toISOString());
+  const motion = new StyleLibrary(other).profiles().find(item => item.key === 'motion-graphics').revisions[0];
+  assert.equal(motion.status, 'retired');
+  assert.match(motion.retirement.reason, /not an editing style any more/);
 });
 
 test('style specs reject unsupported renderer combinations, weak contrast, missing cuts and the 30% reference rule', () => {
@@ -168,15 +183,15 @@ test('family default assignment requires an approved compatible revision and rec
   const first = styles.assign(family.id, {...decision, revisionId: montage.id, expectedAssignmentId: null});
   assert.equal(first.status, 'active');
   assert.throws(() => styles.assign(family.id, {...decision, revisionId: montage.id, expectedAssignmentId: first.id}), /already assigned/);
-  approve(styles, 'motion-graphics');
-  assert.throws(() => styles.assign(family.id, {...decision, revisionId: latest(styles, 'motion-graphics').id, expectedAssignmentId: null}), /changed in another tab/);
+  approve(styles, 'story-mix');
+  assert.throws(() => styles.assign(family.id, {...decision, revisionId: latest(styles, 'story-mix').id, expectedAssignmentId: null}), /changed in another tab/);
 
   const content = approvedScript(store, family);
-  const second = styles.assign(family.id, {...decision, revisionId: latest(styles, 'motion-graphics').id, expectedAssignmentId: first.id, reason: 'Testing a faster visual grammar.'});
+  const second = styles.assign(family.id, {...decision, revisionId: latest(styles, 'story-mix').id, expectedAssignmentId: first.id, reason: 'Testing a faster visual grammar.'});
   const history = styles.assignments(family.id);
   assert.deepEqual(history.map(item => item.status), ['active', 'superseded']);
   assert.equal(history[0].supersedesId, first.id);
-  assert.match(history[1].endedReason, /Replaced by Motion Graphics r1/);
+  assert.match(history[1].endedReason, /Replaced by Story Mix · every engine r1/);
   const stale = store.productionInvalidations().filter(item => item.contentId === content.id);
   assert.deepEqual(stale.map(item => item.stage), ['scene_manifest', 'editing_timeline', 'captions', 'packaging', 'render']);
   assert.ok(stale.every(item => item.reason.startsWith('Style family default changed')));
@@ -186,18 +201,18 @@ test('family default assignment requires an approved compatible revision and rec
 test('every channel inherits the family default; overrides need acknowledgement and never touch the primary channel', t => {
   const {styles, family} = setup(t);
   approve(styles, 'documentary-montage');
-  approve(styles, 'motion-graphics');
+  approve(styles, 'story-mix');
   const base = {familyRevision: family.revision, assignedBy: 'Fixture owner', reason: 'Explicit fixture decision.'};
   const blocked = styles.handoffs().find(item => item.familyId === family.id);
   assert.equal(blocked.ready, false);
   assert.match(blocked.blocker, /Assign an approved default/);
-  assert.throws(() => styles.assign(family.id, {...base, scope: 'channel', locale: 'es-419', revisionId: latest(styles, 'motion-graphics').id, separateProductionAcknowledged: true}), /family default style before/);
+  assert.throws(() => styles.assign(family.id, {...base, scope: 'channel', locale: 'es-419', revisionId: latest(styles, 'story-mix').id, separateProductionAcknowledged: true}), /family default style before/);
   const defaultAssignment = styles.assign(family.id, {...base, revisionId: latest(styles, 'documentary-montage').id});
   let handoff = styles.handoffs().find(item => item.familyId === family.id);
   assert.equal(handoff.ready, true);
   assert.deepEqual(handoff.channels.map(item => item.source), ['family', 'family', 'family']);
 
-  const override = {...base, scope: 'channel', locale: 'es-419', revisionId: latest(styles, 'motion-graphics').id};
+  const override = {...base, scope: 'channel', locale: 'es-419', revisionId: latest(styles, 'story-mix').id};
   assert.throws(() => styles.assign(family.id, override), /separate visual production/);
   assert.throws(() => styles.assign(family.id, {...override, locale: 'en-US', separateProductionAcknowledged: true}), /primary channel always uses the family default/);
   assert.throws(() => styles.assign(family.id, {...override, locale: 'fr-FR', separateProductionAcknowledged: true}), /configured channel locales/);
@@ -205,7 +220,7 @@ test('every channel inherits the family default; overrides need acknowledgement 
   const channel = styles.assign(family.id, {...override, separateProductionAcknowledged: true});
   handoff = styles.handoffs().find(item => item.familyId === family.id);
   assert.deepEqual(handoff.channels.map(item => item.source), ['family', 'override', 'family']);
-  assert.equal(handoff.channels[1].name, 'Motion Graphics');
+  assert.equal(handoff.channels[1].name, 'Story Mix · every engine');
 
   assert.throws(() => styles.revoke(defaultAssignment.id, {...base, revokedBy: 'Fixture owner'}), /channel overrides first/);
   styles.revoke(channel.id, {...base, revokedBy: 'Fixture owner', reason: 'Spanish channel returns to the family style.'});
@@ -232,10 +247,10 @@ test('approved fallbacks are explicit, compatible and manual-only; nothing switc
 
 test('retiring an assigned revision or changing the family format blocks the handoff instead of switching styles', t => {
   const {store, styles, family} = setup(t);
-  const shortsOnly = structuredClone(latest(styles, 'motion-graphics').spec);
+  const shortsOnly = structuredClone(latest(styles, 'story-mix').spec);
   shortsOnly.name = 'Shorts Only Motion';
   shortsOnly.formats = ['shorts'];
-  const custom = styles.createProfile({spec: shortsOnly, changeNote: 'Vertical-only variant for Shorts.', createdBy: 'Fixture', baseRevisionId: latest(styles, 'motion-graphics').id});
+  const custom = styles.createProfile({spec: shortsOnly, changeNote: 'Vertical-only variant for Shorts.', createdBy: 'Fixture', baseRevisionId: latest(styles, 'story-mix').id});
   assert.equal(profile(styles, 'shorts-only-motion').origin, 'derived');
   styles.approveRevision(custom.id, review);
   assert.throws(() => styles.assign(family.id, {familyRevision: family.revision, assignedBy: 'Fixture', reason: 'Wrong format on purpose.', revisionId: custom.id}), /does not support the family's long-form format/);
@@ -274,7 +289,7 @@ test('HTTP style routes require the local token, validate input and return the l
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.styles.profiles.length, 7);
+  assert.equal(state.styles.profiles.length, 6);
   assert.equal(state.app.version, JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version);
   const script = await fetch(`${base}/style-room.js`);
   assert.equal(script.status, 200);

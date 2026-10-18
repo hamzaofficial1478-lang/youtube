@@ -4,8 +4,8 @@
 // toast, saveForm, date, localeName) come from app.js and are only used inside functions.
 
 const STYLE_LABELS = {
-  mix: 'Mix: every look, chosen per scene',
-  vector: 'Vector world', infographic: 'Infographic cartoon', kinetic: 'Kinetic type', collage: 'Documentary collage', data: 'Data desk',
+  mix: 'Mix: every look of this engine, chosen per scene',
+  vector: 'Vector world', infographic: 'Infographic cartoon', kinetic: 'Kinetic type', collage: 'Documentary collage', data: 'Data desk', footage: 'Footage with motion graphics', painted: 'Painted story',
   'long-form': 'Long-form', shorts: 'Shorts', cut: 'Cut', crossfade: 'Crossfade', 'dip-to-black': 'Dip to black', push: 'Push', slide: 'Slide',
   zoom: 'Zoom', 'whip-pan': 'Whip pan', 'match-cut': 'Match cut', wipe: 'Wipe', morph: 'Morph', static: 'Static', 'ken-burns': 'Ken Burns',
   pan: 'Pan', parallax: 'Parallax', 'handheld-sim': 'Handheld feel', tracking: 'Tracking', linear: 'Linear', 'ease-in-out': 'Ease in-out',
@@ -13,7 +13,7 @@ const STYLE_LABELS = {
   both: 'Burned in + sidecar', bottom: 'Bottom', center: 'Center', top: 'Top', 'stock-video': 'Stock video', 'stock-image': 'Stock images',
   'ai-image': 'AI images', 'ai-video': 'AI video', 'generated-graphics': 'Generated graphics', 'maps-and-diagrams': 'Maps & diagrams',
   'archival-public-domain': 'Public-domain archive', 'review-per-asset': 'Review per asset', 'always-disclose': 'Always disclose',
-  classic: 'Classic cartoon', whiteboard: 'Whiteboard', storybook: 'Storybook', doodle: 'Doodle', illustrated: 'Illustrated', chronicle: 'History cartoon',
+  classic: 'Classic cartoon', whiteboard: 'Whiteboard', storybook: 'Storybook', doodle: 'Doodle', illustrated: 'Illustrated',
   cartoon: 'Colour cartoon', marker: 'Black marker', pencil: 'Pencil sketch', framed: 'Framed board', 'dry-erase': 'Dry-erase markers',
   none: 'None', subtle: 'Subtle', accent: 'Accent hits', rich: 'Rich sound design', draft: 'Draft · needs review', approved: 'Approved', retired: 'Retired',
 };
@@ -48,8 +48,8 @@ function styleRendererBadge(spec) {
 }
 // What the style's engine can do, and for stick figures the look and the hand this style uses.
 function styleFeatures(spec) {
-  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['motion-graphics', 'story-mix'].includes(adapter);
-  const chosen = stick || board || design ? `<p class="hint">${design ? `Motion design: <strong>${esc(styleLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
+  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
+  const chosen = stick || board || design ? `<p class="hint">${adapter === 'story-mix' ? '<strong>Mix of all engines.</strong> ' : ''}${design ? `Documentary look: <strong>${esc(docLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
   return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen;
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
@@ -131,7 +131,9 @@ function styleRoom(family) {
 }
 
 // ---------------------------------------------------------------- dialogs
-function styleOptions(values, selected) { return values.map(value => `<option value="${esc(value)}" ${String(value) === String(selected) ? 'selected' : ''}>${esc(styleLabel(value))}</option>`).join(''); }
+function styleOptions(values, selected, label = styleLabel) { return values.map(value => `<option value="${esc(value)}" ${String(value) === String(selected) ? 'selected' : ''}>${esc(label(value))}</option>`).join(''); }
+// The Documentary engine's looks (0.37): "cartoon" here is the cartoon documentary, not the whiteboard's colour cartoon.
+const docLabel = value => (value === 'cartoon' ? 'Cartoon documentary' : value === 'mix' ? 'Mix: every documentary look, chosen per scene' : styleLabel(value));
 function styleChecks(name, values, selected) {
   return `<div class="check-grid">${values.map(value => `<label class="check-chip"><input type="checkbox" name="${name}" value="${esc(value)}" ${selected.includes(value) ? 'checked' : ''}> ${esc(styleLabel(value))}</label>`).join('')}</div>`;
 }
@@ -195,11 +197,12 @@ function styleEditorBody(spec) {
     ${styleNumber('s.truePeakDbtp', 'True-peak ceiling (dBTP)', spec.audio.truePeakDbtp, -3, -0.5, 0.1)}
     <label>Sound effects<select name="s.sfxUsage">${styleOptions(v.sfxUsage, spec.audio.sfxUsage)}</select></label>
   </div></fieldset>
-  ${['ffmpeg-sketch', 'story-mix', 'canvas-frames', 'motion-graphics'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>${spec.renderer.adapter === 'canvas-frames' ? 'Hand-drawn engine features' : spec.renderer.adapter === 'story-mix' ? 'Drawing features' : spec.renderer.adapter === 'motion-graphics' ? 'Motion engine features' : 'Stickman engine features'}</legend><div class="form-grid">
-    ${['story-mix', 'motion-graphics'].includes(spec.renderer.adapter) ? `<label>Motion design<select name="s.drawingDesign">${styleOptions(v.drawingDesigns || ['vector'], spec.drawing?.design || 'vector')}</select><span class="hint">How motion-graphics shots look: one design (vector world, infographic cartoon, kinetic type, documentary collage or data desk), or Mix: every design in one video, picked for each scene.</span></label>` : ''}
-    ${!['canvas-frames', 'motion-graphics'].includes(spec.renderer.adapter) ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: one look (classic cartoon, whiteboard, storybook, marker doodle, illustrated or history cartoon), or Mix: the program uses every look in one video and picks the right one for each scene.</span></label>` : ''}
-    ${!['ffmpeg-sketch', 'motion-graphics'].includes(spec.renderer.adapter) ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: one look (colour cartoon, black marker, pencil sketch, framed board or dry-erase markers), or Mix: every look in one video, picked for each scene.</span></label>` : ''}
-    ${spec.renderer.adapter !== 'motion-graphics' ? `<label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>` : '<input type="hidden" name="s.drawingHand" value="">'}
+  ${['ffmpeg-sketch', 'story-mix', 'canvas-frames', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>${spec.renderer.adapter === 'canvas-frames' ? 'Hand-drawn engine features' : spec.renderer.adapter === 'story-mix' ? 'Story mix: every engine, each in its look' : ['ffmpeg-montage', 'motion-graphics'].includes(spec.renderer.adapter) ? 'Documentary engine features' : 'Stickman engine features'}</legend><div class="form-grid">
+    <p class="hint full">${spec.renderer.adapter === 'story-mix' ? 'This style mixes ALL engines in one video. Below, choose the look each engine uses when it appears (one look, or Mix of that engine\'s looks).' : 'This style uses only this engine. Choose one look, or Mix: every look of this engine in one video, picked for each scene. Motion graphics (kinetic words, maps, charts) are part of every engine. To mix all engines, assign the Story Mix style instead.'}</p>
+    ${['story-mix', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Documentary look<select name="s.drawingDesign">${styleOptions(v.drawingDesigns || ['vector'], spec.drawing?.design || 'vector', docLabel)}</select><span class="hint">One look (footage with motion graphics, cartoon documentary, painted story, vector world, infographic, collage or data desk), or Mix: every documentary look in one video. Footage needs a stock or image key.</span></label>` : ''}
+    ${!['canvas-frames', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: one look (classic cartoon, whiteboard, storybook, marker doodle or illustrated), or Mix: every Stickman look in one video, picked for each scene.</span></label>` : ''}
+    ${!['ffmpeg-sketch', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: one look (colour cartoon, black marker, pencil sketch, framed board or dry-erase markers), or Mix: every look in one video, picked for each scene.</span></label>` : ''}
+    ${!['motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>` : '<input type="hidden" name="s.drawingHand" value="">'}
     ${spec.renderer.adapter === 'ffmpeg-sketch' ? '<p class="hint full">Choosing a look fills in its recommended colours, shot lengths and transitions below; you can still change them.</p>' : ''}
   </div></fieldset>` : ''}
   <fieldset class="editor-section"><legend>Planning brief</legend><div class="form-grid">

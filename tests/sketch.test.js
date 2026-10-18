@@ -186,7 +186,7 @@ test('motion tools: charts, timelines, networks, kinetic statements and posters 
   assert.throws(() => Sk.validate({design: 'neon', elements: [{kind: 'text', text: 'Hi'}]}), /Motion design/);
   const guide = Sk.promptGuide('motion', {designs: true});
   assert.match(guide, /"kind": "chart"[\s\S]*never invent data[\s\S]*"kind": "timeline"[\s\S]*style "statement"[\s\S]*"kind": "network"/);
-  assert.match(guide, /names its design: "design": vector/);
+  assert.match(guide, /names its look: "design": cartoon\|painted\|vector/);
 });
 
 test('0.36 maps: everyday country names, date-line shapes, fitted views, and map and crowd elements checked like the rest', () => {
@@ -222,7 +222,7 @@ test('0.36 maps: everyday country names, date-line shapes, fitted views, and map
 });
 
 test('a checked drawing checked again is the same drawing: every element kind survives a stored plan being drawn again', () => {
-  const sketch = {engine: 'stickman', look: 'chronicle', set: 'street', elements: [
+  const sketch = {engine: 'motion', design: 'cartoon', set: 'throne', elements: [
     {kind: 'figure', who: 'c1', pose: 'point', expression: 'happy', then: [{at: 'later', pose: 'cheer'}], label: 'Max, narrator'},
     {kind: 'prop', prop: 'coin', x: 0.7, y: 0.4, face: true}, {kind: 'text', style: 'statement', text: 'A *big* idea'}, {kind: 'arrow', from: 1, to: [0.8, 0.3]},
     {kind: 'chart', type: 'bar', values: [1, 60], labels: ['cost', 'sale']}, {kind: 'timeline', events: [{label: 'Leave', when: '1497'}, {label: 'India', when: '1498'}], now: 1},
@@ -233,4 +233,26 @@ test('a checked drawing checked again is the same drawing: every element kind su
   const once = Sk.validate(sketch, {cast}), twice = Sk.validate(once, {cast});
   assert.deepEqual(twice, once);
   assert.deepEqual(once.elements.find(el => el.kind === 'network').links, [[1, 2]]);
+});
+
+test('0.37: a video draws only with its engines, places of the past, and a story of the past never keeps a place of today', () => {
+  // A stickman style allows only stickman shots: Claude's other engine is drawn as stickman with a named warning;
+  // an owner edit is told plainly.
+  const warnings = [];
+  const shot = Sk.validate({engine: 'handdrawn', elements: [{kind: 'text', text: 'Hi'}]}, {primary: 'stickman', engines: ['stickman'], lenient: true, warn: message => warnings.push(message)});
+  assert.equal(shot.engine, 'stickman');
+  assert.match(warnings[0], /Engine must be one of: stickman/);
+  assert.throws(() => Sk.validate({engine: 'motion', elements: [{kind: 'text', text: 'Hi'}]}, {primary: 'stickman', engines: ['stickman']}), /Engine must be one of: stickman/);
+  assert.match(Sk.promptGuide('stickman', {engines: ['stickman']}), /"engine": stickman, "set"/);
+  // Places of the past are in the vocabulary, and a story of the past moves places of today to them.
+  for (const set of ['throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield']) assert.ok(Sk.SETS.includes(set), set);
+  assert.ok(Sk.PROPS.includes('galleon'));
+  const drawn = [{label: 'S01A', sketch: Sk.validate({set: 'home', elements: [{kind: 'figure', pose: 'think'}]}), words: 'So Portugal asked a dangerous question'},
+    {label: 'S01B', sketch: Sk.validate({set: 'street', elements: [{kind: 'figure', pose: 'walk'}]}), words: 'Today the street is still there'}];
+  const fixes = Sk.worldMend(drawn, {era: 'early-modern'});
+  assert.equal(drawn[0].sketch.set, 'chamber');
+  assert.equal(drawn[1].sketch.set, 'street', 'a line about today keeps today\'s place');
+  assert.match(fixes[0].fix, /place of today, so this early-modern story moved it to the chamber/);
+  assert.deepEqual(Sk.worldMend([{label: 'S02A', sketch: Sk.validate({set: 'home', elements: [{kind: 'figure'}]})}], {era: 'modern'}), [], 'a modern story keeps its home');
+  assert.equal(Sk.fromText('The king sat alone and wondered what to do.', {primary: 'stickman'}).set, 'throne');
 });

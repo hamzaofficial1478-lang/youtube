@@ -1,7 +1,7 @@
 {
-  "version": "0.36.0",
+  "version": "0.37.0",
   "updated": "2026-10-16",
-  "nextAction": "Show the owner the all-styles demo (scratchpad demo8) and the motion demo; then continue with the owner's next engine request. Historical borders and motion overlays on footage remain open.",
+  "nextAction": "Owner review of the engine restructure (one engine per style, Documentary engine, motion graphics as a layer); then the motion layer's animation upgrades (typography, backgrounds, layering) and image or stock keys for the footage and painted looks.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -400,6 +400,13 @@
           "status": "testing",
           "remaining": "Historical borders; owner review of the all-styles demo.",
           "evidence": "0.36.0 (2026-10-17): look, maps (four finishes, date line) and crowds rendered and checked; map and crowd validation, free maps and drawing tests added."
+        },
+        {
+          "id": "P06r",
+          "title": "One engine per style, motion graphics as a layer, the Documentary engine; places of the past",
+          "status": "testing",
+          "remaining": "Owner review; motion-layer animation upgrades; AI-painted and footage looks need keys.",
+          "evidence": "0.37.0 (2026-10-18): engine scope, documentary looks, period places, backdrops and map fly-in rendered and checked; Style Library checked in the browser; npm test passed (see commit)."
         },
         {
           "id": "S02",

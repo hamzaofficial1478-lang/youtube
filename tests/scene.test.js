@@ -560,7 +560,8 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
   const job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);
   const system = network.calls.find(call => call.path === '/v1/messages').body.system;
-  assert.match(system, /ENGINES\. This video's main look is Stickman animation \(stickman\)[\s\S]*What usually happens when engines mix[\s\S]*BUILD EVERY SHOT LIKE A SCENE/);
+  assert.match(system, /ENGINE\. This video uses one engine: Stickman animation[\s\S]*MOTION GRAPHICS are a layer of every engine[\s\S]*BUILD EVERY SHOT LIKE A SCENE/);
+  assert.doesNotMatch(system, /What usually happens when engines mix/, 'a stickman video is not offered the other engines (0.37)');
   // The review is a second pass with each shot's own words; its redraws land in the plan with their reasons.
   const reviewCall = network.calls.filter(call => call.path === '/v1/messages').find(call => /continuity supervisor/.test(call.body.system));
   assert.ok(JSON.parse(reviewCall.body.messages[0].content).scenes[0].shots[0].words.length > 0, 'the review sees the words of each shot');

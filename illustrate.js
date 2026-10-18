@@ -32,8 +32,14 @@ const STICK_NOTES = Object.freeze({
   storybook: 'a storybook illustration: warm, muted colours, soft shading shapes, round-headed deadpan characters',
   doodle: 'bold thick marker doodles with flat bright colours and simple shapes',
   illustrated: 'ink line art with coloured-pencil shading',
-  chronicle: 'a comic history cartoon: big-headed cartoon people in period costume, painted places with soft colour washes, clean dark outlines',
 });
+// The Documentary engine's looks that keep outlines (0.37): the cartoon documentary and the painted story.
+const DESIGN_NOTES = Object.freeze({
+  cartoon: 'a comic history cartoon: big-headed cartoon people in period costume, painted places with soft colour washes, clean dark outlines',
+  painted: 'a rich painted illustration in warm, cinematic golden light: detailed period places, people in costume with expressive faces, comic-book shading in a few flat tones, thin dark outlines',
+});
+// Whether a picture of this engine and look has outlines (the hand or the build needs them).
+const outlined = (engine, design) => (engine === 'motion' ? !!DESIGN_NOTES[design] : (ENGINE_NOTES[engine] || ENGINE_NOTES.handdrawn).outlines !== false);
 const MOTION_NOTE = 'flat vector motion design: bold geometric shapes, no outlines or very thin ones, a limited palette (use the video\'s palette), clean shadows as darker flat shapes';
 
 const fail = message => ({art: null, issues: [message]});
@@ -75,9 +81,9 @@ function validateArt(raw, {outlines = true} = {}) {
 }
 
 // The illustrator's messages: one picture, its words, the look it will be drawn in and the story's world.
-function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon', look = 'classic', palette = null, world = null, cast = [], aspect = 1.5, findings = []}) {
-  const notes = ENGINE_NOTES[engine] || ENGINE_NOTES.handdrawn;
-  const [lookName, lookNote] = engine === 'stickman' ? [look, STICK_NOTES[look] || STICK_NOTES.classic] : engine === 'motion' ? ['motion graphics', MOTION_NOTE] : [board, LOOK_NOTES[board] || LOOK_NOTES.cartoon];
+function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon', look = 'classic', design = null, palette = null, world = null, cast = [], aspect = 1.5, findings = []}) {
+  const docLook = engine === 'motion' && DESIGN_NOTES[design], notes = docLook ? {...ENGINE_NOTES.handdrawn, role: 'the illustrator of a documentary video', reveal: 'its shapes build in one after another', people: 'People are drawn as people in period costume (proportioned bodies, faces with expression), matching the cast\'s look when a character of the cast appears.', outlines: true} : ENGINE_NOTES[engine] || ENGINE_NOTES.handdrawn;
+  const [lookName, lookNote] = engine === 'stickman' ? [look, STICK_NOTES[look] || STICK_NOTES.classic] : docLook ? [design, DESIGN_NOTES[design]] : engine === 'motion' ? ['motion graphics', MOTION_NOTE] : [board, LOOK_NOTES[board] || LOOK_NOTES.cartoon];
   const input = {picture: describe, spokenWords: words, look: lookName, lookNote, ...(palette ? {palette} : {}), ...(world ? {world} : {}), ...(cast.length ? {cast} : {}), aspect: Math.round(aspect * 100) / 100};
   return [
     {role: 'system', content: [
@@ -99,4 +105,4 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
   ];
 }
 
-module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, validateArt, messages};
+module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, DESIGN_NOTES, outlined, validateArt, messages};

@@ -168,7 +168,7 @@
       const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] != null ? Math.max(ts, cue.then[k] - 0.1) : ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
       // A map's areas, routes and pins arrive on their own words, one after another when they have none.
       let last = ts + 0.15;
-      const marks = item.kind === 'map' ? item.steps.map((step, k) => (last = cue.then?.[k] != null ? Math.max(ts + 0.1, cue.then[k] - 0.15) : last + (k ? 0.6 : 0.2))) : null;
+      const marks = item.kind === 'map' ? item.steps.map((step, k) => (last = cue.then?.[k] != null ? Math.max(ts + 0.1, cue.then[k] - 0.15) : last + (k ? 0.7 : 0.9))) : null;
       return {ts, te, enter, steps, marks, cued: cue.t0 != null, seed: K.hashText(`${item.kind}${i}${item.who || item.prop || item.text || item.effect || ''}`)};
     });
     // Two words never sit on each other: when a later text lands on an earlier one, the earlier one leaves as it comes.
@@ -518,11 +518,12 @@
   const mercY = lat => Math.log(Math.tan(Math.PI / 4 + Math.max(-80, Math.min(84, lat)) * Math.PI / 360));
   let mapBoxes = null;
   const shapeBoxes = () => (mapBoxes ??= Object.fromEntries(Object.entries(window.DMAP?.countries || {}).map(([name, polys]) => [name, polys.map(poly => { const r = poly[0]; return [Math.min(...r.map(p => p[0])), Math.max(...r.map(p => p[0]))]; })])));
-  function mapView(el, box) {
+  function mapView(el, box, zoom = 1) {
     const [w, s, e, n] = el.view, [x0, y0, x1, y1] = box, want = (x1 - x0) / (y1 - y0), R = Math.PI / 180;
     let a0 = w * R, a1 = e * R, b0 = mercY(s), b1 = mercY(n);
     if ((a1 - a0) / (b1 - b0) < want) { const c = (a0 + a1) / 2, half = (b1 - b0) * want / 2; a0 = c - half; a1 = c + half; }
     else { const c = (b0 + b1) / 2, half = (a1 - a0) / want / 2; b0 = c - half; b1 = c + half; }
+    if (zoom !== 1) { const ca = (a0 + a1) / 2, cb = (b0 + b1) / 2; [a0, a1, b0, b1] = [ca - (ca - a0) * zoom, ca + (a1 - ca) * zoom, cb - (cb - b0) * zoom, cb + (b1 - cb) * zoom]; }
     const k = (x1 - x0) / (a1 - a0);
     return {k, west: a0 / R, east: a1 / R, P: ([lon, lat]) => [x0 + (lon * R - a0) * k, y0 + (b1 - mercY(lat)) * k]};
   }
@@ -546,7 +547,8 @@
     return {sea: '#BFE1F2', land: '#F5F1E6', border: '#B7B0A0', coast: '#7F7A6C', lw: 1.5};
   }
   function drawMap(el, i, local) {
-    const {ctx, u} = K, est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, full = (el.size || 'xl') === 'xl', st = mapStyle(), view = mapView(el, est.box), marks = LAYOUT.el[i].marks || [];
+    // The map flies in: it opens a little wider and settles on its view in 1.4 s (0.37: maps felt too quick to read).
+    const {ctx, u} = K, est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, full = (el.size || 'xl') === 'xl', st = mapStyle(), view = mapView(el, est.box, 1 + 0.45 * (1 - ease.inOutSine(clamp01(local / 1.4)))), marks = LAYOUT.el[i].marks || [];
     const all = Object.keys(window.DMAP?.countries || {}), q0 = clamp01(local / 0.35), placed = [];
     // Labels never pile up: one that would sit on another moves down (or up) until it is free.
     const pill = (text, x, y, size, color) => {
@@ -728,7 +730,7 @@
     const g = pictureGeom(el, i);
     if (!g) return;
     // Each engine shows a picture its own way (0.34): the whiteboard looks, the stickman looks, motion design.
-    const {ctx, u} = K, look = K.FIN === 'wb' ? K.WB : {board: 'marker', story: 'story', doodle: 'doodle', ink: 'ink', flat: 'flat'}[K.FIN] || 'cartoon', draws = enter === 'draw', lines = draws ? pictureSeconds(el, LAYOUT.el[i].ts) : 0;
+    const {ctx, u} = K, look = K.FIN === 'wb' ? K.WB : {board: 'marker', story: 'story', doodle: 'doodle', ink: 'ink', flat: 'flat', paint: 'flat'}[K.FIN] || 'cartoon', draws = enter === 'draw', lines = draws ? pictureSeconds(el, LAYOUT.el[i].ts) : 0;
     if (look === 'flat') return buildPicture(g, draws ? lines : 0, local);
     const q = lines ? clamp01(local / lines) : 1, done = q * g.total;
     // Each shape's colour washes in just behind the pen, once its outline is done (a shape without one, when the pen
@@ -1182,13 +1184,16 @@
     K.TIP = null;
     // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise. A motion shot its
     // design (0.35), the same way.
-    const own = value => (value && value !== 'mix' ? value : null);
+    const own = value => (value && value !== 'mix' && value !== 'footage' ? value : null);
     const look = D.engine === 'stickman' ? D.look || own(P.drawing?.look) || 'classic' : null;
     const design = D.engine === 'motion' ? own(D.design) || own(P.drawing?.design) || 'vector' : null;
-    const params = {...P, finish: (look && LOOKS[look]) || (design === 'infographic' ? 'info' : FINISH[D.engine]) || 'cartoon'};
+    // Documentary looks with their own finish (0.37): the cartoon documentary (finish chron) and the painted story (paint).
+    const params = {...P, finish: (look && LOOKS[look]) || ({infographic: 'info', cartoon: 'chron', painted: 'paint'}[design]) || FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});
     if (D.board) K.WB = D.board;
     K.DESIGN = design;
+    // The shot's own seed: an abstract backdrop picks its pattern from it, so neighbouring shots differ.
+    K.SEED = K.hashText((D.elements || []).map(item => `${item.kind}${item.text || item.prop || item.effect || ''}`).join('|'));
     HAND = (D.engine === 'stickman' || D.engine === 'handdrawn') && P.drawing?.hand === true;
     PEN = HAND || look === 'whiteboard';
     K.PEN = HAND; LASTHAND = null;
@@ -1207,6 +1212,7 @@
     }
     if (K.DESIGN) drawBackdrop(t);
     // Storybook: warm paper with a fine grain.
+    if (K.FIN === 'paint') { const rand = K.seeded(37); ctx.fillStyle = K.alpha('#5A3A1A', 0.035); for (let k = 0; k < 1400; k++) ctx.fillRect(rand() * W, rand() * H, 1 + rand() * 2.5, 1 + rand() * 2.5); }
     if (K.FIN === 'chron') { const rand = K.seeded(29); ctx.fillStyle = K.alpha('#7A5A40', 0.03); for (let k = 0; k < 600; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     if (K.FIN === 'story') { const rand = K.seeded(23); ctx.fillStyle = K.alpha('#7A5A40', 0.045); for (let k = 0; k < 900; k++) ctx.fillRect(rand() * W, rand() * H, 1.5 + rand() * 2, 1.5 + rand() * 2); }
     const cam = camera(t);
@@ -1236,6 +1242,8 @@
       if (K.FIN === 'story') ctx.filter = 'sepia(0.45) saturate(0.72)';
       // History cartoon places are painted: a little warmer and softer than the classic look.
       if (K.FIN === 'chron') ctx.filter = 'sepia(0.12) saturate(1.05)';
+      // The painted story's places: warm, rich and a little contrasty, like golden-hour paintings.
+      if (K.FIN === 'paint') ctx.filter = 'sepia(0.28) saturate(1.2) contrast(1.06)';
       ctx.drawImage(layerCanvas, 0, 0); ctx.restore();
       const ground = K.FIN === 'doodle' ? DOODLE_GROUND[D.set] : null;
       if (ground) {
@@ -1252,6 +1260,7 @@
     D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);
+    if (K.FIN === 'paint') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw * 0.5, ch * 0.42, ch * 0.35, cw / 2, ch / 2, ch * 1.0); g.addColorStop(0, 'rgba(255,200,120,0.06)'); g.addColorStop(1, 'rgba(60,30,10,0.32)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (K.FIN === 'chron') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.5, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(70,45,25,0)'); g.addColorStop(1, 'rgba(70,45,25,0.12)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (K.FIN === 'story') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(60,40,25,0)'); g.addColorStop(1, 'rgba(60,40,25,0.16)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (HAND) drawHand(t, context);
