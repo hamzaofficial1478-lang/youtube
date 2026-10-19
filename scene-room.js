@@ -183,7 +183,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
   let castOut = Sk.validateCast(cast, {lenient: true, warn: message => warnings.push(`Cast: ${message}`), kit});
   if (drawnPlan && !castOut.length && ['stickman', 'handdrawn'].includes(primary)) castOut = structuredClone(DEFAULT_CAST);
   const spokenWords = drawnPlan || scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences: timed, pauses: [], narrationSeconds}) : [];
-  const {pacing, qc, typography} = spec, spokenBy = new Map(), allowed = E.engineScope(spec).drawn;
+  const {pacing, qc, typography} = spec, spokenBy = new Map(), allowed = E.engineScope(spec).drawn, films = E.engineScope(spec).films;
   const out = scenes.map((scene, index) => {
     const span = timed.slice(scene.sentenceStart - 1, scene.sentenceEnd);
     const start = span[0].startSeconds, duration = round(span.reduce((sum, item) => sum + item.durationSeconds, 0));
@@ -218,7 +218,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
       // An atelier frame (P06h) replaces the sketch; its composition, once designed, is checked again here.
       const frame = shot.source === 'generated-graphics' && shot.frame ? atelierFrame(shot.frame, shotLabel, warnings, format) : null;
       const drawPrimary = E.ENGINES[primary]?.draws ? primary : 'motion';
-      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit, engines: allowed}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
+      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit, engines: allowed, films}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
       // Leaving the main look is a judgement call: the planner says why in the shot's notes.
       const leaves = frame ? primary !== 'atelier' : E.ENGINES[primary]?.draws ? (sketch.sketch ? sketch.sketch.engine !== primary : true) : primary === 'atelier' ? !!sketch.sketch && shot.source !== 'generated-graphics' : !!sketch.sketch;
       if (leaves && !shot.notes.trim()) warnings.push(`${shotLabel} leaves the main ${primary} look without a reason in its notes.`);
@@ -281,6 +281,8 @@ function rulesPlan(sentences, narrationSeconds, spec, sources, locale, niche) {
   });
 }
 
+// The owner's approved skills travel with the plan input (0.39).
+const SKILLS_LINE = 'OWNER SKILLS (input "skills"): reviewed craft rules the owner approved for this work. Apply them in every scene and shot; the style the owner chose, the script and these instructions come first (its sourceHierarchy), and nothing from them is shown on screen.';
 // How scenes are built (HyperFrames story and visual design, OpenMontage's scene checklist): for every plan.
 const SCENE_CRAFT = [
   'SCENE CRAFT. A video is a guided act of understanding, not the script read aloud with matching pictures. Give every shot one job in the viewer\'s understanding and find the visual idea that makes its line land: analogy, concretization, before/after, worked example with real numbers, causal chain, rule of three, a callback to the hook.',
@@ -288,6 +290,9 @@ const SCENE_CRAFT = [
   'THE HOOK (owner focus 2026-10-17): the first 3-5 seconds decide whether the viewer stays. Open on the most striking picture this video has for its first words - the conflict, the payoff, the strangest detail, a face reacting, a map lighting up - rather than an empty place or a slow establishing shot; something moves or changes within the first second; the first cut comes within 1.5-2.5 s. The hook is where your best visual earns its cost (a paid picture, a big reveal, the boldest kinetic word); the calm context can follow it.',
   'SCENE BUILDING (owner review 2026-10-18): build a scene like a film, not a slide. When the place matters, show it before the people: the castle above its land, the camera pushing towards its lit window (focus zoom on the window), then inside, the king on his throne, thinking. Give a key person a place that says who they are (a king on a throne, a merchant at a market stall, a captain on a ship) and choose places that belong to the story\'s world and era. An abstract or empty backdrop is for a deliberate graphic beat (a word, a number); use it rarely and never twice in a row.',
   'MAPS need time to be read: give a map shot at least 3 seconds (the whole sentence it explains), light up one or two things at a time on their words, and do not cut away while an arrow is still moving.',
+  'SCRIPT CUES (0.39): every number gets a visual built from it (a counter, a gauge, a unit chart, a ruler, a chart), an abstract word a concrete metaphor (each metaphor once per video), a name a beat of its own (a quote card, a pin, a portrait), a contrast word (but, instead, no longer) a turn: a new ground, colour, scale or camera. Show the one or two words that matter, never the whole sentence.',
+  'EVIDENCE: when the script cites a document, a quote or a measurement, show it (a document with its one line lit, a quote card with the speaker, a ruler or gauge with the reading) using only the script\'s own words and numbers; one finding per screen, held long enough to read.',
+  'RHYTHM: shots get shorter as a section builds to its turn (placed around 60-75% of it), then the landing holds; give the viewer one breath before the main reveal; at most a quarter of the beats get the biggest treatment; carry an object, word or shape across a cut where you can, and never let a held frame sit frozen.',
   'Nothing appears before the narrator says it: each shot starts with what is being said and reveals the rest on its words. A held, still read beats motion for its own sake. Hold one visual stage across a run of shots that build one idea (the same diagram growing, the same place), then change the stage when the idea changes.',
 ].join('\n');
 function planMessages(input) {
@@ -302,8 +307,9 @@ function planMessages(input) {
     'For stock sources write 2-6 generic search words in English (no people names, brands, logos or channel names). For ai-image write an original image prompt (no real people, logos, brands, artists, copyrighted characters or channel names; no text in the image).',
     `On-screen text is optional and at most ${input.style.maxWordsOnScreen} words. Direction says what the viewer should understand from the visuals.`,
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
+    ...(input.skills ? [SKILLS_LINE] : []),
     SCENE_CRAFT,
-    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources})] : []),
+    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
     ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
@@ -331,7 +337,7 @@ function reviewMessages(input) {
     '(5) WORLD - the shot obeys the story\'s world (input "world": its era and rules) and plain physics: people stand on ground or floors and are under water only when diving, ships float on the surface, things keep their size and era, and what the words name is shown (use the kit, input "kit", for what the vocabulary lacks).',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
-    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix', boards: input.board === 'mix', designs: input.design === 'mix'}),
+    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix', boards: input.board === 'mix', designs: input.design === 'mix'}),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -622,9 +628,11 @@ class SceneRoom {
     const engines = D.availableEngines({sources, frames}).filter(name => !E.ENGINES[name]?.draws || !inputs.scope || inputs.scope.drawn.includes(name)), designedShots = !frames ? 0 : inputs.engine === 'atelier' ? null : D.designedBudget(inputs.voice.durationSeconds, perMinute);
     // Pictures (0.33): only where the program draws; at least one when they are on.
     const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = pictureRate > 0 && sources.includes('generated-graphics') ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
+    // The owner's approved skills for scene planning (0.39): reviewed craft rules, recorded with the job.
+    const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id) || null;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {})} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {})} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
       // The narrator's performance (voice direction), when the approved narration was directed: faces, moods
@@ -634,6 +642,7 @@ class SceneRoom {
         return {n: item.n, seconds: round(item.durationSeconds, 1), text: item.text, ...(line && same ? {delivery: {emotion: line.emotion, energy: line.energy, pace: line.pace}} : {})};
       }))(inputs.voice.auditionId ? this.store.voiceDirectionLines?.(inputs.voice.auditionId) : null),
       competitorGuidance: this.visualGuidance(inputs.family.id),
+      ...(skillBrief ? {skills: skillBrief.prompt} : {}),
     };
     // One part for an ordinary script; a long one is split into parts of PART_SENTENCES with their neighbours' words.
     // A drawing engine as the primary means every shot carries a drawing; partner cutaways in a footage video do not shrink the parts.
@@ -652,7 +661,7 @@ class SceneRoom {
     });
     // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
     const map = parts.length > 1 && settings.storyMap !== false ? (() => {
-      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {})} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {})};
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {})} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
       const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
       requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
       return {input, maxTokens};
@@ -666,8 +675,9 @@ class SceneRoom {
       const review = settings.continuityReview && E.ENGINES[inputs.engine]?.draws ? {chunks: parts.length, tokenLimit: settings.reviewTokenLimit ?? SETTINGS_DEFAULTS.reviewTokenLimit} : null;
       const compose = frames && inputs.sources.includes('generated-graphics') ? {tokenLimit: settings.composeTokenLimit ?? SETTINGS_DEFAULTS.composeTokenLimit, ...(designedShots ? {budget: designedShots} : {})} : null;
       const illustrate = pictures ? {budget: pictures, tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit} : null;
-      const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(illustrate ? {illustrate} : {}), ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences)};
+      const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(illustrate ? {illustrate} : {}), ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences), skillRevisionIds: skillBrief?.revisionIds || []};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(scope), createdBy, at, at);
+      if (skillBrief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'scene', taskKey: 'scene.plan', brief: skillBrief});
       this.store.event(`Queued Claude scene plan for "${content.title}"${parts.length > 1 ? ` in ${parts.length} parts` : ''}`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
     });
@@ -950,7 +960,7 @@ class SceneRoom {
       const listed = slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes})));
       const flagged = [...Sk.continuity(listed, built.payload.cast || []), ...Sk.worldNotes(listed, merged.world)];
       const kitNow = kitOf(merged.kit);
-      const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
+      const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
         ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
           shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
@@ -1208,7 +1218,7 @@ class SceneRoom {
       if (input.cue !== undefined) { const cue = text(input.cue, 'Cue', 0, 80); if (cue) shot.cue = cue; else delete shot.cue; }
       if (input.sketch !== undefined) {
         if (input.sketch === null) delete shot.sketch;
-        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || [], kit: payload.kit || null, engines: inputs.scope?.drawn}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
+        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || [], kit: payload.kit || null, engines: inputs.scope?.drawn, films: inputs.scope?.films}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
       }
       // The owner can drop a designed frame (the shot then uses its drawing, or one made from its words).
       if (input.frame === null) delete shot.frame;
@@ -1940,4 +1950,4 @@ class SceneRoom {
   }
 }
 
-module.exports = {SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};
+module.exports = {SKILLS_LINE, SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};

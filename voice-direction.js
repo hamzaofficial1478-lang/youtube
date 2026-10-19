@@ -63,6 +63,7 @@ class VoiceDirector {
     return {family: {niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
       ...(spec ? {style: {name: spec.name, summary: spec.summary, musicMoods: spec.audio.musicMoods, motionIntensity: spec.motion.intensity}} : {}),
       ...(this.voiceGuidance(inputs.family.id) ? {competitorVoice: this.voiceGuidance(inputs.family.id)} : {}),
+      ...(this.store.skillRuntime?.brief('voice.direction', inputs.family.id) ? {skills: this.store.skillRuntime.brief('voice.direction', inputs.family.id).prompt} : {}),
       title: inputs.content.title, sentences: inputs.sentences};
   }
 
@@ -77,6 +78,8 @@ class VoiceDirector {
       const promptInput = this.promptInput(inputs), maxTokens = answerTokens(inputs.sentences.length), tokenLimit = messageTokenUpperBound(D.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO voice_direction_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, connector, promptInput, maxTokens, tokenLimit}), by, at, at);
+      const skillBrief = this.store.skillRuntime?.brief('voice.direction', inputs.family.id);
+      if (skillBrief && promptInput.skills) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'voice', taskKey: 'voice.direction', brief: skillBrief});
       this.store.event(`Queued Claude voice direction for "${inputs.content.title}"`);
       return this.publicJob(this.jobRow(id));
     });

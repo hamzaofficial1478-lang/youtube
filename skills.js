@@ -335,6 +335,9 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/youtube-agent.json', label: 'youtube-agent-skill (MIT): hooks, packaging, chapters, Shorts, retention'},
   {file: 'skills/hyperframes.json', label: 'HyperFrames (Apache-2.0): story, motion, captions and mix doctrine'},
   {file: 'skills/claude-video.json', label: 'claude-video (MIT): video evidence, frame budgets, clean stock windows, engine discipline'},
+  {file: 'skills/motion-craft.json', label: 'motionmaxxing (Apache-2.0): measured motion, word timing, script cues, machine-look check'},
+  {file: 'skills/film-craft.json', label: 'lemo-opuscar (MIT): directing, sound, colour by role, evidence grammar, signature moves'},
+  {file: 'skills/channel-grammar.json', label: 'Channel study 2026-10-18: hooks, visual systems, receipts, maps, pacing, narration modes, profiles'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -365,6 +368,9 @@ function loadPacks(root = __dirname) {
 // How much of a Claude prompt one skill brief may occupy. messageTokenUpperBound counts bytes as
 // an upper bound on tokens, so this is a byte budget taken out of the family's job token limit.
 const BRIEF_BYTE_BUDGET = 1800;
+// Rooms whose Claude answers are large get a larger share for skills (0.39): the scene planner and the story director
+// read many craft rules; the rest keep the default.
+const TASK_BRIEF_BYTES = Object.freeze({'scene.plan': 9000, 'voice.direction': 3000, 'motion.template': 3000, 'visuals.prompt': 2500});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 class SkillsEngine {
@@ -573,6 +579,40 @@ class SkillsEngine {
     });
   }
 
+  // Approve a whole pack in one review (0.39, owner review 2026-10-18: 349 drafts were never approved one by one, so no
+  // skill ever reached a video). The reviewer names the exact draft revisions shown on screen; if any of them changed
+  // since, nothing is approved. Each revision still gets its own named approval record.
+  approvePack(input) {
+    object(input, 'Request');
+    const approvedBy = person(input.approvedBy, 'Reviewer name');
+    const notes = text(input.notes || '', 'Review notes', 0, 2000);
+    const confirmations = object(input.confirmations, 'Review confirmations');
+    for (const [key, label] of [
+      ['wordingReviewed', 'wording is ours and copies no passage from a source document or a competitor'],
+      ['numbersReviewed', 'numbers, limits and checks are correct for this program'],
+      ['scopeReviewed', 'rooms and task bindings are the right places for these skills'],
+    ]) need(confirmations[key] === true, `Confirm that the ${label}.`);
+    const pack = text(input.pack, 'Pack', 3, 200);
+    need(Array.isArray(input.revisionIds) && input.revisionIds.length >= 1 && input.revisionIds.length <= 500, 'Name the 1-500 draft revisions you reviewed.');
+    const ids = [...new Set(input.revisionIds.map(id => text(id, 'Revision ID', 10, 64)))];
+    return this.store.transaction(() => {
+      const rows = ids.map(id => this.revisionRow(id));
+      for (const row of rows) {
+        need(row.pack === pack, `Skill ${row.skill_id} is not in the pack "${pack}".`, 409);
+        need(row.status === 'draft' && this.latestRevisionRow(row.skill_id).id === row.id, `Skill ${row.skill_id} changed since you opened the pack. Reload and review it again.`, 409);
+      }
+      const at = now();
+      for (const row of rows) {
+        const review = {approvedBy, approvedAt: at, notes, pack, confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}};
+        this.db.prepare("UPDATE skill_revisions SET status='superseded' WHERE skill_id=? AND id<>? AND status='approved'").run(row.skill_id, row.id);
+        this.db.prepare("UPDATE skill_revisions SET status='approved', review=? WHERE id=? AND status='draft'").run(JSON.stringify(review), row.id);
+        this.db.prepare('UPDATE skills SET updated_at=? WHERE id=?').run(at, row.skill_id);
+      }
+      this.store.event(`Approved ${rows.length} skill${rows.length === 1 ? '' : 's'} of the pack "${pack}" by ${approvedBy}`);
+      return {approved: rows.length, pack};
+    });
+  }
+
   retireRevision(id, input) {
     object(input, 'Request');
     const retiredBy = person(input.retiredBy, 'Your name');
@@ -708,7 +748,7 @@ class SkillsEngine {
 
   // The compact brief that goes into a Claude system prompt. A skill that does not fit the byte
   // budget is dropped whole and counted, never trimmed mid-rule.
-  brief(taskKey, {familyId = null, byteBudget = BRIEF_BYTE_BUDGET} = {}) {
+  brief(taskKey, {familyId = null, byteBudget = TASK_BRIEF_BYTES[taskKey] || BRIEF_BYTE_BUDGET} = {}) {
     integer(byteBudget, 200, 20000, 'Brief byte budget');
     const selected = this.select(taskKey, {familyId});
     const entries = [], revisionIds = [], skillIds = [];
@@ -873,5 +913,5 @@ class SkillsEngine {
 module.exports = {
   SkillsEngine, SkillError, validateSkill, skillHash, loadPacks, PACK_FILES,
   TASK_KEYS, ROOMS, ROOM_TASKS, KINDS, ORIGINS, STATUSES, PROJECT_STATE_CATEGORIES,
-  SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET, RULES,
+  SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET, TASK_BRIEF_BYTES, RULES,
 };

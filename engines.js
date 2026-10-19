@@ -93,19 +93,40 @@ function plannerSources(spec, executable) {
 // The Documentary engine's footage look (a style choice, not a drawing): real footage led by motion graphics.
 const FOOTAGE = Object.freeze({name: 'footage with motion graphics', plan: 'Real footage with motion graphics (the way Vox, MagnatesMedia and Dhruv Rathee work; never their look): stock footage and photos carry the real places, people and events, and motion graphics explain over and between them - maps with animated routes and highlighted countries, kinetic headlines, number callouts, layered cut-outs on a colour field, charts and timelines. Cut on the narration\'s beats every 2-4 s.'});
 // Motion graphics are a layer of every engine (owner decision 2026-10-18), not an engine with its own style.
-const MOTION_LAYER = 'MOTION GRAPHICS are a layer of every engine, not an engine of their own: kinetic words (text styles statement, poster, counter, stamp, pop, highlight, and how words animate: rise, letters, typewriter, wipe, slam, track, glitch, blur, focus), textures (grain, film, paper, grid paper, VHS, a two-colour archive tint, light leaks), depth (a back layer that moves slower and goes soft, a front layer that moves faster, camera moves and focus), maps (the camera flies to a country or a pin, a traveller moves along a route, pins pulse, atlas, satellite and night styles), charts, timelines, networks, crowds, effects and transitions all go inside this engine\'s own shots, drawn in its look. Use them like a motion designer: one or two moves per shot, each on its words, never all at once.';
+const MOTION_LAYER = 'MOTION GRAPHICS are a layer of every engine, not an engine of their own: kinetic words (text styles statement, poster, counter, stamp, pop, highlight, and how words animate: rise, letters, typewriter, wipe, slam, track, glitch, blur, focus, redact), evidence (a quote card with the speaker, a document whose one line lights up, a dial, a loupe that magnifies a spot, a measured range line, a unit chart of identical marks), textures (grain, film, paper, grid paper, VHS, a two-colour archive tint, light leaks), depth (a back layer that moves slower and goes soft, a front layer that moves faster, camera moves and focus), maps (the camera flies to a country or a pin, a traveller moves along a route, pins pulse, atlas, satellite and night styles), charts, timelines, networks, crowds, effects and transitions all go inside this engine\'s own shots, drawn in its look. Use them like a motion designer: one or two moves per shot, each on its words, never all at once.';
 // What a video may use (owner decision 2026-10-18: "when the stickman engine is used and the user selects mix, the
 // program uses only the stickman engine's features"): a style built on one engine uses only that engine (one of its
 // looks, or a mix of its looks); the Story Mix uses every engine; an atelier video keeps its guests (people stay drawn).
 // {mix, drawn: drawing engines allowed, footage: footage and image sources allowed, frames: atelier frames allowed}.
 function engineScope(spec) {
   const primary = primaryEngine(spec);
-  if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true};
-  if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false};
-  return {mix: false, drawn: [primary], footage: false, frames: false};
+  // Film looks (0.39) a shot may name: any when the style has one or lets Claude choose; none otherwise.
+  const films = spec?.drawing?.film && spec.drawing.film !== 'none' ? null : [];
+  if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true, films};
+  if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false, films};
+  return {mix: false, drawn: [primary], footage: false, frames: false, films};
 }
-const MIX_RULE = 'Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
-function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null} = {}) {
+// Film looks (0.39): how a medium prints the finished frame, for the drawn shots of every engine (drawn-engine.js
+// drawFilm). After lemo-opuscar's film styles (MIT), restated in our own words: what each suits and how to plan for it.
+const FILMS = Object.freeze({
+  silent: {name: '1920s silent film', plan: 'Silver black and white with warm whites, flicker, gate weave and scratches. Tell beats by action in wide shots and short intertitle cards (text style chapter, a few words); faces stay deadpan and bodies act. Suits the early 20th century, old inventions, slapstick, a story told like an old reel.'},
+  noir: {name: '1940s studio black and white', plan: 'Deep blacks, small glowing whites, slatted shadows of blinds. Push to faces, keep shadows over the scene. Suits crime, secrets, spies, a detective\'s telling.'},
+  sepia: {name: '19th-century photograph', plan: 'Umber and cream print tones; the hero is hand-tinted (accent). Frontal, still subjects and slow pans across faces. Suits history before 1920: pioneers, frontiers, empires, inventors.'},
+  selective: {name: 'black and white with one colour', plan: 'Everything grey except what carries the accent colour: mark the hero or the one story object accent: true and never colour more than two things. Suits tragedy, the one who stands out, a single choice that matters.'},
+  newsprint: {name: 'newspaper print', plan: 'Black halftone dots on newsprint; the hero on its own spot plate. Use headlines (text style headline), documents and big plain pictures. Suits news events, scandals, a front page of its time.'},
+  riso: {name: 'two-ink risograph', plan: 'Two translucent inks with halftone on warm paper, slightly off register. Saturated areas print in the accent ink, darks in the deep ink. Suits playful explainers, youth culture, indie and creative topics.'},
+  blueprint: {name: 'engineering blueprint', plan: 'White lines on Prussian blue. Draw like an engineer: outlines, then detail, then dimensions (ruler) and labels; one stamp for the verdict. Suits inventions, machines, buildings, how things are made.'},
+  woodcut: {name: 'woodcut print', plan: 'Black wood and carved white; one colour plate prints only the accent (the thing that matters). Heavy and solemn. Suits folk tales, protest, plague, labour and war.'},
+  kinescope: {name: '1950s television', plan: 'Soft cool phosphor with scanlines, a rolling hum bar and the tube\'s rounded corners. Suits the 1950s, early TV, broadcasts, propaganda, the space race on the evening news.'},
+  technicolor: {name: 'golden-age Technicolor', plan: 'A saturated warm print with a soft bloom. Suits epics, adventure, Hollywood, spectacle, the dream of a golden age.'},
+  album: {name: 'family album snapshot', plan: 'A faded 1970s-80s print with a white border. Suits memories, family history, nostalgia, the personal side of a story.'},
+  screenprint: {name: 'silkscreen poster', plan: 'Values stepped into flat bands with a key slightly off register, on paper. Suits places, travel, bold summary cards, posters of an era.'},
+  engraving: {name: 'copperplate engraving', plan: 'Every tone made of engraved lines that swell in the darks, then thin hand colouring. Suits natural history, old science, exploration, the 1500s-1800s.'},
+  deco: {name: 'art deco gold', plan: 'Gold in hard metal bands on warm black with glints; the hero keeps its own colour. Suits luxury, wealth, the 1920s, grand hotels, empires of money and their fall.'},
+});
+const FILM_RULE = 'Drawn shots are printed in it automatically (footage keeps its own grade). A shot may name another film look in sketch.film, or "none", only for a change of register (a flashback, an archive memory, a dream) and says why in its notes; the video must still feel like one film.';
+const MIX_RULE ='Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
+function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null} = {}) {
   // One engine (0.37): every shot comes from it; documentary means its footage and its drawn shots.
   const single = !mix && primary !== 'atelier', documentary = primary === 'montage' || primary === 'motion';
   const footage = documentary && (sources ? sources.some(source => source !== 'generated-graphics') : true);
@@ -134,10 +155,12 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
     ...(docName(design) && motionMain ? [`DOCUMENTARY LOOK: ${docName(design).name}. ${docName(design).plan}${design === 'footage' && !footage ? ' Footage is not connected on this PC (no stock or image key), so build it from the documentary drawn shots with the same motion graphics.' : ''}`] : []),
     ...(design === 'mix' && motionMain ? [`DOCUMENTARY LOOKS (mix): this video uses every documentary look. Give each drawn shot its look in sketch.design, chosen for what its scene needs: ${Object.entries(DESIGNS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}${footage ? ` Footage shots (stock or image sources): ${FOOTAGE.plan}` : ''} ${MIX_RULE}`] : []),
     ...(boardMix ? [`WHITEBOARD LOOKS (mix): this video uses every whiteboard look. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${Object.entries(BOARDS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
+    ...(FILMS[film] ? [`FILM LOOK: ${FILMS[film].name}. ${FILMS[film].plan} ${FILM_RULE}`] : []),
+    ...(film === 'choose' ? [`FILM LOOK: choose one film look for this whole video, or none, and set it on every drawn shot as sketch.film: ${Object.entries(FILMS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} A second look only for a change of register (a flashback, an archive memory), with the reason in notes.`] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
     ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : []),
   ].join('\n');
 }
 
-module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};
+module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FILMS, FILM_RULE, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};

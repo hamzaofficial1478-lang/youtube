@@ -335,3 +335,36 @@ test('0.38 motion layer: words animate in their own ways, textures, depth layers
     await renderer.close();
   }
 });
+
+test('0.39 motion curves are the measured ones: landings ease out, a pop leans only a little past its size, leavings ease in', () => {
+  const vm = require('node:vm'), context = {window: {}};
+  vm.runInNewContext(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'drawn-kit.js'), 'utf8'), context);
+  const e = context.window.DK.ease, peak = f => Math.max(...Array.from({length: 201}, (_, k) => f(k / 200)));
+  for (const name of ['crashIn', 'popOver', 'bounceHard', 'snapSettle', 'softLand', 'whip', 'glide', 'cruise', 'softInOut', 'gentleIn', 'accelExit', 'crashOut']) assert.deepEqual([e[name](0), Math.round(e[name](1) * 1e6) / 1e6], [0, 1], name);
+  assert.ok(Math.abs(peak(e.popOver) - 1.077) < 0.01 && Math.abs(peak(e.crashIn) - 1.18) < 0.01, 'overshoots as measured');
+  assert.ok(e.snapSettle(0.2) > 0.75 && e.accelExit(0.4) < 0.1, 'a landing does most of its travel at once; a leaving starts slowly');
+});
+
+test('0.39 the evidence tools draw, a loupe magnifies, and every film look prints the frame its own way', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const motion = {primary: 'motion'}, shot = (elements, extra = {}) => ({engine: 'motion', set: 'none', camera: 'still', transition: 'cut', elements, ...extra});
+    const doc = {kind: 'document', doc: 'newspaper', source: 'Evening Herald', headline: 'Bank closes', line: 'savings of 4,000 families', x: 0.35};
+    const empty = await frame(renderer, shot([{kind: 'text', style: 'label', text: '.', x: 0.95, y: 0.95}]), 1.6, motion);
+    for (const element of [{kind: 'quote', text: 'We never saw it coming', name: 'A banker'}, doc, {kind: 'gauge', value: 72, unit: '%'}, {kind: 'gauge', value: 3, steps: 7},
+      {kind: 'ruler', from: [0.2, 0.6], to: [0.8, 0.6], value: '43 km'}, {kind: 'chart', type: 'units', values: [1, 100], icon: 'person'}]) {
+      assert.ok(!(await frame(renderer, shot([element]), 1.6, motion)).equals(empty), `${element.kind} draws`);
+    }
+    const page = await frame(renderer, shot([doc]), 1.8, motion), lens = await frame(renderer, shot([doc, {kind: 'loupe', on: 1, zoom: 2.5, x: 0.78, y: 0.36}]), 1.8, motion);
+    assert.ok(!page.equals(lens), 'the loupe adds a magnified view');
+    const scene = film => shot([{kind: 'figure', pose: 'point', x: 0.3, y: 0.8, size: 'l'}, {kind: 'prop', prop: 'coin', x: 0.66, y: 0.5, size: 'l', accent: true}, {kind: 'text', style: 'title', text: 'The first bank', x: 0.6, y: 0.15}], {set: 'village', ...(film ? {film} : {})});
+    const frames = [await frame(renderer, scene(null), 1.6, motion)];
+    for (const film of Sk.FILMS) frames.push(await frame(renderer, scene(film), 1.6, motion));
+    assert.ok(frames.every((png, k) => frames.every((other, j) => j === k || !png.equals(other))), 'each film look differs from the plain frame and from the others');
+    // The style's film look reaches every shot without the shot naming it; a shot may switch it off.
+    const styled = await frame(renderer, scene(null), 1.6, {...motion, drawing: {look: 'classic', hand: false, film: 'blueprint'}});
+    assert.ok(styled.equals(frames[1 + Sk.FILMS.indexOf('blueprint')]), 'the style film prints the shot');
+    assert.ok((await frame(renderer, scene('none'), 1.6, {...motion, drawing: {look: 'classic', hand: false, film: 'blueprint'}})).equals(frames[0]), 'film "none" keeps the plain frame');
+  } finally { await renderer.close(); }
+});

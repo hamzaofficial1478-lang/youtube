@@ -50,7 +50,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Current milestone: captions (P07, primary language) and the YouTube craft engine (S02), v0.14. Acceptance: captions are part of the immutable edit revision and follow the narration, carry every narrated word exactly once, never overlap, are burned in as the top layer only when switched on and download as SRT; graphics keep out of the caption band; the craft scores equal the upstream Python tools on the same inputs; craft output is advice or a draft only; never-used words block Hermes candidates but never the owner's own draft. Remaining for P07: measured word timing, owner-editable caption text, WebVTT, locale caption editions (L01-L03). Earlier: FFmpeg readiness and assembly proxy (P05) v0.10 is complete. Acceptance: readiness records versions, checksums, filters, encoders and a byte-identical fixture; renders run only with the pinned binaries and only from current approved inputs whose checksums still match; the proxy is frame-exact against the narration for cut, crossfade and dip-to-black; QC covers duration, frame, audio, black and frozen pictures; results and manifests are immutable; a human records the style-proof verdict. Previous milestone: Scene & Visual Room (P04) v0.9 is complete with fake-provider verification. Acceptance: a plan needs an approved script, an approved narration and a ready style handoff; every revision is immutable with stable scene and shot IDs; stock searches stay within hourly caps and a 24-hour cache; downloads come only from provider media hosts with size, type, checksum and ffprobe checks; AI images are admitted against a monthly budget and never retried silently; a named human approves the plan and the full board with rights and AI-disclosure decisions; any later change ends the approval. Previous milestone: Competitor Intelligence (R05) and Niche Factory (R06) v0.8 are complete with fake-provider verification. Acceptance: no outside request without an explicit owner action, reserved data caps and token budgets, no automatic retries, YouTube data about other channels display-only and purged after 30 days, blueprints blocked unless they pass the 30/70 rule and copy guard, niche scores computed in code with hard filters winning, and every effect (script guidance, narrator prefill, style draft, new family) behind a named human review. Previous milestone: Style Library & Assignment Room v0.7 is complete. Acceptance: five launch styles exist as reviewable drafts; no draft can be assigned; every revision is immutable; a family default must be approved and format-compatible; overrides need explicit acknowledgement; fallbacks are manual-only; retiring or revoking blocks the handoff instead of switching styles. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 21 / 56 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 21 / 57 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -107,6 +107,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [ ] **P06q History cartoon look, real maps and crowds for every engine** (testing) - 0.36.0 (2026-10-17): look, maps (four finishes, date line) and crowds rendered and checked; map and crowd validation, free maps and drawing tests added.
 - [ ] **P06r One engine per style, motion graphics as a layer, the Documentary engine; places of the past** (testing) - 0.37.0 (2026-10-18): engine scope, documentary looks, period places, backdrops and map fly-in rendered and checked; Style Library checked in the browser; npm test passed (see commit).
 - [ ] **P06s Motion layer upgrade: word animations, textures, depth layers, map moves** (testing) - 0.38.0 (2026-10-18): every animation, texture, layer, entrance and map move rendered and checked; showcase reel rendered; tests added (sketch and drawn).
+- [ ] **P06t Skills that reach the video (pack approval, planner/director/voice injection), measured motion, film looks, evidence tools** (testing) - 0.39.0 (2026-10-18): every evidence tool and all 14 film looks rendered and reviewed; pack approval and the Film look setting checked in a throwaway workspace; tests added (sketch, drawn, skills, scene, engines); npm test 297/297 passed.
 - [x] **S02 YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice** (done) - Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks.
 - [ ] **P07 Captions & Localization Room** (testing) - Version 0.14 (2026-10-06): every new edit carries a caption track (captions.js): words timed inside the narration's measured sentence windows with clause pauses anchored at commas; phrases split into the fewest even captions (never ending on a weak word); 2 lines x 42 characters for long-form, rate-sized groups for Shorts; scarce inline emphasis on figures and negations. Burned in as the top ASS layer (bottom band on 16:9, above the Shorts buttons on 9:16, clearing for full-screen graphics), SRT download per edit revision, on/off as an owner change, caption QC in the critic. 7 caption tests plus render checks; full suite 181/181 on Node 24.18.1 with FFmpeg 8.1.2 and Edge 154. 0.15.1 (2026-10-08): owner caption corrections as the revisioned set-caption op (timing fixed, narration words kept for coverage QC and reset, *word* emphasis, critic nitpick) and a WebVTT download beside the SRT; full suite 192/192, browser check of correct/save/reset/download on a scratch workspace.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
@@ -141,6 +142,34 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-18 - film looks, evidence tools, measured motion, and skills that reach the video (0.39.0)
+
+- **Owner request:** deeply analyse motionmaxxing (motion graphics skills) and lemo-opuscar (50+ film styles), and twelve named channels (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold, Arsacre, Gawx Art); make skills that are actually used while a video is made.
+- **Research:**
+  - motionmaxxing (Apache-2.0, `8c8ec0f`) and lemo-opuscar (MIT, `508848a`) were read in full as untrusted reference data, no scripts run: research/lemo-opuscar-and-motionmaxxing.md.
+  - The channels were studied from their pages, durations and storyboard contact sheets: research/channel-study-2026-10-18.md. Transcripts could not be read.
+- **Found:** all 349 skills in the owner's library were still drafts, with no use recorded, so no skill had reached a video. Skills only reached script candidates, research briefs and packaging, and only when approved.
+- **Built:**
+  - Skills -> Packs: approve a whole pack in one named review of the exact drafts shown.
+  - Approved skills now go to the scene planner and the story director (9,000 bytes), and to voice direction (3,000 bytes). Each job records which skills it used.
+  - Three new packs, all drafts until approved: motion-craft (14), film-craft (14) and channel-grammar (11 general skills plus 12 pin-only channel profiles). 400 skills in all.
+  - Measured motion curves (`K.ease`) for pops, slides, growth, rises, exits and counters, plus the new `land` entrance.
+  - 14 film looks for the drawn shots of every engine, chosen in the Style Library or by Claude. The hero keeps the accent colour, and words print solid over halftone.
+  - Evidence tools for every engine: `quote`, `document`, `gauge`, `loupe`, `ruler`, unit charts and `redact`.
+  - Planner lines SCRIPT CUES, EVIDENCE and RHYTHM. `drawn-scene/22`.
+- **Checked:**
+  - Every tool and every film look was rendered to stills and reviewed. The review led to these fixes:
+    - words print solid over halftone;
+    - skin is no longer kept as the hero colour;
+    - art deco gets a dark ground on light palettes;
+    - the dial's reading no longer collides with its label;
+    - key words now work in every word animation.
+  - In a throwaway workspace (port 3483): Skills -> Packs approved a pack, and the Style Library saved a film look.
+  - `npm run check` passed; `npm test` 297/297 passed.
+- **Not done:** film looks for footage clips; an owner review of the new skills and looks; a live Claude plan using the approved skills.
+
+  No GitHub push.
 
 ### 2026-10-18 - motion layer upgrade (0.38.0)
 

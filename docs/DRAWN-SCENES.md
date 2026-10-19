@@ -397,3 +397,39 @@ Owner request (2026-10-18): "proceed to upgrade motion graphic animation". This 
 - Key words: every word between the opening and the closing star lights up (before, "*redrew the map*" lit only its first and last words); words on the accent bar are drawn without the dark edge, and neighbouring key words share one bar.
 - The planner's MOTION LAYER brief lists these and asks for one or two moves per shot, each on its words.
 - **Not built**: footage cards and 3D globes (they need footage; the drawn engine is 2D).
+
+## 25. Film looks, evidence tools, measured motion and skills that reach the video (0.39.0)
+
+Owner request (2026-10-18): take the motion graphics skills of motionmaxxing, the 50+ film styles of lemo-opuscar and
+what makes twelve named channels work, and make them part of how every video is made, not packs on a shelf. Research:
+research/lemo-opuscar-and-motionmaxxing.md and research/channel-study-2026-10-18.md.
+
+- **Measured motion** (`drawn-kit.js` `K.ease`, from motionmaxxing's measured curves, Apache-2.0 notice in
+  vendor/motionmaxxing): a pop leans about 8% past its size, late, instead of bouncing; slides do most of their travel in
+  the first frames and settle; growth and rises land softly; leaving is quicker than arriving and accelerates away.
+  New entrance `land` (arrives oversized and soft, settles). Counters, gauges and range lines roll one value per frame
+  and land (`rolled`). A still camera stays still: a held, still read is a choice the planner may make.
+- **Film looks** (`engines.js` FILMS, `drawFilm`): how a medium prints the finished drawn frame, for every engine:
+  `silent` (1920s silver, amber whites, flicker, gate weave, scratches, rounded gate), `noir`, `sepia` (albumen print,
+  hand-tinted hero), `selective` (black and white, one colour), `newsprint` (halftone dots, spot plate), `riso` (two
+  inks), `blueprint`, `woodcut`, `kinescope` (1950s TV), `technicolor`, `album` (1970s snapshot with a white border),
+  `screenprint`, `engraving` (lines that swell in the darks, hand colouring), `deco` (gold bands on black). Where the
+  medium allows it, what is drawn in the accent colour keeps its colour (the hero); skin is never taken for it. Words,
+  documents and charts print solid over the halftone and engraved looks, so they stay readable.
+  - The style chooses (Style Library, "Film look"): none, one look for every drawn shot, or "Claude chooses" one per
+    video. A shot may name another look (or `none`) only for a change of register, with the reason in its notes. A
+    style without a film look keeps its engine's own finish (a film named by Claude is left out with a warning).
+  - Footage keeps its own grade for now.
+- **Evidence and measuring tools** (shared vocabulary, every engine): `quote` (the speaker's portrait in the cast look,
+  name tag, words at a speaking pace, key words lit), `document` (newspaper, letter, report or post; the source the
+  narration names, a headline, grey lines, one real line that lights up), `gauge` (a reading whose needle leans past
+  its mark and settles, or a list position such as 3/7), `loupe` (a lens that shows a spot of the shot magnified, with a
+  leader), `ruler` (a range line from A to B with ticks and a reading that rolls and lands), chart type `units` (an
+  isotype of identical marks with the part lit, "1 in 100"), text animation `redact` (black bars lift word by word, key
+  words last). Words and numbers on them come from the narration.
+- **Planner**: SCRIPT CUES, EVIDENCE and RHYTHM lines in every scene plan; the FILM LOOK line when the style has one.
+- **Skills reach the video**: the scene planner, the story director and voice direction receive the owner's approved
+  skills (input `skills`) and every job records which ones it used. Skills -> Packs approves a whole pack in one named
+  review. New packs: motion-craft (14), film-craft (14), channel-grammar (11 general skills and 12 channel-like
+  profiles that reach only a family they are pinned to). `drawn-scene/22`.
+- **Not built**: film looks for footage clips, real satellite, LiDAR or microscope data, 3D scenes.

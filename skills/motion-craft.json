@@ -1,0 +1,504 @@
+[
+ {
+  "id": "motion.measured-role-curves",
+  "title": "A curve for each role of a motion",
+  "rooms": [
+   "motion",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Whenever something arrives, leaves, counts, drifts or the camera moves in a shot.",
+  "summary": "Human-made motion films never use one easing for everything: landings decelerate hard, leavings accelerate, counters step, drifts are linear. One global ease is the clearest sign of machine-made motion.",
+  "do": [
+   "Landings ease out: about 60-72% of the travel in the first 4-5 frames, then a 0.4-0.6 s tail.",
+   "Leavings ease in and are quicker than the arrival; the next thing may enter about 2 frames before the old one is gone.",
+   "Camera reframes are a fast snap followed by a slow decelerating tail, never one even tween.",
+   "Overshoot is rare and small (under 9% of moves, about +4-8%, late in the move); one big springy payoff per video at most.",
+   "Keep one motion grammar per video: crisp steps or smeared fast moves, not both."
+  ],
+  "avoid": [
+   "the same ease and duration on every element",
+   "a bounce on every pop",
+   "exits that are the entrance played backwards"
+  ],
+  "checks": [],
+  "tags": [
+   "motion",
+   "easing",
+   "measured"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 80,
+  "numbers": {
+   "eases": {
+    "crashIn": "hits and slightly passes, peak 1.18",
+    "popOver": "late lean 1.08",
+    "snapSettle": "most travel at once then settles",
+    "softLand": "soft landing",
+    "whip": "fast reframe",
+    "accelExit": "leaving"
+   },
+   "median_move_frames": 10,
+   "opacity_change_frames": 6,
+   "overshoot_share_max": "9%"
+  }
+ },
+ {
+  "id": "motion.arrive-oversize",
+  "title": "Arrive from oversize, never from nothing",
+  "rooms": [
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "principle",
+  "when": "When a word, number, logo or object first appears.",
+  "summary": "A thing that lands from a little too big and soft, settling to its size, reads as weight and confidence; growing from zero reads as a toy.",
+  "do": [
+   "Let important things land oversized (1.4-1.6x) and blurred, settling to size in about 0.4 s (enter \"land\").",
+   "A logo or a name may start large and shrink about its own centre."
+  ],
+  "avoid": [
+   "scaling up from zero",
+   "fading a hero in by opacity alone"
+  ],
+  "checks": [],
+  "tags": [
+   "motion",
+   "entrance"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "start_scale": "1.4-1.6x",
+   "settle_seconds": 0.4
+  }
+ },
+ {
+  "id": "motion.speech-word-cadence",
+  "title": "Words land on the voice",
+  "rooms": [
+   "motion",
+   "captions"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "captions.segment"
+  ],
+  "kind": "ruleset",
+  "when": "When on-screen words build while the narrator speaks.",
+  "summary": "Words appear whole, on the spoken word, at the speech rhythm; the gap before the key word is longer, which is the emphasis.",
+  "do": [
+   "Cue each on-screen word to the word that speaks it (\"at\"), landing 0-2 frames ahead of the voice.",
+   "Gaps of 3-5 frames between words, a longer gap (about 10 frames) before the key word.",
+   "Show the one or two words that matter, not the sentence the voice already says."
+  ],
+  "avoid": [
+   "letter-by-letter typing for headlines (typing belongs inside a screen or prompt)",
+   "words arriving on a metronome",
+   "the whole sentence on screen"
+  ],
+  "checks": [],
+  "tags": [
+   "typography",
+   "timing"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "word_gap_frames": "3-5",
+   "stinger_gap_frames": 10,
+   "lead_frames": "0-2"
+  }
+ },
+ {
+  "id": "motion.no-dead-frame",
+  "title": "No frozen frame",
+  "rooms": [
+   "motion",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When a shot holds for reading or for a payoff.",
+  "summary": "Real holds are alive: something drifts, breathes or creeps. A true stillness is earned after a payoff, or chosen as a breath before one.",
+  "do": [
+   "Keep one living thing on every held frame (a slow drift, a creeping camera of 2-5%, a pulse, a counter settling).",
+   "Hold still only after a payoff (0.5-1.0 s) or as a stated breath before it (0.6-1.5 s)."
+  ],
+  "avoid": [
+   "a static card held for more than a second",
+   "a hold-and-swap rhythm where each card sits 1.2 s and is replaced"
+  ],
+  "checks": [
+   "No frame sequence longer than about 3 flat frames without change, except a stated breath."
+  ],
+  "tags": [
+   "holds",
+   "pacing"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 70,
+  "numbers": {
+   "payoff_hold_s": "0.5-1.0",
+   "breath_s": "0.6-1.5",
+   "camera_creep": "2-5%"
+  }
+ },
+ {
+  "id": "motion.counter-steps",
+  "title": "Numbers roll and land",
+  "rooms": [
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When a number counts up or resolves on screen.",
+  "summary": "A counter that shows one value per frame with shrinking steps lands like a real readout; a smooth tween reads as a slider.",
+  "do": [
+   "Use a counter (text style counter, gauge, ruler reading) with 15-23 visible steps over 0.5-0.9 s, landing on the narrated value with a small pop.",
+   "A claim may land on a round number; measured data lands on its real, un-round value."
+  ],
+  "avoid": [
+   "inventing a number the narration does not say",
+   "a counter that keeps moving after the voice has said it"
+  ],
+  "checks": [],
+  "tags": [
+   "numbers",
+   "data"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "steps": "15-23",
+   "seconds": "0.5-0.9"
+  }
+ },
+ {
+  "id": "motion.accent-means-one-thing",
+  "title": "One accent, one meaning",
+  "rooms": [
+   "motion",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "principle",
+  "when": "When choosing which element gets the accent colour.",
+  "summary": "The accent becomes meaning only if it is spent on one role: the hero, the verdict, or the measured reading. Spent everywhere, it means nothing.",
+  "do": [
+   "Give the accent to one role for the whole video (the hero, the key number, the verdict) and mark it accent: true.",
+   "A new key word may flash the accent on arrival and settle back to ink after 0.13-0.28 s.",
+   "In a film look, the accent is what keeps its colour: put it on the hero."
+  ],
+  "avoid": [
+   "two different things in the accent at once",
+   "accent used as decoration or a background wash",
+   "colour on the same colour (red on red)"
+  ],
+  "checks": [],
+  "tags": [
+   "colour",
+   "hierarchy"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 70,
+  "numbers": {
+   "arrival_flash_s": "0.13-0.28"
+  }
+ },
+ {
+  "id": "motion.cut-on-motion-carry",
+  "title": "Cut on motion and carry an object",
+  "rooms": [
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When moving from one shot or scene to the next.",
+  "summary": "The joins viewers do not notice share something: the last frame of one shot and the first of the next hold the same object, word, ground or position, and both are mid-motion.",
+  "do": [
+   "Carry one object, word or shape across a cut where you can (the coin becomes the planet, the map pin becomes the city).",
+   "Cut while things move, and let the next thing enter along the same direction.",
+   "After a whip, give 2-3 empty frames before the next element sweeps in."
+  ],
+  "avoid": [
+   "default crossfades between unrelated shots",
+   "a cut on a dead, settled frame",
+   "fading the video to black at the end by default"
+  ],
+  "checks": [],
+  "tags": [
+   "transitions",
+   "continuity"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 70
+ },
+ {
+  "id": "scene.script-cues-to-visuals",
+  "title": "Every cue in the script gets a visual",
+  "rooms": [
+   "scene",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt"
+  ],
+  "kind": "procedure",
+  "when": "While planning shots from the narration.",
+  "summary": "Mark the words that need a picture: numbers, abstract nouns, names and contrast words. Each gets a visual built for it; the rest of the sentence the voice carries alone.",
+  "do": [
+   "Numbers: a visual built from the number itself (a counter, a gauge, a unit chart, a ruler, a chart), never just a caption.",
+   "Abstract nouns: a concrete metaphor, each metaphor used once per video.",
+   "Names (people, places, products): a beat with its own hold (a quote card, a pin, a portrait).",
+   "Contrast words (but, instead, not anymore): a turn - a change of ground, colour, scale or camera.",
+   "Mute test: with the sound off the pictures still tell the story; with the picture off nothing important is missing from the voice."
+  ],
+  "avoid": [
+   "showing the whole sentence as text",
+   "a generic picture that matches no cue"
+  ],
+  "checks": [],
+  "tags": [
+   "planning",
+   "narration"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 85
+ },
+ {
+  "id": "scene.metaphor-bank",
+  "title": "Concrete pictures for abstract words",
+  "rooms": [
+   "scene",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt"
+  ],
+  "kind": "template",
+  "when": "When a line names an idea that has no object: attention, scale, rarity, sameness, time pressure.",
+  "summary": "Ask what the word looks like, or what it is the opposite of, and draw that; take props from the audience's own world, not from clip-art.",
+  "do": [
+   "\"top 1%\": 100 identical people, all dim but one lit in the accent (unit chart).",
+   "\"commoditised\": many identical things flooding in; \"different\": one standing apart.",
+   "\"over a weekend\": a calendar whose last two days light up.",
+   "\"billion-dollar\": the word three to four times bigger than everything else, alone.",
+   "A process that \"thinks\": an object from the customer's world working, never a glowing orb."
+  ],
+  "avoid": [
+   "rockets for launch, shields for security, light bulbs for ideas",
+   "the first association of a name (fire for a name that means fire)",
+   "reusing one metaphor twice in a video"
+  ],
+  "checks": [],
+  "tags": [
+   "metaphor",
+   "concreteness"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60
+ },
+ {
+  "id": "scene.importance-budget",
+  "title": "Spend emphasis on few beats",
+  "rooms": [
+   "scene",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When deciding how big each beat should be.",
+  "summary": "If everything is a peak nothing is. Give each beat an importance and a reason it exists for the viewer.",
+  "do": [
+   "At most a quarter of beats get the biggest treatment (a paid picture, a slam, a full-frame number).",
+   "For each beat be able to say what it buys the viewer (\"the viewer now sees why the price fell\").",
+   "Cut beats that buy nothing."
+  ],
+  "avoid": [],
+  "checks": [],
+  "tags": [
+   "planning",
+   "hierarchy"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "top_beats_share_max": "25%"
+  }
+ },
+ {
+  "id": "scene.energy-curve",
+  "title": "Shape the energy of the whole video",
+  "rooms": [
+   "scene",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When pacing shots across a section or the whole video.",
+  "summary": "Human edits shorten their beats toward a peak placed at 60-75% of the piece, then let the last beat linger.",
+  "do": [
+   "Let shots get shorter as a section builds to its turn (for example 1.3, 1.1, 0.7, 0.45 s), then hold the landing.",
+   "Place the strongest moment of each chapter around 60-75% of it.",
+   "Give the viewer at least one breath (a held, quiet shot) before the main reveal."
+  ],
+  "avoid": [
+   "every beat the same length",
+   "the peak in the first or last seconds of a chapter"
+  ],
+  "checks": [],
+  "tags": [
+   "rhythm",
+   "pacing"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "peak_position": "60-75%"
+  }
+ },
+ {
+  "id": "qc.machine-look-check",
+  "title": "What makes motion look machine-made",
+  "rooms": [
+   "qc",
+   "motion",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "qc.review",
+   "editing.review"
+  ],
+  "kind": "checklist",
+  "when": "Before approving a plan or a render.",
+  "summary": "A list of the habits that make generated videos look like slides or templates, each with the decision a designer would make instead.",
+  "do": [],
+  "avoid": [
+   "corner chrome: a label, counter or brand line repeated in a corner",
+   "deck layouts: a headline top-left with a grey sub-line",
+   "a flat colour card per scene with a centred number and a small label (a stat slide)",
+   "the same layout at the same place three shots in a row",
+   "a new effect on every shot with nothing in common",
+   "big faint words or grid lines as decoration behind everything",
+   "labels that only name the scene",
+   "everything fading in and out"
+  ],
+  "checks": [
+   "One hero per frame.",
+   "No frame that would read as a presentation slide.",
+   "Neighbouring shots share a motif, colour or object and differ in layout."
+  ],
+  "tags": [
+   "qc",
+   "anti-generic"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 75
+ },
+ {
+  "id": "motion.transition-moves",
+  "title": "Transitions made of the picture",
+  "rooms": [
+   "motion",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan",
+   "motion.template"
+  ],
+  "kind": "template",
+  "when": "When a scene change needs more than a cut.",
+  "summary": "Good transitions are made of what is on screen: an object becomes the next ground, a shape fills the frame, the camera dives through a detail.",
+  "do": [
+   "Carried object: the same thing in the same place across the cut.",
+   "Effect becomes ground: a growing shape, ink or light fills the frame and is the next background.",
+   "Scale cut: from the whole to a detail (or back) on a hard cut.",
+   "Mask through a shape or a word into the next scene.",
+   "A fast montage only for \"many\": several looks in quick hard cuts."
+  ],
+  "avoid": [
+   "a dissolve between unrelated pictures",
+   "a white flash at full strength (cap it near half)"
+  ],
+  "checks": [],
+  "tags": [
+   "transitions"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60
+ },
+ {
+  "id": "motion.type-like-a-director",
+  "title": "Type set by a director",
+  "rooms": [
+   "motion",
+   "captions"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "When designing on-screen words.",
+  "summary": "Hierarchy comes from scale, not boldness; words arrive whole on the speech; the key word acts out its meaning; survivors never jump to re-centre.",
+  "do": [
+   "Statements at about 7-11% of frame height, hero figures at 22-29%.",
+   "Highlight a key word with a hard box, a hand-drawn loop or a target ring.",
+   "Hold text long enough to read it: at least 0.45 s, about 0.2 s per word, 1.7-2.0 s for 6-8 words."
+  ],
+  "avoid": [
+   "a serif italic word inside a sans line as the accent",
+   "tracked capitals taglines",
+   "a giant single word alone on a flat ground as a slide"
+  ],
+  "checks": [],
+  "tags": [
+   "typography"
+  ],
+  "source": "motionmaxxing (Apache-2.0, pinned 8c8ec0f): references/motion.md, type.md, transitions.md, judgment.md, director.md, slop.md and library/moments.jsonl, restated in our own words; numbers are its measurements of human-made films.",
+  "priority": 60,
+  "numbers": {
+   "statement_height": "7-11% H",
+   "hero_figure_height": "22-29% H",
+   "read_floor_s": 0.45,
+   "per_word_s": 0.2
+  }
+ }
+]

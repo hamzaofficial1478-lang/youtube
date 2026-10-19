@@ -35,19 +35,19 @@ const RENDERERS = {
   'ffmpeg-montage': {
     // 0.37 (owner decision 2026-10-18): the Documentary engine - footage with motion graphics, the cartoon documentary,
     // the painted story and the designed looks that were the motion engine's in 0.35.
-    features: ['Looks: Footage with motion graphics, Cartoon documentary, Painted story, Vector world, Infographic, Collage, Data desk, or Mix of all documentary looks (choose in the style)', 'Mix uses only documentary looks; for every engine at once choose the Story Mix style', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Footage needs a stock or image key (Pexels and Pixabay keys are free); without one the drawn looks carry the video', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free'],
+    features: ['Looks: Footage with motion graphics, Cartoon documentary, Painted story, Vector world, Infographic, Collage, Data desk, or Mix of all documentary looks (choose in the style)', 'Mix uses only documentary looks; for every engine at once choose the Story Mix style', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Footage needs a stock or image key (Pexels and Pixabay keys are free); without one the drawn looks carry the video', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
     name: 'Documentary', milestone: 'P05', status: 'not_implemented', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all Stickman looks (choose in the style)', 'Mix uses only Stickman looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words'],
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all Stickman looks (choose in the style)', 'Mix uses only Stickman looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
     name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
-    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all whiteboard looks (choose in the style)', 'Mix uses only whiteboard looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces'],
+    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all whiteboard looks (choose in the style)', 'Mix uses only whiteboard looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
     name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
@@ -66,7 +66,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'story-mix': {
-    features: ['Mix of ALL engines: Stickman, Whiteboard, Documentary and Atelier in one video', 'The story director picks the engine for each beat; each engine still uses its own looks'],
+    features: ['Mix of ALL engines: Stickman, Whiteboard, Documentary and Atelier in one video', 'The story director picks the engine for each beat; each engine still uses its own looks', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
     name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
     note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
@@ -95,6 +95,8 @@ const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', '
 // The Documentary engine's looks (0.37; the motion engine's designs in 0.35), or a mix of them. Footage is a look of the
 // style only (real footage led by motion graphics); the others are drawn.
 const DRAWING_DESIGNS = Object.freeze(['footage', 'cartoon', 'painted', 'vector', 'infographic', 'kinetic', 'collage', 'data', 'mix']);
+// Film looks (0.39, engines.js FILMS): one medium finish for every drawn shot, or Claude chooses one per video.
+const DRAWING_FILMS = Object.freeze(['none', 'choose', ...Object.keys(require('./engines').FILMS)]);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -362,7 +364,7 @@ function validateStyleSpec(input) {
   // Optional: a style without it draws the classic look without the hand.
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
-    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')})};
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')}), ...(drawingIn.film === undefined || drawingIn.film === 'none' ? {} : {film: choice(drawingIn.film, DRAWING_FILMS, 'film look')})};
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
@@ -608,7 +610,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -796,4 +798,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS};

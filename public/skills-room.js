@@ -7,7 +7,7 @@
 // The page CSP forbids inline style attributes, so nothing here sets one.
 
 let skillSearch = '', skillRoom = '', skillTask = '', skillOrigin = '', skillStatus = '', skillTag = '';
-let skillOpen = '', skillFamily = '', skillTab = 'library';
+let skillOpen = '', skillFamily = '', skillTab = 'packs';
 
 const SKILL_STATUS = {draft: ['Draft · needs review', 'orange'], approved: ['Approved · in use', 'green'], retired: ['Retired', 'gray'], superseded: ['Superseded', 'gray']};
 const SKILL_ORIGIN = {builtin: ['Builtin', 'gray'], owner: ['Owner', 'green'], learned: ['Learned', 'orange']};
@@ -59,12 +59,26 @@ function skillsView() {
   const hero = `<section class="voice-hero"><div><span class="stage-kicker">SKILLS ENGINE · REVIEWED OPERATING KNOWLEDGE</span><h2>Skills</h2><p>Every skill extracted from your main-brain documents (Precision OS, the YT Empire Builders library and the CB YT AI Mastery bundle) and from the editing research lives here, in our own words. They all start as <b>drafts</b>: a skill changes how a room works only after you approve that exact revision. What the program learns from its own reviews arrives as a proposal in the Lessons queue, never as a silent edit. Skills marked <b>pin to a family</b> are channel or niche profiles: they reach only a family you pin them to.</p></div>
     <div class="voice-health"><span class="health-light ${approved ? 'ready' : ''}"></span><strong>${approved ? `${approved} skill${approved === 1 ? '' : 's'} in use` : 'Nothing approved yet'}</strong><small>${approved ? `of ${counts.total} in the library` : `${counts.total} drafts waiting for review`}</small></div></section>`;
   const tally = `<div class="production-context skill-tally"><span>${counts.total} skills</span><span>${counts.approved} approved</span><span>${counts.draft} draft</span><span>${counts.retired} retired</span><span>${counts.builtin} builtin</span><span>${counts.owner} owner</span><span>${counts.learned} learned</span><span>${counts.lessonsProposed} lesson${counts.lessonsProposed === 1 ? '' : 's'} waiting</span></div>`;
-  const tabs = [['library', 'Library'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
+  const tabs = [['packs', 'Packs'], ['library', 'Library'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
   const rail = `<div class="production-toolbar skill-tabs">${tabs.map(([id, label]) => `<button class="button ${skillTab === id ? 'primary' : 'secondary'}" data-skill-tab="${id}">${esc(label)}</button>`).join('')}<div class="row-end">${action('+ Add my own skill', 'skill-new', '', 'primary')}${action('Import pack', 'skill-import', '', 'secondary')}<a class="button secondary" href="/api/skills/export" target="_blank" rel="noopener">Export approved ↗</a></div></div>`;
-  const body = skillTab === 'lessons' ? skillLessonsPanel() : skillTab === 'usage' ? skillUsagePanel() : skillTab === 'state' ? skillProjectStatePanel() : skillTab === 'rules' ? skillRulesPanel() : skillLibraryPanel();
+  const body = skillTab === 'packs' ? skillPacksPanel() : skillTab === 'lessons' ? skillLessonsPanel() : skillTab === 'usage' ? skillUsagePanel() : skillTab === 'state' ? skillProjectStatePanel() : skillTab === 'rules' ? skillRulesPanel() : skillLibraryPanel();
   return heading('Skills', 'The reusable operating knowledge of this program: what to do, what to avoid, and the exact numbers each room applies.') + hero + tally + rail + body;
 }
 
+// Packs (0.39): every builtin pack with what is in use and what still waits, and one review for a whole pack.
+function skillPackDrafts(label) {
+  return skillsAll().filter(skill => skill.pack === label && skill.latest?.status === 'draft');
+}
+function skillPacksPanel() {
+  const packs = state.skills.packs || [];
+  const cards = packs.map(label => {
+    const all = skillsAll().filter(skill => skill.pack === label), used = all.filter(skill => skill.approved).length, drafts = skillPackDrafts(label);
+    return `<section class="production-card skill-card"><div class="production-card-head"><div><span class="micro-label">${all.length} SKILLS</span><h2>${esc(label)}</h2></div>${used ? badge(`${used} in use`, 'green') : badge('Not in use', 'orange')}</div>
+      <p>${drafts.length ? `${drafts.length} draft${drafts.length === 1 ? '' : 's'} waiting for your review.` : 'Nothing waiting.'} Skills only reach the AI after they are approved; the Usage tab shows which skills each job used.</p>
+      <div class="card-actions">${drafts.length ? action('Review & approve the pack', 'skill-pack-approve', String(packs.indexOf(label)), 'primary') : ''}</div></section>`;
+  }).join('');
+  return `<p class="hint">A pack is approved in one review: you read every skill in it, then approve them together under your name. You can still retire any single skill later.</p><div class="skill-grid">${cards}</div>`;
+}
 function skillLibraryPanel() {
   const vocabulary = state.skills.vocabulary;
   const tags = [...new Set(skillsAll().flatMap(skill => (skill.approved || skill.latest)?.skill.tags || []))].sort();
@@ -217,6 +231,20 @@ function skillFormFields(skill) {
 const SKILL_FORMS = {
   create: {eyebrow: 'OWNER SKILL', heading: 'Add my own skill', submit: 'Save as draft', fields: () => skillFormFields(null)},
   edit: {eyebrow: 'NEW REVISION', heading: 'Propose a change', submit: 'Save as draft revision', fields: context => skillFormFields(skillById(context.skillId))},
+  pack: {
+    eyebrow: 'HUMAN REVIEW GATE', heading: 'Review and approve this pack', submit: 'Approve every skill shown',
+    fields: context => {
+      const label = (state.skills.packs || [])[Number(context.index)] || '', drafts = skillPackDrafts(label);
+      const list = drafts.map(skill => { const spec = skill.latest.skill; return `<details class="scene-history"><summary><b>${esc(spec.title)}</b>${spec.pinOnly ? ' · only where pinned' : ''}</summary><p>${esc(spec.when)}</p><p>${esc(spec.summary)}</p>${skillList(spec.do)}${spec.avoid.length ? `<p><b>Avoid</b></p>${skillList(spec.avoid)}` : ''}${skillList(spec.checks)}${skillNumbers(spec.numbers)}</details>`; }).join('');
+      return `${skillNameField('approvedBy', 'Reviewer name')}
+        <p class="note full"><b>${esc(label)}</b>: ${drafts.length} draft skill${drafts.length === 1 ? '' : 's'}. Open any of them to read its rules. Approving makes exactly these revisions the ones the rooms use.</p>
+        <div class="full skill-pack-list">${list}</div>
+        ${skillTextarea('notes', 'Review notes (optional)', {rows: 2, max: 2000})}
+        <label class="checkbox-label full"><input name="wordingReviewed" type="checkbox" required><span>The wording is ours and copies no passage from a source document or a competitor.</span></label>
+        <label class="checkbox-label full"><input name="numbersReviewed" type="checkbox" required><span>The numbers, limits and checks are correct for this program.</span></label>
+        <label class="checkbox-label full"><input name="scopeReviewed" type="checkbox" required><span>The rooms and task bindings are the right places for these skills.</span></label>`;
+    },
+  },
   approve: {
     eyebrow: 'HUMAN REVIEW GATE', heading: 'Review and approve this skill', submit: 'Approve this revision',
     fields: context => {
@@ -308,6 +336,7 @@ function skillAction(command, id) {
   if (command === 'skill-new') return skillDialog('create');
   if (command === 'skill-edit') return skillDialog('edit', {skillId: id});
   if (command === 'skill-approve') return skillDialog('approve', {revisionId: id});
+  if (command === 'skill-pack-approve') { const label = (state.skills.packs || [])[Number(id)]; return skillDialog('pack', {index: id, revisionIds: skillPackDrafts(label).map(skill => skill.latest.id)}); }
   if (command === 'skill-retire') return skillDialog('retire', {revisionId: id});
   if (command === 'skill-bind') return skillDialog('bind', {skillId: id});
   if (command === 'skill-import') return skillDialog('import');
@@ -341,6 +370,7 @@ function skillsBindEvents() {
         await api(`/api/skill-revisions/${context.revisionId}/approve`, {approvedBy: form.elements.approvedBy.value.trim(), notes: form.elements.notes.value.trim(), confirmations: {wordingReviewed: form.elements.wordingReviewed.checked, numbersReviewed: form.elements.numbersReviewed.checked, scopeReviewed: form.elements.scopeReviewed.checked}});
         return;
       }
+      if (mode === 'pack') { await api('/api/skills/packs/approve', {pack: (state.skills.packs || [])[Number(context.index)], revisionIds: context.revisionIds, approvedBy: form.elements.approvedBy.value.trim(), notes: form.elements.notes.value.trim(), confirmations: {wordingReviewed: form.elements.wordingReviewed.checked, numbersReviewed: form.elements.numbersReviewed.checked, scopeReviewed: form.elements.scopeReviewed.checked}}); return; }
       if (mode === 'retire') { await api(`/api/skill-revisions/${context.revisionId}/retire`, {retiredBy: form.elements.retiredBy.value.trim(), reason: form.elements.reason.value.trim()}); return; }
       if (mode === 'bind') { await api('/api/skill-bindings', {createdBy: form.elements.createdBy.value.trim(), skillId: context.skillId, mode: form.elements.mode.value, taskKey: form.elements.taskKey.value, familyId: form.elements.familyId.value || null, position: Number(form.elements.position.value || 0), note: form.elements.note.value.trim()}); return; }
       if (mode === 'lesson') { await api(`/api/skill-lessons/${context.lessonId}/review`, {reviewedBy: form.elements.reviewedBy.value.trim(), action: context.action, reason: form.elements.reason.value.trim()}); return; }

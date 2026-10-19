@@ -1,4 +1,4 @@
-# Skills Engine (v0.14.1)
+# Skills Engine (v0.39.0)
 
 The Skills Engine is the program's reusable operating knowledge: what to do, what to avoid, and the
 exact numbers each room applies. It was built from `docs/SKILLS-ENGINE-PLAN.md`; this file records
@@ -15,7 +15,7 @@ never deleted, so what was in force on any given day stays reconstructible.
 
 ## 2. What is in the library
 
-349 builtin skills, all written in our own words:
+400 builtin skills, all written in our own words:
 
 | Pack | Skills | Source |
 |---|---|---|
@@ -24,6 +24,9 @@ never deleted, so what was in force on any given day stays reconstructible.
 | `skills/mastery-bundle.json` | 64 | CB YT AI Mastery Prompts Bundle (475 pages, read in full; notes in `docs/research/mastery-bundle-analysis.md`) |
 | `skills/youtube-agent.json` | 14 | youtube-agent-skill (MIT): hook scoring and formulas, the first 15 seconds, writing voice, title/thumbnail pairing, chapters, Shorts, retention, outliers, comments, weekly plan, audit (0.14) |
 | `skills/claude-video.json` | 5 | claude-video (MIT): watch before a verdict, frame budgets, narration cue frames, clean stock-clip windows, no silent engine switch (0.14.1) |
+| `skills/motion-craft.json` | 14 | motionmaxxing (Apache-2.0): measured motion curves, oversize arrivals, word cadence, no dead frame, counters, one accent, carried cuts, script cues, metaphors, importance and energy, the machine-look check, transitions, type (0.39) |
+| `skills/film-craft.json` | 14 | lemo-opuscar (MIT): subject, goal and turn, three structures, shot reasons, sound layers and silence, pacing for the viewer, colour by role, the style-brief anatomy, evidence grammar, signature moves, failures, not the reference, two registers, medium transitions, chart honesty (0.39) |
+| `skills/channel-grammar.json` | 23 | the 2026-10-18 study of twelve channels: 11 general skills (hooks, one visual system, receipts, maps, networks, cut rate, narration modes, length, three structures) and 12 channel-like profiles that are pin-only (0.39) |
 | `skills/hyperframes.json` | 17 | HyperFrames (Apache-2.0): value-first story spine, explainer structures, hook strategies, clarity techniques, beat arc, spoken numbers, motion doctrine, seams, caption rail and grouping, keep-out band, voiceover carve, mix by symptom (0.14) |
 | `docs/research/editing-brain/om-creative.json` | 49 | How a professional editor decides |
 | `docs/research/editing-brain/om-meta.json` | 41 | Orchestration, reviewer rubric, the lesson loop |
@@ -80,9 +83,16 @@ concrete to act on.
    size and how many skills were dropped. The approved skill set is part of the job deduplication
    key, so changing the library produces a new job instead of reusing an old result.
 
-Wired today: **Hermes script candidates** (`script.candidate`) and **daily research briefs**
-(`research.brief`), including both deliberate-retry paths. The other task keys exist and are
-selectable, and are wired as their rooms are built.
+Wired: **script candidates** (`script.candidate`), **daily research briefs** (`research.brief`), **packaging titles**
+(`packaging.title`), the **editing brain** (`editing.plan`, in code) and, since 0.39, the **scene planner and the story
+director** (`scene.plan`, input `skills`, 9,000 bytes because plans are large) and **voice direction**
+(`voice.direction`, 3,000 bytes). Each records a `skill_usage` row with the exact revisions it used.
+
+**Pack approval (0.39).** Owner review 2026-10-18 found all 349 drafts still unapproved, so no skill had ever reached a
+video. Skills -> Packs lists every pack with what is in use; "Review & approve the pack" shows every draft of the pack
+(open any to read its rules) and approves exactly those revisions in one named review with the three confirmations.
+If any of them changed after the dialog opened, nothing is approved. Each revision keeps its own approval record
+(reviewer, time, pack), and any single skill can still be retired.
 
 ## 5. Deterministic rules
 

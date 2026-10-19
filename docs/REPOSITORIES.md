@@ -163,6 +163,12 @@ Rather than presenting untested upstream features as ready, the first release re
 - Read again at `9327439db69021ab4b0e2776729bf3b58fdb5a87` (2026-10-03). AGPL-3.0: nothing copied.
 - Its method restated in our own code: taste direction (design read, three dials, signature device) as the atelier art direction; bespoke composition as the atelier engine; the five-aspect scene checklist and scene distinctness in the scene-plan prompt; reviewer plus repair-only-what-failed for frames.
 
+### motionmaxxing and lemo-opuscar (0.39, motion, film looks and skills)
+
+- [Tejashmakwana/motionmaxxing](https://github.com/Tejashmakwana/motionmaxxing), pinned `8c8ec0f2a6f6c9a0da15cd24f7b1298ab298368c`, Apache-2.0. Reused: the twelve easing formulas and constants of `runtime/motion.js`, re-implemented in `drawn-kit.js` (`K.ease`); LICENSE and NOTICE (with what we used) in `vendor/motionmaxxing/`. Its rules are restated in our own words in `skills/motion-craft.json` and the planner lines of `scene-room.js`. Its bundled GSAP, three.js, opentype.js and fonts were not used. No script was run.
+- [lemomo-ai/lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar), pinned `508848acb2b4930c4041fef4d594120da1525bff`, MIT. Read only: DIRECTOR.md, TECHNIQUE.md, the 51 style guides and the 98 style prompts. No code or text copied; the film looks (`engines.js` FILMS, `drawn-engine.js` drawFilm) and `skills/film-craft.json` are our own implementations and wording. No script was run.
+- Both were cloned as untrusted reference data outside the repository. Research notes: `docs/research/lemo-opuscar-and-motionmaxxing.md`.
+
 ### topojson/world-atlas (0.36, maps)
 
 - Source: npm package `world-atlas` 2.0.2 (exact pin), <https://github.com/topojson/world-atlas>. License: ISC (Michael Bostock); the data is Natural Earth's 1:110m admin-0 country boundaries, version 4.1.0, public domain.

@@ -197,6 +197,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(visualRevoke&&req.method==='POST')return json(res,200,sceneRoom.revokeApproval(visualRevoke[1],body));
         if(pathname==='/api/skills'&&req.method==='POST')return json(res,200,skills.saveOwnerSkill(body));
         if(pathname==='/api/skills/import'&&req.method==='POST')return json(res,200,skills.importPack(body));
+        if(pathname==='/api/skills/packs/approve'&&req.method==='POST')return json(res,200,skills.approvePack(body));
         if(pathname==='/api/skill-bindings'&&req.method==='POST')return json(res,200,skills.bind(body));
         const skillRevision=pathname.match(/^\/api\/skills\/([a-z][a-z0-9]*\.[a-z0-9][a-z0-9-]*)\/revisions$/);
         if(skillRevision&&req.method==='POST')return json(res,200,skills.createRevision(skillRevision[1],body));

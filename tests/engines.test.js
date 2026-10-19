@@ -9,10 +9,10 @@ const spec = key => LAUNCH_PROFILES.find(item => item.key === key).spec;
 
 test('a style on one engine uses only that engine; the story mix and atelier use every engine', () => {
   assert.deepEqual(LAUNCH_PROFILES.map(item => E.primaryEngine(item.spec)), ['stickman', 'handdrawn', 'stickman', 'atelier', 'montage', 'montage']);
-  assert.deepEqual(E.engineScope(spec('stickman-sketch-explainer')), {mix: false, drawn: ['stickman'], footage: false, frames: false});
-  assert.deepEqual(E.engineScope(spec('hand-drawn-canvas')), {mix: false, drawn: ['handdrawn'], footage: false, frames: false});
-  assert.deepEqual(E.engineScope(spec('documentary-montage')), {mix: false, drawn: ['motion'], footage: true, frames: false}, 'documentary: its footage and its drawn looks');
-  assert.deepEqual(E.engineScope(spec('story-mix')), {mix: true, drawn: ['stickman', 'handdrawn', 'motion'], footage: true, frames: true});
+  assert.deepEqual(E.engineScope(spec('stickman-sketch-explainer')), {mix: false, drawn: ['stickman'], footage: false, frames: false, films: []});
+  assert.deepEqual(E.engineScope(spec('hand-drawn-canvas')), {mix: false, drawn: ['handdrawn'], footage: false, frames: false, films: []});
+  assert.deepEqual(E.engineScope(spec('documentary-montage')), {mix: false, drawn: ['motion'], footage: true, frames: false, films: []}, 'documentary: its footage and its drawn looks');
+  assert.deepEqual(E.engineScope(spec('story-mix')), {mix: true, drawn: ['stickman', 'handdrawn', 'motion'], footage: true, frames: true, films: []});
   assert.deepEqual(E.drawEngines('stickman'), ['stickman', 'handdrawn', 'motion'], 'the main look leads');
   assert.deepEqual(E.drawEngines('handdrawn'), ['handdrawn', 'stickman', 'motion']);
   assert.deepEqual(E.drawEngines('montage'), ['stickman', 'handdrawn', 'motion']);
@@ -74,4 +74,18 @@ test('documentary looks brief the planner, and their mix only where documentary 
   assert.match(E.promptGuide('montage', {design: 'mix', sources: ['stock-video', 'generated-graphics']}), /DOCUMENTARY LOOKS \(mix\): .*sketch\.design.*painted \(painted story\).*Footage shots \(stock or image sources\)/);
   assert.doesNotMatch(E.promptGuide('stickman', {design: 'mix'}), /DOCUMENTARY LOOK/, 'a stickman video is not told about documentary looks');
   assert.match(E.promptGuide('motion', {mix: true, design: 'kinetic'}), /DOCUMENTARY LOOK: kinetic type/);
+});
+
+test('0.39 film looks: a style may print every drawn shot in one look or let Claude choose; shots may name one only then', () => {
+  const {validateStyleSpec, DRAWING_FILMS} = require('../style');
+  const base = spec('documentary-montage');
+  assert.deepEqual(DRAWING_FILMS, ['none', 'choose', ...Object.keys(E.FILMS)]);
+  assert.equal(validateStyleSpec({...base, drawing: {...base.drawing, film: 'silent'}}).drawing.film, 'silent');
+  assert.equal('film' in validateStyleSpec({...base, drawing: {...base.drawing, film: 'none'}}).drawing, false, 'none is the engine\'s own finish');
+  assert.throws(() => validateStyleSpec({...base, drawing: {...base.drawing, film: 'oil'}}), /film look/);
+  assert.equal(E.engineScope({...base, drawing: {...base.drawing, film: 'choose'}}).films, null, 'any look when the style has one or Claude chooses');
+  assert.deepEqual(E.engineScope(base).films, []);
+  assert.match(E.promptGuide('montage', {design: 'mix', film: 'woodcut'}), /FILM LOOK: woodcut print[\s\S]*change of register/);
+  assert.doesNotMatch(E.promptGuide('montage', {design: 'mix'}), /FILM LOOK/);
+  assert.match(E.MOTION_LAYER, /a loupe that magnifies a spot/);
 });

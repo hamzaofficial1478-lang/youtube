@@ -272,3 +272,38 @@ test('0.38 motion layer: word animations, depth layers, textures and map moves a
   assert.match(warnings[0], /animate must be one of/);
   assert.match(Sk.promptGuide('stickman'), /MOTION LAYER: a text may "animate": auto\|rise\|letters/);
 });
+
+test('0.39 evidence tools, unit charts, redaction, landing and film looks are checked, and a checked drawing checked again is the same', () => {
+  const sketch = {engine: 'motion', film: 'newsprint', elements: [
+    {kind: 'quote', text: 'We *never* saw it coming', name: 'A banker', who: 'c1', source: 'Testimony, 1929'},
+    {kind: 'document', doc: 'newspaper', source: 'Evening Herald', headline: 'Bank closes its doors', line: 'savings of 4,000 families'},
+    {kind: 'gauge', value: 3, steps: 7, label: 'Principle'}, {kind: 'gauge', value: 72, unit: '%', max: 100},
+    {kind: 'loupe', on: 2, zoom: 3.2, label: 'the date'}, {kind: 'ruler', from: [0.2, 0.7], to: [0.8, 0.7], value: '43 km', label: 'shore moved'},
+    {kind: 'chart', type: 'units', values: [1, 100], icon: 'person', title: 'The top 1%'},
+    {kind: 'text', style: 'title', text: 'Project *Blue*', animate: 'redact', enter: 'land'},
+  ]};
+  const once = Sk.validate(sketch, {cast}), twice = Sk.validate(once, {cast});
+  assert.deepEqual(twice, once);
+  assert.equal(once.film, 'newsprint');
+  assert.deepEqual(once.elements.map(el => el.kind), ['quote', 'document', 'gauge', 'gauge', 'loupe', 'ruler', 'chart', 'text']);
+  assert.equal(once.elements[0].who, 'c1');
+  assert.deepEqual(once.elements[0].look, cast[0].look, 'a quote shows its speaker in the cast look');
+  assert.deepEqual([once.elements[2].steps, once.elements[2].value, once.elements[3].min, once.elements[3].max], [7, 3, 0, 100]);
+  assert.deepEqual([once.elements[6].values, once.elements[6].icon], [[1, 100], 'person']);
+  assert.deepEqual([once.elements[7].animate, once.elements[7].enter], ['redact', 'land']);
+  // Strict for owner edits, lenient (with named warnings) for Claude.
+  assert.throws(() => Sk.validate({elements: [{kind: 'quote', name: 'x'}]}), /needs the quoted words/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'document', doc: 'letter'}]}), /needs a headline or a line/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'gauge', value: 2, steps: 30}]}), /steps must be 2-12/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'text', text: 'Hi'}, {kind: 'loupe'}]}), /on must be a point/);
+  assert.throws(() => Sk.validate({elements: [{kind: 'chart', type: 'units', values: [5, 2]}]}), /part, whole/);
+  assert.throws(() => Sk.validate({film: 'oil', elements: [{kind: 'text', text: 'Hi'}]}), /Film look must be one of/);
+  // A style without film looks keeps its own finish: a film named by Claude is left out with a warning.
+  const warnings = [];
+  const plain = Sk.validate({film: 'noir', elements: [{kind: 'text', text: 'Hi'}]}, {lenient: true, warn: message => warnings.push(message), films: []});
+  assert.equal(plain.film, undefined);
+  assert.match(warnings[0], /not this style's/);
+  assert.equal(Sk.validate({film: 'none', elements: [{kind: 'text', text: 'Hi'}]}, {films: []}).film, 'none', 'a shot may always switch the film look off');
+  const guide = Sk.promptGuide('motion', {engines: ['motion']});
+  for (const word of ['"kind": "quote"', '"kind": "document"', '"kind": "gauge"', '"kind": "loupe"', '"kind": "ruler"', 'units is a unit chart', 'redact:', 'land:']) assert.ok(guide.includes(word), word);
+});

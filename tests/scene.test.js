@@ -862,3 +862,25 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   assert.ok(redrawn.plan.review.changes.some(item => item.label === 'S02A'));
   assert.throws(() => room.redrawUndesigned(redrawn.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: redrawn.revision}), /Every planned designed shot is designed/);
 });
+
+test('0.39: approved skills travel with every scene plan and are logged; a style film look reaches the planner', t => {
+  const {SkillsEngine} = require('../skills');
+  const {room, content, ids, store, family, narrate} = setup(t, fakeNetwork(), {storyMap: false});
+  narrate(60);
+  const skills = new SkillsEngine(store, {root: path.join(__dirname, '..')}).attach();
+  const pack = 'motionmaxxing (Apache-2.0): measured motion, word timing, script cues, machine-look check';
+  skills.approvePack({pack, approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: skills.skills().filter(item => item.pack === pack).map(item => item.latest.id)});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  const scope = JSON.parse(room.planJobRow(queued.job.id).scope), input = scope.parts[0].promptInput;
+  assert.ok(input.skills.skills.some(item => item.id === 'scene.script-cues-to-visuals'), 'the approved skill is in the planner input');
+  assert.ok(scope.skillRevisionIds.length >= 1);
+  assert.match(planMessages(input)[0].content, /OWNER SKILLS \(input "skills"\)/);
+  const usage = store.db.prepare("SELECT * FROM skill_usage WHERE job_id=? AND task_key='scene.plan'").get(queued.job.id);
+  assert.ok(usage && JSON.parse(usage.skill_ids).includes('scene.script-cues-to-visuals'), 'the job records which skills it used');
+  assert.equal(family.id, usage.family_id);
+  // Without approved skills nothing is added; a film look in the style is explained to the planner.
+  const plain = {...input}; delete plain.skills;
+  assert.doesNotMatch(planMessages(plain)[0].content, /OWNER SKILLS/);
+  assert.match(planMessages({...plain, style: {...plain.style, film: 'silent'}})[0].content, /FILM LOOK: 1920s silent film/);
+  assert.match(planMessages({...plain, style: {...plain.style, film: 'choose'}})[0].content, /FILM LOOK: choose one film look for this whole video[\s\S]*deco \(art deco gold\)/);
+});

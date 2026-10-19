@@ -77,21 +77,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 349, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 160 editing-brain skills');
+  assert.equal(loaded.length, 400, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 349);
+  assert.equal(ids.size, 400);
   const state = skills.state();
-  assert.equal(state.counts.total, 349);
-  assert.equal(state.counts.draft, 349);
+  assert.equal(state.counts.total, 400);
+  assert.equal(state.counts.draft, 400);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 349);
+  assert.equal(state.counts.builtin, 400);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root});
-  assert.equal(second.skills().length, 349);
+  assert.equal(second.skills().length, 400);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -473,7 +473,7 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.skills.counts.total, 349);
+  assert.equal(state.skills.counts.total, 400);
   assert.equal(state.skills.counts.approved, 0);
   assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
@@ -499,4 +499,29 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   assert.equal((await send('/api/skill-revisions/00000000-0000-0000-0000-000000000000/approve', review)).status, 404);
   const lesson = await send('/api/skill-lessons/00000000-0000-0000-0000-000000000000/review', {reviewedBy: 'Owner', action: 'approve', reason: 'No such lesson exists.'});
   assert.equal(lesson.status, 404);
+});
+
+test('0.39: a whole pack is approved in one named review of the exact drafts shown, and scene planning gets a larger share for skills', t => {
+  const {skills} = setup(t);
+  const pack = 'motionmaxxing (Apache-2.0): measured motion, word timing, script cues, machine-look check';
+  const drafts = skills.skills().filter(item => item.pack === pack && item.latest.status === 'draft');
+  assert.equal(drafts.length, 14);
+  assert.throws(() => skills.approvePack({...review, pack, revisionIds: drafts.map(item => item.latest.id), confirmations: {wordingReviewed: true}}), /Confirm that the/);
+  assert.throws(() => skills.approvePack({...review, pack, revisionIds: []}), /Name the 1-500 draft revisions/);
+  const other = skills.skills().find(item => item.pack !== pack);
+  assert.throws(() => skills.approvePack({...review, pack, revisionIds: [other.latest.id]}), /is not in the pack/);
+  // A draft changed after the reviewer opened the pack: nothing is approved.
+  const first = drafts[0], changed = skills.createRevision(first.id, {createdBy: 'Fixture', changeNote: 'A newer wording to review', skill: {...first.latest.skill, summary: `${first.latest.skill.summary} Changed.`}});
+  assert.throws(() => skills.approvePack({...review, pack, revisionIds: drafts.map(item => item.latest.id)}), /changed since you opened the pack/);
+  assert.equal(skills.skills().filter(item => item.pack === pack && item.approved).length, 0);
+  const result = skills.approvePack({...review, pack, revisionIds: [changed.id, ...drafts.slice(1).map(item => item.latest.id)]});
+  assert.deepEqual(result, {approved: 14, pack});
+  const approved = skills.skills().filter(item => item.pack === pack && item.approved);
+  assert.equal(approved.length, 14);
+  assert.ok(approved.every(item => item.approved.review.approvedBy === review.approvedBy && item.approved.review.pack === pack), 'each revision carries its own named approval');
+  const brief = skills.brief('scene.plan');
+  assert.equal(brief.byteBudget, 9000);
+  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 9000);
+  assert.equal(skills.brief('script.candidate').byteBudget, BRIEF_BYTE_BUDGET, 'other rooms keep the default share');
+  assert.ok(!skills.brief('scene.plan').skillIds.some(id => id.startsWith('profile.')), 'channel profiles reach a family only where pinned');
 });

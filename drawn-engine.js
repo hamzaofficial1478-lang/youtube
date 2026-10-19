@@ -17,7 +17,7 @@
   const TEXT_BASE = {statement: 88, poster: 300, title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
-  const ENTER_SECONDS = {pop: 0.34, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, mask: 0.6, swing: 0.55, blur: 0.5, rise: 0.45, none: 0};
+  const ENTER_SECONDS = {pop: 0.4, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, mask: 0.6, swing: 0.55, blur: 0.5, rise: 0.45, land: 0.42, none: 0};
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
   const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : ENTER_SECONDS[enter] ?? 0.34);
   const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind']);
@@ -32,7 +32,7 @@
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
     if (el.kind === 'picture') return 'draw';
-    if (['chart', 'timeline', 'network', 'map', 'crowd'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
+    if (['chart', 'timeline', 'network', 'map', 'crowd', 'quote', 'document', 'gauge', 'loupe', 'ruler'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';
     if (el.kind === 'arrow') return 'draw';
@@ -63,6 +63,17 @@
       return {box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], center: [x, y], r: Math.min(w, h) / 2, w, h};
     }
     if (el.kind === 'timeline') { const y = el.y * K.H, h = 0.24 * K.H; return {box: [0.08 * K.W, y - h / 2, 0.92 * K.W, y + h / 2], center: [K.W / 2, y], r: h / 2}; }
+    // 0.39 evidence and measure tools: panels like a chart, a lens, a measured line.
+    if (['quote', 'document', 'gauge'].includes(el.kind)) {
+      const w = PICTURE_W[el.size || (el.kind === 'quote' ? 'l' : 'm')] * K.W * (el.kind === 'quote' ? 1.15 : el.kind === 'gauge' ? 0.72 : 1), h = Math.min(0.72 * K.H, w * (el.kind === 'quote' ? 0.38 : el.kind === 'gauge' ? 0.95 : el.doc === 'newspaper' ? 0.66 : 0.8));
+      const x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.82 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
+      return {box: [x - w / 2, y - h / 2, x + w / 2, y + h / 2], center: [x, y], r: Math.min(w, h) / 2, w, h};
+    }
+    if (el.kind === 'loupe') { const R = {s: 0.1, m: 0.14, l: 0.19, xl: 0.24}[el.size || 'm'] * K.H, x = Math.min(K.W - R - K.M, Math.max(R + K.M, el.x * K.W)), y = Math.min(0.82 * K.H - R, Math.max(0.06 * K.H + R, el.y * K.H)); return {box: [x - R, y - R, x + R, y + R], center: [x, y], r: R}; }
+    if (el.kind === 'ruler') {
+      const pt = ref => (Array.isArray(ref) ? [ref[0] * K.W, ref[1] * K.H] : [K.W / 2, K.H / 2]), a = pt(el.from), b = pt(el.to), pad = 60 * K.u;
+      return {box: [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad], center: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], r: Math.hypot(b[0] - a[0], b[1] - a[1]) / 2};
+    }
     if (el.kind === 'picture') {
       const [vw, vh] = el.art?.viewBox || [3, 2], maxH = 0.72 * K.H;
       let w = PICTURE_W[el.size || 'l'] * K.W, h = w * vh / vw;
@@ -133,7 +144,7 @@
     });
     // A chart, network or map makes room for words above it (motion demo 2026-10-17: a counter sat on a chart's title).
     d.elements.forEach((item, i) => {
-      if (!['chart', 'network', 'map'].includes(item.kind)) return;
+      if (!['chart', 'network', 'map', 'quote', 'document', 'gauge'].includes(item.kind)) return;
       const e = est[i];
       let top = e.box[1];
       d.elements.forEach((other, j) => { const b = est[j].box; if (other.kind === 'text' && other.style !== 'poster' && b[2] > e.box[0] && b[0] < e.box[2] && b[3] > e.box[1] && est[j].center[1] < e.center[1]) top = Math.max(top, b[3] + 0.02 * K.H); });
@@ -490,6 +501,23 @@
         ctx.fillStyle = el.highlight === undefined || el.highlight === k ? colours[k % colours.length] : muted; ctx.beginPath(); ctx.roundRect(lx, ly - 12 * u, 24 * u, 24 * u, 6 * u); ctx.fill();
         K.text(`${name} ${fmtValue(el.values[k], el.unit)}`, lx + 36 * u, ly, Math.min(36 * u, h * 0.07), {color: st.text, align: 'left', weight: 700, outline: false, maxWidth: x1 - pad - lx - 36 * u});
       });
+    } else if (el.type === 'units') {
+      // A unit chart (0.39, isotype): the whole as identical marks, the part lit in the accent while the rest dims -
+      // "1 in 10" as something the eye can count. At most 100 marks; a bigger whole names what one mark stands for.
+      const part = Math.max(0, Math.round(el.values[0])), whole = Math.max(part, 1, Math.round(el.values[1] ?? 100)), shown = Math.min(whole, 100), lit = Math.min(shown, Math.round(part * shown / whole));
+      const cols = Math.max(1, Math.ceil(Math.sqrt(shown * (px1 - px0) / Math.max(1, py1 - py0)))), rows = Math.ceil(shown / cols), cell = Math.min((px1 - px0) / cols, (py1 - py0) / rows);
+      const ox = (px0 + px1) / 2 - cell * cols / 2, oy = (py0 + py1) / 2 - cell * rows / 2, built = t0 + shown * 0.012 + 0.2, glow = ease.softLand(clamp01((local - built) / 0.45));
+      for (let k = 0; k < shown; k++) {
+        const born = clamp01((local - t0 - k * 0.012) / 0.18);
+        if (born <= 0) continue;
+        const cx = ox + cell * (k % cols + 0.5), cy = oy + cell * (Math.floor(k / cols) + 0.5), r = cell * 0.36 * (1 + 0.25 * (1 - ease.snapSettle(born)));
+        ctx.fillStyle = k < lit ? K.mix(muted, acc, glow) : K.mix(muted, st.fill || K.PAL.bg, 0.45 * glow);
+        ctx.beginPath();
+        if (el.icon === 'person') { ctx.arc(cx, cy - r * 0.48, r * 0.36, 0, TAU); ctx.roundRect(cx - r * 0.48, cy - r * 0.04, r * 0.96, r * 0.98, r * 0.4); }
+        else ctx.arc(cx, cy, r, 0, TAU);
+        ctx.fill();
+      }
+      if (whole > shown) K.text(`1 mark = ${fmtValue(whole / shown, '')}`, (px0 + px1) / 2, y1 - pad * 0.55, Math.min(30 * u, h * 0.05), {color: st.sub, weight: 700, outline: false});
     } else if (el.type === 'rating') {
       const v = el.values[0], q = clamp01((local - t0) / 0.9), size = Math.min((px1 - px0) / 5.6, (py1 - py0) * 0.6), cy = (py0 + py1) / 2, start = (px0 + px1) / 2 - size * 2.5;
       const star = (cx, fill) => { const pts = K.frame(cx, cy, size * 0.46).star(0, 0, 1, 0.45, 5); ctx.beginPath(); pts.forEach(([px, py], k) => (k ? ctx.lineTo(px, py) : ctx.moveTo(px, py))); ctx.closePath(); ctx.fillStyle = fill; ctx.fill(); };
@@ -739,6 +767,335 @@
     ctx.restore();
   }
 
+  // ------------------------------------------------------------ evidence and measuring tools (0.39)
+  // From the documentary channels (quote cards, documents, a dial for a list's position) and lemo-opuscar's evidence
+  // films (one reading per screen, the loupe, the range line). Their words and numbers come from the narration.
+  const numberIn = text => { const m = String(text || '').match(NUMBER); return m ? {value: Number(m[1].replace(/,/g, '')), raw: m[1]} : null; };
+  // A number rolls one value per frame with shrinking steps and lands on its value; it never slides.
+  function rolled(text, local, span = 0.8) {
+    const n = numberIn(text);
+    if (!n || !Number.isFinite(n.value)) return text;
+    const q = ease.softLand(clamp01(Math.floor(Math.max(0, local) * 24) / 24 / span)), decimals = (n.raw.split('.')[1] || '').length;
+    return String(text).replace(n.raw, (n.value * q).toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: n.raw.includes(',') || Math.abs(n.value) >= 10000}));
+  }
+  // Words with their key words (*between stars*) marked.
+  const hotWords = text => {
+    let open = false;
+    return String(text).split(/\s+/).filter(Boolean).map(word => {
+      const starts = /^[^\w]*\*/.test(word), ends = /\*[^\w]*$/.test(word) && (!starts || word.replace(/[^*]/g, '').length > 1), hot = open || word.includes('*');
+      if (starts && !ends) open = true;
+      if (ends) open = false;
+      return {text: word.replace(/\*/g, ''), hot};
+    }).filter(word => word.text);
+  };
+  function drawQuote(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [x1, y1] = est.box, w = est.w, h = est.h, st = panelStyle(), acc = K.PAL.accent, q = ease.snapSettle(clamp01(local / 0.45));
+    ctx.save(); ctx.globalAlpha *= clamp01(local / 0.18); ctx.translate(0, (1 - q) * 0.035 * K.H);
+    if (st.fill) { ctx.fillStyle = st.fill; ctx.beginPath(); ctx.roundRect(x1, y1, w, h, 18 * u); ctx.fill(); if (st.line) { ctx.strokeStyle = st.line; ctx.lineWidth = 2 * u; ctx.stroke(); } }
+    // The speaker: a portrait in a ring (a cast member's own look) with a name tag.
+    const R = Math.min(h * 0.3, w * 0.13), px = x1 + 0.05 * w + R, py = y1 + h * 0.42, fh = 2.6 * R, s = fh / (K.FIGURE_SIZE.m * u);
+    ctx.save(); ctx.beginPath(); ctx.arc(px, py, R, 0, TAU); ctx.clip();
+    ctx.fillStyle = K.mix(K.PAL.bg, acc, 0.22); ctx.fillRect(px - R, py - R, 2 * R, 2 * R);
+    ctx.translate(px, py + 0.8 * fh - 0.08 * R); ctx.scale(s, s);
+    K.drawFigure({x: 0, y: 0, dir: 1, size: 'm', A: K.poseAngles('talk', local, 0), pose: 'talk', expression: el.expression || 'neutral', emote: 'none', talk: true, tl: local, seed: LAYOUT.el[i].seed, look: el.look || {}, engine: D.engine}, 1);
+    ctx.restore();
+    ctx.save(); ctx.strokeStyle = acc; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(px, py, R, 0, TAU); ctx.stroke(); ctx.restore();
+    if (el.name) K.pill(el.name, px, py + R + 34 * u, 30 * u);
+    // The words arrive at a speaking pace; key words (*stars*) in the accent.
+    const tx = px + R + 0.05 * w, tw = x1 + w - 0.04 * w - tx, fs = Math.min(56 * u, h * 0.13), space = K.measure(' ', fs, {weight: 700}), lines = [[]];
+    K.text('“', tx + fs * 0.3, y1 + h * 0.2, fs * 2.2, {color: acc, outline: false, weight: 900});
+    let lw = 0;
+    for (const word of hotWords(el.text)) { const ww = K.measure(word.text, fs, {weight: 700}); if (lines.at(-1).length && lw + space + ww > tw) { lines.push([]); lw = 0; } lines.at(-1).push({...word, w: ww}); lw += (lw ? space : 0) + ww; }
+    const shown = lines.slice(0, 5), lh = fs * 1.28, top = y1 + h * 0.52 - (shown.length - 1) * lh / 2;
+    let k = 0;
+    shown.forEach((line, li) => { let cx = tx; for (const word of line) { const r = ease.softLand(clamp01((local - 0.25 - k * 0.06) / 0.3)); if (r > 0) { ctx.save(); ctx.globalAlpha *= r; K.text(word.text, cx, top + li * lh + (1 - r) * fs * 0.4, fs, {color: word.hot ? acc : st.text, align: 'left', weight: 700, outline: false}); ctx.restore(); } cx += word.w + space; k++; } });
+    if (el.source) K.text(el.source, tx, y1 + h * 0.9, fs * 0.55, {color: st.sub, align: 'left', weight: 600, outline: false, maxWidth: tw});
+    ctx.restore();
+    LAYOUT.anchors[i] = est;
+  }
+  // A document on the desk: the source's name, a headline, grey lines (never invented text) and one real line that
+  // lights up while the camera reads it (archive films; the narration's own words).
+  function drawDocument(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [cx, cy] = est.center, w = est.w, h = est.h, news = el.doc === 'newspaper', ink = '#1E1B18', rand = K.seeded(LAYOUT.el[i].seed);
+    const q = ease.snapSettle(clamp01(local / 0.4)), tilt = (LAYOUT.el[i].seed % 2 ? 1 : -1) * 0.022;
+    ctx.save(); ctx.translate(cx, cy + (1 - q) * 0.05 * K.H); ctx.rotate(tilt); ctx.globalAlpha *= clamp01(local / 0.15);
+    ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 24 * u; ctx.shadowOffsetY = 10 * u;
+    ctx.fillStyle = news ? '#EDE6D6' : el.doc === 'post' ? '#FFFFFF' : '#FBF8F1'; ctx.beginPath(); ctx.roundRect(-w / 2, -h / 2, w, h, el.doc === 'post' ? 22 * u : 3 * u); ctx.fill(); ctx.shadowColor = 'transparent';
+    const pad = 0.07 * w, left = -w / 2 + pad, right = w / 2 - pad, centred = news;
+    let y = -h / 2 + pad;
+    if (el.doc === 'post') { ctx.fillStyle = K.mix('#FFFFFF', K.PAL.accent, 0.5); ctx.beginPath(); ctx.arc(left + 26 * u, y + 26 * u, 26 * u, 0, TAU); ctx.fill(); }
+    if (el.source) {
+      const fs = Math.min(30 * u, h * 0.06), sx = el.doc === 'post' ? left + 66 * u : centred ? 0 : left;
+      K.text(el.doc === 'post' ? el.source : el.source.toUpperCase(), sx, y + fs * 0.6, fs, {color: ink, weight: 800, outline: false, align: centred ? 'center' : 'left', maxWidth: right - sx});
+      y += fs * (el.doc === 'post' ? 2.2 : 1.4);
+      if (news) { ctx.fillStyle = ink; ctx.fillRect(left, y, right - left, 3 * u); ctx.fillRect(left, y + 6 * u, right - left, 1.2 * u); y += 18 * u; }
+    }
+    if (el.headline) {
+      const fs = Math.min(62 * u, h * 0.105), lines = wrapWords(el.headline, fs, right - left).slice(0, 2);
+      lines.forEach((line, k) => K.text(line, centred ? 0 : left, y + fs * (0.6 + k * 1.1), fs, {color: ink, weight: 900, outline: false, align: centred ? 'center' : 'left', maxWidth: right - left}));
+      y += fs * (lines.length * 1.1 + 0.45);
+    }
+    const lineH = Math.max(12 * u, h * 0.034), cols = news ? 3 : 1, gap = 0.04 * w, colW = (right - left - gap * (cols - 1)) / cols;
+    const rows = Math.max(3, Math.floor((h / 2 - pad - y) / (lineH * 1.9))), hi = Math.min(rows - 2, Math.max(0, Math.floor(rows * 0.4)));
+    for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+      if (el.line && (r === hi || r === hi + 1)) continue;
+      ctx.fillStyle = 'rgba(30,27,24,0.2)'; ctx.fillRect(left + c * (colW + gap), y + r * lineH * 1.9, colW * (r === rows - 1 ? 0.5 : 0.8 + rand() * 0.2), lineH * 0.55);
+    }
+    if (el.line) {
+      const fs = Math.min(40 * u, h * 0.065), ly = y + hi * lineH * 1.9 + fs * 0.3, lines = wrapWords(el.line, fs, right - left).slice(0, 2), widest = Math.max(...lines.map(line => K.measure(line, fs, {weight: 800})));
+      const r = ease.inOutCubic(clamp01((local - 0.55) / 0.45)), mark = K.lum(K.PAL.accent) > 0.45 ? K.PAL.accent : C.yellow;
+      if (r > 0) { ctx.fillStyle = K.alpha(mark, 0.5); ctx.fillRect(left - 6 * u, ly - fs * 0.68, (widest + 12 * u) * r, fs * 1.15 * lines.length + fs * 0.2); }
+      lines.forEach((line, k) => K.text(line, left, ly + k * fs * 1.15, fs, {color: ink, weight: 800, outline: false, align: 'left', maxWidth: right - left}));
+    }
+    ctx.restore();
+    LAYOUT.anchors[i] = est;
+  }
+  // A dial: a reading on its scale (the needle leans past its mark and settles), or a list's position (item 3 of 7).
+  function drawGauge(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], cx = est.center[0], w = est.w, h = est.h, st = panelStyle(), acc = K.PAL.accent;
+    const R = Math.min(w * 0.42, h * 0.5), oy = est.box[1] + h * 0.1 + R, a0 = Math.PI * 0.85, span = Math.PI * 1.3;
+    ctx.save(); ctx.globalAlpha *= clamp01(local / 0.25); ctx.lineCap = 'round';
+    if (el.steps) {
+      const n = el.steps, k = Math.min(n, Math.max(1, Math.round(el.value)));
+      for (let s = 0; s < n; s++) {
+        const r = ease.popOver(clamp01((local - 0.12 - s * 0.05) / 0.4)), now = s === k - 1;
+        ctx.strokeStyle = now ? acc : s < k ? K.mix(acc, st.text, 0.55) : K.alpha(st.text, 0.16); ctx.lineWidth = (now ? 30 : 22) * u * Math.max(0.01, r);
+        ctx.beginPath(); ctx.arc(cx, oy, R, a0 + span * s / n + 0.03, a0 + span * (s + 1) / n - 0.03); ctx.stroke();
+      }
+      K.text(`${k}/${n}`, cx, oy, R * 0.5, {color: acc, weight: 900});
+    } else {
+      const min = el.min ?? 0, max = el.max ?? 100, f = clamp01((el.value - min) / ((max - min) || 1)), n = ease.popOver(clamp01((local - 0.2) / 0.9)) * f, an = a0 + span * n;
+      ctx.strokeStyle = K.alpha(st.text, 0.16); ctx.lineWidth = 22 * u; ctx.beginPath(); ctx.arc(cx, oy, R, a0, a0 + span); ctx.stroke();
+      ctx.strokeStyle = acc; ctx.beginPath(); ctx.arc(cx, oy, R, a0, a0 + span * Math.max(0.0001, Math.min(f, n))); ctx.stroke();
+      ctx.strokeStyle = K.alpha(st.text, 0.5); ctx.lineWidth = 3 * u;
+      for (let s = 0; s <= 10; s++) { const a = a0 + span * s / 10, r1 = R - 20 * u, r2 = R - (s % 5 ? 32 : 44) * u; ctx.beginPath(); ctx.moveTo(cx + Math.cos(a) * r1, oy + Math.sin(a) * r1); ctx.lineTo(cx + Math.cos(a) * r2, oy + Math.sin(a) * r2); ctx.stroke(); }
+      ctx.strokeStyle = st.text; ctx.lineWidth = 7 * u; ctx.beginPath(); ctx.moveTo(cx, oy); ctx.lineTo(cx + Math.cos(an) * (R - 40 * u), oy + Math.sin(an) * (R - 40 * u)); ctx.stroke();
+      ctx.fillStyle = st.text; ctx.beginPath(); ctx.arc(cx, oy, 12 * u, 0, TAU); ctx.fill();
+      K.text(rolled(fmtValue(el.value, el.unit), local - 0.2, 0.9), cx, oy + R * 0.4, R * 0.3, {color: acc, weight: 900});
+    }
+    if (el.label) K.pill(el.label, cx, oy + R * 0.86, 32 * u);
+    ctx.restore();
+    LAYOUT.anchors[i] = est;
+  }
+  // The loupe: a lens lands beside the spot and shows it magnified, with a leader to what it reads (two scales at once).
+  function drawLoupe(el, i, local) {
+    const {ctx, u} = K, est = LAYOUT.est[i], [lx, ly] = est.center, R = est.r, acc = K.PAL.accent, zoom = el.zoom || 2.5;
+    const target = anchorOf(el.on, {center: [K.W / 2, K.H / 2]}).center, q = ease.popOver(clamp01(local / 0.42)), r = R * Math.max(0.01, q), line = K.DARK ? '#FFFFFF' : K.PAL.ink;
+    const dx = target[0] - lx, dy = target[1] - ly, d = Math.hypot(dx, dy) || 1, spot = R / zoom;
+    ctx.save(); ctx.strokeStyle = line; ctx.lineWidth = 3 * u; ctx.globalAlpha *= 0.85 * clamp01(local / 0.3);
+    if (d > r + spot) { ctx.beginPath(); ctx.moveTo(lx + dx / d * r, ly + dy / d * r); ctx.lineTo(target[0] - dx / d * spot, target[1] - dy / d * spot); ctx.stroke(); }
+    ctx.beginPath(); ctx.arc(target[0], target[1], spot, 0, TAU); ctx.stroke(); ctx.restore();
+    // What the frame shows so far, read back through the same transform and drawn larger inside the lens.
+    const m = ctx.getTransform(), src = m.transformPoint(new DOMPoint(target[0], target[1])), dst = m.transformPoint(new DOMPoint(lx, ly)), scale = Math.hypot(m.a, m.b), rd = r * scale, rs = rd / zoom;
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.beginPath(); ctx.arc(dst.x, dst.y, rd, 0, TAU); ctx.clip();
+    ctx.fillStyle = K.PAL.bg; ctx.fillRect(dst.x - rd, dst.y - rd, 2 * rd, 2 * rd);
+    ctx.drawImage(ctx.canvas, src.x - rs, src.y - rs, 2 * rs, 2 * rs, dst.x - rd, dst.y - rd, 2 * rd, 2 * rd);
+    ctx.restore();
+    ctx.save(); ctx.lineWidth = 12 * u; ctx.strokeStyle = '#1B1D21'; ctx.beginPath(); ctx.arc(lx, ly, r, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 3 * u; ctx.strokeStyle = K.alpha('#FFFFFF', 0.55); ctx.beginPath(); ctx.arc(lx, ly, Math.max(1, r - 5 * u), Math.PI * 1.1, Math.PI * 1.6); ctx.stroke();
+    ctx.strokeStyle = acc; ctx.beginPath(); ctx.arc(lx, ly, r + 8 * u, 0, TAU); ctx.stroke(); ctx.restore();
+    if (el.label && q > 0.6) K.pill(el.label, lx, ly + r + 36 * u, 32 * u);
+    LAYOUT.anchors[i] = est;
+  }
+  // The range line: a measured line grows from A to B with its ticks while the reading rides it and lands on the number.
+  function drawRuler(el, i, local) {
+    const {ctx, u} = K, acc = K.PAL.accent, a = anchorOf(el.from, {center: [0.2 * K.W, 0.6 * K.H]}).center, b = anchorOf(el.to, {center: [0.8 * K.W, 0.6 * K.H]}).center;
+    const q = ease.snapSettle(clamp01(local / 0.9)), tip = [a[0] + (b[0] - a[0]) * q, a[1] + (b[1] - a[1]) * q], len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1, nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len;
+    const bar = (p, s) => { ctx.beginPath(); ctx.moveTo(p[0] - nx * s, p[1] - ny * s); ctx.lineTo(p[0] + nx * s, p[1] + ny * s); ctx.stroke(); };
+    ctx.save(); ctx.lineCap = 'round'; ctx.strokeStyle = acc; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(tip[0], tip[1]); ctx.stroke();
+    ctx.strokeStyle = K.DARK ? '#FFFFFF' : K.PAL.ink; ctx.lineWidth = 3 * u; bar(a, 22 * u);
+    for (let k = 1; k < 10; k++) if (k / 10 <= q) bar([a[0] + (b[0] - a[0]) * k / 10, a[1] + (b[1] - a[1]) * k / 10], (k === 5 ? 14 : 9) * u);
+    if (q > 0.98) bar(b, 22 * u);
+    ctx.fillStyle = acc; ctx.beginPath(); ctx.arc(tip[0], tip[1], 9 * u, 0, TAU); ctx.fill(); ctx.restore();
+    const flip = ny > 0 ? -1 : 1, mid = [(a[0] + tip[0]) / 2 + flip * nx * 56 * u, (a[1] + tip[1]) / 2 + flip * ny * 56 * u];
+    if (el.value) { const z = 1 + 0.12 * Math.exp(-Math.max(0, local - 0.9) * 8) * (local > 0.9 ? 1 : 0); ctx.save(); ctx.translate(mid[0], mid[1]); ctx.scale(z, z); K.text(rolled(el.value, local, 0.9), 0, 0, 58 * u, {color: acc, weight: 900}); ctx.restore(); }
+    if (el.label) K.pill(el.label, mid[0], mid[1] - 64 * u, 30 * u);
+    LAYOUT.anchors[i] = LAYOUT.est[i];
+  }
+
+  // ------------------------------------------------------------ film looks (0.39): one finish over the whole frame
+  // The way a medium prints the finished picture, after lemo-opuscar's film styles (MIT, pinned 508848a; their
+  // style prompts are restated in our own words in docs/research/lemo-opuscar-and-motionmaxxing.md). Where the medium
+  // allows it, the accent colour survives (the hero keeps its colour). Pure functions of time; randomness is seeded.
+  const SOLID_TYPE = new Set(['newsprint', 'riso', 'engraving']);
+  const FILMS = {silent: 1, noir: 1, sepia: 1, selective: 1, newsprint: 1, riso: 1, blueprint: 1, woodcut: 1, kinescope: 1, technicolor: 1, album: 1, screenprint: 1, engraving: 1, deco: 1};
+  let filmCanvas = null, filmCtx = null, smallCanvas = null, smallCtx = null;
+  const scratch = (w, h) => {
+    if (!filmCanvas || filmCanvas.width !== w || filmCanvas.height !== h) { filmCanvas = document.createElement('canvas'); filmCanvas.width = w; filmCanvas.height = h; filmCtx = filmCanvas.getContext('2d'); }
+    filmCtx.setTransform(1, 0, 0, 1, 0, 0); filmCtx.filter = 'none'; filmCtx.globalAlpha = 1; filmCtx.globalCompositeOperation = 'source-over'; filmCtx.clearRect(0, 0, w, h);
+    return filmCtx;
+  };
+  // The frame at a low resolution, for the printed looks that sample it (dots, engraved lines).
+  function sample(cell) {
+    const canvas = K.ctx.canvas, w = Math.ceil(canvas.width / cell), h = Math.ceil(canvas.height / cell);
+    if (!smallCanvas || smallCanvas.width !== w || smallCanvas.height !== h) { smallCanvas = document.createElement('canvas'); smallCanvas.width = w; smallCanvas.height = h; smallCtx = smallCanvas.getContext('2d', {willReadFrequently: true}); }
+    smallCtx.drawImage(canvas, 0, 0, w, h);
+    return {w, h, px: smallCtx.getImageData(0, 0, w, h).data};
+  }
+  const hueOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; if (!d) return 0; const hh = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; return (hh * 60 + 360) % 360; };
+  const smooth = x => x * x * (3 - 2 * x);
+  function drawFilm(name, t) {
+    const {ctx} = K, canvas = ctx.canvas, cw = canvas.width, ch = canvas.height, v = ch / 1080, rand = K.seeded(Math.floor(t * 24) * 131 + 7), shot = K.seeded((K.SEED || 1) + 17);
+    const [ar, ag, ab] = K.hexRgb(K.PAL.accent), accH = hueOf(ar, ag, ab), accentOk = Math.max(ar, ag, ab) - Math.min(ar, ag, ab) > 50;
+    // How much a pixel belongs to the accent (the hero's colour): 0-1.
+    const keep = (r, g, b) => { if (!accentOk) return 0; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); if (mx - mn < 90 || mx < 110) return 0; const dh = Math.abs(hueOf(r, g, b) - accH), dd = Math.min(dh, 360 - dh); return dd < 24 ? 1 - dd / 24 : 0; };
+    const pixels = f => { const img = ctx.getImageData(0, 0, cw, ch), px = img.data; for (let k = 0; k < px.length; k += 4) f(px, k, px[k], px[k + 1], px[k + 2], 0.299 * px[k] + 0.587 * px[k + 1] + 0.114 * px[k + 2]); ctx.putImageData(img, 0, 0); };
+    const mixTo = (px, k, R, G, B, r, g, b, h) => { px[k] = R + (r - R) * h; px[k + 1] = G + (g - G) * h; px[k + 2] = B + (b - B) * h; };
+    const grain = (count, alpha) => { for (let k = 0; k < count; k++) { ctx.fillStyle = rand() > 0.5 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha})`; const s = (1 + rand() * 1.5) * v; ctx.fillRect(rand() * cw, rand() * ch, s, s); } };
+    const vignette = (alpha, rgb = '0,0,0', inner = 0.42) => { const g = ctx.createRadialGradient(cw / 2, ch / 2, ch * inner, cw / 2, ch / 2, ch); g.addColorStop(0, `rgba(${rgb},0)`); g.addColorStop(1, `rgba(${rgb},${alpha})`); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); };
+    const corners = (r, color) => { ctx.fillStyle = color; ctx.beginPath(); ctx.rect(0, 0, cw, ch); ctx.roundRect(0, 0, cw, ch, r); ctx.fill('evenodd'); };
+    const blobs = (n, dark, light) => { for (let k = 0; k < n; k++) { const x = shot() * cw, y = shot() * ch, rr = (0.08 + shot() * 0.2) * ch, g = ctx.createRadialGradient(x, y, 0, x, y, rr); g.addColorStop(0, shot() > 0.5 ? dark : light); g.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = g; ctx.fillRect(x - rr, y - rr, 2 * rr, 2 * rr); } };
+    const dots = (S, cell, color, value, dx = 0, dy = 0) => {
+      ctx.fillStyle = color; ctx.beginPath();
+      for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+        const k = (y * S.w + x) * 4, d = value(S.px[k], S.px[k + 1], S.px[k + 2]);
+        if (d < 0.1) continue;
+        const r = cell * 0.66 * Math.sqrt(Math.min(1, d)), cx = (x + 0.5 + (y % 2) * 0.5) * cell + dx, cy = (y + 0.5) * cell + dy;
+        ctx.moveTo(cx + r, cy); ctx.arc(cx, cy, r, 0, TAU);
+      }
+      ctx.fill();
+    };
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    switch (name) {
+      case 'silent': {
+        // Orthochromatic silver with whites half-way to amber, flicker, gate weave, scratches, dust and the rounded gate.
+        const flick = 1 + 0.05 * K.noise(t * 9);
+        pixels((px, k, r, g, b, L) => { const x = Math.min(255, smooth(L / 255) * flick * 255), w = x / 255; mixTo(px, k, x, x * (1 - 0.1 * w), x * (1 - 0.25 * w), r, g, b, keep(r, g, b) * 0.7); });
+        const wx = Math.round(K.noise(t * 3) * 1.6 * v), wy = Math.round(K.noise(t * 2.3 + 5) * 1.6 * v);
+        if (wx || wy) { scratch(cw, ch).drawImage(canvas, 0, 0); ctx.fillStyle = '#0D0B08'; ctx.fillRect(0, 0, cw, ch); ctx.drawImage(filmCanvas, wx, wy); }
+        grain(2400, 0.08);
+        ctx.strokeStyle = 'rgba(255,248,230,0.32)'; ctx.lineWidth = 1.2 * v;
+        for (let k = 0; k < 3; k++) if (rand() < 0.4) { const x = rand() * cw; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + (rand() - 0.5) * 8 * v, ch); ctx.stroke(); }
+        ctx.fillStyle = 'rgba(20,14,8,0.5)'; for (let k = 0; k < 12; k++) { ctx.beginPath(); ctx.arc(rand() * cw, rand() * ch, (1 + rand() * 3) * v, 0, TAU); ctx.fill(); }
+        vignette(0.55, '20,14,8', 0.36); corners(26 * v, '#0D0B08');
+        break;
+      }
+      case 'noir': {
+        // Studio black-and-white: deep blacks, glowing small whites, a diffusion glow and slatted shadows of blinds.
+        pixels((px, k, r, g, b, L) => { const x = Math.max(0, Math.min(255, (smooth(L / 255) - 0.5) * 1.4 * 255 + 116)); mixTo(px, k, x, x, x, r, g, b, keep(r, g, b) * 0.8); });
+        const c = scratch(cw, ch); c.filter = `blur(${10 * v}px)`; c.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 0.22; ctx.drawImage(filmCanvas, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        ctx.save(); ctx.translate(cw * 0.5, ch * 0.5); ctx.rotate(-0.42); ctx.fillStyle = 'rgba(0,0,0,0.12)'; for (let y = -ch; y < ch; y += 64 * v) ctx.fillRect(-cw, y, cw * 2, 22 * v); ctx.restore();
+        grain(2200, 0.07); vignette(0.5, '0,0,0', 0.4);
+        break;
+      }
+      case 'sepia': {
+        // A toned albumen print: umber blacks, cream whites, a hand-tinted hero, blotchy development.
+        pixels((px, k, r, g, b, L) => { const x = L / 255; mixTo(px, k, 46 + 196 * x, 28 + 192 * x, 15 + 165 * x, r, g, b, keep(r, g, b) * 0.65); });
+        blobs(26, 'rgba(60,35,15,0.07)', 'rgba(255,240,210,0.07)'); grain(2000, 0.06); vignette(0.6, '120,86,52', 0.34);
+        break;
+      }
+      case 'selective': {
+        // Black and white with one colour: only what carries the accent keeps it (the hero, one story object).
+        pixels((px, k, r, g, b, L) => { const x = Math.max(0, Math.min(255, (smooth(L / 255) - 0.5) * 1.15 * 255 + 128)); mixTo(px, k, x, x, x, r, g, b, keep(r, g, b)); });
+        grain(1600, 0.05); vignette(0.3);
+        break;
+      }
+      case 'newsprint': {
+        // A newspaper print: black halftone dots on newsprint, the hero on its own spot plate a little off register.
+        const cell = Math.max(5, Math.round(7 * v)), S = sample(cell);
+        ctx.fillStyle = '#E8E0CC'; ctx.fillRect(0, 0, cw, ch);
+        dots(S, cell, '#17130F', (r, g, b) => (1 - (0.299 * r + 0.587 * g + 0.114 * b) / 255) * (1 - keep(r, g, b) * 0.8));
+        dots(S, cell, K.alpha(K.PAL.accent, 0.92), (r, g, b) => keep(r, g, b) * 0.95, 2 * v, 1 * v);
+        grain(1200, 0.05); vignette(0.18, '70,55,30', 0.5);
+        break;
+      }
+      case 'riso': {
+        // Two translucent spot inks on warm paper, each a halftone at its own offset (fixed for the shot).
+        const cell = Math.max(5, Math.round(6 * v)), S = sample(cell), off = [(shot() - 0.5) * 6 * v, (shot() - 0.5) * 6 * v];
+        const deep = K.lum(K.PAL.ink) < 0.35 ? K.PAL.ink : '#1F3A93', sat = (r, g, b) => (Math.max(r, g, b) - Math.min(r, g, b)) / 255;
+        ctx.fillStyle = '#F4EEE2'; ctx.fillRect(0, 0, cw, ch); ctx.globalCompositeOperation = 'multiply';
+        dots(S, cell, K.alpha(K.PAL.accent, 0.85), (r, g, b) => sat(r, g, b) * 1.1 + (1 - (0.299 * r + 0.587 * g + 0.114 * b) / 255) * 0.2, off[0], off[1]);
+        dots(S, cell, K.alpha(deep, 0.85), (r, g, b) => Math.max(0, (1 - (0.299 * r + 0.587 * g + 0.114 * b) / 255) - sat(r, g, b) * 0.5));
+        ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = 'rgba(244,238,226,0.5)'; for (let k = 0; k < 900; k++) ctx.fillRect(rand() * cw, rand() * ch, 1.4 * v, 1.4 * v);
+        break;
+      }
+      case 'blueprint': {
+        // White lines on Prussian-blue paper: what was drawn dark prints white; the hero keeps its colour.
+        pixels((px, k, r, g, b, L) => { const x = Math.pow(K.DARK ? L / 255 : 1 - L / 255, 0.85); mixTo(px, k, 20 + 216 * x, 56 + 188 * x, 116 + 139 * x, r, g, b, keep(r, g, b) * 0.85); });
+        blobs(22, 'rgba(5,20,60,0.12)', 'rgba(120,170,230,0.07)');
+        ctx.strokeStyle = 'rgba(200,225,255,0.10)'; ctx.lineWidth = 2 * v; ctx.beginPath(); ctx.moveTo(cw * (0.3 + shot() * 0.4), 0); ctx.lineTo(cw * (0.3 + shot() * 0.4), ch); ctx.moveTo(0, ch * (0.4 + shot() * 0.2)); ctx.lineTo(cw, ch * (0.4 + shot() * 0.2)); ctx.stroke();
+        vignette(0.4, '4,14,40', 0.42);
+        break;
+      }
+      case 'woodcut': {
+        // Black is the wood, white is what the knife cut away; one colour plate prints only the hero's colour.
+        pixels((px, k, r, g, b, L) => {
+          const n = (((k >> 2) % cw) * 7 + (((k >> 2) / cw) | 0) * 13) % 17 / 17 * 40 - 20, h = keep(r, g, b);
+          if (h > 0.35) { px[k] = ar; px[k + 1] = ag; px[k + 2] = ab; } else if (L + n > 118) { px[k] = 232; px[k + 1] = 223; px[k + 2] = 202; } else { px[k] = 23; px[k + 1] = 19; px[k + 2] = 15; }
+        });
+        ctx.globalCompositeOperation = 'screen'; ctx.strokeStyle = 'rgba(232,223,202,0.05)'; ctx.lineWidth = 1.5 * v; ctx.beginPath();
+        for (let y = 0; y < ch; y += 7 * v) { ctx.moveTo(0, y); for (let x = 0; x <= cw; x += 80 * v) ctx.lineTo(x, y + K.noise(x * 0.004 + y * 0.03) * 4 * v); }
+        ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; grain(900, 0.05);
+        break;
+      }
+      case 'kinescope': {
+        // A 1950s television picture: soft cool phosphor, scanlines, a rolling hum bar, a ghost and the tube's corners.
+        const c = scratch(cw, ch); c.filter = `blur(${1.2 * v}px)`; c.drawImage(canvas, 0, 0); ctx.drawImage(filmCanvas, 0, 0);
+        pixels((px, k, r, g, b, L) => { const x = 26 + L * 0.84; mixTo(px, k, x * 0.86, x * 0.9, x * 0.92, r, g, b, keep(r, g, b) * 0.7); });
+        ctx.globalAlpha = 0.12; ctx.drawImage(canvas, 5 * v, 0); ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(0,0,0,0.16)'; for (let y = 0; y < ch; y += 3 * v) ctx.fillRect(0, y, cw, Math.max(1, 1.1 * v));
+        const bar = ((t * 0.18) % 1.3 - 0.15) * ch, g = ctx.createLinearGradient(0, bar - 60 * v, 0, bar + 60 * v); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,0.07)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.fillRect(0, bar - 60 * v, cw, 120 * v);
+        grain(1500, 0.06); vignette(0.45, '0,0,0', 0.38); corners(64 * v, 'rgba(8,10,12,0.96)');
+        break;
+      }
+      case 'technicolor': {
+        // A saturated three-strip print: warm, rich, a little contrast and a soft bloom.
+        const c = scratch(cw, ch); c.filter = 'saturate(1.4) contrast(1.08) sepia(0.12)'; c.drawImage(canvas, 0, 0); ctx.drawImage(filmCanvas, 0, 0);
+        const b = scratch(cw, ch); b.filter = `blur(${12 * v}px) brightness(1.1)`; b.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = 0.12; ctx.drawImage(filmCanvas, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        grain(1400, 0.04); vignette(0.28, '60,20,0', 0.45);
+        break;
+      }
+      case 'album': {
+        // A 1970s snapshot in an album: faded dyes, teal-grey blacks, creamy highlights, soft, a white print border.
+        const c = scratch(cw, ch); c.filter = `blur(${0.8 * v}px) saturate(0.62)`; c.drawImage(canvas, 0, 0); ctx.drawImage(filmCanvas, 0, 0);
+        pixels((px, k, r, g, b) => { px[k] = 53 + r * 0.8; px[k + 1] = 58 + g * 0.74; px[k + 2] = 58 + b * 0.66; });
+        grain(1600, 0.05); vignette(0.22, '90,60,30', 0.45);
+        const bw = 0.022 * ch; ctx.fillStyle = '#F7F3EA'; ctx.beginPath(); ctx.rect(0, 0, cw, ch); ctx.rect(bw, bw, cw - 2 * bw, ch - 2 * bw); ctx.fill('evenodd');
+        break;
+      }
+      case 'screenprint': {
+        // A silkscreen poster: values stepped into flat bands (no gradients), a key printed a little off register, paper.
+        pixels((px, k, r, g, b, L) => { const s = L > 1 ? (Math.round(L / 255 * 4) / 4 * 255) / L : 0; px[k] = r * s; px[k + 1] = g * s; px[k + 2] = b * s; });
+        const c = scratch(cw, ch); c.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = 0.22; ctx.drawImage(filmCanvas, 2 * v, 2 * v); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(240,226,192,0.35)'; for (let k = 0; k < 1400; k++) ctx.fillRect(rand() * cw, rand() * ch, 1.4 * v, 1.4 * v);
+        break;
+      }
+      case 'engraving': {
+        // A copperplate: every tone made of engraved lines that swell where it is dark, cross-hatched in the darks, then
+        // hand-coloured with thin washes.
+        const c = scratch(cw, ch); c.drawImage(canvas, 0, 0);
+        const sp = Math.max(4, Math.round(5 * v)), S = sample(sp), lum = (x, y) => { const k = (y * S.w + Math.min(S.w - 1, x)) * 4; return (0.299 * S.px[k] + 0.587 * S.px[k + 1] + 0.114 * S.px[k + 2]) / 255; };
+        ctx.fillStyle = '#EFE3C4'; ctx.fillRect(0, 0, cw, ch); ctx.fillStyle = '#1C1610';
+        for (let y = 0; y < S.h; y++) {
+          const top = [], bottom = [];
+          for (let x = 0; x <= S.w; x++) { const d = Math.pow(1 - lum(x, y), 1.1) * sp * 0.46, cy = (y + 0.5) * sp + K.noise(x * 0.15 + y * 0.7) * sp * 0.15; top.push([x * sp, cy - d]); bottom.push([x * sp, cy + d]); }
+          ctx.beginPath(); top.forEach(([x, yy], k) => (k ? ctx.lineTo(x, yy) : ctx.moveTo(x, yy))); for (let k = bottom.length - 1; k >= 0; k--) ctx.lineTo(bottom[k][0], bottom[k][1]); ctx.closePath(); ctx.fill();
+        }
+        ctx.strokeStyle = '#1C1610'; ctx.lineWidth = Math.max(1, 0.9 * v); ctx.beginPath();
+        for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) if (lum(x, y) < 0.36) { ctx.moveTo(x * sp, (y + 1) * sp); ctx.lineTo((x + 1) * sp, y * sp); }
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = 0.4; ctx.filter = 'saturate(1.25) brightness(1.2)'; ctx.drawImage(filmCanvas, 0, 0); ctx.filter = 'none'; ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        vignette(0.2, '90,60,30', 0.5);
+        break;
+      }
+      case 'deco': {
+        // Art deco metal: tones become gold in hard bands on warm black (a light palette prints in reverse, so the ground
+        // is black lacquer and the lines are gold), the hero keeps its colour, a few glints.
+        const BANDS = [[10, 9, 8], [58, 46, 20], [138, 110, 46], [214, 181, 96], [243, 226, 162]];
+        pixels((px, k, r, g, b, L) => { const c = BANDS[Math.min(4, Math.floor((K.DARK ? L : 255 - L) / 255 * 5))]; mixTo(px, k, c[0], c[1], c[2], r, g, b, keep(r, g, b)); });
+        ctx.fillStyle = 'rgba(255,240,200,0.8)';
+        for (let k = 0; k < 6; k++) { const x = shot() * cw, y = shot() * ch, s = (6 + 10 * Math.max(0, Math.sin(t * 2.4 + k * 1.7))) * v; ctx.beginPath(); ctx.moveTo(x, y - s); ctx.lineTo(x + s * 0.16, y); ctx.lineTo(x, y + s); ctx.lineTo(x - s * 0.16, y); ctx.closePath(); ctx.moveTo(x - s, y); ctx.lineTo(x, y + s * 0.16); ctx.lineTo(x + s, y); ctx.lineTo(x, y - s * 0.16); ctx.closePath(); ctx.fill(); }
+        grain(1200, 0.04); vignette(0.45, '0,0,0', 0.42);
+        break;
+      }
+      default: break;
+    }
+    ctx.restore();
+  }
+
   // ------------------------------------------------------------ pictures (0.33)
   // A picture's shapes as Path2D with their lengths and boxes, measured once per shot on hidden SVG paths (the
   // path data was checked in Node: commands and numbers only).
@@ -934,7 +1291,7 @@
     const statement = el.style === 'statement' || el.style === 'poster', weight = statement ? 900 : 800, upper = el.style === 'keyword';
     const color = el.accent || el.style === 'number' ? K.PAL.accent : el.style === 'poster' ? K.alpha(K.PAL.ink, 0.9) : K.PAL.ink, onAccent = K.lum(K.PAL.accent) > 0.55 ? '#141414' : '#FFFFFF';
     // Lines of words with their widths (a statement's own lines; one line otherwise, fitted to the frame).
-    const lines = statement ? at.lines.map(line => line.words) : [String(upper ? el.text.toUpperCase() : el.text).split(/\s+/).filter(Boolean).map(text => ({text, hot: false, w: K.measure(text, size, {weight})}))];
+    const lines = statement ? at.lines.map(line => line.words) : [hotWords(upper ? el.text.toUpperCase() : el.text).map(word => ({...word, w: K.measure(word.text, size, {weight})}))];
     const space = K.measure(' ', size, {weight}), lh = size * 1.18, widths = lines.map(words => words.reduce((sum, w) => sum + w.w, 0) + space * (words.length - 1));
     const fit = Math.min(1, (K.W - 2 * K.M) / Math.max(1, ...widths)), sz = size * fit;
     const letterCount = lines.flat().reduce((n, w) => n + w.text.length, 0), typed = kind === 'typewriter' ? Math.floor(local * 24) : Infinity;
@@ -985,6 +1342,11 @@
             if (local - delay < 0.55) { const rand = K.seeded(Math.floor(local * 24) * 31 + k), j = (rand() - 0.5) * sz * 0.22; ctx.save(); ctx.globalAlpha *= 0.7; K.text(w.text, wx + j + sz * 0.05, cy, sz, {color: '#FF2D55', weight, outline: false}); K.text(w.text, wx - j - sz * 0.05, cy, sz, {color: '#18E0FF', weight, outline: false}); ctx.restore(); ctx.translate((rand() - 0.5) * sz * 0.1, 0); ctx.globalAlpha *= 0.5 + 0.5 * (rand() > 0.3 ? 1 : 0); }
             word(w, wx, cy);
           }
+        } else if (kind === 'redact') {
+          // A redacted file (0.39): black bars print over the words and lift one by one; key words lift last.
+          const lift = 0.35 + (w.hot ? lastIndex + 2 : k) * 0.16, q = ease.accelExit(clamp01((local - lift) / 0.14));
+          word(w, wx, cy);
+          if (q < 1) { const left = cx - sz * 0.08, bw = (w.w * fit + sz * 0.16) * (1 - q); ctx.fillStyle = K.DARK ? '#050505' : '#111111'; ctx.fillRect(left + (w.w * fit + sz * 0.16) * q, cy - sz * 0.55, bw, sz * 1.1); }
         } else if (kind === 'blur') {
           const q = ease.outCubic(clamp01((local - delay * 0.5) / 0.6));
           if (q > 0) { ctx.globalAlpha *= q; if (q < 1) ctx.filter = `blur(${((1 - q) * 14 * u).toFixed(2)}px)`; const z = 1.08 - 0.08 * q; ctx.translate(wx, cy); ctx.scale(z, z); ctx.translate(-wx, -cy); word(w, wx, cy); }
@@ -1028,10 +1390,9 @@
       case 'note': { const n = Math.ceil(el.text.length * clamp01(local * 28 / Math.max(1, el.text.length))); K.text(el.text.slice(0, n), x, y, size, {color, weight: 700, maxWidth: K.W - 2 * K.M}); break; }
       case 'number': { const q = clamp01(local / 0.25), z = 1 + 0.7 * (1 - ease.outCubic(q)); ctx.save(); ctx.translate(x, y); ctx.rotate(-0.08 * (1 - q)); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 3); K.text(el.text, 0, 0, size, {color, maxWidth: K.W - 2 * K.M}); ctx.restore(); break; }
       case 'counter': {
-        const match = el.text.match(NUMBER), value = match ? Number(match[1].replace(/,/g, '')) : null;
-        let shown = el.text;
-        if (value !== null) { const decimals = (match[1].split('.')[1] || '').length, now = value * ease.outCubic(clamp01(local / 0.9)); shown = el.text.replace(match[1], now.toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: match[1].includes(',') || value >= 10000})); }
-        const z = 1 + 0.12 * Math.exp(-Math.max(0, local - 0.9) * 8) * (local > 0.9 ? 1 : 0);
+        // One value per frame with shrinking steps, landing on the number with a small pop (0.39: a counter steps like
+        // a real readout instead of sliding).
+        const shown = rolled(el.text, local, 0.85), z = 1 + 0.1 * Math.exp(-Math.max(0, local - 0.85) * 8) * (local > 0.85 ? 1 : 0);
         ctx.save(); ctx.translate(x, y); ctx.scale(z, z); K.text(shown, 0, 0, size, {color, maxWidth: K.W - 2 * K.M}); ctx.restore();
         break;
       }
@@ -1293,10 +1654,12 @@
     const local = t - tm.ts, enter = el.kind === 'fx' ? 'none' : tm.enter, d = enterSeconds(enter);
     let sx = 1, sy = 1, dx = 0, dy = 0, a = 1, p = 1;
     if (d && local < d && el.kind !== 'picture') {
+      // 0.39: each role its own measured curve - a pop leans past its size late and only a little (8%), a slide does
+      // most of its travel in the first frames and then settles, a growth lands softly.
       const q = local / d;
-      if (enter === 'pop') sx = sy = ease.outBack(q);
-      if (enter === 'grow') sx = sy = ease.outCubic(q);
-      if (enter === 'slide') dx = (1 - ease.outCubic(q)) * (LAYOUT.est[i].center[0] < K.W / 2 ? -1 : 1) * 0.6 * K.W;
+      if (enter === 'pop') sx = sy = ease.popOver(q);
+      if (enter === 'grow') sx = sy = ease.softLand(q);
+      if (enter === 'slide') dx = (1 - ease.snapSettle(q)) * (LAYOUT.est[i].center[0] < K.W / 2 ? -1 : 1) * 0.6 * K.W;
       if (enter === 'drop') dy = -(1 - ease.inCubic(q)) * 0.75 * K.H;
       if (enter === 'fade') a = q;
       if (enter === 'draw') p = el.kind === 'figure' ? clamp01(local / (d * 1.25)) : q;
@@ -1309,10 +1672,13 @@
       if (enter === 'mask') reveal = ease.inOutCubic(q);
       if (enter === 'swing') { swing = (1 - ease.outBack(q)) * -0.7; a *= clamp01(q * 2); }
       if (enter === 'blur') { focus = 1 - ease.outCubic(q); a *= clamp01(q * 1.6); }
-      if (enter === 'rise') { dy = (1 - ease.outCubic(q)) * 0.12 * K.H; a *= clamp01(q * 1.8); }
+      if (enter === 'rise') { dy = (1 - ease.softLand(q)) * 0.12 * K.H; a *= clamp01(q * 1.8); }
+      // Lands from oversize: it arrives big and soft and settles to its size (never grows from nothing).
+      if (enter === 'land') { const s = 1 + 0.6 * (1 - ease.snapSettle(q)); sx *= s; sy *= s; focus = Math.max(focus, (1 - ease.snapSettle(q)) * 0.8); a *= clamp01(q * 2.5); }
     }
     if (enter === 'drop' && local >= d && local < d + 0.18) { const s = Math.sin(Math.PI * (local - d) / 0.18); sy = 1 - 0.14 * s; sx = 1 + 0.1 * s; }
-    if (exitAt !== null && t > exitAt) { const q = clamp01((t - exitAt) / 0.22); sx *= 1 - ease.inCubic(q); sy *= 1 - ease.inCubic(q); a *= 1 - q; }
+    // Leaving is quicker than arriving and accelerates away (motionmaxxing: exits ease in).
+    if (exitAt !== null && t > exitAt) { const q = clamp01((t - exitAt) / 0.2); sx *= 1 - ease.accelExit(q); sy *= 1 - ease.accelExit(q); a *= 1 - ease.gentleIn(q); }
     const est = LAYOUT.est[i], [ax, ay] = el.kind === 'figure' ? [el.x * K.W, el.y * K.H] : est.center;
     const {ctx} = K;
     ctx.save();
@@ -1349,6 +1715,11 @@
     else if (el.kind === 'network') drawNetwork(el, i, local);
     else if (el.kind === 'map') drawMap(el, i, local);
     else if (el.kind === 'crowd') drawCrowd(el, i, local);
+    else if (el.kind === 'quote') drawQuote(el, i, local);
+    else if (el.kind === 'document') drawDocument(el, i, local);
+    else if (el.kind === 'gauge') drawGauge(el, i, local);
+    else if (el.kind === 'ruler') drawRuler(el, i, local);
+    else if (el.kind === 'loupe') drawLoupe(el, i, local);
     else if (el.kind === 'fx' && !SCREEN_FX.has(el.effect) && !['shake', 'punch'].includes(el.effect)) drawFx(el, i, t, local, p);
     ctx.restore();
   }
@@ -1434,7 +1805,9 @@
     ctx.save(); applyCamera(ctx, cam, 1);
     if (LAYOUT.stage !== null) drawStage(t);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
-    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect))) drawElement(el, i, t); });
+    // A loupe magnifies what is already drawn, so it comes last.
+    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect)) && el.kind !== 'loupe') drawElement(el, i, t); });
+    D.elements.forEach((el, i) => { if (el.kind === 'loupe') drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);
     if (K.FIN === 'paint') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw * 0.5, ch * 0.42, ch * 0.35, cw / 2, ch / 2, ch * 1.0); g.addColorStop(0, 'rgba(255,200,120,0.06)'); g.addColorStop(1, 'rgba(60,30,10,0.32)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
@@ -1443,6 +1816,13 @@
     if (HAND) drawHand(t, context);
     if (K.FIN === 'wb' && K.WB === 'framed') drawBoardFrame(context);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && SCREEN_FX.has(el.effect)) drawScreenFx(el, i, t); });
+    // The film look (0.39): the shot's own, or the style's for every drawn shot.
+    const film = D.film && D.film !== 'none' ? D.film : P.drawing?.film && !['none', 'choose'].includes(P.drawing.film) && D.film !== 'none' ? P.drawing.film : null;
+    if (film && FILMS[film]) {
+      drawFilm(film, t);
+      // Type prints solid over a halftone or engraved picture, as on a real press: words stay sharp and readable.
+      if (SOLID_TYPE.has(film)) { ctx.save(); applyCamera(ctx, cam, 1); D.elements.forEach((el, i) => { if (['text', 'quote', 'document', 'gauge', 'ruler', 'chart', 'timeline'].includes(el.kind)) drawElement(el, i, t); }); ctx.restore(); }
+    }
     if (D.texture && D.texture !== 'grid') drawTexture(D.texture, t);
     // The opening transition's own marks: speed streaks on a whip, an ink wipe, a glitch, a flash on a pop.
     const tr = D.transition;

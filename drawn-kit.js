@@ -17,6 +17,24 @@
     inOutSine: x => -(Math.cos(Math.PI * x) - 1) / 2, outQuart: x => 1 - (1 - x) ** 4, outExpo: x => (x >= 1 ? 1 : 1 - 2 ** (-10 * x)),
     outBack: x => { const c1 = 1.9, c3 = c1 + 1; return 1 + c3 * (x - 1) ** 3 + c1 * (x - 1) ** 2; },
   };
+  // 0.39: curves measured from human-made motion films, one per role (motionmaxxing, Apache-2.0, pinned 8c8ec0f,
+  // runtime/motion.js; formulas and constants reused, see docs/REPOSITORIES.md). Landings ease out (60-72% of the
+  // travel in the first 4-5 frames, then a long tail), leavings ease in, overshoot is rare and small.
+  {
+    const powerOut = p => x => 1 - (1 - x) ** p, powerIn = p => x => x ** p;
+    const expoOut = k => { const d = 1 - Math.exp(-k); return x => (1 - Math.exp(-k * x)) / d; };
+    const snapRamp = (w, tau) => { const n = w * (1 - Math.exp(-1 / tau)) + (1 - w); return x => (w * (1 - Math.exp(-x / tau)) + (1 - w) * x) / n; };
+    const norm = f => { const end = f(1); return x => f(x) / end; };
+    const snapOver = (A, ta, td) => norm(x => (1 + A * Math.exp(-x / td)) * (1 - Math.exp(-x / ta)));
+    const spring = (c, om) => norm(x => 1 - Math.exp(-c * x) * (Math.cos(om * x) + (c / om) * Math.sin(om * x)));
+    const smoothP = p => x => { const a = x ** p, b = (1 - x) ** p; return a + b ? a / (a + b) : 0; };
+    const clampEase = f => x => (x <= 0 ? 0 : x >= 1 ? 1 : f(x));
+    Object.assign(K.ease, Object.fromEntries(Object.entries({
+      crashIn: snapOver(2.0, 0.19, 0.218), popOver: spring(2.67, 4.36), bounceHard: spring(1.34, 5.07), snapSettle: snapRamp(0.942, 0.118),
+      softLand: expoOut(3.41), whip: powerOut(2.52), glide: powerOut(1.7), cruise: x => x, softInOut: smoothP(1.42), gentleIn: powerIn(2.07),
+      accelExit: powerIn(2.6), crashOut: powerIn(3.97),
+    }).map(([name, f]) => [name, clampEase(f)])));
+  }
   K.seeded = seed => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let r = Math.imul(a ^ (a >>> 15), 1 | a); r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r; return ((r ^ (r >>> 14)) >>> 0) / 4294967296; }; };
   K.hashText = text => { let h = 2166136261; for (const ch of String(text)) { h ^= ch.codePointAt(0); h = Math.imul(h, 16777619); } return h >>> 0; };
   // Smooth deterministic noise in [-1, 1].

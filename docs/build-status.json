@@ -1,5 +1,5 @@
 {
-  "version": "0.38.0",
+  "version": "0.39.0",
   "updated": "2026-10-16",
   "nextAction": "Owner review of the motion layer showcase (scratchpad motion3) and the 0.37 engine restructure; then the next engine or demo the owner asks for.",
   "repositories": [
@@ -414,6 +414,13 @@
           "status": "testing",
           "remaining": "Owner review of the showcase reel; footage cards need footage.",
           "evidence": "0.38.0 (2026-10-18): every animation, texture, layer, entrance and map move rendered and checked; showcase reel rendered; tests added (sketch and drawn)."
+        },
+        {
+          "id": "P06t",
+          "title": "Skills that reach the video (pack approval, planner/director/voice injection), measured motion, film looks, evidence tools",
+          "status": "testing",
+          "remaining": "Owner review and approval of the packs; a live Claude plan using approved skills; film looks for footage clips.",
+          "evidence": "0.39.0 (2026-10-18): every evidence tool and all 14 film looks rendered and reviewed; pack approval and the Film look setting checked in a throwaway workspace; tests added (sketch, drawn, skills, scene, engines); npm test 297/297 passed."
         },
         {
           "id": "S02",
