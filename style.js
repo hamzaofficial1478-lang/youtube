@@ -72,9 +72,10 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'cinematic-hybrid': {
-    features: ['Cinematic footage with designed titles'],
-    name: 'Cinematic hybrid', milestone: 'P05+', status: 'not_implemented',
-    note: 'Generated or stock video shots with continuity rules and a strict proxy-review loop.',
+    // 0.40: the Cinematic engine - real footage cut with film grammar, graded as one film (render.js GRADE_FILTERS).
+    features: ['Real stock footage cut like a film: shot sizes, continuity of direction and light, cuts on motion', 'One colour grade for the whole video: natural, teal and orange, golden hour, bleach bypass, cold thriller, black and white, vintage film, moody, or Claude chooses for the story', 'Film grain and cinema bars (2.39:1) on long videos', 'Designed titles: place and date supers, the one number that matters, chapter titles', 'Nothing drawn: no characters, maps or charts (use the Documentary engine for those)', 'Footage needs a stock or image key (Pexels and Pixabay keys are free)'],
+    name: 'Cinematic', milestone: 'P06u', status: 'not_implemented',
+    note: 'Cinematic engine (0.40): real moving footage chosen like a cinematographer would (size, subject, movement, light), cut with film grammar and finished as one film: one colour grade on every clip, film grain and cinema bars, with designed titles from the editing brain. Rendered with the pinned FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES},
   },
 };
@@ -87,7 +88,7 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v10';
+const LAUNCH_VERSION = 'Launch library v11';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
 const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
@@ -97,6 +98,8 @@ const DRAWING_BOARDS = Object.freeze(['cartoon', 'marker', 'pencil', 'framed', '
 const DRAWING_DESIGNS = Object.freeze(['footage', 'cartoon', 'painted', 'vector', 'infographic', 'kinetic', 'collage', 'data', 'mix']);
 // Film looks (0.39, engines.js FILMS): one medium finish for every drawn shot, or Claude chooses one per video.
 const DRAWING_FILMS = Object.freeze(['none', 'choose', ...Object.keys(require('./engines').FILMS)]);
+// The Cinematic engine's colour grades (0.40, engines.js GRADES), or Claude chooses one per video.
+const CINEMA_GRADES = Object.freeze(['choose', ...Object.keys(require('./engines').GRADES)]);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -205,21 +208,22 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 1, maxFrozenSeconds: 6, minSceneSeconds: 2.5, maxSceneSeconds: 15, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'cinematic-hybrid', spec: {
-    name: 'Cinematic Hybrid',
-    summary: 'Premium shot grammar and continuity using generated or stock video behind rights and cost gates, with deliberate sound design.',
-    bestFit: ['Narrative essays', 'Trailers and openers', 'Dramatic explainers'],
+  {key: 'cinematic-hybrid', upgrade: 'Launch library v11 (0.40): the Cinematic engine. Real stock footage cut with film grammar (shot sizes, continuity, cuts on motion), one colour grade for the whole video (Claude chooses by default), film grain, cinema bars and designed titles. Footage needs a free Pexels or Pixabay key.', spec: {
+    name: 'Cinematic',
+    summary: 'Real footage cut like a film: shot grammar and continuity, one colour grade for the whole video, film grain, cinema bars and designed titles, with deliberate sound design.',
+    bestFit: ['Narrative essays', 'Trailers and openers', 'Dramatic explainers', 'Travel and places'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 24, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
     pacing: {shotMinSeconds: 2, shotMaxSeconds: 6, hookShotMaxSeconds: 1.5, maxStaticHoldSeconds: 6},
     transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
-    motion: {cameraMoves: ['static', 'pan', 'zoom', 'tracking', 'handheld-sim', 'parallax'], intensity: 60, easing: 'ease-in-out'},
-    typography: {headingFont: 'Bebas Neue', bodyFont: 'Inter', maxWordsOnScreen: 5, textCase: 'upper', minTextHeightPercent: 5},
+    motion: {cameraMoves: ['static', 'ken-burns', 'pan', 'zoom'], intensity: 45, easing: 'ease-in-out'},
+    typography: {headingFont: 'Bahnschrift', bodyFont: 'Segoe UI', maxWordsOnScreen: 5, textCase: 'upper', minTextHeightPercent: 5},
     palette: {background: '#050505', primary: '#EDE6DA', accent: '#D6452F', text: '#FFFFFF'},
     captions: {mode: 'sidecar', maxCharsPerLine: 38, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 10},
-    visuals: {sources: ['ai-video', 'stock-video', 'ai-image'], primarySource: 'ai-video', aiDisclosure: 'always-disclose', characterConsistency: true},
+    visuals: {sources: ['stock-video', 'stock-image', 'ai-image'], primarySource: 'stock-video', aiDisclosure: 'always-disclose', characterConsistency: false},
     audio: {musicMoods: ['cinematic', 'tension', 'epic'], duckingDb: -18, targetLufs: -16, truePeakDbtp: -1, sfxUsage: 'rich'},
     renderer: {adapter: 'cinematic-hybrid'},
+    cinema: {grade: 'choose', grain: 30, letterbox: true},
     qc: {maxBlackSeconds: 1.5, maxFrozenSeconds: 2, minSceneSeconds: 1.5, maxSceneSeconds: 10, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
@@ -369,6 +373,11 @@ function validateStyleSpec(input) {
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
   const brief = input.brief === undefined || input.brief === null || input.brief === '' ? null : text(input.brief, 'Planning brief', 20, 1200);
+  // The Cinematic engine's finish (0.40): one colour grade for the video (or Claude chooses), film grain, cinema bars.
+  const cinema = input.cinema === undefined ? null : (() => {
+    const cinemaIn = object(input.cinema, 'Cinematic finish');
+    return {grade: choice(cinemaIn.grade, CINEMA_GRADES, 'colour grade'), grain: integer(cinemaIn.grain, 0, 100, 'Film grain'), letterbox: bool(cinemaIn.letterbox, 'Cinema bars')};
+  })();
 
   const qcIn = object(input.qc, 'Quality checks');
   const qc = {
@@ -393,6 +402,7 @@ function validateStyleSpec(input) {
     bestFit: textList(input.bestFit, 'Best fit', 1, 6, 80),
     formats, canvas, pacing, transitions, motion, typography, palette, captions, visuals, audio, renderer, qc, originality,
     ...(drawing ? {drawing} : {}),
+    ...(cinema ? {cinema} : {}),
     ...(brief ? {brief} : {}),
   };
 }
@@ -610,7 +620,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -798,4 +808,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES};

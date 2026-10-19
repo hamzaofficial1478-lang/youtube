@@ -51,7 +51,8 @@ function styleFeatures(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
   const chosen = stick || board || design ? `<p class="hint">${adapter === 'story-mix' ? '<strong>Mix of all engines.</strong> ' : ''}${design ? `Documentary look: <strong>${esc(docLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
   const film = spec.drawing?.film ? `<p class="hint">Film look: <strong>${esc(filmLabel(spec.drawing.film))}</strong></p>` : '';
-  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + film;
+  const grade = spec.cinema ? `<p class="hint">Colour grade: <strong>${esc(gradeLabel(spec.cinema.grade))}</strong>${spec.cinema.letterbox ? ' · cinema bars' : ''}${spec.cinema.grain ? ` · film grain ${esc(spec.cinema.grain)}` : ''}</p>` : '';
+  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + film + grade;
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
 function transitionList(spec) {
@@ -137,6 +138,9 @@ function styleOptions(values, selected, label = styleLabel) { return values.map(
 // Film looks (0.39): the medium every drawn shot is printed in.
 const FILM_LABELS = {none: "None (the engine's own finish)", choose: 'Claude chooses one per video', silent: '1920s silent film', noir: '1940s film noir', sepia: '19th-century photograph', selective: 'Black and white, one colour', newsprint: 'Newspaper print', riso: 'Risograph (two inks)', blueprint: 'Blueprint', woodcut: 'Woodcut print', kinescope: '1950s television', technicolor: 'Technicolor', album: 'Family album snapshot', screenprint: 'Silkscreen poster', engraving: 'Copperplate engraving', deco: 'Art deco gold'};
 const filmLabel = value => FILM_LABELS[value] || styleLabel(value);
+// The Cinematic engine's colour grades (0.40).
+const GRADE_LABELS = {choose: 'Claude chooses one per video', natural: 'Natural', 'teal-orange': 'Teal and orange', golden: 'Golden hour', bleach: 'Bleach bypass', cold: 'Cold thriller', noir: 'Black and white', vintage: 'Vintage film', moody: 'Moody'};
+const gradeLabel = value => GRADE_LABELS[value] || styleLabel(value);
 const docLabel = value => (value === 'cartoon' ? 'Cartoon documentary' : value === 'mix' ? 'Mix: every documentary look, chosen per scene' : styleLabel(value));
 function styleChecks(name, values, selected) {
   return `<div class="check-grid">${values.map(value => `<label class="check-chip"><input type="checkbox" name="${name}" value="${esc(value)}" ${selected.includes(value) ? 'checked' : ''}> ${esc(styleLabel(value))}</label>`).join('')}</div>`;
@@ -210,6 +214,12 @@ function styleEditorBody(spec) {
     ${!['motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label class="checkbox-label"><input type="checkbox" name="s.drawingHand" ${spec.drawing?.hand ? 'checked' : ''}>Show a hand drawing each scene</label>` : '<input type="hidden" name="s.drawingHand" value="">'}
     ${spec.renderer.adapter === 'ffmpeg-sketch' ? '<p class="hint full">Choosing a look fills in its recommended colours, shot lengths and transitions below; you can still change them.</p>' : ''}
   </div></fieldset>` : ''}
+  ${spec.renderer.adapter === 'cinematic-hybrid' ? `<fieldset class="editor-section"><legend>Cinematic engine features</legend><div class="form-grid">
+    <p class="hint full">This style uses only real footage, cut and graded like a film. Nothing is drawn; titles come from the editing brain. Footage needs a stock key (Pexels and Pixabay keys are free).</p>
+    <label>Colour grade<select name="s.cinemaGrade">${styleOptions(v.cinemaGrades || ['choose'], spec.cinema?.grade || 'choose', gradeLabel)}</select><span class="hint">One grade on every clip, so footage from many cameras looks like one film, or Claude picks the grade that suits the story.</span></label>
+    ${styleNumber('s.cinemaGrain', 'Film grain (0-100)', spec.cinema?.grain ?? 30, 0, 100, 1)}
+    <label class="checkbox-label"><input type="checkbox" name="s.cinemaLetterbox" ${spec.cinema?.letterbox !== false ? 'checked' : ''}>Cinema bars (2.39:1) on long videos</label>
+  </div></fieldset>` : ''}
   <fieldset class="editor-section"><legend>Planning brief</legend><div class="form-grid">
     <label class="full">Brief for Claude's planner <span class="hint">Optional, up to 1,200 characters. A style made from an approved style study carries what was learned here, in our own words.</span><textarea name="s.brief" rows="4" maxlength="1200">${esc(spec.brief || '')}</textarea></label>
   </div></fieldset>
@@ -245,6 +255,7 @@ function collectStyleSpec(form) {
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
     ...(form.elements['s.drawingHand'] ? {drawing: {look: form.elements['s.drawingLook'] ? value('s.drawingLook') : 'classic', hand: form.elements['s.drawingHand'].checked === true, ...(form.elements['s.drawingBoard'] ? {board: value('s.drawingBoard')} : {}), ...(form.elements['s.drawingDesign'] ? {design: value('s.drawingDesign')} : {}), ...(form.elements['s.drawingFilm'] && value('s.drawingFilm') !== 'none' ? {film: value('s.drawingFilm')} : {})}} : {}),
+    ...(form.elements['s.cinemaGrade'] ? {cinema: {grade: value('s.cinemaGrade'), grain: num('s.cinemaGrain'), letterbox: form.elements['s.cinemaLetterbox'].checked}} : {}),
     ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
     originality: {referenceSharePercent: num('s.referenceSharePercent'), prohibited: list('s.prohibited', /\r?\n/)},

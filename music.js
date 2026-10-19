@@ -108,7 +108,7 @@ const SFX = Object.freeze({
   heartbeat: {seconds: 1.2, prompt: 'two strong heartbeats, low thump'},
   typing: {seconds: 1.5, prompt: 'fast typing on a laptop keyboard'},
 });
-const FLAVOUR = Object.freeze({stickman: 'playful cartoon sound effect, crisp and clean, no music', handdrawn: 'soft organic hand-made sound effect, warm, no music', motion: 'clean modern UI sound design, crisp, no music', montage: 'cinematic sound effect, polished, no music'});
+const FLAVOUR = Object.freeze({stickman: 'playful cartoon sound effect, crisp and clean, no music', handdrawn: 'soft organic hand-made sound effect, warm, no music', motion: 'clean modern UI sound design, crisp, no music', montage: 'cinematic sound effect, polished, no music', cinema: 'cinematic film sound design, natural and rich, no music'});
 const sfxRequest = (kind, engine = 'stickman') => ({text: `${SFX[kind].prompt}, ${FLAVOUR[engine] || FLAVOUR.montage}.`, duration_seconds: SFX[kind].seconds, prompt_influence: 0.5, model_id: 'eleven_text_to_sound_v2'});
 
 // When things happen in a drawn shot, as the drawing engine times them (keep equal to drawn-engine.js layout()).

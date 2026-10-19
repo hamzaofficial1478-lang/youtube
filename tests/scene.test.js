@@ -239,6 +239,26 @@ test('Claude chooses each scene\'s transition: offered from the style, kept thro
   assert.equal(payload.payload.scenes[0].transition, 'push-left', 'older short names are stored by their full name');
 });
 
+// 0.40: a Cinematic style may let Claude choose the video's grade; the plan keeps a known grade and drops anything else.
+test('the Cinematic plan carries the grade Claude chose for the whole video', () => {
+  const {aiScenes, buildPayload, mergeParts} = require('../scene-room');
+  const input = {family: {}, style: {name: 'Cinematic', summary: '', engine: 'cinema', grade: 'choose', sources: ['stock-video'], primarySource: 'stock-video', cameraMoves: ['static', 'zoom'], transitions: [], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 5}, narrationSeconds: 10, sentences: []};
+  const prompt = planMessages(input)[0].content;
+  assert.match(prompt, /"grade": one grade key/);
+  assert.match(prompt, /SHOT GRAMMAR/);
+  assert.doesNotMatch(prompt, /"sketch"|"cast"/, 'no drawings in a footage engine');
+  assert.doesNotMatch(planMessages({...input, style: {...input.style, grade: 'golden'}})[0].content, /"grade": one grade key/);
+  const scene = {sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', shots: [{source: 'stock-video', query: 'aerial cargo ship ocean', prompt: '', motion: 'static', notes: ''}]};
+  assert.equal(aiScenes({summary: '', grade: 'golden', scenes: [scene]}).grade, 'golden');
+  assert.equal(aiScenes({summary: '', grade: 'sepia-ish', scenes: [scene]}).grade, undefined, 'an unknown grade is dropped');
+  assert.equal(mergeParts([{summary: '', grade: 'cold', scenes: []}, {summary: '', grade: 'noir', scenes: []}]).grade, 'cold', 'the first part sets the grade');
+  const {LAUNCH_PROFILES} = require('../style');
+  const spec = LAUNCH_PROFILES.find(item => item.key === 'cinematic-hybrid').spec;
+  const built = grade => buildPayload({scenes: [{id: 'sc1', ...scene, shots: [{id: 'sh1', ...scene.shots[0]}]}], sentences: [{n: 1, text: 'One sentence of narration.', words: 4}], narrationSeconds: 3, spec, terms: [], primary: 'cinema', grade}).payload;
+  assert.equal(built('teal-orange').grade, 'teal-orange');
+  assert.equal(built('nope').grade, undefined);
+});
+
 test('pictures (paid): Claude spends the video\'s picture budget, the illustrator draws each one once, a failed one is asked again, the rest is drawn free', async t => {
   const art = {viewBox: [600, 400], paths: [
     {d: 'M100 300 L500 300 L500 360 L100 360 Z', fill: '#C9A77C', stroke: '#1E1E1E', width: 4}, {d: 'M200 120 L400 120 L380 300 L220 300 Z', fill: '#FFFFFF', stroke: '#1E1E1E', width: 4},

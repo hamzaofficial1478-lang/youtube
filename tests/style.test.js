@@ -88,7 +88,7 @@ test('Mix is a choice in each engine with looks: stickman looks and whiteboard l
   assert.ok(['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames'].every(key => RENDERERS[key].features.some(item => /Paid pictures where they count/.test(item))), 'every drawing engine lists paid pictures');
 });
 
-test('the Documentary engine: its looks or a mix of them, chosen in the style; motion graphics are no style; launch library v10', () => {
+test('the Documentary engine: its looks or a mix of them, chosen in the style; motion graphics are no style', () => {
   const doc = LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec;
   assert.equal(doc.name, 'Documentary');
   assert.equal(validateStyleSpec(structuredClone(doc)).drawing.design, 'mix');
@@ -97,7 +97,20 @@ test('the Documentary engine: its looks or a mix of them, chosen in the style; m
   assert.throws(() => validateStyleSpec({...structuredClone(doc), drawing: {look: 'chronicle', hand: false}}), /stickman look/, 'the history cartoon left the stickman looks');
   assert.ok(RENDERERS['ffmpeg-montage'].features.some(item => /Cartoon documentary, Painted story/.test(item)));
   assert.ok(RENDERERS['motion-graphics'].features.some(item => /Not an editing style/.test(item)));
-  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v10');
+});
+
+// 0.40: the Cinematic engine's style - footage only, one grade (or Claude chooses), grain and bars; launch library v11.
+test('the Cinematic style: footage first, a grade or Claude chooses, film grain and cinema bars; launch library v11', () => {
+  const cinema = LAUNCH_PROFILES.find(item => item.key === 'cinematic-hybrid').spec;
+  assert.deepEqual([cinema.name, cinema.visuals.primarySource, cinema.visuals.sources.includes('ai-video'), cinema.visuals.sources.includes('generated-graphics')], ['Cinematic', 'stock-video', false, false]);
+  assert.deepEqual(validateStyleSpec(structuredClone(cinema)).cinema, {grade: 'choose', grain: 30, letterbox: true});
+  for (const grade of ['natural', 'teal-orange', 'golden', 'bleach', 'cold', 'noir', 'vintage', 'moody']) assert.equal(validateStyleSpec({...structuredClone(cinema), cinema: {grade, grain: 0, letterbox: false}}).cinema.grade, grade);
+  assert.throws(() => validateStyleSpec({...structuredClone(cinema), cinema: {grade: 'sepia', grain: 30, letterbox: true}}), /colour grade/);
+  assert.throws(() => validateStyleSpec({...structuredClone(cinema), cinema: {grade: 'natural', grain: 130, letterbox: true}}), /Film grain/);
+  assert.throws(() => validateStyleSpec({...structuredClone(cinema), cinema: {grade: 'natural', grain: 30, letterbox: 'yes'}}), /Cinema bars/);
+  assert.equal(RENDERERS['cinematic-hybrid'].name, 'Cinematic');
+  assert.ok(RENDERERS['cinematic-hybrid'].features.some(item => /One colour grade for the whole video/.test(item)));
+  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v11');
 });
 
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {

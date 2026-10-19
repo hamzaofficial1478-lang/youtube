@@ -19,11 +19,14 @@ const ENGINES = Object.freeze({
   atelier: {name: 'Atelier (designed per shot)', draws: false, composes: true, finish: null, strengths: 'anything designed from scratch for this video: kinetic typography, a number that must hit, a diagram or chart assembling, an abstract visual metaphor, a comparison, a list, a title; a look nobody else has', risks: 'each shot costs Claude tokens to design; it cannot keep the drawn cast (people stay in stickman or hand-drawn shots); many atelier shots in a row read as slides unless the beats and framings vary'},
   // 0.37 (owner decision 2026-10-18): the key 'motion' draws the Documentary engine's designed shots (its looks are
   // DESIGNS). Motion graphics themselves are no engine: the motion layer is part of every engine (MOTION_LAYER).
+  // 0.40: the Cinematic engine (adapter cinematic-hybrid): real moving footage cut with film grammar, graded as one film,
+  // with designed titles. It draws nothing.
+  cinema: {name: 'Cinematic', draws: false, finish: null, strengths: 'mood, scale and emotion carried by real moving pictures: places, faces, weather, crowds, machines in motion; openers, trailers and dramatic essays', risks: 'cannot explain mechanisms or numbers; generic stock looks cheap without a grade, a shot grammar and designed titles; needs a stock or image connection'},
   motion: {name: 'Documentary drawn shots', draws: true, finish: 'flat', strengths: 'history, money, science and business stories told with designed scenes: a cartoon history, painted scenes, flat vector worlds, infographic people, collage cut-outs, data desks, with maps and charts', risks: 'many charts or words in a row read as slides; a look that changes on every shot breaks the film'},
 });
 
 // The story mix draws a shot without a named engine as stickman (the cast's home), but no engine leads.
-const PRIMARY_BY_ADAPTER = Object.freeze({'ffmpeg-montage': 'montage', 'cinematic-hybrid': 'montage', 'ffmpeg-sketch': 'stickman', 'canvas-frames': 'handdrawn', 'motion-graphics': 'motion', atelier: 'atelier', 'story-mix': 'stickman'});
+const PRIMARY_BY_ADAPTER = Object.freeze({'ffmpeg-montage': 'montage', 'cinematic-hybrid': 'cinema', 'ffmpeg-sketch': 'stickman', 'canvas-frames': 'handdrawn', 'motion-graphics': 'motion', atelier: 'atelier', 'story-mix': 'stickman'});
 const isMix = spec => spec?.renderer?.adapter === 'story-mix';
 
 // How engines usually combine: experience to weigh, not rules. Claude decides for this script and this audience.
@@ -82,7 +85,8 @@ const drawEngines = primary => (ENGINES[primary]?.draws ? [primary, ...DRAW_ENGI
 // drawn shots. Returns {engine, sources, primarySource}.
 // A style on one drawing engine plans drawn shots only (0.37); documentary, atelier and the story mix keep footage.
 function plannerSources(spec, executable) {
-  const engine = primaryEngine(spec), scope = engineScope(spec), sources = scope.footage ? [...executable] : executable.filter(source => source === 'generated-graphics');
+  // An engine that draws nothing (Cinematic) gets no drawn shots.
+  const engine = primaryEngine(spec), scope = engineScope(spec), sources = (scope.footage ? [...executable] : executable.filter(source => source === 'generated-graphics')).filter(source => source !== 'generated-graphics' || scope.drawn.length || scope.frames);
   const primarySource = (ENGINES[engine].draws || ENGINES[engine].composes) && sources.includes('generated-graphics') ? 'generated-graphics' : (sources.includes(spec.visuals.primarySource) ? spec.visuals.primarySource : sources[0]);
   return {engine, sources, primarySource, scope};
 }
@@ -104,6 +108,8 @@ function engineScope(spec) {
   const films = spec?.drawing?.film && spec.drawing.film !== 'none' ? null : [];
   if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true, films};
   if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false, films};
+  // The Cinematic engine draws nothing: footage and images only (its titles come from the editing brain).
+  if (primary === 'cinema') return {mix: false, drawn: [], footage: true, frames: false, films: []};
   return {mix: false, drawn: [primary], footage: false, frames: false, films};
 }
 // Film looks (0.39): how a medium prints the finished frame, for the drawn shots of every engine (drawn-engine.js
@@ -124,9 +130,29 @@ const FILMS = Object.freeze({
   engraving: {name: 'copperplate engraving', plan: 'Every tone made of engraved lines that swell in the darks, then thin hand colouring. Suits natural history, old science, exploration, the 1500s-1800s.'},
   deco: {name: 'art deco gold', plan: 'Gold in hard metal bands on warm black with glints; the hero keeps its own colour. Suits luxury, wealth, the 1920s, grand hotels, empires of money and their fall.'},
 });
+// The Cinematic engine's grades (0.40): one colour treatment for every clip of a video, so stock from many cameras reads
+// as one film (render.js GRADE_FILTERS draws them). What each suits, in our own words.
+const GRADES = Object.freeze({
+  natural: {name: 'natural', plan: 'Clean, true colour with a gentle contrast. Suits travel, nature, science and anything that must look real.'},
+  'teal-orange': {name: 'teal and orange', plan: 'Warm skin and highlights against teal shadows, the blockbuster look. Suits adventure, business stories, energy and spectacle.'},
+  golden: {name: 'golden hour', plan: 'Warm, soft, glowing light. Suits nostalgia, hope, origins, family and success stories.'},
+  bleach: {name: 'bleach bypass', plan: 'Low colour, hard contrast, metallic. Suits war, crime, disasters, industry and grit.'},
+  cold: {name: 'cold thriller', plan: 'Blue-green shadows, cool and quiet. Suits mysteries, technology, surveillance, winter and loneliness.'},
+  noir: {name: 'black and white', plan: 'Silver black and white with deep blacks. Suits history, crime, memory and timeless statements.'},
+  vintage: {name: 'vintage film', plan: 'Faded film stock with lifted blacks, warm cast and grain. Suits the 1950s-1980s, archives, home-movie memories.'},
+  moody: {name: 'moody', plan: 'Dark, desaturated, low-key with crushed blacks. Suits tension, loss, true crime and the hour before a turn.'},
+});
+const CINEMA = 'CINEMATIC ENGINE. This video uses one engine: Cinematic - real moving footage (stock video first, photos when nothing moves) cut with film grammar and graded as one film. Nothing is drawn: no characters, maps, charts or diagrams (a number or a name goes into on-screen text, which the program sets as a designed title).\n- best for ' + ENGINES.cinema.strengths + '; watch out: ' + ENGINES.cinema.risks + '.\n' + [
+  'SHOT GRAMMAR: give every shot a shot size and a reason, and write its stock query like a cinematographer: size + subject + movement + light, in 3-6 generic words (aerial drone cargo ship ocean; close up hands counting coins; slow motion wave crashing rocks; silhouette walking city night). Vary sizes the way films do: an establishing wide, then closer, an insert of the detail the words name, a reaction or a human face, then wide again for a change of place.',
+  'CONTINUITY: keep the screen direction of a journey (a ship sailing left to right keeps sailing that way until the story turns back), keep the light and time of day within a scene, and cut on motion (a whip, a pan, something crossing the frame) or on a matching shape. Use the same kind of shot to rhyme the opening and the ending.',
+  'RHYTHM: open on the most striking moving picture with a hard cut on the first word; short shots (1.5-3 s) for energy and lists, long held shots (4-8 s) for awe, grief or a reveal; slow motion (say so in the query) for an emotional beat; a held, quiet shot before the turn.',
+  'TITLES: on-screen text is a designed title, never a caption: a place and date super for a new place or time (AMSTERDAM, 1602), the one number or name that matters, a chapter title at a turn. At most one title on screen at a time, few words.',
+].join('\n');
 const FILM_RULE = 'Drawn shots are printed in it automatically (footage keeps its own grade). A shot may name another film look in sketch.film, or "none", only for a change of register (a flashback, an archive memory, a dream) and says why in its notes; the video must still feel like one film.';
 const MIX_RULE ='Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
-function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null} = {}) {
+function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null, grade = null} = {}) {
+  // The Cinematic engine (0.40) has its own guide: footage only, no drawing vocabulary or motion layer.
+  if (primary === 'cinema') return [CINEMA, ...(GRADES[grade] ? [`GRADE: ${GRADES[grade].name}. ${GRADES[grade].plan} Every clip is graded alike, so choose footage whose light suits it.`] : []), ...(grade === 'choose' ? [`GRADE: choose one grade for the whole video and put its key in the plan's "grade" field: ${Object.entries(GRADES).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}`] : []), 'TASTE: references are ideas, never rules. Choose shots, light and rhythm that make each moment feel like a film for this audience, and say why when it matters.', ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : [])].join('\n');
   // One engine (0.37): every shot comes from it; documentary means its footage and its drawn shots.
   const single = !mix && primary !== 'atelier', documentary = primary === 'montage' || primary === 'motion';
   const footage = documentary && (sources ? sources.some(source => source !== 'generated-graphics') : true);
@@ -163,4 +189,4 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
   ].join('\n');
 }
 
-module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FILMS, FILM_RULE, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};
+module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FILMS, FILM_RULE, GRADES, CINEMA, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};

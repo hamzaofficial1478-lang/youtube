@@ -433,3 +433,30 @@ research/lemo-opuscar-and-motionmaxxing.md and research/channel-study-2026-10-18
   review. New packs: motion-craft (14), film-craft (14), channel-grammar (11 general skills and 12 channel-like
   profiles that reach only a family they are pinned to). `drawn-scene/22`.
 - **Not built**: film looks for footage clips, real satellite, LiDAR or microscope data, 3D scenes.
+
+## 26. Engine audit: planner, free planner and a live Claude plan (0.40.0)
+
+Owner request (2026-10-19): check the completed engines - bugs, the brain that builds scenes, animation and originality - before
+building the next engine (the Cinematic engine, docs/CINEMATIC-ENGINE.md).
+
+- **Planner prompts** (read for every launch style): frames and art direction were offered to one-engine styles; "neighbouring
+  shots never share their primary subject" fought continuity (now: never repeat the same composition; a character may carry a
+  run of shots); "a held, still read" fought "something alive" (now: a held shot keeps something small alive); the footage camera
+  list was applied to drawn shots (now only footage and images; drawn shots move with `sketch.camera`); the MOTION SHOTS line
+  reached engines without motion; "text in the top third" contradicted centred statements, quotes, documents, charts and maps.
+- **Free planner** (`Sk.fromText`, rendered for stickman, whiteboard and three documentary looks): a year counted up from 0 (now
+  it lands as a `number`; an amount beats a year and counts); "lost at sea" put a person under water (now `storm`; ships, sailors
+  and seas are a `harbor`; `ocean` is under water only); documentary shots were always abstract (now they use places too);
+  the most relevant prop was skipped on odd shots and the fallback prop repeated (now the best prop always, fallbacks rotate);
+  "wipe out profit" showed `chart-up`; the whiteboard pen wrote the key number last (now right after the figure); many people
+  get a `crowd`; a turn word (but, however, yet, instead) makes the shot tense with a punch and a worried face. Pops start at
+  half size.
+- **Live Claude plan** (documentary-montage, 12-sentence business-history script, throwaway workspace, fake narration;
+  13,668 read + 5,937 answer + 14,728 thinking tokens, 3.6 minutes): varied and story-led (map with a route, a chart that
+  grows to 60x, a ledger document with one line lit, a crowd of 40,000, a timeline of the fall, a recurring governor). Its
+  frames showed readability bugs, all fixed in the engine: a shot's mood (light rays, dark grade, vignette) was painted over
+  the words, so words now draw above the mood (posters and back-layer words stay in the picture); keywords and timeline labels
+  had no edge on dark palettes and vanished on a light place, so they keep a nearly solid dark edge; back-layer words blurred
+  out of reading (now only a hint of softness); the word focus effect dimmed the other words to a third (now about half); a
+  corner keyword ran into a character's name chip (name chips now count as drawings, and a keyword stops short of one).
+- `drawn-scene/23`.

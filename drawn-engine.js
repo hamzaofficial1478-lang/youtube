@@ -105,6 +105,10 @@
       }
     });
     const solid = d.elements.map((el, i) => (['figure', 'prop', 'picture', 'crowd'].includes(el.kind) && !(el.kind === 'prop' && ['cloud', 'rainbow'].includes(el.prop)) ? est[i].box : null)).filter(Boolean);
+    // A character's name chip counts as a drawing, and a keyword (pinned to a top corner) stops short of one (live plan
+    // 2026-10-19: "LIKE A COUNTRY" ran into "Company governor").
+    const chips = d.elements.map((el, i) => { if (el.kind !== 'figure' || !el.label) return null; const [hx, hy, hr] = est[i].head, s = 46 * K.u, w = K.measure(el.label, s, {weight: 800}) + s * 0.9, y = hy - hr * 1.7; return [hx - w / 2, y - s * 0.73, hx + w / 2, y + s * 0.73]; }).filter(Boolean);
+    solid.push(...chips);
     // Words never leave the frame or sit on a drawing: they move to the free height that covers least.
     const textAt = d.elements.map((el, i) => {
       if (el.kind !== 'text') return null;
@@ -132,7 +136,9 @@
       // Words placed side by side (a split: "this" left, "that" right) share the width instead of sliding together
       // (motion demo 2026-10-17: two titles of a split were drawn over each other).
       const split = d.elements.reduce((m, o, j) => (j !== i && o.kind === 'text' && !['statement', 'poster', 'chapter', 'headline', 'versus'].includes(o.style) && Math.abs(o.x - el.x) >= 0.2 && Math.abs(o.y - el.y) < 0.12 ? Math.min(m, Math.abs(o.x - el.x) * K.W * 0.92) : m), Infinity);
-      const base = textSize(el), safe = Math.min((K.W - 2 * K.M) / 1.12, split), natural = K.measure(el.text, base, {weight: 800}) * 1.08;
+      const base = textSize(el), band = [0.13 * K.H - base * 0.7, 0.13 * K.H + base * 0.7], edge = K.M + 0.05 * K.W + 0.02 * K.W;
+      const room = el.style !== 'keyword' ? Infinity : chips.filter(c => c[3] > band[0] && c[1] < band[1]).reduce((m, c) => Math.min(m, el.x <= 0.5 ? c[0] - edge : K.W - edge - c[2]), Infinity);
+      const safe = Math.min((K.W - 2 * K.M) / 1.12, split, room > 0.3 * K.W ? room : Infinity), natural = K.measure(el.text, base, {weight: 800}) * 1.08;
       const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
       const x = ['headline', 'chapter'].includes(el.style) ? K.W / 2 : el.style === 'keyword' ? (el.x <= 0.5 ? K.M + 0.05 * K.W + half : K.W - K.M - 0.05 * K.W - half) : el.style === 'versus' ? Math.min(0.8, Math.max(0.2, el.x)) * K.W : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
       const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
@@ -543,7 +549,7 @@
       const hot = el.now === k, r = (hot ? 34 : 26) * u * ease.outBack(p);
       ctx.save(); ctx.globalAlpha *= clamp01(p * 1.5);
       ctx.fillStyle = hot ? acc : st.fill || K.mix(K.PAL.bg, '#FFFFFF', 0.2); ctx.strokeStyle = hot ? '#FFFFFF' : acc; ctx.lineWidth = 5 * u; ctx.beginPath(); ctx.arc(ex, y, Math.max(0.5, r), 0, TAU); ctx.fill(); ctx.stroke();
-      K.text(ev.label, ex, y + (k % 2 ? 74 : -74) * u, 34 * u, {color: st.fill && !K.DARK ? K.PAL.ink : st.text, outline: !K.DARK, maxWidth: slot * 0.95});
+      K.text(ev.label, ex, y + (k % 2 ? 74 : -74) * u, 34 * u, {color: st.fill && !K.DARK ? K.PAL.ink : st.text, maxWidth: slot * 0.95});
       if (ev.when) K.pill(ev.when, ex, y + (k % 2 ? -64 : 64) * u, 28 * u, {color: hot ? acc : K.mix(st.text, K.PAL.bg, 0.25)});
       ctx.restore();
     });
@@ -774,7 +780,8 @@
   // A number rolls one value per frame with shrinking steps and lands on its value; it never slides.
   function rolled(text, local, span = 0.8) {
     const n = numberIn(text);
-    if (!n || !Number.isFinite(n.value)) return text;
+    // A year is a date, not a quantity: it lands as it is (audit 2026-10-19: 1602 counted up from 0).
+    if (!n || !Number.isFinite(n.value) || (/^(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})$/.test(n.raw) && !/[$£€¥₹%]/.test(text))) return text;
     const q = ease.softLand(clamp01(Math.floor(Math.max(0, local) * 24) / 24 / span)), decimals = (n.raw.split('.')[1] || '').length;
     return String(text).replace(n.raw, (n.value * q).toLocaleString('en-US', {minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: n.raw.includes(',') || Math.abs(n.value) >= 10000}));
   }
@@ -1311,7 +1318,7 @@
         if (kind === 'rise' || kind === 'focus') {
           const q = ease.outCubic(clamp01((local - delay) / 0.38));
           ctx.beginPath(); ctx.rect(cx - sz * 0.3, cy - sz * 0.72, w.w * fit + sz * 0.6, sz * 1.44); ctx.clip();
-          if (kind === 'focus' && settle > 0 && !w.hot) { ctx.globalAlpha *= 1 - 0.68 * settle; ctx.filter = `blur(${(settle * 2.5 * u).toFixed(2)}px)`; }
+          if (kind === 'focus' && settle > 0 && !w.hot) { ctx.globalAlpha *= 1 - 0.45 * settle; ctx.filter = `blur(${(settle * 1.4 * u).toFixed(2)}px)`; }
           if (q > 0) word(w, wx, cy + (1 - q) * sz * 1.2);
         } else if (kind === 'letters' || kind === 'track' || kind === 'typewriter') {
           // Letter by letter, from each letter's own place on the line.
@@ -1450,7 +1457,7 @@
         ctx.restore();
         break;
       }
-      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !K.DARK && !handwritten(), maxWidth: K.W * 0.5}); break; }
+      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !handwritten(), maxWidth: K.W * 0.5}); break; }
       case 'versus': {
         // A comparison divider: a hand-drawn line down the frame with the word in a circle at its middle.
         const q = clamp01(local / 0.5), r = size * 0.85, rand = K.seeded(LAYOUT.el[i].seed), line = Array.from({length: 13}, (_, k) => [x + (rand() - 0.5) * 6 * u, K.H * (0.08 + 0.84 * k / 12)]);
@@ -1657,7 +1664,8 @@
       // 0.39: each role its own measured curve - a pop leans past its size late and only a little (8%), a slide does
       // most of its travel in the first frames and then settles, a growth lands softly.
       const q = local / d;
-      if (enter === 'pop') sx = sy = ease.popOver(q);
+      // A pop starts at half size and fades in quickly (as measured: popping from nothing with this curve looked slow).
+      if (enter === 'pop') { sx = sy = 0.5 + 0.5 * ease.popOver(q); a = clamp01(q * 4); }
       if (enter === 'grow') sx = sy = ease.softLand(q);
       if (enter === 'slide') dx = (1 - ease.snapSettle(q)) * (LAYOUT.est[i].center[0] < K.W / 2 ? -1 : 1) * 0.6 * K.W;
       if (enter === 'drop') dy = -(1 - ease.inCubic(q)) * 0.75 * K.H;
@@ -1687,7 +1695,8 @@
     if (el.layer && LAYOUT.cam) {
       const c = LAYOUT.cam, f = el.layer === 'back' ? 0.8 : 1.25;
       ctx.translate(c.cx, c.cy); ctx.scale(1 / c.Z, 1 / c.Z); ctx.translate(-(K.W / 2 + c.ox), -(K.H / 2 + c.oy)); applyCamera(ctx, c, f);
-      if (el.layer === 'back') focus = Math.max(focus, Math.min(0.45, 0.15 + Math.max(0, c.Z - 1) * 3));
+      // Words only soften a little: a back-layer poster blurred out of reading (live plan 2026-10-19).
+      if (el.layer === 'back') focus = Math.max(focus, el.kind === 'text' ? 0.05 : Math.min(0.45, 0.15 + Math.max(0, c.Z - 1) * 3));
     }
     if (focus > 0.01) ctx.filter = `blur(${(focus * 12 * K.u).toFixed(2)}px)`;
     if (reveal !== null) { const [x1, y1, x2, y2] = est.box, r = Math.hypot(x2 - x1, y2 - y1) * 0.62 * reveal; ctx.beginPath(); ctx.arc((x1 + x2) / 2, (y1 + y2) / 2, Math.max(0.5, r), 0, TAU); ctx.clip(); }
@@ -1806,10 +1815,14 @@
     if (LAYOUT.stage !== null) drawStage(t);
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
     // A loupe magnifies what is already drawn, so it comes last.
-    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect)) && el.kind !== 'loupe') drawElement(el, i, t); });
+    // Words sit above the mood's light and colour (live plan 2026-10-19: hope rays and a dark grade washed keywords
+    // out); a poster or words on the back layer stay part of the picture.
+    const above = el => el.kind === 'text' && el.style !== 'poster' && el.layer !== 'back' && !!D.mood && D.mood !== 'none';
+    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect)) && el.kind !== 'loupe' && !above(el)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (el.kind === 'loupe') drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);
+    if (D.elements.some(above)) { ctx.save(); applyCamera(ctx, cam, 1); D.elements.forEach((el, i) => { if (above(el)) drawElement(el, i, t); }); ctx.restore(); }
     if (K.FIN === 'paint') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw * 0.5, ch * 0.42, ch * 0.35, cw / 2, ch / 2, ch * 1.0); g.addColorStop(0, 'rgba(255,200,120,0.06)'); g.addColorStop(1, 'rgba(60,30,10,0.32)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (K.FIN === 'chron') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.5, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(70,45,25,0)'); g.addColorStop(1, 'rgba(70,45,25,0.12)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }
     if (K.FIN === 'story') { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); const cw = ctx.canvas.width, ch = ctx.canvas.height, g = ctx.createRadialGradient(cw / 2, ch / 2, ch * 0.45, cw / 2, ch / 2, ch * 1.05); g.addColorStop(0, 'rgba(60,40,25,0)'); g.addColorStop(1, 'rgba(60,40,25,0.16)'); ctx.fillStyle = g; ctx.fillRect(0, 0, cw, ch); ctx.restore(); }

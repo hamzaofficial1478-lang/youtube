@@ -1,7 +1,7 @@
 {
-  "version": "0.39.0",
-  "updated": "2026-10-16",
-  "nextAction": "Owner review of the motion layer showcase (scratchpad motion3) and the 0.37 engine restructure; then the next engine or demo the owner asks for.",
+  "version": "0.40.0",
+  "updated": "2026-10-19",
+  "nextAction": "Owner: restart the program, review the Cinematic style (Style Library) and connect a free Pexels or Pixabay key so a live Cinematic plan and render can be proven; then scripts, competitor finding, trending topics and competitor top-video analysis with the owner's collected data.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -423,6 +423,13 @@
           "evidence": "0.39.0 (2026-10-18): every evidence tool and all 14 film looks rendered and reviewed; pack approval and the Film look setting checked in a throwaway workspace; tests added (sketch, drawn, skills, scene, engines); npm test 297/297 passed."
         },
         {
+          "id": "P06u",
+          "title": "Engine audit (planner, free planner, live Claude plan) and the Cinematic engine (footage cut with film grammar, one grade per video, grain, cinema bars)",
+          "status": "testing",
+          "remaining": "A live Cinematic plan with Claude and real stock footage (needs the owner's free Pexels or Pixabay key); a full edit render with titles over a graded film; owner review of the grades.",
+          "evidence": "0.40.0 (2026-10-19): planner prompts read for every launch style and fixed; the free planner rendered for five looks and fixed; one live Claude documentary plan (34,333 tokens) rendered shot by shot and its readability bugs fixed in the engine; all 8 grades rendered with the pinned FFmpeg (bars, BT.709/TV tags, repeatable grain, frame-exact concat) and reviewed on a photo; tests added (render, engines, scene, sketch, style); npm test 301/301 passed."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -552,7 +559,8 @@
     "2026-10-04: R05/R06 use the NexLev REST API (x-api-key in a protected connector slot); the OAuth MCP endpoint is not used. YouTube data about other channels is display-only and purged after 30 days unless the owner records YouTube derived-metrics approval.",
     "2026-10-04: Each competitor link carries owner picks (voice-over, narration, editing, thumbnails, visuals); the blueprint learns each area only from the picked channels and keeps 30/70 per area.",
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
-    "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file."
+    "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file.",
+    "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt."
   ],
-  "milestone": "One card per engine; hand-drawn engine tools (P06l)"
+  "milestone": "Engine audit and the Cinematic engine (P06u)"
 }

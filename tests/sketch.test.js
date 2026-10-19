@@ -70,7 +70,17 @@ test('the free fallback builds a scene from the narration: a set, the narrator a
   assert.deepEqual(hot.elements.map(el => el.kind === 'figure' ? `${el.who}:${el.pose}:${el.expression}` : el.prop || el.text), ['c1:shock:shocked', 'bolt', 'sun']);
   const count = Sk.fromText('Right now, lightning is striking about 45 times every second.', {shotIndex: 1});
   assert.equal(count.elements[0].facing, 'left', 'every other shot mirrors the layout');
-  assert.deepEqual(count.elements.at(-1), {kind: 'text', text: '45', style: 'counter', x: 0.5, y: 0.15, size: 'l', accent: true, enter: 'auto'});
+  assert.deepEqual(count.elements[1], {kind: 'text', text: '45', style: 'counter', x: 0.5, y: 0.15, size: 'l', accent: true, enter: 'auto'}, 'the number comes right after the speaker, so a drawing hand writes it first');
+  // Audit 2026-10-19: a year is a date (it lands, it does not count up), the amount wins over the year, many people
+  // are a crowd, a ship at sea stays above water, a turn word changes the mood, nothing named takes turns.
+  const army = Sk.fromText('By 1700 the company had 40,000 employees and its own army.', {cast});
+  assert.deepEqual([army.set, army.elements[0].kind, army.elements.find(el => el.kind === 'text').text, army.elements.find(el => el.kind === 'text').style], ['battlefield', 'crowd', '40,000', 'counter']);
+  assert.equal(Sk.fromText('In 1602 the merchants met.', {cast}).elements.find(el => el.kind === 'text').style, 'number');
+  const sea = Sk.fromText('But one ship lost at sea could wipe out a whole year of profit.', {cast, shotIndex: 1});
+  assert.deepEqual([sea.set, sea.mood, sea.camera, sea.elements.filter(el => el.kind === 'prop').map(el => el.prop)], ['storm', 'tense', 'punch', ['ship', 'chart-down']]);
+  assert.equal(Sk.fromText('Their ships sailed for months.', {cast}).set, 'harbor', 'ships at sea are not under water');
+  assert.equal(Sk.fromText('Merchants sold spices.', {primary: 'motion', cast}).set, 'market', 'documentary drawn shots stand in a place too');
+  assert.notEqual(Sk.fromText('Nothing named.', {shotIndex: 1}).elements.find(el => el.kind === 'prop').prop, Sk.fromText('Nothing named.', {shotIndex: 2}).elements.find(el => el.kind === 'prop').prop);
   const hook = Sk.fromText('Nothing to see.', {purpose: 'hook'});
   assert.deepEqual([hook.camera, hook.elements[1].effect, hook.elements[1].on, hook.elements[2].prop], ['punch', 'burst', 3, 'exclamation'], 'a hook opens on a punch with a burst behind its prop');
   assert.equal(Sk.fromText('Prices rise.', {primary: 'motion'}).elements.some(el => el.kind === 'figure'), false, 'motion graphics without a cast draw no figure');

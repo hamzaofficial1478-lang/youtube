@@ -61,7 +61,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/22';
+const VERSION = 'drawn-scene/23';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -509,19 +509,24 @@ function timing(sketch, words) {
 
 // ---------------------------------------------------------------- the free fallback
 
+// Free planner (audit 2026-10-19): a year is a date, not a count; many people are a crowd; nothing named takes turns.
+const YEAR = /^(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})$/;
+const PEOPLE = /\b(employees|workers|people|investors|soldiers|army|armies|crowds?|citizens|voters|customers|traders|shareholders|population)\b/;
+const FALLBACK_PROPS = ['lightbulb', 'question', 'magnifier', 'target', 'key'];
 const PROP_WORDS = [
+  ['ship', /\b(ships?|boats?|fleet|voyages?)\b/], ['shield', /\b(insur\w*|protect\w*)\b/], ['pie-chart', /\b(shares?|pieces?|split\w*|portions?)\b/], ['crown', /\b(king|queen|emperor|royal)\b/], ['sword', /\b(army|armies|soldiers?|war)\b/],
   ['bolt', /\b(lightning|bolt|strikes?|striking|flash|spark|electric\w*)\b/], ['storm', /\b(storm|thunder\w*|clouds?)\b/], ['sun', /\b(sun|sunlight|solar)\b/], ['fire', /\b(fire|burn\w*|flames?|hot|hotter|heat)\b/],
-  ['moneybag', /\b(rich|wealth\w*|fortune|million\w*|billion\w*)\b/], ['money', /\b(money|cash|dollars?|salary|income|paid|pay)\b/], ['coin', /\b(coins?|price|cost\w*|cheap|save\w*)\b/], ['chart-up', /\b(grow\w*|increase\w*|rise|rising|profit\w*)\b/],
-  ['chart-down', /\b(fall\w*|drop\w*|crash\w*|loss\w*|lose)\b/], ['laptop', /\b(computer|laptop|online|internet|website\w*|hack\w*)\b/], ['phone', /\b(phone|app|apps|text\w*|call\w*)\b/], ['brain', /\b(brain|mind|think\w*|smart|memory|learn\w*)\b/],
+  ['moneybag', /\b(rich|wealth\w*|fortune|million\w*|billion\w*)\b/], ['money', /\b(money|cash|dollars?|salary|income|paid|pay)\b/], ['coin', /\b(coins?|price|cost\w*|cheap|save\w*)\b/], ['chart-down', /\b(fall\w*|drop\w*|crash\w*|loss\w*|lose|wipe\w*|ruin\w*)\b/], ['chart-up', /\b(grow\w*|increase\w*|rise|rising|profit\w*)\b/],
+  ['laptop', /\b(computer|laptop|online|internet|website\w*|hack\w*)\b/], ['phone', /\b(phone|app|apps|text\w*|call\w*)\b/], ['brain', /\b(brain|mind|think\w*|smart|memory|learn\w*)\b/],
   ['heart', /\b(heart|love\w*|alive)\b/], ['skull', /\b(death|dead|die\w*|deadly|kill\w*|poison\w*)\b/], ['lock', /\b(secret\w*|private|hidden|lock\w*)\b/], ['key', /\b(key|unlock\w*|access)\b/],
   ['globe', /\b(earth|world|globe|planet|countries)\b/], ['clock', /\b(seconds?|minutes?|hours?|time|clock)\b/], ['calendar', /\b(days?|weeks?|months?|years?)\b/], ['book', /\b(book|story|history|read\w*)\b/],
   ['city', /\b(city|cities|town)\b/], ['house', /\b(house|home)\b/], ['tree', /\b(trees?|forest|wood)\b/], ['sand', /\b(sand|desert|beach|dune)\b/], ['glass', /\b(glass|crystal)\b/],
-  ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(search\w*|find|discover\w*|investigat\w*)\b/], ['lightbulb', /\b(idea|because|reason|explain\w*|means|trick)\b/],
+  ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea|seas)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(search\w*|find|discover\w*|investigat\w*)\b/], ['lightbulb', /\b(idea|because|reason|explain\w*|means|trick)\b/],
   ['trophy', /\b(win\w*|best|champion\w*|advantage\w*)\b/], ['warning', /\b(danger\w*|warning|risk\w*|careful)\b/], ['pill', /\b(medicine|pills?|drug\w*|doctor\w*|health)\b/], ['car', /\b(car|cars|drive|driving|traffic)\b/],
 ].filter(([prop]) => PROPS.includes(prop));
-const SET_WORDS = [['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyage)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
+const SET_WORDS = [['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['storm', /\b(lost at sea|sank|sink\w*|shipwreck\w*|wreck\w*)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyages?|ships?|sailors?|sea)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
   ['lab', /\b(science|scientist\w*|experiment\w*|lab|chemical\w*|atoms?)\b/], ['bank', /\b(bank\w*|money|loan\w*|debt|invest\w*)\b/], ['office', /\b(job|work\w*|boss|office|company|business)\b/],
-  ['space', /\b(space|planet\w*|stars?|galaxy|universe|orbit)\b/], ['storm', /\b(storm|thunder\w*|lightning)\b/], ['ocean', /\b(ocean|sea|underwater|fish)\b/], ['city', /\b(city|cities|street\w*|town)\b/],
+  ['space', /\b(space|planet\w*|stars?|galaxy|universe|orbit)\b/], ['storm', /\b(storm|thunder\w*|lightning)\b/], ['ocean', /\b(underwater|under water|diving|divers?|seabed|sea floor|coral|fish)\b/], ['city', /\b(city|cities|street\w*|town)\b/],
   ['hospital', /\b(doctor\w*|hospital|disease|virus|sick)\b/], ['classroom', /\b(school|teacher|student\w*|learn\w*|class)\b/], ['nature', /\b(nature|forest|trees?|animal\w*)\b/], ['desert', /\b(desert|sand|dune)\b/], ['home', /\b(home|house|family)\b/]];
 const POSE_WORDS = [['shock', /\b(hotter|explode\w*|blinding|kill\w*|danger\w*|melt\w*|split|insane|crazy)\b|!/], ['think', /\b(why|how|what|wonder|imagine|count)\b|\?/], ['point', /\b(this|that|here|there|look|next|every)\b/], ['walk', /\b(creep\w*|walk\w*|travel\w*|move\w*|steps?)\b/], ['cheer', /\b(win\w*|best|success\w*|finally)\b/], ['type', /\b(computer|website\w*|online|hack\w*|type)\b/]];
 const MOOD_EXPRESSION = {shock: 'shocked', think: 'thinking', point: 'excited', walk: 'determined', cheer: 'excited', type: 'determined', talk: 'happy', stand: 'neutral'};
@@ -544,10 +549,14 @@ function countriesIn(narration) {
 }
 function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null} = {}) {
   const lower = ` ${String(narration).toLowerCase()} `;
-  const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(shotIndex % 2 ? 1 : 0).slice(0, 2);
-  if (!props.length) props.push(purpose === 'hook' ? 'exclamation' : 'lightbulb');
+  const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(0, 2);
+  // Nothing named: a hook gets an exclamation, other lines take turns so neighbouring shots differ (audit 2026-10-19:
+  // one light bulb on shot after shot).
+  if (!props.length) props.push(purpose === 'hook' ? 'exclamation' : FALLBACK_PROPS[shotIndex % FALLBACK_PROPS.length]);
   const pose = POSE_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (shotIndex % 2 ? 'point' : 'talk');
-  const left = shotIndex % 2 === 1, number = String(narration).match(/\b\d[\d,.]*%?/)?.[0];
+  // The number a line is about: an amount before a year (a year is a date, not a quantity to count up to).
+  const numbers = (String(narration).match(/\b\d[\d,.]*%?/g) || []).map(raw => raw.replace(/[.,]+$/, '')), amount = numbers.find(raw => !YEAR.test(raw)), year = numbers.find(raw => YEAR.test(raw));
+  const left = shotIndex % 2 === 1, turn = /^\s*(but|however|yet|instead)\b/i.test(narration);
   const engine = E.drawEngines(primary)[0] || 'motion', who = cast[0]?.id;
   // A line that names countries gets a map (0.36): each colours in as it is said, a character points at it.
   const named = countriesIn(narration).slice(0, 4);
@@ -558,14 +567,19 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
     ]}, {primary, cast});
   }
   const elements = [];
-  if (engine !== 'motion' || cast.length) elements.push({kind: 'figure', ...(who ? {who} : {}), pose, expression: MOOD_EXPRESSION[pose] || 'neutral', x: left ? 0.72 : 0.27, y: 0.8, size: 'l', facing: left ? 'left' : 'right'});
-  props.forEach((prop, k) => elements.push({kind: 'prop', prop, x: left ? 0.3 + k * 0.2 : 0.6 + k * 0.2, y: k ? 0.56 : 0.42, size: k ? 'm' : 'l', accent: k === 0}));
+  // Many people (employees, an army, investors) are a crowd behind the speaker.
+  if (PEOPLE.test(lower)) elements.push({kind: 'crowd', count: 9, pose: /\b(army|armies|soldiers?|war)\b/.test(lower) ? 'fist' : 'stand', x: left ? 0.3 : 0.68, y: 0.84, width: 0.5});
+  if (engine !== 'motion' || cast.length) elements.push({kind: 'figure', ...(who ? {who} : {}), pose, expression: turn ? 'worried' : MOOD_EXPRESSION[pose] || 'neutral', x: left ? 0.72 : 0.27, y: 0.8, size: 'l', facing: left ? 'left' : 'right'});
+  // The words come right after the speaker, so a drawing hand writes the number the line is about first.
+  const words = clean(onScreenText, 40) || amount || year || '';
+  if (words) elements.push({kind: 'text', text: words, x: 0.5, y: 0.15, size: !onScreenText && (amount || year) ? 'l' : 'm', style: onScreenText ? 'title' : amount ? 'counter' : year ? 'number' : 'title', accent: true});
+  const lift = elements.some(el => el.kind === 'crowd') ? 0.12 : 0;
+  props.forEach((prop, k) => elements.push({kind: 'prop', prop, x: left ? 0.3 + k * 0.2 : 0.6 + k * 0.2, y: (k ? 0.56 : 0.42) - lift, size: k ? 'm' : 'l', accent: k === 0}));
   const first = elements.findIndex(el => el.kind === 'prop');
   if (purpose === 'hook') elements.splice(first, 0, {kind: 'fx', effect: 'burst', on: first + 2});
-  const words = clean(onScreenText, 40) || number || '';
-  if (words) elements.push({kind: 'text', text: words, x: 0.5, y: 0.15, size: number && !onScreenText ? 'l' : 'm', style: number && !onScreenText ? 'counter' : 'title', accent: true});
-  const set = setting?.set || (engine === 'motion' ? 'abstract' : SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || 'none');
-  return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : {}), camera: purpose === 'hook' ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
+  // Every engine's drawn shots stand in a place the words name (0.37 documentary looks draw places at full strength).
+  const set = setting?.set || SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (engine === 'motion' ? 'abstract' : 'none');
+  return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : turn ? {mood: 'tense'} : {}), camera: purpose === 'hook' || turn ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
 }
 
 // ---------------------------------------------------------------- Claude's guide
@@ -608,8 +622,8 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     'CONTINUITY: plan the world first. Each part of the story has one place that matches what the narration describes; shots stay in it while the narration stays there and change place only when the words move. Keep each character on the same side of the screen and facing the same way across neighbouring shots unless they move; keep introduced props while they are still discussed; return to an earlier place when the story returns to its topic. A new place or a new layout needs a reason in the words.',
     'VOICE: a sentence may carry the narrator voice "delivery" (emotion, energy 1-5, pace). Let the expressions of the characters, the mood, the camera and the beat speed follow it: excited lines get punchy pops and bright faces, sad lines slow pushes and sad faces, tense lines worried faces and a tense mood, a whisper a close, quiet frame.',
     'PACING: match the genre. Energetic explainers and listicles change the picture every 1.5-3 seconds (a new shot or a new beat) and use whip, zoom and pop openings at section changes; calm or serious topics hold longer with slow pushes. Never let a frame sit still: every shot has something that moves.',
-    'MOTION SHOTS (engine motion): one hero element at size xl and the number or word big (size l or xl), filling the frame; no empty half-frame.',
-    'COMPOSITION: feet on the ground line (y 0.8); text in the top third; keep the bottom 18% clear for captions; never cover a face with text; characters are the subject: m or larger, a lone character l or xl, s only when smallness is the point (a tiny person under a huge storm); use size xl and focus zoom for reaction close-ups; alternate left/right/centre layouts and sets, never the same composition twice in a row; at most 3-4 things arriving at once. Words on screen come from the narration.',
+    ...(engines.includes('motion') ? ['MOTION SHOTS (engine motion): one hero element at size xl and the number or word big (size l or xl), filling the frame; no empty half-frame.'] : []),
+    'COMPOSITION: feet on the ground line (y 0.8); short titles and labels in the top third (statements, quotes, documents, charts and maps may hold the centre); keep the bottom 18% clear for captions; never cover a face with text; characters are the subject: m or larger, a lone character l or xl, s only when smallness is the point (a tiny person under a huge storm); use size xl and focus zoom for reaction close-ups; alternate left/right/centre layouts and sets, never the same composition twice in a row; at most 3-4 things arriving at once. Words on screen come from the narration.',
     'Example: {"source": "generated-graphics", "query": "", "prompt": "", "motion": "static", "notes": "", "cue": "a single bolt", "sketch": {"engine": "stickman", "set": "storm", "mood": "tense", "camera": "push", "transition": "cut", "elements": [{"kind": "figure", "who": "c1", "pose": "cower", "expression": "scared", "emote": "sweat", "x": 0.28, "y": 0.8, "size": "l", "facing": "right", "then": [{"at": "hotter", "pose": "shock", "expression": "shocked"}]}, {"kind": "prop", "prop": "bolt", "x": 0.62, "y": 0.4, "size": "xl", "at": "bolt", "enter": "drop"}, {"kind": "fx", "effect": "flash", "at": "bolt"}, {"kind": "prop", "prop": "sun", "x": 0.85, "y": 0.22, "size": "m", "at": "sun"}, {"kind": "text", "text": "5x hotter", "style": "stamp", "x": 0.5, "y": 0.14, "at": "five times", "accent": true}]}}',
   ].join('\n');
 }

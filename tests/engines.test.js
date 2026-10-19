@@ -8,7 +8,8 @@ const {LAUNCH_PROFILES} = require('../style');
 const spec = key => LAUNCH_PROFILES.find(item => item.key === key).spec;
 
 test('a style on one engine uses only that engine; the story mix and atelier use every engine', () => {
-  assert.deepEqual(LAUNCH_PROFILES.map(item => E.primaryEngine(item.spec)), ['stickman', 'handdrawn', 'stickman', 'atelier', 'montage', 'montage']);
+  assert.deepEqual(LAUNCH_PROFILES.map(item => E.primaryEngine(item.spec)), ['stickman', 'handdrawn', 'stickman', 'atelier', 'montage', 'cinema']);
+  assert.deepEqual(E.engineScope(spec('cinematic-hybrid')), {mix: false, drawn: [], footage: true, frames: false, films: []}, 'cinematic: footage only, nothing drawn');
   assert.deepEqual(E.engineScope(spec('stickman-sketch-explainer')), {mix: false, drawn: ['stickman'], footage: false, frames: false, films: []});
   assert.deepEqual(E.engineScope(spec('hand-drawn-canvas')), {mix: false, drawn: ['handdrawn'], footage: false, frames: false, films: []});
   assert.deepEqual(E.engineScope(spec('documentary-montage')), {mix: false, drawn: ['motion'], footage: true, frames: false, films: []}, 'documentary: its footage and its drawn looks');
@@ -88,4 +89,18 @@ test('0.39 film looks: a style may print every drawn shot in one look or let Cla
   assert.match(E.promptGuide('montage', {design: 'mix', film: 'woodcut'}), /FILM LOOK: woodcut print[\s\S]*change of register/);
   assert.doesNotMatch(E.promptGuide('montage', {design: 'mix'}), /FILM LOOK/);
   assert.match(E.MOTION_LAYER, /a loupe that magnifies a spot/);
+});
+
+// 0.40: the Cinematic engine - real footage cut with film grammar and graded as one film; it draws nothing.
+test('the Cinematic engine plans footage only, with shot grammar and one grade for the video', () => {
+  const cinema = spec('cinematic-hybrid');
+  assert.deepEqual(E.plannerSources(cinema, ['stock-video', 'stock-image', 'ai-image', 'generated-graphics']).sources, ['stock-video', 'stock-image', 'ai-image'], 'no drawn shots');
+  assert.equal(E.plannerSources(cinema, ['stock-video', 'generated-graphics']).primarySource, 'stock-video');
+  const guide = E.promptGuide('cinema', {grade: 'choose'});
+  for (const line of ['CINEMATIC ENGINE', 'SHOT GRAMMAR', 'CONTINUITY', 'RHYTHM', 'TITLES', 'TASTE']) assert.match(guide, new RegExp(line));
+  for (const key of Object.keys(E.GRADES)) assert.match(guide, new RegExp(`${key} \\(`), `the grade ${key} is offered`);
+  assert.match(guide, /"grade" field/);
+  assert.doesNotMatch(guide, /MOTION GRAPHICS|sketch|STICKMAN|FILM LOOK/, 'no drawing vocabulary in a footage engine');
+  assert.match(E.promptGuide('cinema', {grade: 'noir'}), /GRADE: black and white\. /);
+  assert.doesNotMatch(E.promptGuide('cinema', {grade: 'noir'}), /"grade" field/, 'a fixed grade is not chosen again');
 });

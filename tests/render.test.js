@@ -206,6 +206,47 @@ test('the FFmpeg here draws every transition of the catalogue', {skip}, () => {
   }
 });
 
+// 0.40: the Cinematic engine's finish - one grade on every clip, seeded grain and 2.39:1 bars - keeps frames exact,
+// keeps BT.709 TV range on every segment (or chunk joins drop frames) and renders the same bytes twice.
+test('the cinematic finish grades every clip, adds grain and bars, and stays frame-exact and repeatable', {skip}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-cinema-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1920x1280', '-frames:v', '1', '-y', path.join(dir, 'a.jpg')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=25', '-t', '3', '-c:v', 'mpeg4', '-y', path.join(dir, 'b.mp4')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000', '-t', '4', '-c:a', 'pcm_s16le', '-y', path.join(dir, 'n.wav')]);
+  const spec = {canvas: {frameRate: 30}, transitions: {default: 'cut', maxDurationMs: 0}, motion: {intensity: 35}};
+  const shots = [{shotId: 'a', label: 'S01A', mediaType: 'image', motion: 'ken-burns', startSeconds: 0, file: path.join(dir, 'a.jpg')}, {shotId: 'b', label: 'S01B', mediaType: 'video', motion: 'static', startSeconds: 2, clipSeconds: 3, file: path.join(dir, 'b.mp4')}];
+  const frameOf = (file, filter) => execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', file, '-vf', `select=eq(n\\,10),${filter}`, '-frames:v', '1', '-f', 'rawvideo', '-']);
+  for (const grade of Object.keys(R.GRADE_FILTERS)) {
+    const out = path.join(dir, `${grade}.mp4`), look = {grade, grain: 30, letterbox: true};
+    const plan = R.planProxy({shots, narration: {file: path.join(dir, 'n.wav'), durationSeconds: 4}, spec, format: 'long-form', workDir: dir, outFile: out, look});
+    assert.deepEqual(plan.look, look);
+    for (const segment of plan.segments) await R.run('ffmpeg', segment.args);
+    const first = sha(fs.readFileSync(plan.segments[1].file));
+    await R.run('ffmpeg', plan.segments[1].args);
+    assert.equal(sha(fs.readFileSync(plan.segments[1].file)), first, `${grade}: the grain is seeded, so a render repeats exactly`);
+    for (const segment of plan.segments) {
+      const tags = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=color_space,color_range', '-of', 'default=nw=1', segment.file]).toString();
+      assert.ok(/color_space=bt709/.test(tags) && /color_range=tv/.test(tags), `${grade} ${segment.label} keeps one colour profile`);
+      const gray = frameOf(segment.file, 'format=gray'), {width, height} = plan.preset, row = y => gray.subarray(y * width, (y + 1) * width).reduce((sum, v) => sum + v, 0) / width;
+      assert.ok(row(2) < 24 && row(height - 3) < 24, `${grade} ${segment.label}: cinema bars at the top and bottom`);
+      assert.ok(row(Math.round(height / 2)) > 40, `${grade} ${segment.label}: the picture between them`);
+    }
+    if (grade === 'noir') {
+      const rgb = frameOf(plan.segments[1].file, 'format=rgb24');
+      let spread = 0;
+      for (let k = rgb.length / 2; k < rgb.length / 2 + 3000; k += 3) spread = Math.max(spread, Math.abs(rgb[k] - rgb[k + 1]), Math.abs(rgb[k + 1] - rgb[k + 2]));
+      assert.ok(spread <= 12, `black and white has no colour left (spread ${spread})`);
+    }
+    fs.writeFileSync(plan.final.listFile, plan.final.list);
+    await R.run('ffmpeg', plan.final.args, {timeout: 120000});
+    const frames = Number(execFileSync('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v', '-show_entries', 'stream=nb_read_frames', '-of', 'csv=p=0', out]).toString().trim());
+    assert.equal(frames, 120, `${grade} keeps 120 frames for 4 s`);
+  }
+  assert.equal(R.lookFilters(null, {width: 640, height: 360}, 0), '', 'other engines are untouched');
+  assert.doesNotMatch(R.lookFilters({grade: 'natural', grain: 0, letterbox: true}, {width: 360, height: 640}, 0), /drawbox/, 'no bars on a vertical short');
+});
+
 test('crossfade and dip-to-black assemblies stay frame-exact against the narration', {skip}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-xfade-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));

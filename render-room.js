@@ -119,10 +119,19 @@ class RenderRoom {
       approvalRow = this.db.prepare('SELECT * FROM visual_approvals WHERE id=?').get(visual.approvalId);
       spec = JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec);
       // Drawn styles (P06c) render through the montage assembler: their shots are clips the program drew itself.
-      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier', 'story-mix'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
+      if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier', 'story-mix', 'cinematic-hybrid'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
       if (voice?.ready && manifestRow.voice_approval_id !== voice.approvalId) blockers.push('The approved narration differs from the one the scene plan was timed with.');
     }
     return {family, visual, voice, spec, manifestRow, approvalRow, blockers, ready: !blockers.length};
+  }
+
+  // The Cinematic engine's finish (0.40): the style's grade, or the one Claude chose in the scene plan (natural when the
+  // plan has none), with the style's grain and bars. Other styles have no look.
+  lookOf(scope) {
+    const cinema = scope.style.spec.cinema;
+    if (!cinema) return null;
+    const grade = cinema.grade === 'choose' ? JSON.parse(this.scenes.manifestRow(scope.manifestId).payload).grade : cinema.grade;
+    return {grade: grade || 'natural', grain: cinema.grain, letterbox: cinema.letterbox};
   }
 
   // ------------------------------------------------------------ jobs
@@ -402,9 +411,9 @@ class RenderRoom {
             this.current.handle = null;
           }
         }
-        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss, overlays});
+        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss, overlays, look: this.lookOf(scope)});
       } else {
-        plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out});
+        plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out, look: this.lookOf(scope)});
       }
       // 2. One segment per shot or clip, frame-exact.
       for (const segment of plan.segments) {
@@ -512,7 +521,7 @@ class RenderRoom {
       }
       const scrub = args => args.map(arg => String(arg).replaceAll(work, '<work>').replaceAll(this.dataRoot, '<data>'));
       const manifest = {
-        renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg,
+        renderId: job.id, rendererVersion: R.RENDERER_VERSION, createdAt: now(), preset: plan.preset, transition: plan.transition, ...(plan.look ? {look: plan.look} : {}), inputs: {contentRevision: scope.contentRevision, manifestId: scope.manifestId, manifestRevision: scope.manifestRevision, manifestHash: scope.manifestHash, visualApprovalId: job.visual_approval_id, narration: {approvalId: scope.narration.approvalId, sha256: scope.narration.sha256}, style: {revisionId: scope.style.revisionId, specHash: scope.style.specHash}, ffmpeg: scope.ffmpeg,
           edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, timelineId: scope.edit.timelineId, payloadHash: scope.edit.payloadHash, graphicsSha256: scope.edit.graphicsAss ? createHash('sha256').update(scope.edit.graphicsAss).digest('hex') : null, canvas: motionInfo, ...(drawnInfo.length ? {drawn: {engine: Sk.VERSION, clips: drawnInfo}} : {})} : null},
         shots: plan.segments.map(segment => ({label: segment.label, shotId: segment.shotId, clipId: segment.clipId || null, assetId: segment.assetId, sha256: scope.edit ? scope.edit.files[segment.clipId].sha256 : scope.shots[segment.index].sha256, mediaType: segment.mediaType, motion: segment.motion, startFrame: segment.startFrame, frames: segment.frames, extraFrames: segment.extraFrames})),
         commands: [...audioCommands.map(command => ({step: command.step, args: scrub(command.args)})), ...plan.segments.map(segment => ({step: `segment ${segment.label}`, args: scrub(segment.args)})), ...(plan.chunks || []).map(chunk => ({step: `join ${chunk.file}`, args: scrub(chunk.args)})), {step: 'assemble', args: scrub(plan.final.args)}],

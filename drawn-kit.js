@@ -228,8 +228,9 @@
     ctx.textAlign = align; ctx.textBaseline = baseline; ctx.lineJoin = 'round';
     if (outline) {
       // Dark palettes: a glow and a dark edge, so light words also read over a bright place (motion designs draw places
-      // at full strength since 0.36).
-      if (K.DARK) { ctx.shadowColor = K.alpha('#000000', 0.6); ctx.shadowBlur = 14 * u; ctx.strokeStyle = K.alpha('#000000', 0.55); ctx.lineWidth = Math.max(3 * u, size * fit * 0.1); ctx.strokeText(value, x, y); }
+      // at full strength since 0.36). The edge is nearly solid (live plan 2026-10-19: pale words with a soft edge vanished
+      // into a white cloud and a pale map).
+      if (K.DARK) { ctx.shadowColor = K.alpha('#000000', 0.55); ctx.shadowBlur = 10 * u; ctx.strokeStyle = K.alpha('#000000', 0.85); ctx.lineWidth = Math.max(3.5 * u, size * fit * 0.13); ctx.strokeText(value, x, y); }
       else { ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(4 * u, size * fit * 0.16); ctx.strokeText(value, x, y); }
     }
     ctx.fillStyle = color; ctx.fillText(value, x, y);

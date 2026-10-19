@@ -18,6 +18,8 @@ const now = () => new Date().toISOString();
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo', 'eq', 'vignette'];
 REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS.includes(name)));
+// The Cinematic engine's finish (0.40).
+REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox');
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
@@ -152,8 +154,32 @@ function zoompanFor(move, index, frames, intensity) {
   return {z: String(1 + amp), x: `(iw-iw/zoom)*(1-on/${last})`, y: centre.y, kind: cycle};
 }
 // The edit's transitions are FFmpeg xfade transitions (transitions.js: one catalogue for every engine).
+// The Cinematic engine's grades (0.40, engines.js GRADES): one treatment on every clip so stock from many cameras reads
+// as one film. RGB filters convert back to BT.709 TV range, so the segments keep one colour profile.
+const GRADE_FILTERS = Object.freeze({
+  natural: 'eq=contrast=1.05:saturation=1.06',
+  'teal-orange': 'colorbalance=rs=-0.12:gs=0.02:bs=0.16:rm=-0.03:bm=0.03:rh=0.12:gh=0.03:bh=-0.12,eq=contrast=1.1:saturation=1.14',
+  golden: 'colorbalance=rm=0.07:gm=0.025:bm=-0.07:rh=0.05:bh=-0.06,eq=saturation=1.08:gamma=1.03',
+  bleach: 'eq=contrast=1.3:saturation=0.42:gamma=0.95',
+  cold: 'colorbalance=rs=-0.08:gs=0.02:bs=0.14:rm=-0.07:bm=0.09:rh=-0.04:bh=0.07,eq=contrast=1.08:saturation=0.78',
+  noir: 'hue=s=0,eq=contrast=1.32:gamma=0.94',
+  vintage: 'curves=preset=vintage,eq=saturation=0.85',
+  moody: 'eq=contrast=1.12:brightness=-0.04:saturation=0.68,colorbalance=bs=0.04',
+});
+const VIGNETTED = new Set(['bleach', 'noir', 'vintage', 'moody']);
+// The filters one segment gets for a look {grade, grain 0-100, letterbox}: grade, vignette, grain (seeded, so a render
+// repeats exactly) and 2.39:1 bars on landscape frames. Empty without a look.
+function lookFilters(look, size, index) {
+  if (!look) return '';
+  const grade = GRADE_FILTERS[look.grade], out = [];
+  if (grade) out.push(grade, 'scale=out_color_matrix=bt709:out_range=tv', 'format=yuv420p', 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709');
+  if (grade && VIGNETTED.has(look.grade)) out.push('vignette=PI/5');
+  if (look.grain > 0) out.push(`noise=alls=${Math.max(1, Math.round(look.grain / 5))}:allf=t:all_seed=${1009 + index}`);
+  if (look.letterbox && size.width > size.height) { const bar = 2 * Math.round(size.height * 0.064); out.push(`drawbox=x=0:y=0:w=iw:h=${bar}:color=black:t=fill`, `drawbox=x=0:y=ih-${bar}:w=iw:h=${bar}:color=black:t=fill`); }
+  return out.length ? `${out.join(',')},` : '';
+}
 // Builds every command for one proxy. Shot boundaries are snapped to frames so the picture never drifts from the narration.
-function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, workDir, outFile}) {
+function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, workDir, outFile, look = null}) {
   const size = preset[format] || preset['long-form'], fps = Math.min(spec.canvas.frameRate, preset.maxFps);
   const transition = spec.transitions.default;
   const fade = T.xfadeOf(transition);
@@ -172,11 +198,11 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     if (shot.mediaType === 'image') {
       motion = zoompanFor(shot.motion, index, count, spec.motion.intensity);
       const big = `${size.width * 2}:${size.height * 2}`;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${motion.z}':x='${motion.x}':y='${motion.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${motion.z}':x='${motion.x}':y='${motion.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     } else {
       motion = {kind: 'clip'};
       const hold = Math.max(0, count / fps - (shot.clipSeconds || 0)) + 1;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', shot.file, '-vf', `fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     }
     return {index, shotId: shot.shotId, label: shot.label, assetId: shot.assetId, mediaType: shot.mediaType, startFrame: boundaries[index], frames: frames[index], extraFrames: extra, motion: motion.kind, file, args};
   });
@@ -197,7 +223,7 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     final = {mode: 'xfade', transition: fade, transitionSeconds: td,
       args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...segments.flatMap(item => ['-i', item.file]), '-i', narration.file, '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${segments.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
   }
-  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {style: transition, applied: fade || 'cut', frames: transitionFrames}, totalFrames, segments, final};
+  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {style: transition, applied: fade || 'cut', frames: transitionFrames}, totalFrames, segments, final, ...(look ? {look} : {})};
 }
 
 // ---------------------------------------------------------------- edit render (P06)
@@ -218,7 +244,7 @@ function easedZoompan(move, frames) {
 // Plans an edit render: one segment per clip, lossless joins for runs of hard cuts, xfade for the few
 // structural transitions, then the graphics layer (ASS through libass) and the fade-out ending.
 // Every boundary is snapped from the edit's frame grid to the preset's, so picture and narration stay locked.
-function planTimeline({timeline, files, narration, format, preset = PRESETS.proxy, workDir, outFile, graphics = null, overlays = []}) {
+function planTimeline({timeline, files, narration, format, preset = PRESETS.proxy, workDir, outFile, graphics = null, overlays = [], look = null}) {
   const size = preset[format] || preset['long-form'], fps = Math.min(timeline.fps, preset.maxFps);
   const scale = frame => Math.round(frame * fps / timeline.fps);
   const totalFrames = scale(timeline.totalFrames);
@@ -242,12 +268,12 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
       const zp = easedZoompan(clip.move, count);
       motion = clip.move?.kind || 'static';
       const big = `${size.width * 2}:${size.height * 2}`;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', source, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${zp.z}':x='${zp.x}':y='${zp.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', source, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${zp.z}':x='${zp.x}':y='${zp.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     } else {
       motion = clip.speed < 1 ? `clip at ${Math.round(clip.speed * 100)}%` : 'clip';
       const available = Math.max(0, ((clip.clipSeconds || count / fps) - (clip.inSeconds || 0)) / (clip.speed || 1));
       const hold = Math.max(0, count / fps - available) + 1;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', ...(clip.inSeconds ? ['-ss', String(clip.inSeconds)] : []), '-i', source, '-vf', `setpts=(PTS-STARTPTS)/${clip.speed || 1},fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', ...(clip.inSeconds ? ['-ss', String(clip.inSeconds)] : []), '-i', source, '-vf', `setpts=(PTS-STARTPTS)/${clip.speed || 1},fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     }
     return {index, clipId: clip.id, shotId: clip.shotId, label: clip.label, assetId: clip.assetId, mediaType: clip.mediaType, startFrame: starts[index], frames: frames[index], extraFrames: extra, motion, file, args};
   });
@@ -284,7 +310,7 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
   parts.push(`[${label}]${tailFilters.join(',')}[vout]`);
   const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
   const final = {mode: 'edit', graphics: !!graphics, args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...chunks.flatMap(chunk => ['-i', chunk.file]), '-i', narration.file, ...overlays.flatMap(overlay => ['-i', overlay.file]), '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${chunks.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
-  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames, overlays: overlays.length};
+  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames, overlays: overlays.length, ...(look ? {look} : {})};
 }
 
 // Parses blackdetect/freezedetect output into spans.
@@ -332,4 +358,4 @@ function sheetGeometry({width, height}, cols, rows) {
   return {cols, rows, width, height, tileWidth: (width - 8 - (cols - 1) * 4) / cols, tileHeight: (height - 8 - (rows - 1) * 4) / rows};
 }
 
-module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, decodeArgs, decodeCheck, avAlignment, sheetGeometry, tail, object, text, person, requireValue, now, round};
+module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, GRADE_FILTERS, lookFilters, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, decodeArgs, decodeCheck, avAlignment, sheetGeometry, tail, object, text, person, requireValue, now, round};
