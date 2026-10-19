@@ -168,6 +168,20 @@ function validateSkill(input) {
   return skill;
 }
 const skillHash = skill => createHash('sha256').update(JSON.stringify(skill)).digest('hex');
+// How a skill could be better (0.41, after anthropics/skills skill-creator: skills that give reasons generalise, rigid
+// capitals do not, lean skills leave room in the brief). Advice for the owner's review, never a gate.
+function skillQuality(skill) {
+  const notes = [], size = Buffer.byteLength(JSON.stringify(skill));
+  // A bare instruction (one sentence, no reason, no contrast) is flagged; an explanation in any form is not.
+  const reasoned = /\b(because|so that|so |since|otherwise|which|means|makes|keeps|shows|reads|without|when|not |instead|than|why)\b/i.test(skill.summary) || (skill.summary.match(/[.!?](\s|$)/g) || []).length >= 2;
+  if (!reasoned) notes.push('Say why it matters: a rule with its reason is applied well beyond the cases it names.');
+  const rigid = (JSON.stringify([skill.do, skill.avoid, skill.steps, skill.checks, skill.summary]).match(/\b(MUST|NEVER|ALWAYS|DO NOT|DON'T)\b/g) || []).length;
+  if (rigid >= 2) notes.push(`${rigid} rules in capitals (MUST, NEVER): explain the reason instead, so the rule is understood rather than obeyed narrowly.`);
+  if (size > 2500) notes.push(`Long (${size.toLocaleString('en-US')} bytes): it takes a big share of a planning brief; move detail out or split it.`);
+  if (skill.when.length < 25) notes.push('Say more exactly when it applies, so it is used in the right moments.');
+  if (!skill.do.length && !skill.steps.length && !skill.checks.length) notes.push('Add what to do, not only what to avoid.');
+  return notes;
+}
 const person = (value, label) => text(value, label, 2, 80);
 const reason = (value, label = 'Reason') => text(value, label, 8, 1000);
 
@@ -338,6 +352,7 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/motion-craft.json', label: 'motionmaxxing (Apache-2.0): measured motion, word timing, script cues, machine-look check'},
   {file: 'skills/film-craft.json', label: 'lemo-opuscar (MIT): directing, sound, colour by role, evidence grammar, signature moves'},
   {file: 'skills/channel-grammar.json', label: 'Channel study 2026-10-18: hooks, visual systems, receipts, maps, pacing, narration modes, profiles'},
+  {file: 'skills/studio-craft.json', label: 'Studio craft 2026-10-19 (p5.brush, video-use, Remotion, Remotion skills, watch-video, caption-ai, video toolkit, skill-creator)'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -432,7 +447,7 @@ class SkillsEngine {
   publicRevision(row) {
     return {
       id: row.id, skillId: row.skill_id, revision: row.revision, status: row.status, origin: row.origin, pack: row.pack,
-      skill: JSON.parse(row.payload), payloadHash: row.payload_hash, changeNote: row.change_note, lessonId: row.lesson_id,
+      skill: JSON.parse(row.payload), payloadHash: row.payload_hash, changeNote: row.change_note, lessonId: row.lesson_id, quality: skillQuality(JSON.parse(row.payload)),
       createdBy: row.created_by, createdAt: row.created_at,
       review: row.review ? JSON.parse(row.review) : null, retirement: row.retirement ? JSON.parse(row.retirement) : null,
     };
@@ -911,7 +926,7 @@ class SkillsEngine {
 }
 
 module.exports = {
-  SkillsEngine, SkillError, validateSkill, skillHash, loadPacks, PACK_FILES,
+  SkillsEngine, SkillError, validateSkill, skillHash, skillQuality, loadPacks, PACK_FILES,
   TASK_KEYS, ROOMS, ROOM_TASKS, KINDS, ORIGINS, STATUSES, PROJECT_STATE_CATEGORIES,
   SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET, TASK_BRIEF_BYTES, RULES,
 };

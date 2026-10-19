@@ -460,3 +460,31 @@ building the next engine (the Cinematic engine, docs/CINEMATIC-ENGINE.md).
   out of reading (now only a hint of softness); the word focus effect dimmed the other words to a third (now about half); a
   corner keyword ran into a character's name chip (name chips now count as drawings, and a keyword stops short of one).
 - `drawn-scene/23`.
+
+## 27. Word colour, natural media, motion blur and the study of eight repositories (0.41.0)
+
+Owner review (2026-10-19): a poster word was drawn pale white behind a crowd. Why white, when the program could have chosen gold
+or a cinematic colour? The owner also asked for a deep study of eight repositories (research/eight-repos-2026-10-19.md).
+
+- **Word colour.** Text elements may carry `color` (`sketch.js` `WORD_COLORS`: accent, ink or a named colour). Claude's near
+  misses are dropped with a warning; owner edits are strict.
+  - The planner has a WORD COLOUR line, and the continuity review checks WORD COLOUR.
+  - A poster without a colour takes the accent, never a pale ink ghost.
+  - Word edges follow the word's own colour: light words get a nearly solid dark edge, dark words a white edge (`K.text`).
+- **Natural media** (after p5.brush, MIT; `vendor/p5brush/NOTICE`):
+  - `K.brush` stamps pencil, crayon and coloured-pencil strokes, with pressure along the stroke, paper grain and side-scatter.
+  - `K.wash` washes storybook and painted places in like watercolour: warped translucent layers and a darker rim.
+  - Only places are washed (`K.WASH`); characters stay solid.
+  - Whiteboard pencil is graphite, doodle outlines get crayon tooth, storybook outlines are coloured pencil. All seeded.
+- **Motion.**
+  - Zooms grow the area evenly (`K.zlerp`, after Remotion's perceptual scale).
+  - Fast moments get a film camera's motion blur: samples across half a frame, more for faster motion, and only while the camera
+    moves fast or something slides, drops, swings, lands or slams.
+  - Blur is on by default for the Documentary engine's designed shots and off for hand-made looks (photographic blur on thin
+    outlines read as ghost copies); style option `drawing.motionBlur`.
+  - Style option `drawing.cadence` 'twos' or 'threes' holds each drawing for two or three frames (hand-made or stop-motion
+    feel).
+- **Fonts.** `fonts.js` reads the installed families. Missing style fonts are drawn in chosen look-alikes. The Style Library
+  warns about them. Launch library v12 uses fonts Windows ships with.
+- Typed notes grow from a fixed left edge (they slid while typing).
+- `drawn-scene/24`.

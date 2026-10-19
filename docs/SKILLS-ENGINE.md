@@ -1,4 +1,4 @@
-# Skills Engine (v0.39.0)
+# Skills Engine (v0.41.0)
 
 The Skills Engine is the program's reusable operating knowledge: what to do, what to avoid, and the
 exact numbers each room applies. It was built from `docs/SKILLS-ENGINE-PLAN.md`; this file records
@@ -15,7 +15,7 @@ never deleted, so what was in force on any given day stays reconstructible.
 
 ## 2. What is in the library
 
-400 builtin skills, all written in our own words:
+420 builtin skills, all written in our own words:
 
 | Pack | Skills | Source |
 |---|---|---|
@@ -27,6 +27,7 @@ never deleted, so what was in force on any given day stays reconstructible.
 | `skills/motion-craft.json` | 14 | motionmaxxing (Apache-2.0): measured motion curves, oversize arrivals, word cadence, no dead frame, counters, one accent, carried cuts, script cues, metaphors, importance and energy, the machine-look check, transitions, type (0.39) |
 | `skills/film-craft.json` | 14 | lemo-opuscar (MIT): subject, goal and turn, three structures, shot reasons, sound layers and silence, pacing for the viewer, colour by role, the style-brief anatomy, evidence grammar, signature moves, failures, not the reference, two registers, medium transitions, chart honesty (0.39) |
 | `skills/channel-grammar.json` | 23 | the 2026-10-18 study of twelve channels: 11 general skills (hooks, one visual system, receipts, maps, networks, cut rate, narration modes, length, three structures) and 12 channel-like profiles that are pin-only (0.39) |
+| `skills/studio-craft.json` | 20 | the 2026-10-19 study of eight repositories (p5.brush, video-use, Remotion and its skills, watch-video, caption-ai, claude-code-video-toolkit, skill-creator): word colour by role, see-then-hear, one new idea, dim and reveal, perceptual zoom, easing, stepped cadence, motion blur, cut overlays, self-check cuts, grade by looking, caption chunking, effects on the frame, pace band, coarse-to-fine watching, evidence labels, testing a skill, writing with why, natural media, fonts that exist |
 | `skills/hyperframes.json` | 17 | HyperFrames (Apache-2.0): value-first story spine, explainer structures, hook strategies, clarity techniques, beat arc, spoken numbers, motion doctrine, seams, caption rail and grouping, keep-out band, voiceover carve, mix by symptom (0.14) |
 | `docs/research/editing-brain/om-creative.json` | 49 | How a professional editor decides |
 | `docs/research/editing-brain/om-meta.json` | 41 | Orchestration, reviewer rubric, the lesson loop |
@@ -191,3 +192,16 @@ the owner's pins and blocks.
   against the assembled prompt and the recorded usage rows, not against a paid Hermes response.
 - Skill effectiveness is counted from recorded outcomes only. Retention and click-through cannot be
   measured until analytics (A01) exists.
+
+## 12. How a skill could be better (0.41)
+
+After anthropics/skills skill-creator (Apache-2.0), every skill revision carries `quality`: plain advice shown when a skill is
+opened in the Skills room. It is never a gate. `skillQuality` notes:
+- a summary that gives no reason (a rule with its reason is applied well beyond the cases it names);
+- rules in capitals;
+- skills over 2,500 bytes (a big share of a planning brief);
+- a vague "when";
+- a skill that only says what to avoid.
+
+Of the 420 builtin skills, 101 have no stated reason and 58 are long. The studio-craft pack passes. Testing a skill with and
+without it against a blind judge (skill-creator's evaluation loop) is the next step and needs the owner's go-ahead on token cost.

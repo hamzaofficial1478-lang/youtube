@@ -161,7 +161,9 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
 // One FFmpeg filter graph: the finished narration (input 0) stays as it is; music cues sit at their times with
 // fades, at the chosen bed level, ducked under the voice; effects at their times. Gains come from measured
 // loudness (music) and peak (effects) so every asset lands at the same level.
-// music: [{start, end, entry, exit, measuredLufs}], sfx: [{seconds, measuredPeakDb}], settings: {music, sfx}.
+// music: [{start, end, entry, exit, measuredLufs}], sfx: [{seconds, measuredPeakDb, attackSeconds?}], settings: {music, sfx}.
+// An effect hits on its moment (0.41, from video-use): a file whose sound builds before its hit (a whoosh, a riser)
+// starts that much earlier (attackSeconds, measured at render, at most 2 s).
 function mixGraph({music = [], sfx = [], settings}) {
   const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]'], beds = [], hits = [];
   music.forEach((cue, k) => {
@@ -171,7 +173,7 @@ function mixGraph({music = [], sfx = [], settings}) {
     beds.push(`[m${k}]`);
   });
   sfx.forEach((hit, k) => {
-    const input = music.length + k + 1, gain = round(Math.max(-40, Math.min(12, settings.sfx.levelDb - (Number.isFinite(hit.measuredPeakDb) ? hit.measuredPeakDb : -3))), 2), delay = Math.round(hit.seconds * 1000);
+    const input = music.length + k + 1, gain = round(Math.max(-40, Math.min(12, settings.sfx.levelDb - (Number.isFinite(hit.measuredPeakDb) ? hit.measuredPeakDb : -3))), 2), delay = Math.round(Math.max(0, hit.seconds - Math.min(2, Math.max(0, hit.attackSeconds || 0))) * 1000);
     parts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=${gain}dB,adelay=${delay}|${delay}[s${k}]`);
     hits.push(`[s${k}]`);
   });
@@ -192,4 +194,7 @@ function mixGraph({music = [], sfx = [], settings}) {
   return parts.join(';');
 }
 
-module.exports = {SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+// Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
+const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
+const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
+module.exports = {attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

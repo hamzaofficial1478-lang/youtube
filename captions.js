@@ -213,33 +213,55 @@ const assTime = value => { const cs = Math.max(0, Math.round(value * 100)); retu
 const assText = value => String(value).replace(/\\/g, '').replace(/[{}]/g, '');
 const assInline = hex => `&H${(/^#?([0-9a-f]{6})$/i.exec(String(hex || ''))?.[1] || 'FFD23F').replace(/^(..)(..)(..)$/, '$3$2$1').toUpperCase()}&`;
 // The caption style and events for the graphics ASS script (same 1920x1080 / 1080x1920 script space).
+// Caption themes (0.41; caption-ai's theme set, MIT, restated as our own ASS styles): how burned-in captions look.
+// upper: capitals; size: x the base size; outline/shadow in script pixels; box: an opaque box behind the words;
+// fill/edge: colours (null keeps the style's own); spacing: letter spacing; fade: ms; pop: each caption pops in;
+// blur: soft glowing edge; font: a face of its own.
+const THEMES = Object.freeze({
+  clean: {},
+  bold: {upper: true, size: 1.12, outline: 1.6, shadow: 2, spacing: 1},
+  boxed: {box: true, size: 0.96, fill: '#FFFFFF'},
+  cinematic: {upper: true, size: 0.82, spacing: 4, fill: '#F2E6C9', outline: 0.5, shadow: 1, fade: 320},
+  glow: {edge: 'accent', outline: 1.4, blur: 4, fill: '#FFFFFF', hero: 'glow'},
+  comic: {upper: true, size: 1.18, fill: '#FFE14D', edge: '#111111', outline: 2, shadow: 0, font: 'Impact', pop: true},
+  pop: {size: 1.06, pop: true, outline: 1.2},
+});
 function assParts(timeline, spec, clearTemplates) {
   const captions = timeline.captions;
   if (!captions?.enabled) return {styles: [], events: [], hidden: 0};
   const vertical = timeline.format === 'shorts', M = vertical ? 96 : 144;
-  const font = ((spec.typography || {}).bodyFont || 'Arial').replace(/,/g, ' ');
+  const theme = THEMES[spec.captions?.theme] || THEMES.clean;
+  const font = (theme.font || (spec.typography || {}).bodyFont || 'Arial').replace(/,/g, ' ');
   const accent = assInline((spec.palette || {}).accent || '#FFD23F');
   // White words with a dark outline read on footage and dark styles; on a light style (paper, whiteboard) the
   // words take the style's ink and a white outline instead.
   const bg = /^#?([0-9a-f]{6})$/i.exec(String((spec.palette || {}).background || ''))?.[1], light = !!bg && (0.299 * parseInt(bg.slice(0, 2), 16) + 0.587 * parseInt(bg.slice(2, 4), 16) + 0.114 * parseInt(bg.slice(4, 6), 16)) / 255 > 0.6;
-  const word = light ? assInline((spec.palette || {}).primary || '#1F1F1F') : '&HFFFFFF&', white = word, edge = light ? '&H00FFFFFF' : '&H00101010';
+  const colourOf = value => (value === 'accent' ? (spec.palette || {}).accent || '#FFD23F' : value);
+  // A theme's own fill and edge win; boxed captions are light words on a dark box on every palette.
+  const word = theme.fill ? assInline(colourOf(theme.fill)) : light && !theme.box ? assInline((spec.palette || {}).primary || '#1F1F1F') : '&HFFFFFF&', white = word;
+  const edge = theme.edge ? assInline(colourOf(theme.edge)).replace(/^&H/, '&H00').replace(/&$/, '') : light && !theme.fill && !theme.box ? '&H00FFFFFF' : '&H00101010';
   // Active-word highlight (HyperFrames caption DNA): words wait dimmed and light up as the narrator says them
   // (ASS karaoke on the caption's word times); the hero word lights in the accent with a small pop.
   const follow = !!spec.captions?.activeWordHighlight;
-  const style = `Style: Caption,${font},${vertical ? 80 : 50},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${word.replace(/^&H/, follow ? '&H90' : '&H00').replace(/&$/, '')},${edge},${light ? '&H00FFFFFF' : '&H96000000'},-1,0,0,0,100,100,0,0,1,${vertical ? (light ? 6 : 5) : (light ? 4 : 3)},${light ? 0 : 1},2,${M},${M},${vertical ? 620 : 62},1`;
+  const outline = (vertical ? (light ? 6 : 5) : (light ? 4 : 3)) * (theme.outline ?? 1), shadow = theme.shadow ?? (light ? 0 : 1), size = Math.round((vertical ? 80 : 50) * (theme.size || 1));
+  const back = theme.box ? '&H40000000' : light ? '&H00FFFFFF' : '&H96000000';
+  const style = `Style: Caption,${font},${size},${word.replace(/^&H/, '&H00').replace(/&$/, '')},${word.replace(/^&H/, follow ? '&H90' : '&H00').replace(/&$/, '')},${edge},${back},-1,0,0,0,100,100,${theme.spacing || 0},0,${theme.box ? 3 : 1},${theme.box ? Math.round(size * 0.28) : Math.round(outline * 10) / 10},${theme.box ? 0 : shadow},2,${M},${M},${vertical ? 620 : 62},1`;
   const clears = clearWindows(timeline, clearTemplates), shown = visibleGroups(captions, clears);
   const events = shown.map((group, k) => {
     const before = k ? group.start - shown[k - 1].end : group.start, after = k + 1 < shown.length ? shown[k + 1].start - group.end : Infinity;
-    const fade = `{\\fad(${before > 0.3 ? 150 : 0},${after > 0.3 ? 150 : 0})}`;
+    const fadeMs = theme.fade || 150, popIn = theme.pop ? '\\fscx82\\fscy82\\t(0,140,\\fscx106\\fscy106)\\t(140,240,\\fscx100\\fscy100)' : '';
+    const fade = `{\\fad(${before > 0.3 ? fadeMs : 0},${after > 0.3 ? fadeMs : 0})${theme.blur ? `\\blur${theme.blur}` : ''}${popIn}}`;
     // Karaoke needs one time per shown word; a corrected caption with other words is shown without it.
     const timed = follow && group.lines.join(' ').split(' ').length === group.words.length;
     const cs = seconds => Math.max(0, Math.round((seconds - group.start) * 100));
     const at = k => (k < group.words.length ? cs(group.words[k].start) : Math.max(cs(group.words[k - 1].end), cs(group.words[k - 1].start) + 1));
     let index = 0;
-    const lines = group.lines.map(line => line.split(' ').map(word => {
+    const lines = group.lines.map(line => (theme.upper ? line.toUpperCase() : line).split(' ').map(word => {
       const k = index++, hero = k === group.emphasis, beat = timed ? `\\k${at(k + 1) - at(k)}` : '';
       const pop = timed && hero ? `\\t(${at(k) * 10},${at(k) * 10 + 90},\\fscx114\\fscy114)\\t(${at(k) * 10 + 90},${at(k) * 10 + 260},\\fscx100\\fscy100)` : '';
-      return hero ? `{${beat}\\c${accent}${pop}}${assText(word)}{\\c${white}${pop ? '\\fscx100\\fscy100' : ''}}` : `${beat ? `{${beat}}` : ''}${assText(word)}`;
+      // On a glowing theme the key word keeps the white fill and glows wider (an accent word on an accent glow blurs away).
+      const lift = theme.hero === 'glow' ? `\\bord${Math.round(outline * 1.8)}` : `\\c${accent}`, drop = theme.hero === 'glow' ? `\\bord${Math.round(outline * 10) / 10}` : `\\c${white}`;
+      return hero ? `{${beat}${lift}${pop}}${assText(word)}{${drop}${pop ? '\\fscx100\\fscy100' : ''}}` : `${beat ? `{${beat}}` : ''}${assText(word)}`;
     }).join(' '));
     const lead = timed && at(0) > 0 ? `{\\k${at(0)}}` : '';
     return `Dialogue: 5,${assTime(group.start)},${assTime(group.end)},Caption,,0,0,0,,${fade}${lead}${lines.join('\\N')}`;
@@ -328,4 +350,4 @@ function validateCaptions(captions, narrationSeconds) {
   return problems;
 }
 
-module.exports = {SCHEMA, METHOD, SKILL, LIMITS, weight, wordTimings, measuredTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};
+module.exports = {THEMES, SCHEMA, METHOD, SKILL, LIMITS, weight, wordTimings, measuredTimings, buildCaptions, clearWindows, visibleGroups, assParts, srt, vtt, editCaption, lintCaptions, validateCaptions};

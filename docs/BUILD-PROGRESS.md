@@ -50,7 +50,7 @@ A UI-based program that researches markets and competitors, proposes differentia
 Current milestone: captions (P07, primary language) and the YouTube craft engine (S02), v0.14. Acceptance: captions are part of the immutable edit revision and follow the narration, carry every narrated word exactly once, never overlap, are burned in as the top layer only when switched on and download as SRT; graphics keep out of the caption band; the craft scores equal the upstream Python tools on the same inputs; craft output is advice or a draft only; never-used words block Hermes candidates but never the owner's own draft. Remaining for P07: measured word timing, owner-editable caption text, WebVTT, locale caption editions (L01-L03). Earlier: FFmpeg readiness and assembly proxy (P05) v0.10 is complete. Acceptance: readiness records versions, checksums, filters, encoders and a byte-identical fixture; renders run only with the pinned binaries and only from current approved inputs whose checksums still match; the proxy is frame-exact against the narration for cut, crossfade and dip-to-black; QC covers duration, frame, audio, black and frozen pictures; results and manifests are immutable; a human records the style-proof verdict. Previous milestone: Scene & Visual Room (P04) v0.9 is complete with fake-provider verification. Acceptance: a plan needs an approved script, an approved narration and a ready style handoff; every revision is immutable with stable scene and shot IDs; stock searches stay within hourly caps and a 24-hour cache; downloads come only from provider media hosts with size, type, checksum and ffprobe checks; AI images are admitted against a monthly budget and never retried silently; a named human approves the plan and the full board with rights and AI-disclosure decisions; any later change ends the approval. Previous milestone: Competitor Intelligence (R05) and Niche Factory (R06) v0.8 are complete with fake-provider verification. Acceptance: no outside request without an explicit owner action, reserved data caps and token budgets, no automatic retries, YouTube data about other channels display-only and purged after 30 days, blueprints blocked unless they pass the 30/70 rule and copy guard, niche scores computed in code with hard filters winning, and every effect (script guidance, narrator prefill, style draft, new family) behind a named human review. Previous milestone: Style Library & Assignment Room v0.7 is complete. Acceptance: five launch styles exist as reviewable drafts; no draft can be assigned; every revision is immutable; a family default must be approved and format-compatible; overrides need explicit acknowledgement; fallbacks are manual-only; retiring or revoking blocks the handoff instead of switching styles. Preserve original data during editing and tests; configured language slots are still not connected YouTube channels.
 
 <!-- CHECKLIST:START -->
-Completed: 21 / 58 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
+Completed: 21 / 59 tracked work items. These items have different sizes; this is not a percentage of total engineering effort.
 
 ### 01 · Local foundation
 
@@ -109,6 +109,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [ ] **P06s Motion layer upgrade: word animations, textures, depth layers, map moves** (testing) - 0.38.0 (2026-10-18): every animation, texture, layer, entrance and map move rendered and checked; showcase reel rendered; tests added (sketch and drawn).
 - [ ] **P06t Skills that reach the video (pack approval, planner/director/voice injection), measured motion, film looks, evidence tools** (testing) - 0.39.0 (2026-10-18): every evidence tool and all 14 film looks rendered and reviewed; pack approval and the Film look setting checked in a throwaway workspace; tests added (sketch, drawn, skills, scene, engines); npm test 297/297 passed.
 - [ ] **P06u Engine audit (planner, free planner, live Claude plan) and the Cinematic engine (footage cut with film grammar, one grade per video, grain, cinema bars)** (testing) - 0.40.0 (2026-10-19): planner prompts read for every launch style and fixed; the free planner rendered for five looks and fixed; one live Claude documentary plan (34,333 tokens) rendered shot by shot and its readability bugs fixed in the engine; all 8 grades rendered with the pinned FFmpeg (bars, BT.709/TV tags, repeatable grain, frame-exact concat) and reviewed on a photo; tests added (render, engines, scene, sketch, style); npm test 301/301 passed.
+- [ ] **P06v Word colour by role, natural media (pencil, crayon, watercolour), motion blur and cadence, installed fonts, caption looks, effect attacks, narration pace, shot matching; study of eight repositories** (testing) - 0.41.0 (2026-10-19): every change rendered and reviewed (poster in gold, natural media, motion blur, seven caption looks burned with FFmpeg); font detection matches the drawing browser (Inter and Source Serif 4 missing); tests added (drawn, sketch, fonts, captions, soundtrack, voice, skills); npm test 309/309 passed.
 - [x] **S02 YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice** (done) - Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks.
 - [ ] **P07 Captions & Localization Room** (testing) - Version 0.14 (2026-10-06): every new edit carries a caption track (captions.js): words timed inside the narration's measured sentence windows with clause pauses anchored at commas; phrases split into the fewest even captions (never ending on a weak word); 2 lines x 42 characters for long-form, rate-sized groups for Shorts; scarce inline emphasis on figures and negations. Burned in as the top ASS layer (bottom band on 16:9, above the Shorts buttons on 9:16, clearing for full-screen graphics), SRT download per edit revision, on/off as an owner change, caption QC in the critic. 7 caption tests plus render checks; full suite 181/181 on Node 24.18.1 with FFmpeg 8.1.2 and Edge 154. 0.15.1 (2026-10-08): owner caption corrections as the revisioned set-caption op (timing fixed, narration words kept for coverage QC and reset, *word* emphasis, critic nitpick) and a WebVTT download beside the SRT; full suite 192/192, browser check of correct/save/reset/download on a scratch workspace.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
@@ -143,6 +144,45 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-19 - word colour, natural media, motion blur, fonts, caption looks and eight repositories (0.41.0)
+
+- **Owner request:**
+  - A poster word was drawn pale white over a crowd. Why white, when appealing colours were available? Make the scene-building sense better.
+  - Study eight repositories deeply (p5.brush, video-use, Remotion, Remotion skills, watch-video, caption-ai, claude-code-video-toolkit, skill-creator) and bring their brains and skills into the program.
+- **Root cause of the white word:** the drawing vocabulary gave a word no colour of its own, so Claude could not choose gold. A poster fell back to the ink at 90% (cream on the documentary palette).
+- **Built:**
+  - Word colour: text `color`, a WORD COLOUR planner line, a review check, posters default to the accent, and edges that follow the word's own colour.
+  - Natural media (stamped pencil, crayon and coloured pencil; watercolour washes on places).
+  - Perceptual zoom.
+  - Motion blur on fast moments: Documentary designed shots by default; hand-made looks only if the style turns it on.
+  - Cadence on twos or threes.
+  - `fonts.js`: Inter and Source Serif 4 were never installed, so text had been drawn in other faces. Look-alikes are now used at every boundary, the Style Library warns, and launch library v12 uses Windows fonts.
+  - Typed notes no longer slide.
+  - Seven caption looks.
+  - Effects start early by their measured attack.
+  - Narration pace in words per minute.
+  - Cinematic shot matching.
+  - Studio-craft skill pack (20 drafts) and skill advice in the Skills room.
+  - `drawn-scene/24`.
+- **Research:** `docs/research/eight-repos-2026-10-19.md`; pinned revisions and licences in REPOSITORIES.md. No script of any repository was run and no code was copied.
+- **Checked:** every change was rendered and reviewed:
+  - the live plan's poster now reads in gold;
+  - natural media at full size: painted characters were see-through at first, so only places are washed; pencil was too faint at first;
+  - motion blur showed ghost copies with too few samples, now adaptive, and is off for hand-made looks;
+  - all seven caption looks were burned with FFmpeg (glow lost its key word at first; fixed).
+  - New tests: drawn, sketch, fonts, captions, soundtrack, voice, skills; npm test 309/309 passed.
+- **Not tested:**
+  - a live Claude plan using the new WORD COLOUR guidance;
+  - a full edit render with a caption look, effect attacks and shot matching together;
+  - the owner's own review in the running program (restart needed).
+- **Next (documented, not built):**
+  - light-leak overlays at hard cuts;
+  - running p5.brush's own WebGL build;
+  - a cut-boundary filmstrip check;
+  - Shorts cut-downs;
+  - a paid A/B test of a skill pack;
+  - competitor video analysis (needs a decision on downloads).
 
 ### 2026-10-19 - engine audit and the Cinematic engine (0.40.0)
 

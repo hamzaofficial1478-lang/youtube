@@ -1,7 +1,7 @@
 {
-  "version": "0.40.0",
+  "version": "0.41.0",
   "updated": "2026-10-19",
-  "nextAction": "Owner: restart the program, review the Cinematic style (Style Library) and connect a free Pexels or Pixabay key so a live Cinematic plan and render can be proven; then scripts, competitor finding, trending topics and competitor top-video analysis with the owner's collected data.",
+  "nextAction": "Owner: restart the program, review the new word colours, natural media, caption looks and the studio-craft skills (approve the pack if it fits); then scripts, competitor finding, trending topics and competitor top-video analysis with the owner's collected data (decide how competitor videos may be read: owner-provided files only, or another route).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -430,6 +430,13 @@
           "evidence": "0.40.0 (2026-10-19): planner prompts read for every launch style and fixed; the free planner rendered for five looks and fixed; one live Claude documentary plan (34,333 tokens) rendered shot by shot and its readability bugs fixed in the engine; all 8 grades rendered with the pinned FFmpeg (bars, BT.709/TV tags, repeatable grain, frame-exact concat) and reviewed on a photo; tests added (render, engines, scene, sketch, style); npm test 301/301 passed."
         },
         {
+          "id": "P06v",
+          "title": "Word colour by role, natural media (pencil, crayon, watercolour), motion blur and cadence, installed fonts, caption looks, effect attacks, narration pace, shot matching; study of eight repositories",
+          "status": "testing",
+          "remaining": "A live Claude plan using the WORD COLOUR guidance; a full edit render with a caption look, effect attacks and shot matching; owner review; light-leak cut overlays, a cut-boundary filmstrip check, Shorts cut-downs and a skill A/B test are next.",
+          "evidence": "0.41.0 (2026-10-19): every change rendered and reviewed (poster in gold, natural media, motion blur, seven caption looks burned with FFmpeg); font detection matches the drawing browser (Inter and Source Serif 4 missing); tests added (drawn, sketch, fonts, captions, soundtrack, voice, skills); npm test 309/309 passed."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -560,7 +567,8 @@
     "2026-10-04: Each competitor link carries owner picks (voice-over, narration, editing, thumbnails, visuals); the blueprint learns each area only from the picked channels and keeps 30/70 per area.",
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file.",
-    "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt."
+    "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
+    "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Engine audit and the Cinematic engine (P06u)"
+  "milestone": "Word colour, natural media, motion blur, fonts and eight repositories (P06v)"
 }

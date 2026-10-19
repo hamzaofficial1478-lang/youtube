@@ -10,6 +10,7 @@ const path = require('node:path');
 const {spawn} = require('node:child_process');
 const {createHash} = require('node:crypto');
 const {InputError} = require('./store');
+const F = require('./fonts');
 
 // The page script: the drawn-shot engine (P06d) first, then the templates that call it.
 const TEMPLATE_FILES = ['drawn-kit.js', 'drawn-props.js', 'drawn-things.js', 'drawn-figures.js', 'drawn-sets.js', 'drawn-engine.js', 'motion-templates.js'].map(name => path.join(__dirname, name));
@@ -116,6 +117,8 @@ class MotionRenderer {
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
+    // The faces this PC really has (fonts.js): a missing style font is drawn in its chosen look-alike, never an accident.
+    fonts = {heading: F.resolve(fonts?.heading), body: F.resolve(fonts?.body), hand: F.resolve(fonts?.hand || 'Segoe Print')};
     const params = {template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration};
     await this.evaluate(`MOTION.setup(${JSON.stringify(params)})`);
     // Wait for the named fonts (system fonts resolve immediately; a missing one falls back).
@@ -139,6 +142,7 @@ class MotionRenderer {
       await this.evaluate(pageScript() + '\ntrue');
       this.injected = true;
     }
+    fonts = {heading: F.resolve(fonts?.heading), body: F.resolve(fonts?.body), hand: F.resolve(fonts?.hand || 'Segoe Print')};
     await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration})})`);
     const url = await this.evaluate(`MOTION.renderFrame(${t}) && document.getElementById('stage').toDataURL('image/png')`);
     return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');

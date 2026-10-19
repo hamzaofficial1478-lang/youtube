@@ -19,7 +19,7 @@ const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** pl
 const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale', 'crop', 'fps', 'setsar', 'format', 'concat', 'apad', 'blackdetect', 'freezedetect', 'tile', 'settb', 'setparams', 'fade', 'ass', 'silencedetect', 'overlay', 'select', 'showinfo', 'eq', 'vignette'];
 REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS.includes(name)));
 // The Cinematic engine's finish (0.40).
-REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox');
+REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox', 'normalize');
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
   proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
@@ -172,7 +172,10 @@ const VIGNETTED = new Set(['bleach', 'noir', 'vintage', 'moody']);
 function lookFilters(look, size, index) {
   if (!look) return '';
   const grade = GRADE_FILTERS[look.grade], out = [];
-  if (grade) out.push(grade, 'scale=out_color_matrix=bt709:out_range=tv', 'format=yuv420p', 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709');
+  // Shot matching first (0.41, after video-use's per-clip correction): stock clips from many cameras are brought to
+  // similar levels with a gentle, linked, temporally smoothed normalisation (30% strength, colour balance kept), so
+  // the grade lands the same way on every clip.
+  if (grade) out.push('normalize=blackpt=black:whitept=white:smoothing=12:independence=0:strength=0.3', grade, 'scale=out_color_matrix=bt709:out_range=tv', 'format=yuv420p', 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709');
   if (grade && VIGNETTED.has(look.grade)) out.push('vignette=PI/5');
   if (look.grain > 0) out.push(`noise=alls=${Math.max(1, Math.round(look.grain / 5))}:allf=t:all_seed=${1009 + index}`);
   if (look.letterbox && size.width > size.height) { const bar = 2 * Math.round(size.height * 0.064); out.push(`drawbox=x=0:y=0:w=iw:h=${bar}:color=black:t=fill`, `drawbox=x=0:y=ih-${bar}:w=iw:h=${bar}:color=black:t=fill`); }

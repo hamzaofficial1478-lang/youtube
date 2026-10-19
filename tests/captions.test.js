@@ -211,3 +211,21 @@ test('active-word highlight: words wait dimmed and light up on the narrator\'s w
   assert.doesNotMatch(Cap.assParts({...timeline, captions: fixed}, spec, []).events[0], /\\k/);
   assert.doesNotMatch(Cap.assParts(timeline, {...spec, captions: {activeWordHighlight: false}}, []).events.join(''), /\\k/);
 });
+
+// 0.41: caption looks (caption-ai's themes, restated as our own ASS styles).
+test('caption themes change how burned-in captions look; the style checks the name', () => {
+  const timeline = {format: 'long-form', captions: {enabled: true, groups: [{id: 'g1', start: 0, end: 2, text: 'money is a promise', lines: ['money is a promise'], words: 'money is a promise'.split(' ').map((text, k) => ({text, start: k * 0.4, end: k * 0.4 + 0.3})), emphasis: 3}]}};
+  const parts = theme => Cap.assParts(timeline, {palette: {background: '#101418', primary: '#F2F4F5', accent: '#37C2A0'}, typography: {bodyFont: 'Segoe UI'}, captions: {theme}}, []);
+  assert.deepEqual(parts('clean'), parts(undefined), 'clean is the default look');
+  assert.match(parts('comic').styles[0], /^Style: Caption,Impact,59,&H004DE1FF,/);
+  assert.match(parts('comic').events[0], /MONEY IS A/);
+  assert.match(parts('boxed').styles[0], /,3,13,0,2,/, 'an opaque box behind the words');
+  assert.match(parts('cinematic').events[0], /\\fad\(0,320\)/, 'a slow cinematic fade out (the first caption starts at once)');
+  assert.match(parts('glow').events[0], /\\blur4/);
+  assert.doesNotMatch(parts('glow').events[0], /\\c&HA0C237&/, 'on a glow the key word stays white and glows wider');
+  const {LAUNCH_PROFILES, validateStyleSpec} = require('../style');
+  const spec = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec);
+  assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, theme: 'bold'}}).captions.theme, 'bold');
+  assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, theme: 'clean'}}).captions.theme, undefined);
+  assert.throws(() => validateStyleSpec({...spec, captions: {...spec.captions, theme: 'neon'}}), /caption theme/);
+});

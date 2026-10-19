@@ -105,8 +105,10 @@ function skillCard(skill) {
   const bindings = (state.skills.bindings || []).filter(item => item.skillId === skill.id);
   const pins = bindings.length ? `<div class="handoff-rule"><strong>Owner bindings</strong>${bindings.map(item => `<p>${item.mode === 'pin' ? 'Pinned to' : 'Blocked for'} <code>${esc(item.taskKey)}</code>${item.familyId ? ` · ${esc(state.families.find(family => family.id === item.familyId)?.name || 'one family')}` : ' · every family'} · ${esc(item.note)} ${action('Remove', 'skill-unbind', item.id, 'text-button danger')}</p>`).join('')}</div>` : '';
   const effect = skill.approved ? `<p class="hint">Used in ${(state.skills.usage || []).filter(item => item.skillIds.includes(skill.id)).length} recorded job(s).</p>` : '';
+  // How the skill could be better (skill-creator's advice), shown to the owner when the skill is opened.
+  const quality = current.quality?.length ? `<div class="handoff-rule"><strong>How this skill could be better</strong>${current.quality.map(note => `<p>${esc(note)}</p>`).join('')}</div>` : '';
   return `<section class="production-card skill-card open">${head}
-    <p class="skill-when">${esc(spec.when)}</p><p>${esc(spec.summary)}</p>
+    <p class="skill-when">${esc(spec.when)}</p><p>${esc(spec.summary)}</p>${quality}
     ${spec.steps.length ? `<h3>Steps</h3><ol class="skill-rules">${spec.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : ''}
     ${spec.do.length ? `<h3>Do</h3>${skillList(spec.do)}` : ''}
     ${spec.avoid.length ? `<h3>Avoid</h3>${skillList(spec.avoid)}` : ''}

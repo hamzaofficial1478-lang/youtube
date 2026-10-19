@@ -4,6 +4,7 @@
 // owner change decisions with conflict protection, repairs one scene at a time, and hands an edit to the
 // pinned renderer. A human style-proof verdict on the rendered edit is its approval (render-room.js).
 const fs = require('node:fs');
+const F = require('./fonts');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const B = require('./editing-brain');
@@ -302,7 +303,8 @@ class EditingRoom {
       requireValue(Audio.REQUIRED_FILTERS.every(name => readiness?.filters?.[name] === true) && readiness?.encoders?.pcm_s24le === true,
         'Audio finishing needs a fresh FFmpeg readiness check and pinned build (Room 05).', 409);
     }
-    const ass = B.graphicsAss(payload, state.inputs.spec);
+    // Captions and graphics are written with the faces this PC really has (libass replaces a missing font silently).
+    const ass = B.graphicsAss(payload, F.withFonts(state.inputs.spec));
     if (ass) {
       const readiness = this.renders.latestReadiness();
       requireValue(readiness?.filters?.ass === true, 'Graphics need the FFmpeg "ass" filter. Run the readiness check again (Room 05) and pin the build.', 409);

@@ -88,7 +88,7 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v11';
+const LAUNCH_VERSION = 'Launch library v12';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
 const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
@@ -116,7 +116,7 @@ const LOOKS_MOVED = 'The stickman looks are features of the Stickman engine now:
 const RETIRED_LAUNCH = Object.freeze({'stickman-whiteboard': LOOKS_MOVED, 'stickman-storybook': LOOKS_MOVED, 'stickman-doodle': LOOKS_MOVED,
   'motion-graphics': 'Motion graphics are not an editing style any more (owner decision 2026-10-18): they are part of every engine, and the motion designs are looks of the Documentary engine.'});
 const LAUNCH_PROFILES = [
-  {key: 'stickman-sketch-explainer', upgrade: 'Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
+  {key: 'stickman-sketch-explainer', upgrade: 'Launch library v12 (0.41): fonts that ship with Windows (Segoe UI for text); the earlier Inter was not installed, so the text was drawn in another face. Launch library v3 (0.21): the stickman engine. Drawn shots lead; stock photos, footage and AI images stay available and Claude decides when the script needs one, with its reason. Faster energetic pacing, a richer motion layer and sound accents.', spec: {
     name: 'Stickman Sketch Explainer',
     summary: 'Cartoon stick characters with distinct looks, expressions and gestures act every line inside built sets, with kinetic words and effects on the narrator\'s words; energetic, word-timed and never still.',
     bestFit: ['Educational explainers', 'Business and money concepts', 'Psychology and how-it-works'],
@@ -125,7 +125,7 @@ const LAUNCH_PROFILES = [
     pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 4.5, hookShotMaxSeconds: 2, maxStaticHoldSeconds: 5},
     transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom'], intensity: 60, easing: 'ease-in-out'},
-    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    typography: {headingFont: 'Patrick Hand', bodyFont: 'Segoe UI', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
     visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
@@ -134,7 +134,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'hand-drawn-canvas', upgrade: 'Launch library v8 (0.32): the hand-drawn engine is whiteboard animation (owner references 2026-10-16): a hand draws people, objects and words line by line and colours them in; looks: colour cartoon, black marker, pencil sketch, framed board, dry-erase markers.', spec: {
+  {key: 'hand-drawn-canvas', upgrade: 'Launch library v12 (0.41): fonts that ship with Windows (Segoe UI for text); the earlier Inter was not installed, so the text was drawn in another face. Launch library v8 (0.32): the hand-drawn engine is whiteboard animation (owner references 2026-10-16): a hand draws people, objects and words line by line and colours them in; looks: colour cartoon, black marker, pencil sketch, framed board, dry-erase markers.', spec: {
     name: 'Hand-drawn Whiteboard',
     summary: 'Whiteboard animation: a hand draws people, objects and words on a whiteboard, line by line on the narrator\'s words, then colours them in; the board moves on to the next picture.',
     bestFit: ['Self-improvement and psychology', 'Business and money explained', 'Big ideas and stories'],
@@ -143,7 +143,7 @@ const LAUNCH_PROFILES = [
     pacing: {shotMinSeconds: 2.5, shotMaxSeconds: 8, hookShotMaxSeconds: 3, maxStaticHoldSeconds: 8},
     transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 20, easing: 'ease-in-out'},
-    typography: {headingFont: 'Caveat', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
+    typography: {headingFont: 'Caveat', bodyFont: 'Segoe UI', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFFFF', primary: '#1E1E1E', accent: '#2F6FE0', text: '#1E1E1E'},
     captions: {mode: 'both', maxCharsPerLine: 40, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
     visuals: {sources: ['generated-graphics', 'stock-image', 'ai-image', 'archival-public-domain'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
@@ -153,7 +153,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.8, maxFrozenSeconds: 8, minSceneSeconds: 2, maxSceneSeconds: 14, contactSheetEverySeconds: 5},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'story-mix', upgrade: 'Launch library v10 (0.37): the mix of ALL engines - stickman, whiteboard, documentary and atelier - each in its own looks; motion graphics are part of every engine.', spec: {
+  {key: 'story-mix', upgrade: 'Launch library v12 (0.41): fonts that ship with Windows (Segoe UI for text); the earlier Inter was not installed, so the text was drawn in another face. Launch library v10 (0.37): the mix of ALL engines - stickman, whiteboard, documentary and atelier - each in its own looks; motion graphics are part of every engine.', spec: {
     name: 'Story Mix · every engine',
     summary: 'The mix of all engines: stick characters for people and feelings, whiteboard drawings for how things work, documentary looks for history, places and evidence, Claude-designed shots for the numbers and turns, footage for the real thing. Built for long videos that must not bore.',
     bestFit: ['Long explainers (8 minutes and more)', 'Science, history and money stories', 'Channels that want a look nobody else has'],
@@ -162,7 +162,7 @@ const LAUNCH_PROFILES = [
     pacing: {shotMinSeconds: 1.2, shotMaxSeconds: 6, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 6},
     transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'pan', 'zoom', 'parallax'], intensity: 60, easing: 'ease-in-out'},
-    typography: {headingFont: 'Patrick Hand', bodyFont: 'Inter', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
+    typography: {headingFont: 'Patrick Hand', bodyFont: 'Segoe UI', maxWordsOnScreen: 6, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#FFFDF8', primary: '#1F1F1F', accent: '#E0753E', text: '#1F1F1F'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: true, safeAreaPercent: 8},
     visuals: {sources: ['generated-graphics', 'stock-image', 'stock-video', 'ai-image'], primarySource: 'generated-graphics', aiDisclosure: 'review-per-asset', characterConsistency: true},
@@ -189,7 +189,7 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.3, maxFrozenSeconds: 5, minSceneSeconds: 1.5, maxSceneSeconds: 12, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'documentary-montage', upgrade: 'Launch library v10 (0.37): the Documentary engine. Looks: footage with motion graphics, cartoon documentary, painted story, vector world, infographic, collage and data desk, or a mix of them (owner decision 2026-10-18); it uses only documentary looks.', spec: {
+  {key: 'documentary-montage', upgrade: 'Launch library v12 (0.41): fonts that ship with Windows (Segoe UI for text, Georgia for documentary titles); the earlier Inter and Source Serif 4 were not installed, so the titles and text were drawn in other faces. Launch library v10 (0.37): the Documentary engine. Looks: footage with motion graphics, cartoon documentary, painted story, vector world, infographic, collage and data desk, or a mix of them (owner decision 2026-10-18); it uses only documentary looks.', spec: {
     name: 'Documentary',
     summary: 'Documentary storytelling in its own looks: real footage with motion graphics, a cartoon documentary, painted story scenes, flat vector worlds, infographic people, collage cut-outs and data desks, with real maps and charts; chronology follows the narration.',
     bestFit: ['History and culture', 'Finance and economics stories', 'Sourced factual essays'],
@@ -198,7 +198,7 @@ const LAUNCH_PROFILES = [
     pacing: {shotMinSeconds: 3, shotMaxSeconds: 8, hookShotMaxSeconds: 2.5, maxStaticHoldSeconds: 8},
     transitions: {allowed: ALL_TRANSITIONS(), default: 'cut', maxDurationMs: 800},
     motion: {cameraMoves: ['static', 'ken-burns', 'pan', 'zoom'], intensity: 35, easing: 'ease-in-out'},
-    typography: {headingFont: 'Source Serif 4', bodyFont: 'Inter', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
+    typography: {headingFont: 'Georgia', bodyFont: 'Segoe UI', maxWordsOnScreen: 8, textCase: 'sentence', minTextHeightPercent: 4},
     palette: {background: '#0E0E0E', primary: '#F2EEE6', accent: '#C9A227', text: '#FFFFFF'},
     captions: {mode: 'both', maxCharsPerLine: 42, maxLines: 2, position: 'bottom', activeWordHighlight: false, safeAreaPercent: 8},
     visuals: {sources: ['stock-video', 'stock-image', 'archival-public-domain', 'maps-and-diagrams', 'ai-image', 'generated-graphics'], primarySource: 'stock-video', aiDisclosure: 'always-disclose', characterConsistency: false},
@@ -331,6 +331,8 @@ function validateStyleSpec(input) {
     position: choice(captionsIn.position, CAPTION_POSITIONS, 'caption position'),
     activeWordHighlight: bool(captionsIn.activeWordHighlight, 'Active-word highlight'),
     safeAreaPercent: integer(captionsIn.safeAreaPercent, 5, 20, 'Caption safe area'),
+    // 0.41: how burned-in captions look (captions.js THEMES); without one they are clean.
+    ...(captionsIn.theme === undefined || captionsIn.theme === 'clean' ? {} : {theme: choice(captionsIn.theme, Object.keys(require('./captions').THEMES), 'caption theme')}),
   };
 
   const visualsIn = object(input.visuals, 'Visual sources');
@@ -368,7 +370,11 @@ function validateStyleSpec(input) {
   // Optional: a style without it draws the classic look without the hand.
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
-    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')}), ...(drawingIn.film === undefined || drawingIn.film === 'none' ? {} : {film: choice(drawingIn.film, DRAWING_FILMS, 'film look')})};
+    return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')}), ...(drawingIn.film === undefined || drawingIn.film === 'none' ? {} : {film: choice(drawingIn.film, DRAWING_FILMS, 'film look')}),
+      // 0.41: hand-made stepped motion (on twos or threes) and a film camera's motion blur on fast moments (unset: on for
+      // the Documentary engine's designed shots, off for hand-made looks).
+      ...(drawingIn.cadence === undefined || drawingIn.cadence === 'full' ? {} : {cadence: choice(drawingIn.cadence, ['twos', 'threes'], 'drawing cadence')}),
+      ...(drawingIn.motionBlur === undefined ? {} : {motionBlur: bool(drawingIn.motionBlur, 'Motion blur')})};
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
@@ -625,10 +631,13 @@ class StyleLibrary {
   }
 
   state() {
+    const profiles = this.profiles();
     return {
       vocabulary: this.vocabulary(),
       renderers: Object.fromEntries(Object.entries(RENDERERS).map(([key, value]) => [key, {...value}])),
-      profiles: this.profiles(),
+      profiles,
+      // Fonts a style names that this PC does not have, with the face drawn instead (0.41, fonts.js).
+      missingFonts: Object.fromEntries(profiles.flatMap(profile => profile.revisions.flatMap(revision => require('./fonts').missing(revision.spec?.typography))).map(item => [item.font, item.instead])),
       assignments: this.assignments(),
       handoffs: this.handoffs(),
     };

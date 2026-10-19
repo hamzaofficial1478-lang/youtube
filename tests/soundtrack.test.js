@@ -87,3 +87,16 @@ test('the voice-over carve: under the voice the music gives up its speech band a
   assert.ok(speech >= 6, `the speech band makes room (${speech.toFixed(1)} dB)`);
   assert.ok(speech - bass >= 3, `the bass stays (${bass.toFixed(1)} dB against ${speech.toFixed(1)} dB)`);
 });
+
+// 0.41: an effect's hit lands on its moment (video-use: start the file its attack earlier).
+test('an effect with a build before its hit starts that much earlier, at most two seconds', () => {
+  const M = require('../music');
+  assert.equal(M.attackOf('[silencedetect @ 0] silence_start: 0\n[silencedetect @ 0] silence_end: 0.355 | silence_duration: 0.355'), 0.355);
+  assert.equal(M.attackOf('[silencedetect @ 0] silence_start: 1.2\n silence_end: 1.5'), 0, 'quiet later in the file is not an attack');
+  assert.equal(M.attackOf(''), 0);
+  assert.match(M.attackArgs('fx.mp3', -1.5).join(' '), /silencedetect=noise=-31.5dB:d=0.002/);
+  const graph = attack => M.mixGraph({sfx: [{seconds: 2, measuredPeakDb: -1, attackSeconds: attack}], settings: {music: {levelLufs: -30, fadeSeconds: 1}, sfx: {levelDb: -6}}});
+  assert.match(graph(0.35), /adelay=1650\|1650/);
+  assert.match(graph(5), /adelay=0\|0/, 'a long riser starts at most two seconds early, never before zero');
+  assert.match(graph(undefined), /adelay=2000\|2000/);
+});

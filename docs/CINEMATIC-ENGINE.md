@@ -14,7 +14,8 @@ pictures, cut with film grammar and finished as one film. It draws nothing.
 | Style | `style.js` `cinema: {grade, grain, letterbox}` | `grade` is a key of `GRADES` or `choose`; `grain` 0-100; `letterbox` true/false. Style editor section "Cinematic engine features". |
 | Claude chooses | `scene-room.js` | With `grade: 'choose'` the plan answer has a top-level `"grade"`; `aiScenes` keeps a known key and drops anything else, `mergeParts` keeps the first part's, `buildPayload` stores `payload.grade`, every later plan revision carries it. |
 | Render | `render.js` `lookFilters`, `render-room.js` `lookOf` | Per segment, after the BT.709 tags: the grade, a conversion back to BT.709 TV range and the tags again, a vignette for bleach/noir/vintage/moody, seeded grain (`noise ... all_seed=1009+index`, so a render repeats byte for byte) and 2.39:1 bars on landscape frames (`drawbox`). Titles (ASS) and canvas graphics lie above. The render result records `look`. |
-| Readiness | `render.js` `REQUIRED_FILTERS` | adds `colorbalance`, `curves`, `hue`, `noise`, `drawbox`. |
+| Shot matching (0.41) | `render.js` `lookFilters` | Before the grade, each clip is levelled by a gentle, linked, temporally smoothed `normalize` (30% strength, colour balance kept), after video-use's per-clip correction, so footage from many cameras takes the grade alike. |
+| Readiness | `render.js` `REQUIRED_FILTERS` | adds `colorbalance`, `curves`, `hue`, `noise`, `drawbox` and (0.41) `normalize`. |
 
 The launch spec (launch library v11) uses stock video first, then stock and AI images, Bahnschrift titles in capitals, captions as
 a sidecar file, camera moves static/ken-burns/pan/zoom, and `cinema: {grade: 'choose', grain: 30, letterbox: true}`. AI video is

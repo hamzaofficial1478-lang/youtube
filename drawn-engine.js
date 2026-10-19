@@ -241,8 +241,8 @@
     const {W, H} = K, dur = Math.max(0.1, P.duration), e = ease.inOutSine(clamp01(t / dur));
     let z = 1, ox = 0, oy = 0;
     switch (D.camera) {
-      case 'push': z = 1 + 0.07 * e; break;
-      case 'pull': z = 1.08 - 0.08 * e; break;
+      case 'push': z = K.zlerp(1, 1.07, e); break;
+      case 'pull': z = K.zlerp(1.08, 1, e); break;
       case 'drift': z = 1.04; ox = (0.5 - e) * 0.035 * W; break;
       case 'punch': z = 1.02 + 0.03 * e + 0.1 * Math.exp(-t * 6); break;
       case 'shake': z = 1.05; ox = K.noise(t * 7) * 0.008 * W; oy = K.noise(t * 9 + 4) * 0.008 * H; break;
@@ -250,14 +250,14 @@
       case 'pan-right': z = 1.08; ox = (0.5 - e) * 0.07 * W; break;
       case 'tilt-up': z = 1.08; oy = (e - 0.5) * 0.07 * H; break;
       case 'tilt-down': z = 1.08; oy = (0.5 - e) * 0.07 * H; break;
-      case 'crash-zoom': z = 1 + 0.16 * ease.outExpo(clamp01(t / 0.35)); break;
-      case 'dolly-in': z = 1 + 0.15 * e; break;
+      case 'crash-zoom': z = K.zlerp(1, 1.16, ease.outExpo(clamp01(t / 0.35))); break;
+      case 'dolly-in': z = K.zlerp(1, 1.15, e); break;
       case 'handheld': z = 1.05; ox = K.noise(t * 1.3) * 0.006 * W; oy = K.noise(t * 1.1 + 9) * 0.006 * H; break;
-      case 'ken-burns': z = 1.02 + 0.06 * e; ox = (0.5 - e) * 0.03 * W; oy = (0.5 - e) * 0.02 * H; break;
+      case 'ken-burns': z = K.zlerp(1.02, 1.08, e); ox = (0.5 - e) * 0.03 * W; oy = (0.5 - e) * 0.02 * H; break;
       default: break;
     }
     const cur = {x: W / 2, y: H / 2, z: 1};
-    for (const f of LAYOUT.focus) { if (t < f.t) break; const q = ease.inOutCubic(clamp01((t - f.t) / 0.45)); cur.x = K.lerp(cur.x, f.x * W, q); cur.y = K.lerp(cur.y, f.y * H, q); cur.z = K.lerp(cur.z, f.zoom, q); }
+    for (const f of LAYOUT.focus) { if (t < f.t) break; const q = ease.inOutCubic(clamp01((t - f.t) / 0.45)); cur.x = K.lerp(cur.x, f.x * W, q); cur.y = K.lerp(cur.y, f.y * H, q); cur.z = K.zlerp(cur.z, f.zoom, q); }
     let Z = z * cur.z;
     for (const imp of LAYOUT.impulses) {
       if (t < imp.t) continue;
@@ -1293,10 +1293,12 @@
   // typewriter, a highlighter that sweeps and reveals, a slam with trails, a tracked title, a glitch, a focus pull and
   // the word focus effect. Pure functions of the time since the words arrived.
   const ANIMATED = new Set(['title', 'note', 'number', 'pop', 'keyword', 'statement', 'poster', 'highlight']);
+  // A word's colour (0.41): the one Claude chose (sketch.js WORD_COLORS), else the accent when marked, else the fallback.
+  const tint = (el, fallback) => (el.color ? (el.color === 'accent' ? K.PAL.accent : el.color === 'ink' ? K.PAL.ink : K.col(el.color)) : el.accent ? K.PAL.accent : fallback);
   function animText(el, i, local) {
     const at = LAYOUT.textAt[i], {ctx, u} = K, {size} = at, kind = el.animate;
     const statement = el.style === 'statement' || el.style === 'poster', weight = statement ? 900 : 800, upper = el.style === 'keyword';
-    const color = el.accent || el.style === 'number' ? K.PAL.accent : el.style === 'poster' ? K.alpha(K.PAL.ink, 0.9) : K.PAL.ink, onAccent = K.lum(K.PAL.accent) > 0.55 ? '#141414' : '#FFFFFF';
+    const color = tint(el, ['number', 'poster'].includes(el.style) ? K.PAL.accent : K.PAL.ink), onAccent = K.lum(K.PAL.accent) > 0.55 ? '#141414' : '#FFFFFF';
     // Lines of words with their widths (a statement's own lines; one line otherwise, fitted to the frame).
     const lines = statement ? at.lines.map(line => line.words) : [hotWords(upper ? el.text.toUpperCase() : el.text).map(word => ({...word, w: K.measure(word.text, size, {weight})}))];
     const space = K.measure(' ', size, {weight}), lh = size * 1.18, widths = lines.map(words => words.reduce((sum, w) => sum + w.w, 0) + space * (words.length - 1));
@@ -1306,7 +1308,7 @@
     const word = (w, cx, cy, extra = {}) => {
       const bar = w.hot && el.style === 'statement';
       if (bar) { ctx.fillStyle = K.PAL.accent; ctx.beginPath(); ctx.roundRect(cx - w.w * fit / 2 - sz * 0.12, cy - sz * 0.6, w.w * fit + sz * 0.24 + (w.joined ? space * fit : 0), sz * 1.14, sz * 0.12); ctx.fill(); }
-      K.text(w.text, cx, cy, sz, {color: w.hot ? (bar ? onAccent : K.PAL.accent) : color, weight, outline: el.style !== 'poster' && !bar, ...extra});
+      K.text(w.text, cx, cy, sz, {color: w.hot ? (bar ? onAccent : K.PAL.accent) : color, weight, outline: !bar, ...extra});
     };
     let k = 0, n = 0, cursor = null;
     lines.forEach((words, li) => {
@@ -1325,9 +1327,9 @@
           let lx = cx;
           for (const ch of w.text) {
             const cw = K.measure(ch, sz, {weight}), mid = lx + cw / 2;
-            if (kind === 'letters') { const q = clamp01((local - n * 0.028) / 0.3); if (q > 0) { const z = ease.outBack(q); ctx.save(); ctx.globalAlpha *= clamp01(q * 2); ctx.translate(mid, cy + (1 - q) * sz * 0.3); ctx.scale(z, z); K.text(ch, 0, 0, sz, {color: w.hot ? K.PAL.accent : color, weight, outline: el.style !== 'poster'}); ctx.restore(); } }
-            if (kind === 'track') { const q = ease.outCubic(clamp01(local / 1.1)), spread = (1 - q) * sz * 0.55 * (n - (letterCount - 1) / 2); ctx.save(); ctx.globalAlpha *= clamp01(q * 1.6); K.text(ch, mid + spread, cy, sz, {color: w.hot ? K.PAL.accent : color, weight, outline: el.style !== 'poster'}); ctx.restore(); }
-            if (kind === 'typewriter' && n < typed) { K.text(ch, mid, cy, sz, {color: w.hot ? K.PAL.accent : color, weight, outline: el.style !== 'poster'}); cursor = [lx + cw + sz * 0.06, cy]; }
+            if (kind === 'letters') { const q = clamp01((local - n * 0.028) / 0.3); if (q > 0) { const z = ease.outBack(q); ctx.save(); ctx.globalAlpha *= clamp01(q * 2); ctx.translate(mid, cy + (1 - q) * sz * 0.3); ctx.scale(z, z); K.text(ch, 0, 0, sz, {color: w.hot ? K.PAL.accent : color, weight}); ctx.restore(); } }
+            if (kind === 'track') { const q = ease.outCubic(clamp01(local / 1.1)), spread = (1 - q) * sz * 0.55 * (n - (letterCount - 1) / 2); ctx.save(); ctx.globalAlpha *= clamp01(q * 1.6); K.text(ch, mid + spread, cy, sz, {color: w.hot ? K.PAL.accent : color, weight}); ctx.restore(); }
+            if (kind === 'typewriter' && n < typed) { K.text(ch, mid, cy, sz, {color: w.hot ? K.PAL.accent : color, weight}); cursor = [lx + cw + sz * 0.06, cy]; }
             lx += cw; n++;
           }
           n++;
@@ -1362,13 +1364,13 @@
         cx += (w.w + space) * fit; k++;
       }
     });
-    if (cursor && (local * 24 < letterCount + 4 || (local % 1) < 0.5)) { ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.fillRect(cursor[0], cursor[1] - sz * 0.5, Math.max(3 * u, sz * 0.08), sz); ctx.restore(); }
+    if (cursor && (local * 24 < letterCount + 4 || (local % 1) < 0.5)) { ctx.save(); ctx.fillStyle = tint(el, K.PAL.ink); ctx.fillRect(cursor[0], cursor[1] - sz * 0.5, Math.max(3 * u, sz * 0.08), sz); ctx.restore(); }
     LAYOUT.anchors[i] = LAYOUT.est[i];
     return true;
   }
   function drawText(el, i, t, local, p) {
     if (el.animate && ANIMATED.has(el.style) && !handwritten() && animText(el, i, local)) return;
-    const at = LAYOUT.textAt[i], {ctx, u} = K, color = el.accent || ['number', 'counter'].includes(el.style) ? K.PAL.accent : K.PAL.ink;
+    const at = LAYOUT.textAt[i], {ctx, u} = K, color = tint(el, ['number', 'counter', 'poster'].includes(el.style) ? K.PAL.accent : K.PAL.ink);
     const {x, y, size} = at;
     switch (el.style) {
       case 'statement': case 'poster': {
@@ -1386,7 +1388,7 @@
               const z = el.style === 'poster' ? 1 + 0.18 * (1 - ease.outCubic(q)) : ease.outBack(q);
               ctx.save(); ctx.translate(cx + word.w / 2, ly); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 2);
               if (word.hot && el.style === 'statement') { ctx.fillStyle = K.PAL.accent; ctx.beginPath(); ctx.roundRect(-word.w / 2 - size * 0.12, -size * 0.6, word.w + size * 0.24 + (joined ? space : 0), size * 1.14, size * 0.12); ctx.fill(); }
-              K.text(word.text, 0, 0, size, {color: word.hot && el.style === 'statement' ? onAccent : el.style === 'poster' ? (el.accent ? K.PAL.accent : K.alpha(K.PAL.ink, 0.9)) : word.hot ? K.PAL.accent : color, weight: 900, outline: el.style !== 'poster' && !(word.hot && el.style === 'statement')});
+              K.text(word.text, 0, 0, size, {color: word.hot && el.style === 'statement' ? onAccent : el.style === 'poster' ? color : word.hot ? K.PAL.accent : color, weight: 900, outline: !(word.hot && el.style === 'statement')});
               ctx.restore();
             }
             cx += word.w + space;
@@ -1394,7 +1396,9 @@
         });
         break;
       }
-      case 'note': { const n = Math.ceil(el.text.length * clamp01(local * 28 / Math.max(1, el.text.length))); K.text(el.text.slice(0, n), x, y, size, {color, weight: 700, maxWidth: K.W - 2 * K.M}); break; }
+      // Typed words grow from the full line's left edge at the full line's size (0.41, from video-use: centring the
+      // partial string made the line slide left while it typed).
+      case 'note': { const n = Math.ceil(el.text.length * clamp01(local * 28 / Math.max(1, el.text.length))), full = K.measure(el.text, size, {weight: 700}), sz = size * Math.min(1, (K.W - 2 * K.M) / Math.max(1, full)), left = Math.max(K.M, x - full * sz / size / 2); K.text(el.text.slice(0, n), left, y, sz, {color, weight: 700, align: 'left'}); break; }
       case 'number': { const q = clamp01(local / 0.25), z = 1 + 0.7 * (1 - ease.outCubic(q)); ctx.save(); ctx.translate(x, y); ctx.rotate(-0.08 * (1 - q)); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 3); K.text(el.text, 0, 0, size, {color, maxWidth: K.W - 2 * K.M}); ctx.restore(); break; }
       case 'counter': {
         // One value per frame with shrinking steps, landing on the number with a small pop (0.39: a counter steps like
@@ -1404,7 +1408,7 @@
         break;
       }
       case 'stamp': {
-        const q = clamp01(local / 0.16), z = 1 + 1.4 * (1 - ease.inCubic(q)), stamp = el.accent ? K.PAL.accent : C.red;
+        const q = clamp01(local / 0.16), z = 1 + 1.4 * (1 - ease.inCubic(q)), stamp = tint(el, C.red);
         ctx.save(); ctx.translate(x, y); ctx.rotate(-0.12); ctx.scale(z, z); ctx.globalAlpha *= clamp01(q * 2);
         const w = Math.min(K.W - 2 * K.M, at.width) / 2 + size * 0.3, h = size * 0.75;
         ctx.strokeStyle = stamp; ctx.lineWidth = size * 0.08; ctx.strokeRect(-w, -h, w * 2, h * 2); ctx.lineWidth = size * 0.03; ctx.strokeRect(-w + size * 0.12, -h + size * 0.12, w * 2 - size * 0.24, h * 2 - size * 0.24);
@@ -1414,7 +1418,7 @@
       }
       case 'highlight': {
         const q = ease.outCubic(clamp01(local / 0.45)), w = at.width;
-        ctx.save(); ctx.fillStyle = K.alpha(el.accent ? K.PAL.accent : C.yellow, 0.55); ctx.beginPath(); ctx.moveTo(x - w / 2 - 12 * u, y - size * 0.42); ctx.lineTo(x - w / 2 - 12 * u + (w + 24 * u) * q, y - size * 0.46); ctx.lineTo(x - w / 2 - 12 * u + (w + 24 * u) * q, y + size * 0.46); ctx.lineTo(x - w / 2 - 12 * u, y + size * 0.42); ctx.fill(); ctx.restore();
+        ctx.save(); ctx.fillStyle = K.alpha(tint(el, C.yellow), 0.55); ctx.beginPath(); ctx.moveTo(x - w / 2 - 12 * u, y - size * 0.42); ctx.lineTo(x - w / 2 - 12 * u + (w + 24 * u) * q, y - size * 0.46); ctx.lineTo(x - w / 2 - 12 * u + (w + 24 * u) * q, y + size * 0.46); ctx.lineTo(x - w / 2 - 12 * u, y + size * 0.42); ctx.fill(); ctx.restore();
         K.text(el.text, x, y, size, {color: K.PAL.ink, outline: false, maxWidth: K.W - 2 * K.M});
         break;
       }
@@ -1424,7 +1428,7 @@
         words.forEach((word, k) => { const q = clamp01((local - k * 0.1) / 0.25); if (q > 0) { const z = ease.outBack(q); ctx.save(); ctx.translate(cursor + widths[k] * fit / 2, y); ctx.scale(z, z); K.text(word, 0, 0, size * fit, {color: k === words.length - 1 && el.accent ? K.PAL.accent : color}); ctx.restore(); } cursor += widths[k] * fit; });
         break;
       }
-      case 'label': if (handwritten()) { K.text(el.text.toUpperCase(), x, y, size * 1.15, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: false, maxWidth: K.W - 2 * K.M}); break; } { const w = at.width + size * 0.8, h = size * 1.5; ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.restore(); K.text(el.text, x, y, size, {color: K.PAL.bg, outline: false}); break; }
+      case 'label': if (handwritten()) { K.text(el.text.toUpperCase(), x, y, size * 1.15, {color: tint(el, K.PAL.ink), weight: 700, outline: false, maxWidth: K.W - 2 * K.M}); break; } { const w = at.width + size * 0.8, h = size * 1.5; ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, h / 2); ctx.fill(); ctx.restore(); K.text(el.text, x, y, size, {color: K.PAL.bg, outline: false}); break; }
       case 'sticky': case 'tag': case 'callout': {
         // Illustrated annotations: a sticky note, a price tag on its string, an arrow-shaped callout. They pop on.
         const q = clamp01(local / 0.3), z = ease.outBack(q), rand = K.seeded(LAYOUT.el[i].seed), pad = size * 0.55;
@@ -1435,7 +1439,7 @@
         const ink = K.DARK ? '#23272E' : K.PAL.ink, lw = Math.max(2.5 * u, size * 0.06);
         ctx.lineWidth = lw; ctx.strokeStyle = ink; ctx.lineJoin = 'round';
         if (el.style === 'sticky') {
-          const paper = el.accent ? K.mix(K.PAL.accent, '#FFFFFF', 0.55) : ['#FFE680', '#BDE8B0', '#B9DDF5', '#FFC9A8'][LAYOUT.el[i].seed % 4], fold = size * 0.7;
+          const paper = el.color || el.accent ? K.mix(tint(el, K.PAL.accent), '#FFFFFF', 0.55) : ['#FFE680', '#BDE8B0', '#B9DDF5', '#FFC9A8'][LAYOUT.el[i].seed % 4], fold = size * 0.7;
           ctx.fillStyle = K.alpha('#000000', 0.12); ctx.fillRect(-w / 2 + 6 * u, -h / 2 + 8 * u, w, h);
           ctx.beginPath(); ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2 - fold); ctx.lineTo(w / 2 - fold, h / 2); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
           ctx.fillStyle = paper; ctx.fill(); ctx.stroke();
@@ -1444,7 +1448,7 @@
         } else if (el.style === 'tag') {
           const nose = h * 0.45;
           ctx.beginPath(); ctx.moveTo(-w / 2 - nose, 0); ctx.lineTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
-          ctx.fillStyle = el.accent ? K.mix(K.PAL.accent, '#FFFFFF', 0.75) : '#F7EBD3'; ctx.fill(); ctx.stroke();
+          ctx.fillStyle = el.color || el.accent ? K.mix(tint(el, K.PAL.accent), '#FFFFFF', 0.75) : '#F7EBD3'; ctx.fill(); ctx.stroke();
           ctx.beginPath(); ctx.arc(-w / 2 - nose * 0.35, 0, size * 0.13, 0, Math.PI * 2); ctx.fillStyle = K.PAL.bg; ctx.fill(); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(-w / 2 - nose * 0.35, 0); ctx.bezierCurveTo(-w / 2 - nose * 1.4, -h * 0.2, -w / 2 - nose * 1.6, -h * 0.9, -w / 2 - nose * 2.2, -h * 0.75); ctx.lineWidth = lw * 0.7; ctx.stroke();
           K.text(el.text, nose * 0.1, 0, size, {color: ink, outline: false, weight: 800, maxWidth: w - pad});
@@ -1452,12 +1456,12 @@
           const nose = h * 0.55;
           ctx.beginPath(); ctx.moveTo(-w / 2 - nose, 0); ctx.lineTo(-w / 2, -h / 2); ctx.lineTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2); ctx.lineTo(-w / 2, h / 2); ctx.closePath();
           ctx.fillStyle = '#FFFFFF'; ctx.fill(); ctx.lineWidth = lw * 1.3; ctx.stroke();
-          K.text(el.text, 0, 0, size, {color: el.accent ? K.PAL.accent : ink, outline: false, weight: 800, maxWidth: w - pad});
+          K.text(el.text, 0, 0, size, {color: el.color || el.accent ? K.mix(tint(el, K.PAL.accent), '#000000', 0.35) : ink, outline: false, weight: 800, maxWidth: w - pad});
         }
         ctx.restore();
         break;
       }
-      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 700, outline: !handwritten(), maxWidth: K.W * 0.5}); break; }
+      case 'keyword': { K.text(el.text.toUpperCase(), x, y, size, {color: tint(el, K.PAL.ink), weight: 700, outline: !handwritten(), maxWidth: K.W * 0.5}); break; }
       case 'versus': {
         // A comparison divider: a hand-drawn line down the frame with the word in a circle at its middle.
         const q = clamp01(local / 0.5), r = size * 0.85, rand = K.seeded(LAYOUT.el[i].seed), line = Array.from({length: 13}, (_, k) => [x + (rand() - 0.5) * 6 * u, K.H * (0.08 + 0.84 * k / 12)]);
@@ -1466,7 +1470,7 @@
           const z = ease.outBack(clamp01((q - 0.4) / 0.6));
           ctx.save(); ctx.translate(x, y); ctx.scale(z, z);
           K.render([{pts: K.frame(0, 0, 1).ring(0, 0, r, r, 40), fill: K.PAL.bg, px: 4.5 * u}], 1, 9);
-          K.text(el.text.toUpperCase(), 0, 0, size, {color: el.accent ? K.PAL.accent : K.PAL.ink, weight: 800, outline: false, maxWidth: r * 1.7});
+          K.text(el.text.toUpperCase(), 0, 0, size, {color: tint(el, K.PAL.ink), weight: 800, outline: false, maxWidth: r * 1.7});
           ctx.restore();
         }
         break;
@@ -1478,7 +1482,7 @@
         ctx.save(); ctx.globalAlpha *= q; K.text(el.text, x, y, size, {color: '#F1F1EE', outline: false, weight: 700, heading: false, maxWidth: K.W - 2 * K.M}); ctx.restore();
         break;
       }
-      case 'headline': { const q = ease.outCubic(clamp01(local / 0.35)), h = size * 1.6, yy = y - (1 - q) * (y + h); ctx.save(); ctx.fillStyle = el.accent ? K.PAL.accent : K.PAL.ink; ctx.fillRect(K.M * 0.5, yy - h / 2, K.W - K.M, h); ctx.restore(); K.text(el.text, K.W / 2, yy, size, {color: K.PAL.bg, outline: false, maxWidth: K.W - 2 * K.M}); break; }
+      case 'headline': { const q = ease.outCubic(clamp01(local / 0.35)), h = size * 1.6, yy = y - (1 - q) * (y + h); ctx.save(); ctx.fillStyle = tint(el, K.PAL.ink); ctx.fillRect(K.M * 0.5, yy - h / 2, K.W - K.M, h); ctx.restore(); K.text(el.text, K.W / 2, yy, size, {color: K.PAL.bg, outline: false, maxWidth: K.W - 2 * K.M}); break; }
       default: {
         K.text(el.text, x, y, size, {color, maxWidth: K.W - 2 * K.M});
         const q = clamp01((local - 0.25) / 0.3);
@@ -1732,7 +1736,41 @@
     else if (el.kind === 'fx' && !SCREEN_FX.has(el.effect) && !['shake', 'punch'].includes(el.effect)) drawFx(el, i, t, local, p);
     ctx.restore();
   }
+  // Fast moments get a film camera's motion blur (0.41, after Remotion's CameraMotionBlur): the frame is the average
+  // of a few moments across half a frame's time (a 180-degree shutter). Only when something moves fast (the camera, a
+  // whip in, a slide, a drop or a slam), so still frames cost nothing extra. On by default for the Documentary engine's
+  // designed shots (motion design blurs fast moves); hand-made looks show speed with their own smears, so it is off
+  // there unless the style turns it on (drawing.motionBlur). A style may animate on twos or threes
+  // instead (drawing.cadence: the stepped motion of hand-made 2D animation), which keeps every frame crisp.
+  const FAST_ENTERS = new Set(['slide', 'drop', 'swing', 'land']);
+  let blurCanvas = null;
   function frame(t, context) {
+    const fps = context.P.fps || 24, cadence = {twos: 2, threes: 3}[context.P.drawing?.cadence] || 1;
+    if (cadence > 1) t = Math.floor(t * fps / cadence + 1e-6) * cadence / fps;
+    const drawn = drawOnce(t, context), blurOn = context.P.drawing?.motionBlur ?? context.P.data?.engine === 'motion', speed = cadence > 1 || !blurOn ? 0 : fastAt(t, fps);
+    if (!speed) return drawn;
+    // Enough samples that neighbouring copies sit about 3 device pixels apart (at most 10), so the smear is smooth.
+    const main = context.ctx, canvas = main.canvas, tip = K.TIP, hand = LASTHAND, samples = Math.max(3, Math.min(10, Math.ceil(speed * 0.5 * (canvas.width / K.W) / 3)));
+    if (!blurCanvas || blurCanvas.width !== canvas.width || blurCanvas.height !== canvas.height) { blurCanvas = document.createElement('canvas'); blurCanvas.width = canvas.width; blurCanvas.height = canvas.height; }
+    const off = blurCanvas.getContext('2d');
+    for (let k = 1; k <= samples; k++) {
+      off.setTransform(1, 0, 0, 1, 0, 0); off.clearRect(0, 0, canvas.width, canvas.height); off.setTransform(main.getTransform());
+      drawOnce(Math.max(0, t - k * 0.5 / fps / samples), {...context, ctx: off});
+      main.save(); main.setTransform(1, 0, 0, 1, 0, 0); main.globalAlpha = 1 / (k + 1); main.drawImage(blurCanvas, 0, 0); main.restore();
+    }
+    K.ctx = main; K.TIP = tip; LASTHAND = hand;
+    return drawn;
+  }
+  // How fast the picture moves at t, in canvas pixels per frame (0 when nothing moves fast).
+  function fastAt(t, fps) {
+    if (!LAYOUT || t < 0.5 / fps) return 0;
+    const a = camera(t), b = camera(t - 1 / fps), moved = Math.abs(a.Z - b.Z) * K.W + Math.abs(a.ox - b.ox) + Math.abs(a.oy - b.oy) + Math.abs(a.cx - b.cx) + Math.abs(a.cy - b.cy);
+    // A sliding, dropping or slammed thing crosses about a tenth of the frame per frame at its fastest.
+    const entering = D.elements.some((el, i) => { const s = t - (LAYOUT.el[i]?.ts ?? Infinity); return s >= 0 && s < 0.3 && (FAST_ENTERS.has(el.enter) || (el.kind === 'text' && (el.style === 'stamp' || el.animate === 'slam'))); });
+    const speed = Math.max(moved > 0.006 * K.W ? moved : 0, entering ? 0.1 * K.W : 0);
+    return speed;
+  }
+  function drawOnce(t, context) {
     P = context.P; D = P.data;
     K.KIT = D.kit || {};
     K.TIP = null;
@@ -1785,9 +1823,9 @@
       K.ctx = layerCtx;
       // Ink draws the place on; under the pen it fades in, so the hand only draws the action.
       const reveal = K.FIN === 'ink' && !PEN && !D.holdSet ? clamp01(t / 0.6) : 1, pen = K.PEN;
-      K.PEN = false; K.SKETCH = K.FIN === 'board';
+      K.PEN = false; K.SKETCH = K.FIN === 'board'; K.WASH = true;
       K.render(setOf(D.set)(t), reveal, 77);
-      K.PEN = pen; K.SKETCH = false; K.ctx = ctx;
+      K.PEN = pen; K.SKETCH = false; K.WASH = false; K.ctx = ctx;
       layerCtx.restore();
       // Storybook places are illustrated, so they are drawn at nearly full strength.
       // Storybook places are illustrated (nearly full strength, warm and muted); a doodle page keeps only a hint of

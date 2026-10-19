@@ -317,3 +317,15 @@ test('0.39 evidence tools, unit charts, redaction, landing and film looks are ch
   const guide = Sk.promptGuide('motion', {engines: ['motion']});
   for (const word of ['"kind": "quote"', '"kind": "document"', '"kind": "gauge"', '"kind": "loupe"', '"kind": "ruler"', 'units is a unit chart', 'redact:', 'land:']) assert.ok(guide.includes(word), word);
 });
+
+// 0.41: a word's colour is chosen for its role (owner review 2026-10-19: a pale white poster word).
+test('words carry a colour: lenient for Claude, strict for owner edits, and the planner is told how to choose it', () => {
+  const warnings = [], drawing = Sk.validate({elements: [{kind: 'text', text: 'ANYONE', style: 'poster', color: 'Gold'}, {kind: 'text', text: 'x', style: 'title', color: 'neon'}]}, {lenient: true, warn: message => warnings.push(message)});
+  assert.deepEqual(drawing.elements.map(item => item.color), ['gold', undefined]);
+  assert.ok(warnings.some(item => /colour must be one of/.test(item)));
+  assert.throws(() => Sk.validate({elements: [{kind: 'text', text: 'x', style: 'title', color: 'neon'}]}), /colour must be one of/);
+  assert.deepEqual(Sk.WORD_COLORS.slice(0, 2), ['accent', 'ink']);
+  assert.match(Sk.promptGuide('stickman'), /WORD COLOUR: words are designed, not typed/);
+  assert.match(Sk.promptGuide('stickman'), /"color"\?: accent\|ink\|red/);
+  assert.deepEqual(Sk.validate(drawing).elements.map(item => item.color), ['gold', undefined], 'a checked drawing checks the same again');
+});

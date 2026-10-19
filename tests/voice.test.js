@@ -162,3 +162,12 @@ test('truncated audio cannot pass decoder integrity validation',async t=>{
   execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=440:duration=2','-ar','44100','-ac','1','-y',file]);const bytes=fs.readFileSync(file);fs.writeFileSync(file,bytes.subarray(0,Math.floor(bytes.length/2)));
   let report=null,rejected=false;try{report=await analyzeAudio(file,{expectedDuration:{min:1,max:3}});}catch{rejected=true;}assert.ok(rejected||report?.passed===false);
 });
+
+// 0.41: narration pace in words per minute (claude-code-video-toolkit's pacing QC), a note for the owner.
+test('narration pace is measured in words per minute and labelled fast, slow or ok', () => {
+  const {pace} = require('../voice');
+  assert.deepEqual(pace('one two three four five six seven eight nine ten', 4), {words: 10, wpm: 150, label: 'ok'});
+  assert.equal(pace('one two three four five six seven eight nine ten', 3).label, 'fast');
+  assert.equal(pace('one two three four five six seven eight nine ten', 6).label, 'slow');
+  assert.equal(pace('', 3), null);
+});

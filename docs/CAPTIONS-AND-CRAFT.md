@@ -59,6 +59,13 @@ Styles with `activeWordHighlight` burn captions whose words wait dimmed and ligh
 them (ASS karaoke from the caption's word times); the emphasis word lights in the accent with a short pop.
 A caption corrected to other words has no word times and is shown whole.
 
+### Caption looks (0.41, after caption-ai's themes, MIT)
+
+Style `captions.theme` picks how burned-in captions look (`captions.js` `THEMES`): `clean` (default), `bold` (capitals, heavier
+edge), `boxed` (an opaque box behind the words), `cinematic` (spaced capitals, warm, slow fades), `glow` (a glow in the accent;
+the key word stays white and glows wider), `comic` (yellow Impact capitals, thick outline, popping in) and `pop` (each caption
+pops in). Sidecar captions are drawn by the player and keep no look.
+
 ### On screen (skills `captions.keep-out-band`, `editing.caption-spec`)
 
 - Burned in as the **top ASS layer** (above graphics and canvas overlays), white bold sans with a dark

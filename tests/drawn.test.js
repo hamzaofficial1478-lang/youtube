@@ -368,3 +368,30 @@ test('0.39 the evidence tools draw, a loupe magnifies, and every film look print
     assert.ok((await frame(renderer, scene('none'), 1.6, {...motion, drawing: {look: 'classic', hand: false, film: 'blueprint'}})).equals(frames[0]), 'film "none" keeps the plain frame');
   } finally { await renderer.close(); }
 });
+
+// 0.41 (owner review 2026-10-19 and the study of eight repositories): words carry a chosen colour, natural media
+// strokes and washes, motion blur on fast moments, stepped cadence, and zooms that grow the area evenly.
+test('0.41 words take their chosen colour, natural media draw, fast moments blur and stepped motion holds frames', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  try {
+    await renderer.start();
+    const word = color => ({engine: 'stickman', set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'text', style: 'poster', text: 'ANYONE', x: 0.5, y: 0.45, size: 'xl', ...(color ? {color} : {})}]});
+    const gold = await frame(renderer, word('gold'), 1.5), plain = await frame(renderer, word(null), 1.5), red = await frame(renderer, word('red'), 1.5);
+    assert.ok(!gold.equals(plain) && !gold.equals(red), 'a word takes the colour Claude chose');
+    // Storybook and painted places are washed in, pencil whiteboards drawn in graphite: each finish changes the frame.
+    const place = {engine: 'stickman', set: 'market', camera: 'still', transition: 'cut', elements: [{kind: 'figure', pose: 'point', x: 0.3, y: 0.8, size: 'l'}]};
+    const classic = await frame(renderer, place, 1.5, {drawing: {look: 'classic', hand: false}}), story = await frame(renderer, place, 1.5, {drawing: {look: 'storybook', hand: false}});
+    assert.ok(!classic.equals(story));
+    assert.ok((await frame(renderer, place, 1.5, {drawing: {look: 'storybook', hand: false}})).equals(story), 'natural media are seeded: the same frame every time');
+    // A fast moment (a sliding rocket) blurs when motion blur is on, and stays the same frame every time.
+    const fast = {engine: 'motion', set: 'none', camera: 'still', transition: 'cut', elements: [{kind: 'prop', prop: 'rocket', x: 0.6, y: 0.45, size: 'l', enter: 'slide'}]};
+    const motion = {primary: 'motion'}, sharp = await frame(renderer, fast, 0.12, {...motion, drawing: {look: 'classic', hand: false, motionBlur: false}});
+    const blurred = await frame(renderer, fast, 0.12, {...motion, drawing: {look: 'classic', hand: false}});
+    assert.ok(!blurred.equals(sharp), 'the documentary engine blurs fast moves by default');
+    assert.ok((await frame(renderer, fast, 0.12, {...motion, drawing: {look: 'classic', hand: false}})).equals(blurred), 'the blur is the same every time');
+    assert.ok((await frame(renderer, fast, 1.5, {...motion, drawing: {look: 'classic', hand: false}})).equals(await frame(renderer, fast, 1.5, {...motion, drawing: {look: 'classic', hand: false, motionBlur: false}})), 'still frames are not blurred');
+    // On twos: a drawing holds for two frames.
+    const twos = {drawing: {look: 'classic', hand: false, cadence: 'twos'}};
+    assert.ok((await frame(renderer, fast, 0.2, {...motion, ...twos})).equals(await frame(renderer, fast, 0.2 + 1 / 30, {...motion, ...twos})), 'the second frame of a pair repeats the first');
+  } finally { await renderer.close(); }
+});

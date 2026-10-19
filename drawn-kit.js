@@ -44,6 +44,9 @@
   K.hexRgb = hex => { const v = /^#?([0-9a-f]{6})$/i.exec(hex)?.[1] || 'ffffff'; return [0, 2, 4].map(k => parseInt(v.slice(k, k + 2), 16)); };
   K.alpha = (hex, a) => { const [r, g, b] = K.hexRgb(hex); return `rgba(${r},${g},${b},${a})`; };
   K.mix = (a, b, f) => { const x = K.hexRgb(a), y = K.hexRgb(b); return '#' + x.map((v, k) => Math.round(v + (y[k] - v) * f).toString(16).padStart(2, '0')).join(''); };
+  // A zoom grows the picture's area evenly, not its width (0.41, after Remotion's perceptual scale): a linear scale
+  // seems to rush at the start and crawl at the end.
+  K.zlerp = (a, b, q) => Math.sqrt(Math.max(0, a * a + (b * b - a * a) * q));
   K.lum = hex => { const [r, g, b] = K.hexRgb(hex); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; };
   K.COL = {
     red: '#E5484D', blue: '#3E7BFA', green: '#34B36B', yellow: '#FFC83D', orange: '#FF8A3D', purple: '#8B5CF6', pink: '#F58AB8', black: '#2A2A2A', white: '#FFFFFF', grey: '#9AA0A6', brown: '#8B5A3C', gold: '#F2B531', teal: '#1FB5A8',
@@ -91,6 +94,8 @@
   K.TIP = null;
   K.PEN = false;
   K.SKETCH = false;
+  // K.WASH: the place (set) is being drawn; only places are washed in like watercolour, people and props stay solid.
+  K.WASH = false;
   K.penAt = (x, y) => { if (!K.PEN) return; const m = K.ctx.getTransform(); K.TIP = [m.a * x + m.c * y + m.e, m.b * x + m.d * y + m.f]; };
   K.paint = (it, p, seed, wash = 1) => {
     const {ctx, u, FIN} = K, pts = it.pts;
@@ -127,7 +132,11 @@
         // Whiteboard looks: black marker keeps the board white inside its lines, pencil colours lightly, and dry-erase
         // markers colour in with visible strokes over the white.
         const wbFill = FIN === 'wb' && it.fill[0] === '#' ? (K.WB === 'marker' ? '#FFFFFF' : K.WB === 'pencil' ? K.mix(it.fill, '#FFFFFF', 0.68) : K.WB === 'dry-erase' ? '#FFFFFF' : it.fill) : null;
-        ctx.fillStyle = wbFill || (FIN === 'story' && it.fill[0] === '#' ? K.mix(it.fill, K.PAL.bg, 0.22) : it.fill); K.trace(pts, true); ctx.fill(); ctx.shadowBlur = 0;
+        const fillColour = wbFill || (FIN === 'story' && it.fill[0] === '#' ? K.mix(it.fill, K.PAL.bg, 0.22) : it.fill);
+        // Storybook and painted places are washed in like watercolour (0.41, natural media); glows stay flat.
+        if ((FIN === 'story' || FIN === 'paint') && K.WASH && fillColour[0] === '#' && !it.glow) K.wash(pts, fillColour, seed, FIN === 'paint' ? 0.8 : 1);
+        else { ctx.fillStyle = fillColour; K.trace(pts, true); ctx.fill(); }
+        ctx.shadowBlur = 0;
         if (FIN === 'wb' && K.WB === 'dry-erase' && it.fill[0] === '#' && it.fill.toUpperCase() !== '#FFFFFF') {
           let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
           for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
@@ -153,6 +162,11 @@
         const rand = K.seeded(seed * 31 + 977);
         K.trace(part, closed && p >= 1, () => (rand() - 0.5) * 0.9 * u * 2);
         ctx.lineWidth = width * 0.85; ctx.stroke();
+      } else if (FIN === 'wb' && K.WB === 'pencil') {
+        // A pencil sketch: graphite stamped along the line, darker where the hand presses, with the paper's tooth.
+        const rand = K.seeded(seed * 29 + 151), colour = it.color || K.mix(K.PAL.line, '#FFFFFF', 0.12);
+        const line = part.map(([x, y]) => [x + (rand() - 0.5) * 1.2 * u, y + (rand() - 0.5) * 1.2 * u]);
+        K.brush(closed && p >= 1 ? [...line, line[0]] : line, width * 1.05, colour, 'graphite', seed);
       } else if (FIN === 'wb') {
         // A whiteboard marker: one confident line; a pencil: two light graphite passes.
         const pencil = K.WB === 'pencil', rand = K.seeded(seed * 29 + 151);
@@ -163,17 +177,103 @@
           ctx.lineWidth = pencil ? width * (pass ? 0.5 : 0.85) : width; ctx.stroke();
         }
       } else if (FIN === 'doodle') {
-        // A felt marker: one uneven line, the same on every frame (no boil).
+        // A felt marker: one uneven line, the same on every frame (no boil), with crayon tooth along it (0.41).
         for (let pass = 0; pass < 2; pass++) {
           const rand = K.seeded(seed * 17 + pass * 389), amp = (pass ? 1.5 : 0.7) * u;
           K.trace(part, closed && p >= 1, () => (rand() - 0.5) * amp * 2);
-          ctx.lineWidth = pass ? width * 0.55 : width; ctx.stroke();
+          ctx.lineWidth = pass ? width * 0.55 : width * 0.82; ctx.stroke();
         }
+        K.brush(closed && p >= 1 ? [...part, part[0]] : part, width * 0.9, ctx.strokeStyle, 'crayon', seed);
+      } else if (FIN === 'story') {
+        // Storybook outlines are coloured pencil over a thin line (0.41, natural media).
+        K.trace(part, closed && p >= 1); ctx.lineWidth = width * 0.55; ctx.stroke();
+        K.brush(closed && p >= 1 ? [...part, part[0]] : part, width * 1.1, ctx.strokeStyle, 'pencil', seed);
       } else {
         if (it.glow && FIN === 'flat') { ctx.shadowColor = it.glow; ctx.shadowBlur = 22 * u; }
         K.trace(part, closed && p >= 1); ctx.lineWidth = width; ctx.stroke();
       }
     }
+    ctx.restore();
+  };
+
+  // ------------------------------------------------------------ natural media (0.41)
+  // After p5.brush (MIT, Alejandro Campos Uribe; vendor/p5brush/NOTICE), restated in our own code for the 2D canvas:
+  // a stroke is stamps along the line whose pressure swells in the middle of the stroke and fades at its ends, with
+  // paper grain (stamps skipped where the paper's tooth lies) and a little side-scatter; a fill is a watercolour wash
+  // (Tyler Hobbs' method: translucent layers of a slightly warped copy of the shape, darker at the edges).
+  // Seeded per stroke, so every frame of a stroke is identical.
+  const MEDIA = {
+    graphite: {size: 0.8, spread: 0.3, grain: 0.72, alpha: 0.82, step: 0.38, peak: [1.1, 0.78]}, // a soft (2B) pencil
+    crayon: {size: 0.9, spread: 0.42, grain: 0.62, alpha: 0.62, step: 0.5, peak: [1.05, 0.85]},
+    pencil: {size: 0.72, spread: 0.28, grain: 0.68, alpha: 0.55, step: 0.4, peak: [1.06, 0.78]}, // coloured pencil
+    marker: {size: 1, spread: 0.08, grain: 0.97, alpha: 0.3, step: 0.3, peak: [1.08, 0.9]},
+  };
+  K.brush = (pts, width, color, kind = 'graphite', seed = 1) => {
+    const m = MEDIA[kind] || MEDIA.graphite, {ctx} = K, rand = K.seeded(seed * 97 + 13), total = K.polyLen(pts);
+    if (pts.length < 2 || total <= 0) return;
+    const step = Math.max(0.6, width * m.step), peakAt = 0.35 + 0.3 * rand(), lean = (rand() - 0.5) * 0.3;
+    // Stamps are gathered into a few opacity groups, each filled at once (fast; the grain keeps the texture).
+    const groups = [[], [], []];
+    let acc = 0;
+    for (let k = 1; k < pts.length; k++) {
+      const [x0, y0] = pts[k - 1], [x1, y1] = pts[k], len = Math.hypot(x1 - x0, y1 - y0);
+      if (!len) continue;
+      const nx = -(y1 - y0) / len, ny = (x1 - x0) / len;
+      for (let d = (step - (acc % step)) % step; d < len; d += step) {
+        const f = (acc + d) / total, x = x0 + (x1 - x0) * d / len, y = y0 + (y1 - y0) * d / len;
+        const pressure = m.peak[1] + (m.peak[0] - m.peak[1]) / (1 + Math.pow(Math.abs((f - peakAt) / 0.42), 3)) + lean * (f - 0.5);
+        if (rand() > m.grain * Math.min(1.15, pressure + 0.12)) continue;
+        const side = (rand() + rand() + rand() - 1.5) * width * m.spread, r = Math.max(0.35, pressure * pressure * width * m.size * (0.85 + 0.3 * rand()) / 2);
+        groups[Math.min(2, Math.floor(rand() * 3))].push(x + nx * side, y + ny * side, r);
+      }
+      acc += len;
+    }
+    ctx.save(); ctx.fillStyle = color;
+    const base = ctx.globalAlpha;
+    groups.forEach((g, i) => {
+      if (!g.length) return;
+      ctx.globalAlpha = base * m.alpha * (0.7 + 0.3 * i);
+      ctx.beginPath();
+      for (let k = 0; k < g.length; k += 3) { ctx.moveTo(g[k] + g[k + 2], g[k + 1]); ctx.arc(g[k], g[k + 1], g[k + 2], 0, 6.2832); }
+      ctx.fill();
+    });
+    ctx.restore();
+  };
+  // A watercolour wash: a few translucent layers of the shape, each edge pushed in and out by a seeded midpoint
+  // deformation, then a darker rim where the pigment pools. Small shapes stay a flat colour.
+  const deform = (pts, rand, amount, depth) => {
+    let out = pts;
+    for (let d = 0; d < depth; d++) {
+      const next = [];
+      for (let k = 0; k < out.length; k++) {
+        const [x0, y0] = out[k], [x1, y1] = out[(k + 1) % out.length], len = Math.hypot(x1 - x0, y1 - y0);
+        next.push(out[k]);
+        if (len < 2) continue;
+        const g = (rand() + rand() + rand() - 1.5) * amount * len;
+        next.push([(x0 + x1) / 2 - (y1 - y0) / len * g, (y0 + y1) / 2 + (x1 - x0) / len * g]);
+      }
+      out = next; amount *= 0.62;
+    }
+    return out;
+  };
+  K.wash = (pts, color, seed = 1, strength = 1) => {
+    const {ctx, u} = K;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+    const size = Math.min(x1 - x0, y1 - y0);
+    if (size < 26 * u || pts.length < 3 || pts.length > 400) { ctx.fillStyle = color; K.trace(pts, true); ctx.fill(); return; }
+    // Long edges are split first, so a rectangle bleeds along its sides too.
+    const even = []; for (let k = 0; k < pts.length; k++) { const [a, b] = pts[k], [c, d] = pts[(k + 1) % pts.length], n = Math.min(6, Math.floor(Math.hypot(c - a, d - b) / (size * 0.35))); for (let i = 0; i <= n; i++) even.push([a + (c - a) * i / (n + 1), b + (d - b) * i / (n + 1)]); }
+    const rand = K.seeded(seed * 53 + 7), base = ctx.globalAlpha;
+    ctx.save(); ctx.fillStyle = color;
+    ctx.globalAlpha = base * 0.86; K.trace(even, true); ctx.fill();
+    for (let layer = 0; layer < 4; layer++) {
+      ctx.globalAlpha = base * 0.12 * strength; K.trace(deform(even, rand, 0.05 + 0.03 * layer, 2), true); ctx.fill();
+    }
+    // The rim: pigment gathers at the edge as the wash dries.
+    ctx.save(); K.trace(even, true); ctx.clip();
+    ctx.globalAlpha = base * 0.22 * strength; ctx.strokeStyle = K.mix(K.col(color), '#1B1B2F', 0.25); ctx.lineWidth = Math.max(2 * u, size * 0.05); ctx.lineJoin = 'round';
+    K.trace(deform(even, rand, 0.02, 1), true); ctx.stroke(); ctx.restore();
     ctx.restore();
   };
   // Draws items in order; a draw-on progress is shared out by stroke length, the way a hand draws.
@@ -227,11 +327,12 @@
     if (fit < 1) ctx.font = K.font(size * fit, {heading, weight});
     ctx.textAlign = align; ctx.textBaseline = baseline; ctx.lineJoin = 'round';
     if (outline) {
-      // Dark palettes: a glow and a dark edge, so light words also read over a bright place (motion designs draw places
-      // at full strength since 0.36). The edge is nearly solid (live plan 2026-10-19: pale words with a soft edge vanished
-      // into a white cloud and a pale map).
-      if (K.DARK) { ctx.shadowColor = K.alpha('#000000', 0.55); ctx.shadowBlur = 10 * u; ctx.strokeStyle = K.alpha('#000000', 0.85); ctx.lineWidth = Math.max(3.5 * u, size * fit * 0.13); ctx.strokeText(value, x, y); }
-      else { ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.max(4 * u, size * fit * 0.16); ctx.strokeText(value, x, y); }
+      // The edge follows the word's own colour (0.41): a light word (a dark palette's ink, yellow, gold) gets a glow and a
+      // nearly solid dark edge, so it reads over a bright place too (live plan 2026-10-19: pale words vanished into a
+      // white cloud); a dark word gets a white edge, also on a dark palette.
+      const tone = K.lum(K.col(String(color).startsWith('rgba') ? K.PAL.ink : color));
+      if (tone > 0.55) { ctx.shadowColor = K.alpha('#000000', 0.55); ctx.shadowBlur = 10 * u; ctx.strokeStyle = K.alpha('#000000', 0.85); ctx.lineWidth = Math.min(16 * u, Math.max(3.5 * u, size * fit * 0.13)); ctx.strokeText(value, x, y); }
+      else { ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = Math.min(18 * u, Math.max(4 * u, size * fit * 0.16)); ctx.strokeText(value, x, y); }
     }
     ctx.fillStyle = color; ctx.fillText(value, x, y);
     ctx.restore();

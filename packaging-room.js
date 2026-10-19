@@ -4,6 +4,7 @@
 // pinned FFmpeg; Claude drafts only on an owner's click, inside a token reservation. Approval is named and
 // becomes stale when the script, the reviewed render or the package changes. Nothing is published.
 const fs = require('node:fs');
+const F = require('./fonts');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 const R = require('./render');
@@ -81,7 +82,7 @@ class PackagingRoom {
     for (const thumb of payload.thumbnails) {
       const shot = inputs.shots.find(item => item.label === thumb.shot), video = shot.mediaType === 'video';
       const at = video ? Math.min(thumb.at, Math.max(0, (shot.durationSeconds || 1) - 0.1)) : 0;
-      const ass = P.thumbnailAss({text: thumb.text, accent: thumb.accent, layout: thumb.layout, font: inputs.spec?.typography?.headingFont || 'Arial', accentColour: inputs.spec?.palette?.accent});
+      const ass = P.thumbnailAss({text: thumb.text, accent: thumb.accent, layout: thumb.layout, font: F.resolve(inputs.spec?.typography?.headingFont || 'Arial'), accentColour: inputs.spec?.palette?.accent});
       const specHash = hash({asset: shot.sha256, at, ass, ffmpeg: pin.pin.ffmpegSha256}), file = path.join(dir, `${specHash.slice(0, 32)}.jpg`);
       if (!fs.existsSync(file)) {
         const source = this.renders.localFile(shot.relativePath);

@@ -169,6 +169,21 @@ Rather than presenting untested upstream features as ready, the first release re
 - [lemomo-ai/lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar), pinned `508848acb2b4930c4041fef4d594120da1525bff`, MIT. Read only: DIRECTOR.md, TECHNIQUE.md, the 51 style guides and the 98 style prompts. No code or text copied; the film looks (`engines.js` FILMS, `drawn-engine.js` drawFilm) and `skills/film-craft.json` are our own implementations and wording. No script was run.
 - Both were cloned as untrusted reference data outside the repository. Research notes: `docs/research/lemo-opuscar-and-motionmaxxing.md`.
 
+### Eight repositories (0.41: natural media, motion, captions, fonts, sound timing, analysis and skills)
+
+All were cloned shallowly as untrusted reference data outside the repository (Remotion: only the twelve packages read, by sparse
+checkout). No script was run and no code was copied; each idea is restated in our own code. Research notes:
+`docs/research/eight-repos-2026-10-19.md`.
+
+- [acamposuribe/p5.brush](https://github.com/acamposuribe/p5.brush), pinned `43ac6d5a2b96db8125c81e4ac1ebd5aa00f6de96`, MIT (Alejandro Campos Uribe). Restated: the stamp brush model (pressure along the stroke, grain, side-scatter) and the watercolour wash (Tyler Hobbs' layered deformation) as `drawn-kit.js` `K.brush` and `K.wash`. Notice: `vendor/p5brush/NOTICE`.
+- [browser-use/video-use](https://github.com/browser-use/video-use), pinned `43cfc566833548093455c9d4a46bd69913b7e552`, MIT. Restated: fonts fail silently (`fonts.js`), typed text from a fixed edge, effects start early by their attack (`music.js` `attackArgs`/`attackOf`), per-clip levelling before a grade (`render.js` normalize), self-check and design references as skills.
+- [remotion-dev/remotion](https://github.com/remotion-dev/remotion), pinned `a65368a820d9195dc17cbf6d619e296c0b8e9d5b`, Remotion License (free for individuals and companies of up to 3 people; a company licence above that). Read only: core interpolate/spring/easing, transitions, effects (light leak), motion-blur, captions, paths, noise, layout-utils, rough-notation, shapes, light-leaks, animation-utils. Ideas taken: perceptual scale (`K.zlerp`), camera motion blur by averaged samples, posterised cadence. No Remotion code is in the program; using Remotion itself would need the licence check.
+- [remotion-dev/skills](https://github.com/remotion-dev/skills), pinned `1441a11e95db35443bd76bb318386c0d3ca00053` (part of the Remotion repository). Read only: remotion-markup timing, transitions, effects, motion blur, light leaks, measuring text, captions. Restated as studio-craft skills.
+- [TomGranot/watch-video](https://github.com/TomGranot/watch-video), pinned `9492ba334de083ba0d74a5bbac18ae6a20ace500`, MIT. Read only: SKILL.md, analysis protocol, frame sampling. Restated as skills (coarse-to-fine, evidence labels); its yt-dlp download path is not used (YouTube terms; our no-download rule).
+- [morningstarwebd/caption-ai](https://github.com/morningstarwebd/caption-ai), pinned `5779ef6b674a36295499ccec1d5e221c1b52c5e4`, MIT. Read only: caption themes and the alignment pipeline. Restated: seven caption looks as our own ASS styles (`captions.js` `THEMES`).
+- [digitalsamba/claude-code-video-toolkit](https://github.com/digitalsamba/claude-code-video-toolkit), pinned `959e0fc6c20210832078781e49daa7384cebb293`, MIT. Read only: CLAUDE.md, commands, tools (pacing, qc, sync_timing, sfx, cutdown), transitions registry. Restated: narration pace in words per minute (`voice.js` `pace`).
+- [anthropics/skills](https://github.com/anthropics/skills) `skills/skill-creator`, pinned `dbd4588f9e1033efb41dad4bef2f7947c8993d44`, Apache-2.0. Read only: SKILL.md and its agents and references. Restated: skill advice (`skills.js` `skillQuality`) and two learning skills.
+
 ### topojson/world-atlas (0.36, maps)
 
 - Source: npm package `world-atlas` 2.0.2 (exact pin), <https://github.com/topojson/world-atlas>. License: ISC (Michael Bostock); the data is Natural Earth's 1:110m admin-0 country boundaries, version 4.1.0, public domain.
