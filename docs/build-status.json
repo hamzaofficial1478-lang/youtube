@@ -1,7 +1,7 @@
 {
-  "version": "0.43.0",
+  "version": "0.44.0",
   "updated": "2026-10-20",
-  "nextAction": "Owner: restart the program; for a family with more than one language, open Room 06 after approving a master and ask Claude for an edition. Next build step: L02 (edition narration and timing), then L03; the parked script and competitor work when the owner decides.",
+  "nextAction": "Owner: restart the program; for a family with more than one language, approve a language's words in Room 06, choose its narrator and narrate it (ElevenLabs, paid, on a click), then approve the narration. Next build step: L03 (each edition's render, thumbnail and approval); the parked script and competitor work when the owner decides.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -493,8 +493,9 @@
         {
           "id": "L02",
           "title": "Language narration and synchronization",
-          "status": "planned",
-          "remaining": "Generate actual voices, adjust natural wording/timing and verify with proficient language reviewers."
+          "status": "testing",
+          "remaining": "Not yet run with live ElevenLabs in a language other than English, nor heard by a speaker of that language. Voice direction (emotion per sentence) is not applied to editions. The retimed edition picture, its captions and its render come with L03.",
+          "evidence": "0.44.0 (2026-10-20): edition narration and timing in Room 06. Each language gets its narrator (the main narrator's connection and rights with this language's voice and model, named language-rights confirmation); the approved words are narrated on a click through the Voice Room's own speaking and audio-check code, inside the family's shared monthly voice limit, at most 3 paid attempts, interrupted attempts need a confirmed retry; every scene of the approved edit is timed to the new voice from measured word times (scene changes within 0.25 s of their words, scenes that change length beyond the natural range named with the sentences to shorten); named approval that goes stale with new words, a new voice, a changed file or another master. Tested in tests/localization.test.js (stand-in ElevenLabs returning real FFmpeg audio with character timing) and in the browser on a throwaway 55-s master (narration 61.7 s, all audio checks passed, scene changes within 0.01 s, one long scene accepted at approval). npm test 315/315 passed."
         },
         {
           "id": "L03",
@@ -572,5 +573,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Language editions in Room 06 (L01)"
+  "milestone": "Edition narration and timing in Room 06 (L02)"
 }

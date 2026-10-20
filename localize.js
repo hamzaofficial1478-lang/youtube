@@ -153,4 +153,49 @@ function carry(previousPayload, previousSource, src) {
   return {sentences, visible, given};
 }
 
-module.exports = {SCHEMA, VISIBLE, LIMITS, RATE, seconds, language, visibleTexts, packageSource, source, syllables, figures, messages, normalise, check, script, carry};
+// L02 synchronization: where each sentence of the edition's narration starts, then each scene of the approved edit
+// measured in the edition's voice. The picture follows the voice (never the other way: the voice is not sped up), so
+// every scene is retimed to its new length and every scene change lands on the frame nearest the edition's own words
+// (DRIFT_LIMIT is the blueprint's tolerance). A scene that must stretch or shrink beyond what reads as natural is
+// named, with the wording fix that avoids it.
+const DRIFT_LIMIT = 0.25, NATURAL = Object.freeze({min: 0.8, max: 1.25, seconds: 0.6});
+const r3 = value => Math.round(value * 1000) / 1000;
+// Sentence starts in the edition's narration: measured when the voice's word times cover exactly the words sent
+// (ElevenLabs), otherwise spread by spoken length (estimated, and labelled so).
+function sentenceTimes(sentences, words, narrationSeconds, locale) {
+  const counts = sentences.map(item => (String(item.text).match(/\S+/g) || []).length);
+  if (Array.isArray(words) && words.length && words.length === counts.reduce((sum, value) => sum + value, 0)) {
+    let index = 0;
+    return {method: 'measured', starts: sentences.map((item, k) => { const at = words[index].start; index += counts[k]; return {n: item.n, start: r3(at)}; })};
+  }
+  const weights = sentences.map(item => Math.max(0.2, seconds(item.text, locale))), total = weights.reduce((sum, value) => sum + value, 0);
+  let at = 0;
+  return {method: 'estimated', starts: sentences.map((item, k) => { const start = at; at += narrationSeconds * weights[k] / total; return {n: item.n, start: r3(start)}; })};
+}
+function sync({timeline, payload, src, words = null, narrationSeconds, locale = null}) {
+  const fps = timeline.fps, sentences = src.sentences.map(item => ({n: item.n, text: payload.sentences.find(entry => entry.n === item.n)?.text || ''}));
+  const times = sentenceTimes(sentences, words, narrationSeconds, locale), startOf = new Map(times.starts.map(item => [item.n, item.start]));
+  // The last scene keeps whatever the primary video holds after its last word.
+  const last = timeline.scenes.at(-1), tail = last ? Math.max(0, last.endFrame / fps - (timeline.narrationSeconds ?? last.endFrame / fps)) : 0;
+  const scenes = timeline.scenes.map((scene, k) => {
+    const next = timeline.scenes[k + 1], primary = {start: scene.startFrame / fps, end: scene.endFrame / fps};
+    const start = k === 0 ? primary.start : startOf.get(scene.sentenceStart) ?? primary.start, end = next ? startOf.get(next.sentenceStart) ?? primary.end : narrationSeconds + tail;
+    const startFrame = k === 0 ? scene.startFrame : Math.round(start * fps), endFrame = next ? Math.round(end * fps) : Math.round(end * fps);
+    const was = primary.end - primary.start, now = (endFrame - startFrame) / fps, factor = now / Math.max(was, 1 / fps), change = now - was;
+    const natural = Math.abs(change) <= DRIFT_LIMIT ? 'same' : factor >= NATURAL.min && factor <= NATURAL.max || Math.abs(change) <= NATURAL.seconds ? 'retime' : factor > 1 ? 'long' : 'short';
+    return {id: scene.id, label: scene.label, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, primary: {start: r3(primary.start), end: r3(primary.end)}, edition: {start: r3(startFrame / fps), end: r3(endFrame / fps)}, startFrame, endFrame,
+      drift: r3(k === 0 ? 0 : Math.abs(startFrame / fps - start)), factor: Math.round(factor * 100) / 100, status: natural};
+  });
+  const issues = [], span = scene => scene.sentenceStart === scene.sentenceEnd ? `sentence ${scene.sentenceStart}` : `sentences ${scene.sentenceStart}-${scene.sentenceEnd}`;
+  for (const scene of scenes.filter(item => item.status === 'long' || item.status === 'short')) issues.push({severity: 'warning', code: `scene-${scene.status}`, sceneId: scene.id,
+    message: scene.status === 'long' ? `${scene.label} runs ${Math.round((scene.factor - 1) * 100)}% longer in this language (${(scene.edition.end - scene.edition.start).toFixed(1)} s instead of ${(scene.primary.end - scene.primary.start).toFixed(1)} s): its pictures are held longer. A shorter wording of ${span(scene)} keeps the original rhythm.`
+      : `${scene.label} is ${Math.round((1 - scene.factor) * 100)}% shorter in this language: its pictures run faster than in the original. Fuller wording of ${span(scene)} keeps the original rhythm.`});
+  const maxDrift = scenes.reduce((most, scene) => Math.max(most, scene.drift), 0);
+  if (maxDrift >= DRIFT_LIMIT) issues.push({severity: 'critical', code: 'drift', message: `A scene change lands ${maxDrift.toFixed(2)} s from its words (the limit is ${DRIFT_LIMIT} s).`});
+  if (times.method === 'estimated') issues.push({severity: 'warning', code: 'estimated', message: 'This voice gave no word timing, so sentence starts are estimated from their length: check the scene changes by ear.'});
+  const total = scenes.length ? scenes.at(-1).edition.end : 0;
+  return {method: times.method, fps, sentences: times.starts, scenes, maxDrift: r3(maxDrift), seconds: r3(total), primarySeconds: r3(timeline.totalFrames / fps), issues,
+    passed: !issues.some(item => item.severity === 'critical'), counts: {same: scenes.filter(item => item.status === 'same').length, retime: scenes.filter(item => item.status === 'retime').length, outside: scenes.filter(item => item.status === 'long' || item.status === 'short').length}};
+}
+
+module.exports = {SCHEMA, VISIBLE, LIMITS, RATE, DRIFT_LIMIT, NATURAL, seconds, language, visibleTexts, packageSource, source, syllables, figures, messages, normalise, check, script, carry, sentenceTimes, sync};

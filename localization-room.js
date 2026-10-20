@@ -3,8 +3,12 @@
 // languages gets an edition: the narration script, every word on screen and the package, adapted by Claude on the
 // owner's click (inside a token reservation) or written by the owner. Revisions are immutable per language; an
 // approval is named and goes stale when the primary video's words change. Items whose source did not change keep their
-// approved wording. Nothing is narrated, rendered or published here (L02/L03).
+// approved wording. L02: each language's narrator speaks the approved words (on a click, inside the family's voice
+// characters), and the approved edit's scenes are measured in that voice. Nothing is rendered or published here (L03).
+const fs = require('node:fs');
+const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
+const V = require('./voice');
 const L = require('./localize');
 const R = require('./render');
 const {splitSentences} = require('./scene-room');
@@ -33,19 +37,28 @@ function sentencesOf(script, locale) {
 }
 
 class LocalizationRoom {
-  constructor(store, renders, packaging, connectors, ai) {
-    Object.assign(this, {store, db: store.db, renders, packaging, connectors, ai, busy: false});
+  constructor(store, renders, packaging, connectors, ai, {dataRoot = null, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe'} = {}) {
+    Object.assign(this, {store, db: store.db, renders, packaging, connectors, ai, busy: false, narrating: false, ffmpeg, ffprobe});
+    this.dataRoot = dataRoot || store.artifactRoot || renders?.dataRoot;
+    this.voiceDir = path.join(this.dataRoot || '.', 'voice-artifacts');
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS edition_revisions(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL REFERENCES content(id), locale TEXT NOT NULL, revision INTEGER NOT NULL, content_revision INTEGER NOT NULL, master_id TEXT NOT NULL, source TEXT NOT NULL, source_hash TEXT NOT NULL, actor TEXT NOT NULL, payload TEXT NOT NULL, payload_hash TEXT NOT NULL, checks TEXT NOT NULL, note TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(content_id, locale, revision));
       CREATE TRIGGER IF NOT EXISTS edition_revisions_immutable BEFORE UPDATE ON edition_revisions BEGIN SELECT RAISE(ABORT, 'Edition revisions are immutable.'); END;
       CREATE TABLE IF NOT EXISTS edition_approvals(id TEXT PRIMARY KEY, revision_id TEXT NOT NULL REFERENCES edition_revisions(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, source_hash TEXT NOT NULL, master_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE TRIGGER IF NOT EXISTS edition_approvals_immutable BEFORE UPDATE ON edition_approvals BEGIN SELECT RAISE(ABORT, 'Edition approvals are immutable.'); END;
+      CREATE TABLE IF NOT EXISTS edition_voices(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), locale TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(family_id, locale, revision));
+      CREATE TRIGGER IF NOT EXISTS edition_voices_immutable BEFORE UPDATE ON edition_voices BEGIN SELECT RAISE(ABORT, 'Edition voices are immutable.'); END;
+      CREATE TABLE IF NOT EXISTS edition_narrations(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, edition_revision_id TEXT NOT NULL REFERENCES edition_revisions(id), voice_id TEXT NOT NULL REFERENCES edition_voices(id), status TEXT NOT NULL, scope TEXT NOT NULL, result TEXT, error TEXT, attempts INTEGER NOT NULL, usage_status TEXT NOT NULL, reserved_characters INTEGER NOT NULL DEFAULT 0, period_month TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS edition_narration_approvals(id TEXT PRIMARY KEY, narration_id TEXT NOT NULL REFERENCES edition_narrations(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, edition_approval_id TEXT NOT NULL, master_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TRIGGER IF NOT EXISTS edition_narration_approvals_immutable BEFORE UPDATE ON edition_narration_approvals BEGIN SELECT RAISE(ABORT, 'Narration approvals are immutable.'); END;
       CREATE TABLE IF NOT EXISTS edition_jobs(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, parts TEXT NOT NULL DEFAULT '{}', revision_id TEXT, error TEXT, attempts INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     `);
     for (const row of this.db.prepare("SELECT id FROM edition_jobs WHERE status='running'").all()) {
       this.db.prepare("UPDATE edition_jobs SET status='interrupted', error='The program stopped while Claude was adapting. Finished parts are kept; token use of the open part is unknown. Retry deliberately.', updated_at=? WHERE id=?").run(now(), row.id);
       this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(now(), row.id);
     }
+    this.db.prepare("UPDATE edition_narrations SET status='interrupted', usage_status=CASE WHEN usage_status='reserved' THEN 'unknown' ELSE usage_status END, error='The program stopped while the narration was being made. The voice service may have charged for it; retry deliberately.', updated_at=? WHERE status='running'").run(now());
+    store.editionVoiceCharacters = (familyId, period) => this.editionVoiceCharacters(familyId, period);
   }
 
   // ------------------------------------------------------------ inputs
@@ -214,6 +227,201 @@ class LocalizationRoom {
     }
   }
 
+  // ------------------------------------------------------------ L02 edition voices
+  // An edition's narrator: the main narrator's connection, rights and delivery, with the voice and model the owner
+  // chooses for this language (ElevenLabs' multilingual voices speak many languages with one voice).
+  latestVoice(familyId, locale) { return this.db.prepare('SELECT * FROM edition_voices WHERE family_id=? AND locale=? ORDER BY revision DESC LIMIT 1').get(familyId, locale) || null; }
+  voiceOf(row) { return row ? {...JSON.parse(row.payload), id: row.id, revision: row.revision, locale: row.locale, createdBy: row.created_by, createdAt: row.created_at} : null; }
+  voiceCurrent(voice) { try { this.store.voiceConnector(voice.connectorId, voice.connectorRevision, voice.provider); return true; } catch { return false; } }
+  saveVoice(familyId, input) {
+    object(input);
+    const by = person(input.createdBy), family = this.store.family(familyId), locale = text(input.locale, 'Language', 2, 20);
+    requireValue(family.locales.slice(1).includes(locale), `${locale} is not one of this family's other languages.`, 400);
+    const primary = this.store.voiceProfiles(familyId).at(-1);
+    requireValue(primary, 'Set up the main narrator in the Voice Room (Room 02) first: an edition voice uses its connection and rights.', 409);
+    this.store.voiceConnector(primary.connectorId, primary.connectorRevision, primary.provider);
+    const id = (value, fallback, label) => { if (value === undefined || value === null || value === '') return fallback; const result = text(value, label, 1, 128); requireValue(/^[A-Za-z0-9_.:-]+$/.test(result), `${label} contains unsupported characters.`); return result; };
+    requireValue(input.languageConfirmed === true, `Confirm that this voice may narrate in ${L.language(locale)} for commercial use.`);
+    return this.store.transaction(() => {
+      const latest = this.latestVoice(familyId, locale);
+      requireValue((latest?.revision || 0) === input.expectedRevision, 'This language\'s voice changed in another tab. Reload before saving.', 409);
+      const payload = {name: `${primary.name} · ${L.language(locale)}`, connectorId: primary.connectorId, connectorRevision: primary.connectorRevision, provider: primary.provider,
+        model: id(input.model, primary.model, 'Voice model'), voiceId: id(input.voiceId, primary.voiceId, 'Voice ID'), voiceVersion: primary.voiceVersion, rights: primary.rights, delivery: primary.delivery,
+        maxCharacters: primary.budget.maxCharactersPerAudition, fromProfile: {id: primary.id, revision: primary.revision}, languageConfirmedBy: by};
+      const voiceId = randomUUID(), revision = (latest?.revision || 0) + 1;
+      this.db.prepare('INSERT INTO edition_voices(id,family_id,locale,revision,payload,created_by,created_at) VALUES(?,?,?,?,?,?,?)').run(voiceId, familyId, locale, revision, JSON.stringify(payload), by, now());
+      this.store.event(`${L.language(locale)} narrator for ${family.name}: ${payload.voiceId} (${payload.model}), set by ${by}`);
+      return this.voiceOf(this.db.prepare('SELECT * FROM edition_voices WHERE id=?').get(voiceId));
+    });
+  }
+
+  // ------------------------------------------------------------ L02 edition narration
+  timelineOf(master) { return master ? JSON.parse(master.scope).edit?.timeline || null : null; }
+  narrationRow(id) { const row = this.db.prepare('SELECT * FROM edition_narrations WHERE id=?').get(id); requireValue(row, 'Edition narration not found.', 404); return row; }
+  editionVoiceCharacters(familyId, period) { return this.db.prepare("SELECT COALESCE(SUM(reserved_characters),0) AS total FROM edition_narrations WHERE family_id=? AND period_month=? AND usage_status IN ('reserved','settled','unknown')").get(familyId, period).total; }
+  // A narration stands for what it was made from: the language's current approval and its current voice.
+  narrationCurrent(row, scope = JSON.parse(row.scope)) {
+    try {
+      if (this.currentApproval(row.content_id, row.locale)?.id !== scope.editionApprovalId) return false;
+      const voice = this.voiceOf(this.latestVoice(row.family_id, row.locale));
+      return voice?.id === scope.voice.id && this.voiceCurrent(voice);
+    } catch { return false; }
+  }
+  queueNarration(contentId, input) {
+    object(input);
+    const by = person(input.requestedBy), inputs = this.inputs(contentId);
+    requireValue(inputs.ready, inputs.blockers[0], 409);
+    const locale = this.locale(inputs, input.locale), approval = this.currentApproval(contentId, locale);
+    requireValue(approval, `Approve the ${L.language(locale)} edition's words first.`, 409);
+    requireValue(this.timelineOf(inputs.master), 'The approved master was not made from an edit, so its scenes cannot be retimed. Render the master from an edit (Room 05).', 409);
+    const voice = this.voiceOf(this.latestVoice(inputs.family.id, locale));
+    requireValue(voice, `Choose the ${L.language(locale)} narrator first.`, 409);
+    requireValue(this.voiceCurrent(voice), 'The narrator\'s connection changed or is not tested. Test it in Connections, then set the voice again.', 409);
+    const row = this.revisionRow(approval.revisionId), payload = JSON.parse(row.payload), src = JSON.parse(row.source), script = L.script(payload, src);
+    requireValue(script.length <= voice.maxCharacters, `This narration has ${script.length} characters, above the voice limit of ${voice.maxCharacters} per narration (Voice Room).`, 409);
+    return this.store.transaction(() => {
+      requireValue(!this.db.prepare("SELECT 1 FROM edition_narrations WHERE content_id=? AND locale=? AND status IN ('queued','running')").get(contentId, locale), `A ${L.language(locale)} narration is already being made.`, 409);
+      const paid = this.db.prepare("SELECT count(*) AS n FROM edition_narrations WHERE content_id=? AND locale=? AND edition_revision_id=? AND voice_id=? AND usage_status IN ('settled','unknown')").get(contentId, locale, row.id, voice.id).n;
+      requireValue(paid < 3, 'These words and this voice already had 3 paid narrations.', 409);
+      const estimate = L.seconds(script, locale), id = randomUUID(), at = now();
+      const scope = {familyId: inputs.family.id, contentId, locale, editionRevisionId: row.id, editionRevision: row.revision, editionApprovalId: approval.id, script, characterCount: script.length,
+        voice: {id: voice.id, revision: voice.revision}, connectorId: voice.connectorId, connectorRevision: voice.connectorRevision, provider: voice.provider, model: voice.model, voiceId: voice.voiceId, voiceVersion: voice.voiceVersion,
+        delivery: voice.delivery, providerInstructions: voice.delivery.instructions || '', expectedDuration: {min: Math.max(1, estimate * 0.45), max: estimate * 2.1}};
+      this.db.prepare("INSERT INTO edition_narrations(id,family_id,content_id,locale,edition_revision_id,voice_id,status,scope,attempts,usage_status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,'queued',?,?,'none',?,?,?)")
+        .run(id, inputs.family.id, contentId, locale, row.id, voice.id, JSON.stringify(scope), paid + 1, by, at, at);
+      this.store.event(`Queued the ${L.language(locale)} narration of "${inputs.content.title}" (${script.length} characters, attempt ${paid + 1} of 3)`);
+      return this.publicNarration(this.narrationRow(id));
+    });
+  }
+  retryNarration(id, input) {
+    object(input);
+    return this.store.transaction(() => {
+      const row = this.narrationRow(id);
+      requireValue(['failed', 'interrupted', 'validation_failed', 'blocked_budget'].includes(row.status), `A ${row.status} narration cannot be retried.`, 409);
+      if (row.status === 'interrupted' || row.usage_status === 'unknown') requireValue(input.confirmInterrupted === true, 'The last attempt stopped after the voice service was asked; it may have been charged. Confirm the deliberate retry.', 409);
+      requireValue(this.narrationCurrent(row), 'The words or the voice changed since this attempt. Make a new narration.', 409);
+      const paid = this.db.prepare("SELECT count(*) AS n FROM edition_narrations WHERE content_id=? AND locale=? AND edition_revision_id=? AND voice_id=? AND usage_status IN ('settled','unknown')").get(row.content_id, row.locale, row.edition_revision_id, row.voice_id).n;
+      requireValue(paid < 3, 'These words and this voice already had 3 paid narrations.', 409);
+      const next = randomUUID(), at = now();
+      this.db.prepare("INSERT INTO edition_narrations(id,family_id,content_id,locale,edition_revision_id,voice_id,status,scope,attempts,usage_status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,'queued',?,?,'none',?,?,?)")
+        .run(next, row.family_id, row.content_id, row.locale, row.edition_revision_id, row.voice_id, row.scope, paid + 1, person(input.requestedBy || row.created_by), at, at);
+      this.db.prepare("UPDATE edition_narrations SET status='retried', updated_at=? WHERE id=?").run(at, id);
+      return this.publicNarration(this.narrationRow(next));
+    });
+  }
+  claimNarration() {
+    return this.store.transaction(() => {
+      const row = this.db.prepare("SELECT * FROM edition_narrations WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
+      if (!row) return null;
+      const scope = JSON.parse(row.scope), family = this.store.family(row.family_id), at = now();
+      if (!this.narrationCurrent(row, scope)) { this.db.prepare("UPDATE edition_narrations SET status='stale', error='The words or the voice changed before the narration started. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id); return null; }
+      // Editions share the family's monthly voice characters with the main narration (Voice Room limit).
+      const period = this.store.tokenPeriod(family), limit = this.store.voiceProfiles(family.id).at(-1)?.budget.monthlyCharacterLimit || 0;
+      const used = this.db.prepare("SELECT COALESCE(SUM(reserved_characters),0) AS total FROM voice_usage WHERE family_id=? AND period_month=? AND status IN ('reserved','settled','unknown')").get(family.id, period).total + this.editionVoiceCharacters(family.id, period);
+      if (used + scope.characterCount > limit) { this.db.prepare("UPDATE edition_narrations SET status='blocked_budget', error='The family monthly voice character limit cannot reserve this narration. Raise it in the Voice Room or wait for next month.', updated_at=? WHERE id=?").run(at, row.id); return null; }
+      this.db.prepare("UPDATE edition_narrations SET status='running', usage_status='reserved', reserved_characters=?, period_month=?, updated_at=? WHERE id=?").run(scope.characterCount, period, at, row.id);
+      return {...row, scope};
+    });
+  }
+  async processNextNarration() {
+    if (this.narrating) return null;
+    const job = this.claimNarration();
+    if (!job) return null;
+    this.narrating = true;
+    let started = false, final = null;
+    const work = path.join(this.voiceDir, '.working', job.id), s = job.scope;
+    try {
+      fs.mkdirSync(work, {recursive: true});
+      await V.checkTool(this.ffmpeg, 'FFmpeg'); await V.checkTool(this.ffprobe, 'ffprobe');
+      const Client = s.provider === 'openai' ? V.OpenAISpeechClient : V.ElevenLabsSpeechClient, client = new Client(this.connectors.key(s.connectorId), this.connectors.fetch);
+      const {parts, partWords, requestIds} = await V.speak({client, requests: V.chunkText(s.script, s.provider).map(chunk => ({text: chunk})), scope: s, work, isCurrent: () => this.narrationCurrent(job, s), onRequest: () => { started = true; }});
+      const dir = path.join(this.voiceDir, s.familyId, s.contentId);
+      fs.mkdirSync(dir, {recursive: true});
+      final = path.join(dir, `${s.locale}-${job.id}.wav`);
+      const {analysis, bytes} = await V.joinNarration({parts, partWords, final, scope: s, ffmpeg: this.ffmpeg, ffprobe: this.ffprobe});
+      const artifact = {relativePath: path.relative(this.dataRoot, final).replaceAll('\\', '/'), sha256: createHash('sha256').update(bytes).digest('hex'), sizeBytes: bytes.length, mime: 'audio/wav'};
+      const saved = this.store.transaction(() => {
+        const at = now(), current = this.narrationCurrent(job, s);
+        const status = !current ? 'stale' : analysis.passed ? 'completed' : 'validation_failed';
+        this.db.prepare("UPDATE edition_narrations SET status=?, result=?, error=?, usage_status='settled', updated_at=? WHERE id=?").run(status, JSON.stringify({artifact, analysis, provider: {requestIds, model: s.model, voiceId: s.voiceId}}),
+          status === 'stale' ? 'The words or the voice changed while the narration was being made.' : status === 'validation_failed' ? 'The narration failed one or more real-audio checks.' : null, at, job.id);
+        this.store.event(`${L.language(s.locale)} narration of content ${s.contentId}: ${status}`);
+        return this.publicNarration(this.narrationRow(job.id));
+      });
+      final = null;
+      return saved;
+    } catch (error) {
+      if (final) fs.rmSync(final, {force: true});
+      this.store.transaction(() => this.db.prepare("UPDATE edition_narrations SET status=?, error=?, usage_status=?, reserved_characters=CASE WHEN ? THEN reserved_characters ELSE 0 END, updated_at=? WHERE id=?")
+        .run(started ? 'interrupted' : 'failed', error instanceof InputError ? error.message : 'The narration failed.', started ? 'unknown' : 'released', started ? 1 : 0, now(), job.id));
+      return null;
+    } finally {
+      fs.rmSync(work, {recursive: true, force: true});
+      this.narrating = false;
+    }
+  }
+  narrationFile(id) {
+    const row = this.narrationRow(id), artifact = row.result ? JSON.parse(row.result).artifact : null;
+    requireValue(artifact, 'This narration has no audio.', 404);
+    const file = path.resolve(this.dataRoot, artifact.relativePath);
+    requireValue(file.startsWith(path.resolve(this.dataRoot) + path.sep) && fs.existsSync(file) && R.fileSha256(file) === artifact.sha256, 'The narration file is missing or changed.', 409);
+    return {file, size: fs.statSync(file).size, mime: artifact.mime};
+  }
+  // How the approved edit's scenes land in this narration (computed against the master that is approved now).
+  syncFor(row, inputs = null) {
+    const result = row.result ? JSON.parse(row.result) : null, master = (inputs || this.inputs(row.content_id)).master, timeline = this.timelineOf(master);
+    if (!result || !timeline) return null;
+    const edition = this.revisionRow(row.edition_revision_id);
+    return {...L.sync({timeline, payload: JSON.parse(edition.payload), src: JSON.parse(edition.source), words: result.analysis.alignment?.words || null, narrationSeconds: result.analysis.durationSeconds, locale: row.locale}), masterId: master.id};
+  }
+  approveNarration(id, input) {
+    object(input);
+    const by = person(input.approvedBy, 'Your name');
+    return this.store.transaction(() => {
+      const row = this.narrationRow(id), scope = JSON.parse(row.scope);
+      requireValue(row.status === 'completed', 'Only a finished narration that passed its audio checks can be approved.', 409);
+      requireValue(this.narrationCurrent(row, scope), 'The words or the voice changed after this narration. Make a new one.', 409);
+      this.narrationFile(id);
+      const sync = this.syncFor(row);
+      requireValue(sync, 'The approved master has no edit to follow.', 409);
+      requireValue(sync.passed, sync.issues.find(item => item.severity === 'critical')?.message, 409);
+      const c = object(input.confirmations, 'Confirmations');
+      for (const [key, message] of [['listened', `Confirm that a speaker of ${L.language(row.locale)} listened to the whole narration.`], ['pronunciation', 'Confirm that names, numbers and places are pronounced right.'], ['syncReviewed', 'Confirm that you read the scene timing list.']]) requireValue(c[key] === true, message);
+      if (sync.counts.outside) requireValue(c.syncAccepted === true, `Accept the ${sync.counts.outside === 1 ? 'scene that changes' : `${sync.counts.outside} scenes that change`} length beyond the natural range, or shorten the wording in the edition first.`);
+      const approvalId = randomUUID();
+      this.db.prepare('INSERT INTO edition_narration_approvals(id,narration_id,content_id,locale,edition_approval_id,master_id,approved_by,notes,confirmations,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+        .run(approvalId, id, row.content_id, row.locale, scope.editionApprovalId, sync.masterId, by, text(input.notes || '', 'Notes', 0, 2000), JSON.stringify({listened: true, pronunciation: true, syncReviewed: true, syncAccepted: c.syncAccepted === true}), now());
+      this.store.event(`${L.language(row.locale)} narration of "${this.store.content(row.content_id).title}" approved by ${by}`);
+      return this.publicNarration(row);
+    });
+  }
+  // An approval holds while it is the newest for its language, the narration still stands for the approved words
+  // and voice, its file is intact and its scenes were timed against the master approved now.
+  narrationApproval(row) {
+    const approval = this.db.prepare('SELECT * FROM edition_narration_approvals WHERE narration_id=? ORDER BY created_at DESC LIMIT 1').get(row.id);
+    if (!approval) return null;
+    const newer = this.db.prepare('SELECT 1 FROM edition_narration_approvals WHERE content_id=? AND locale=? AND created_at>? LIMIT 1').get(row.content_id, row.locale, approval.created_at);
+    let reason = newer ? 'A newer narration was approved.' : !this.narrationCurrent(row) ? 'The words or the voice changed.' : null;
+    if (!reason) { try { this.narrationFile(row.id); } catch (error) { reason = error.message; } }
+    if (!reason && this.approvedMaster(row.content_id)?.id !== approval.master_id) reason = 'A different final master is approved now: check the scene timing again.';
+    return {id: approval.id, approvedBy: approval.approved_by, notes: approval.notes, at: approval.created_at, current: !reason, staleReason: reason};
+  }
+  // The narration approval that stands now for one language (L03 renders it).
+  currentNarration(contentId, locale) {
+    for (const row of this.db.prepare("SELECT * FROM edition_narrations WHERE content_id=? AND locale=? AND status='completed' ORDER BY created_at DESC, rowid DESC").all(contentId, locale)) {
+      const approval = this.narrationApproval(row);
+      if (approval?.current) return {id: row.id, approvalId: approval.id, approvedBy: approval.approvedBy};
+    }
+    return null;
+  }
+  publicNarration(row, inputs = null) {
+    const scope = JSON.parse(row.scope), result = row.result ? JSON.parse(row.result) : null;
+    const analysis = result ? {durationSeconds: result.analysis.durationSeconds, passed: result.analysis.passed, checks: result.analysis.checks, pace: result.analysis.pace || null, timing: result.analysis.alignment ? 'measured' : 'estimated'} : null;
+    return {id: row.id, contentId: row.content_id, locale: row.locale, status: row.status, error: row.error, attempts: row.attempts, editionRevision: scope.editionRevision, voice: {voiceId: scope.voiceId, model: scope.model},
+      characters: scope.characterCount, usage: row.usage_status, createdBy: row.created_by, createdAt: row.created_at, current: this.narrationCurrent(row, scope),
+      ...(result ? {analysis, audioUrl: `/api/edition-narrations/${row.id}/audio`, sync: (() => { try { return this.syncFor(row, inputs); } catch { return null; } })(), approval: this.narrationApproval(row)} : {})};
+  }
+
   // ------------------------------------------------------------ approval
   approve(revisionId, input) {
     object(input);
@@ -262,14 +470,17 @@ class LocalizationRoom {
     const families = new Map(this.store.families().map(family => [family.id, family]));
     const contents = this.store.contents().filter(content => (families.get(content.familyId)?.locales.length || 0) > 1 && (content.state === 'approved' || this.db.prepare('SELECT 1 FROM edition_revisions WHERE content_id=? LIMIT 1').get(content.id)));
     return {
-      busy: !!this.db.prepare("SELECT 1 FROM edition_jobs WHERE status IN ('queued','running') LIMIT 1").get(),
+      busy: !!this.db.prepare("SELECT 1 FROM edition_jobs WHERE status IN ('queued','running') UNION ALL SELECT 1 FROM edition_narrations WHERE status IN ('queued','running') LIMIT 1").get(),
       contents: contents.map(content => {
         const inputs = (() => { try { return this.inputs(content.id); } catch (error) { return {ready: false, blockers: [error.message], targets: [], source: null}; } })();
         return {contentId: content.id, familyId: content.familyId, title: content.title, ready: inputs.ready, blockers: inputs.blockers, masterId: inputs.master?.id || null, primaryLocale: families.get(content.familyId).primaryLocale,
+          primaryVoice: (() => { const profile = this.store.voiceProfiles(content.familyId).at(-1); return profile ? {name: profile.name, provider: profile.provider, model: profile.model, voiceId: profile.voiceId, priceCentsPerMillionCharacters: profile.budget.priceCentsPerMillionCharacters} : null; })(), hasEdit: !!this.timelineOf(inputs.master),
           source: inputs.source ? {sentences: inputs.source.sentences.length, visible: inputs.source.visible.length, designed: inputs.source.designed.length, package: !!inputs.source.package, full: inputs.source} : null,
           editions: (inputs.targets || families.get(content.familyId).locales.slice(1)).map(locale => {
             const latest = this.latestRow(content.id, locale);
-            return {locale, language: L.language(locale), latest: latest ? this.publicRevision(latest, inputs.ready ? inputs : null) : null, sourceChanged: !!(latest && inputs.sourceHash && latest.source_hash !== inputs.sourceHash),
+            const voice = this.voiceOf(this.latestVoice(content.familyId, locale));
+            return {locale, language: L.language(locale), latest: latest ? this.publicRevision(latest, inputs.ready ? inputs : null) : null, voice: voice ? {...voice, current: this.voiceCurrent(voice)} : null, scriptCharacters: latest ? L.script(JSON.parse(latest.payload), JSON.parse(latest.source)).length : 0,
+              narrations: this.db.prepare("SELECT * FROM edition_narrations WHERE content_id=? AND locale=? AND status!='retried' ORDER BY created_at DESC, rowid DESC LIMIT 3").all(content.id, locale).map(row => this.publicNarration(row, inputs.ready ? inputs : null)), sourceChanged: !!(latest && inputs.sourceHash && latest.source_hash !== inputs.sourceHash),
               history: this.db.prepare('SELECT id, revision, actor, note, created_by, created_at FROM edition_revisions WHERE content_id=? AND locale=? ORDER BY revision DESC LIMIT 10').all(content.id, locale).map(item => ({id: item.id, revision: item.revision, actor: item.actor, note: item.note, createdBy: item.created_by, createdAt: item.created_at})),
               jobs: this.db.prepare('SELECT * FROM edition_jobs WHERE content_id=? AND locale=? ORDER BY created_at DESC, rowid DESC LIMIT 3').all(content.id, locale).map(row => this.publicJob(row))};
           })};

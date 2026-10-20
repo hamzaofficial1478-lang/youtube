@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const {execFileSync} = require('node:child_process');
 const {Store} = require('../store');
 const L = require('../localize');
 const {LocalizationRoom, sentencesOf} = require('../localization-room');
@@ -60,11 +61,12 @@ function setup(t, answer, body = story, minutes = 1) {
   store.db.exec('CREATE TABLE render_jobs(id TEXT PRIMARY KEY, content_id TEXT, preset TEXT, status TEXT, scope TEXT, created_at TEXT)');
   store.db.prepare("INSERT INTO render_jobs VALUES('m1',?,'master','completed',?,?)").run(content.id, JSON.stringify({edit: {drawings, timeline: {graphics, clips}}}), new Date().toISOString());
   store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude', 'claude', JSON.stringify({name: 'claude', provider: 'claude-code', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), null);
-  const connectors = {row: id => store.db.prepare('SELECT * FROM connectors WHERE id=?').get(id), key: () => null};
-  const state = {master: true, pkg: structuredClone(pkg)}, calls = [];
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('eleven', 'eleven', JSON.stringify({name: 'eleven', provider: 'elevenlabs', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), Buffer.from('protected'));
+  const state = {master: true, pkg: structuredClone(pkg), fetch: null}, calls = [];
+  const connectors = {row: id => store.db.prepare('SELECT * FROM connectors WHERE id=?').get(id), key: id => id === 'eleven' ? 'fixture-key' : null, fetch: (...args) => state.fetch(...args)};
   const renders = {masterApproval: () => ({current: state.master})}, packaging = {latestRow: () => ({payload: JSON.stringify(state.pkg)})};
   const ai = {complete: async ({task, messages, maxTokens, onStart}) => { onStart?.(); calls.push({task, messages, maxTokens}); return {content: JSON.stringify(answer(JSON.parse(messages[1].content), calls.length)), usage: {promptTokens: 800, completionTokens: 400, totalTokens: 1200}, model: 'claude-opus-5-5'}; }};
-  return {store, content, room: new LocalizationRoom(store, renders, packaging, connectors, ai), state, calls};
+  return {store, content, family, root, room: new LocalizationRoom(store, renders, packaging, connectors, ai), state, calls};
 }
 // A fake Spanish adaptation: every asked sentence and text gets a Spanish wording with its figures kept.
 const spanish = packet => ({sentences: packet.sentences.map(item => ({n: item.n, text: `ES ${item.text.replace(/[A-Za-z]+/g, 'palabra')}`})), visible: packet.visible.map(item => ({id: item.id, text: `ES ${item.text}`.slice(0, item.maxLength)})),
@@ -130,4 +132,95 @@ test('an adaptation that stops part-way keeps its finished parts and never pays 
   assert.equal(revision.payload.sentences.length, 200);
   assert.equal(revision.checks.passed, true);
   assert.equal(store.db.prepare("SELECT count(*) n FROM intelligence_usage WHERE job_id LIKE ?").get(`${job.id}%`).n, 2);
+});
+
+// A stand-in for ElevenLabs: real audio (an FFmpeg tone, 0.4 s a word) with character timing for the text it was sent.
+function fakeElevenLabs(root, calls, {failAfter = Infinity} = {}) {
+  return async (url, options) => {
+    calls.push(String(url));
+    if (calls.length > failAfter) throw new Error('connection reset');
+    const text = JSON.parse(options.body).text, seconds = text.split(/\s+/).filter(Boolean).length * 0.4, file = path.join(root, `tts-${calls.length}.mp3`);
+    execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `sine=frequency=220:sample_rate=44100:duration=${seconds}`, '-af', 'volume=0.5', '-c:a', 'libmp3lame', '-b:a', '64k', '-y', file]);
+    const chars = [...text], per = seconds / chars.length;
+    return new Response(JSON.stringify({audio_base64: fs.readFileSync(file).toString('base64'), alignment: {characters: chars, character_start_times_seconds: chars.map((_, k) => k * per), character_end_times_seconds: chars.map((_, k) => (k + 1) * per)}}), {status: 200, headers: {'content-type': 'application/json'}});
+  };
+}
+
+test('L02: each language gets its own narrator, the narration is measured scene by scene and approved by name', async t => {
+  const {store, content, room, state, root, family} = setup(t, spanish);
+  const fetches = [];
+  state.fetch = fakeElevenLabs(root, fetches);
+  const confirmations = {meaningReviewed: true, factsChecked: true, visibleChecked: true, packageHonest: true};
+  room.queueDraft(content.id, {requestedBy: 'Owner', locale: 'es-419', connector: {id: 'claude', revision: 1}});
+  const edition = await room.processNext();
+  // The narrator: the main narrator's connection and rights, with this language's voice and model.
+  assert.throws(() => room.saveVoice(family.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: 0, languageConfirmed: true}), /main narrator in the Voice Room/);
+  store.saveVoiceProfile(family.id, {revision: 0, familyRevision: store.family(family.id).revision, name: 'Narrator', connectorId: 'eleven', connectorRevision: 1, provider: 'elevenlabs', model: 'eleven_multilingual_v2', voiceId: 'voice_fixture_123', voiceVersion: 'current', ownershipBasis: 'provider_stock_voice', rightsHolder: 'Provider voice catalog', consentConfirmed: true, commercialUseConfirmed: true, evidenceReference: 'Terms reviewed.', termsReviewedAt: '2026-10-09', pace: 1, energy: 55, emotion: 'warm', pauseScale: 1, emphasis: 50, instructions: '', lexicon: [], monthlyCharacterLimit: 100000, maxCharactersPerAudition: 12000, priceCentsPerMillionCharacters: 1500});
+  assert.throws(() => room.saveVoice(family.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: 0}), /may narrate in Latin American Spanish/);
+  assert.throws(() => room.saveVoice(family.id, {createdBy: 'Owner', locale: 'fr-FR', expectedRevision: 0, languageConfirmed: true}), /not one of this family's other languages/);
+  const voice = room.saveVoice(family.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: 0, voiceId: 'voice_es_456', languageConfirmed: true});
+  assert.deepEqual([voice.voiceId, voice.model, voice.provider, voice.revision], ['voice_es_456', 'eleven_multilingual_v2', 'elevenlabs', 1]);
+  assert.throws(() => store.db.prepare('UPDATE edition_voices SET payload=? WHERE id=?').run('{}', voice.id), /immutable/);
+  // The approved edit's scenes, one per paragraph; the third is far shorter than this language needs.
+  const words = n => edition.payload.sentences.filter(item => item.n >= n[0] && item.n <= n[1]).reduce((sum, item) => sum + item.text.split(/\s+/).length, 0) * 0.4;
+  const spans = [[1, 3], [4, 6], [7, 9], [10, 12]], shape = [1, 1.1, 0.6, 1], fps = 30;
+  let at = 0;
+  const scenes = spans.map((span, k) => { const frames = Math.round(words(span) * shape[k] * fps), scene = {id: `sc${k}`, label: `S${k + 1}`, startFrame: at, endFrame: at + frames, sentenceStart: span[0], sentenceEnd: span[1]}; at += frames; return scene; });
+  store.db.prepare('UPDATE render_jobs SET scope=? WHERE id=?').run(JSON.stringify({edit: {drawings, timeline: {fps, totalFrames: at, narrationSeconds: at / fps, scenes, graphics, clips}}}), 'm1');
+  assert.throws(() => room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'es-419'}), /Approve the Latin American Spanish edition's words first/);
+  room.approve(edition.id, {approvedBy: 'Owner', confirmations});
+  const job = room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'es-419'});
+  assert.throws(() => room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'es-419'}), /already being made/);
+  const narration = await room.processNextNarration();
+  assert.equal(narration.status, 'completed', narration.error);
+  assert.equal(fetches.length, 1);
+  assert.match(fetches[0], /text-to-speech\/voice_es_456\/with-timestamps/);
+  assert.equal(narration.analysis.timing, 'measured');
+  assert.equal(narration.analysis.passed, true);
+  // Every scene change lands on its own words in this language; the scene that needs much more time is named.
+  const sync = narration.sync;
+  assert.equal(sync.method, 'measured');
+  assert.ok(sync.maxDrift < L.DRIFT_LIMIT);
+  assert.deepEqual(sync.scenes.map(scene => scene.status), ['same', 'retime', 'long', 'same']);
+  assert.match(sync.issues[0].message, /S3 runs 6\d% longer[\s\S]*sentences 7-9/);
+  const period = store.tokenPeriod(store.family(family.id));
+  assert.equal(store.editionVoiceCharacters(family.id, period), JSON.parse(room.narrationRow(job.id).scope).characterCount, 'the edition counts against the family voice characters');
+  // Approval by name; a scene outside the natural range must be accepted explicitly.
+  const base = {listened: true, pronunciation: true, syncReviewed: true};
+  assert.throws(() => room.approveNarration(job.id, {approvedBy: 'Owner', confirmations: {listened: true}}), /pronounced right/);
+  assert.throws(() => room.approveNarration(job.id, {approvedBy: 'Owner', confirmations: base}), /Accept the scene that changes length/);
+  const approved = room.approveNarration(job.id, {approvedBy: 'Owner', confirmations: {...base, syncAccepted: true}});
+  assert.equal(approved.approval.current, true);
+  assert.equal(room.currentNarration(content.id, 'es-419').id, job.id);
+  assert.throws(() => store.db.prepare('UPDATE edition_narration_approvals SET notes=? WHERE narration_id=?').run('x', job.id), /immutable/);
+  // New words for this language: the narration no longer stands for them.
+  room.save(content.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: 1, edition: {...edition.payload, sentences: edition.payload.sentences.map(item => item.n === 2 ? {...item, text: 'Vendieron partes de una compañía.'} : item)}});
+  assert.equal(room.currentNarration(content.id, 'es-419'), null);
+  assert.match(room.publicNarration(room.narrationRow(job.id)).approval.staleReason, /words or the voice changed/);
+});
+
+test('L02: a narration that stops after the voice service was asked needs a confirmed retry', async t => {
+  const {store, content, room, state, root, family} = setup(t, spanish);
+  const fetches = [];
+  state.fetch = fakeElevenLabs(root, fetches, {failAfter: 0});
+  room.queueDraft(content.id, {requestedBy: 'Owner', locale: 'it-IT', connector: {id: 'claude', revision: 1}});
+  const edition = await room.processNext();
+  room.approve(edition.id, {approvedBy: 'Owner', confirmations: {meaningReviewed: true, factsChecked: true, visibleChecked: true, packageHonest: true}});
+  store.db.prepare('UPDATE render_jobs SET scope=? WHERE id=?').run(JSON.stringify({edit: {drawings, timeline: {fps: 30, totalFrames: 900, narrationSeconds: 30, scenes: [{id: 'a', label: 'S1', startFrame: 0, endFrame: 900, sentenceStart: 1, sentenceEnd: 12}], graphics, clips}}}), 'm1');
+  store.saveVoiceProfile(family.id, {revision: 0, familyRevision: store.family(family.id).revision, name: 'Narrator', connectorId: 'eleven', connectorRevision: 1, provider: 'elevenlabs', model: 'eleven_multilingual_v2', voiceId: 'voice_fixture_123', voiceVersion: 'current', ownershipBasis: 'provider_stock_voice', rightsHolder: 'Provider voice catalog', consentConfirmed: true, commercialUseConfirmed: true, evidenceReference: 'Terms reviewed.', termsReviewedAt: '2026-10-09', pace: 1, energy: 55, emotion: 'warm', pauseScale: 1, emphasis: 50, instructions: '', lexicon: [], monthlyCharacterLimit: 100000, maxCharactersPerAudition: 12000, priceCentsPerMillionCharacters: 1500});
+  room.saveVoice(family.id, {createdBy: 'Owner', locale: 'it-IT', expectedRevision: 0, languageConfirmed: true});
+  const job = room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'it-IT'});
+  assert.equal(await room.processNextNarration(), null);
+  const failed = room.narrationRow(job.id);
+  assert.deepEqual([failed.status, failed.usage_status], ['interrupted', 'unknown']);
+  assert.throws(() => room.retryNarration(job.id, {}), /may have been charged/);
+  const again = room.retryNarration(job.id, {confirmInterrupted: true});
+  assert.equal(again.attempts, 2);
+  state.fetch = fakeElevenLabs(root, fetches);
+  assert.equal((await room.processNextNarration()).status, 'completed');
+  // A program stop while narrating marks it interrupted on the next start.
+  room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'it-IT'});
+  store.db.prepare("UPDATE edition_narrations SET status='running', usage_status='reserved' WHERE status='queued'").run();
+  new LocalizationRoom(store, {masterApproval: () => ({current: true})}, {latestRow: () => null}, {}, {});
+  assert.equal(store.db.prepare("SELECT count(*) AS n FROM edition_narrations WHERE status='interrupted' AND usage_status='unknown'").get().n, 1);
 });

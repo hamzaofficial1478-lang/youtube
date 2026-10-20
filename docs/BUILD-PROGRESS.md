@@ -122,7 +122,7 @@ A sourced primary-language master becomes a real, reviewable video.
 Reuse the visual master while preserving meaning, natural voice and scene timing.
 
 - [ ] **L01 Scene translation and local packaging** (testing) - 0.43.0 (2026-10-20): Room 06 language editions. An edition starts only from an approved, current final master. Narration sentences, every word on screen (drawn shots and graphics) and the package are adapted per extra language by Claude on a click inside a token reservation (parts of 150 sentences, finished parts kept) or by the owner; checks for missing items, lost figures and sentences that take much longer to say; immutable revisions and named approvals that go stale when the main video's words change; unchanged items keep their wording. Tested in tests/localization.test.js and in the browser on a throwaway workspace (Spanish edition of a real 20-s master with a fixture answer). npm test 313/313 passed.
-- [ ] **L02 Language narration and synchronization** (planned) - Generate actual voices, adjust natural wording/timing and verify with proficient language reviewers.
+- [ ] **L02 Language narration and synchronization** (testing) - 0.44.0 (2026-10-20): edition narration and timing in Room 06. Each language gets its narrator (the main narrator's connection and rights with this language's voice and model, named language-rights confirmation); the approved words are narrated on a click through the Voice Room's own speaking and audio-check code, inside the family's shared monthly voice limit, at most 3 paid attempts, interrupted attempts need a confirmed retry; every scene of the approved edit is timed to the new voice from measured word times (scene changes within 0.25 s of their words, scenes that change length beyond the natural range named with the sentences to shorten); named approval that goes stale with new words, a new voice, a changed file or another master. Tested in tests/localization.test.js (stand-in ElevenLabs returning real FFmpeg audio with character timing) and in the browser on a throwaway 55-s master (narration 61.7 s, all audio checks passed, scene changes within 0.01 s, one long scene accepted at approval). npm test 315/315 passed.
 - [ ] **L03 Independent edition approvals** (planned) - Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions.
 
 ### 05 · Controlled publishing
@@ -144,6 +144,48 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Edition narration and timing in Room 06 (0.44.0)
+
+- **Owner request:** proceed to L02.
+- **Built** (docs/LOCALIZATION.md "L02"):
+  - **The narrator.** Each extra language has its own narrator. It uses the main narrator's connection and rights, with this language's voice ID and model. Saving it records the owner's name and the confirmation that the voice may narrate in this language.
+  - **The narration:**
+    - made from the approved words on a click;
+    - through the same speaking and audio-check code as the main narration (taken out of the Voice Room runtime, so both use it);
+    - counted in the family's monthly voice limit together with the main narration;
+    - at most 3 paid attempts, never retried by itself; an attempt stopped after the request needs a confirmed retry.
+  - **Timing.** Every scene of the approved edit is timed to the new voice from its measured word times:
+    - scene changes land on their words (the limit is 0.25 s);
+    - each scene is rated the same, retimed, much longer or much shorter;
+    - for scenes out of range, the warning names the sentences whose shorter or fuller wording keeps the original rhythm;
+    - the voice is never sped up.
+  - **Approval.** It is named, with confirmations: listened by a speaker, pronunciation, timing reviewed, and out-of-range scenes accepted. It goes stale with new words, a new voice, a changed file or another master.
+- **Checked:**
+  - tests/localization.test.js gained 2 tests that use a stand-in ElevenLabs returning real FFmpeg audio with character timing. They cover:
+    - narrator rules;
+    - immutability;
+    - the request with timestamps;
+    - the audio checks;
+    - measured timing within 0.25 s;
+    - the long scene named;
+    - the shared voice limit;
+    - the approval rules;
+    - staleness;
+    - an interrupted attempt and its confirmed retry;
+    - a restart.
+  - The Voice Room tests still pass after the shared-code change.
+  - Browser check on a throwaway 55-s master:
+    - narrator refused without the language confirmation, then saved;
+    - narration 61.7 s, all checks passed;
+    - 6 scenes: 1 the same, 4 retimed, 1 much longer (the deliberately padded sentence);
+    - scene changes within 0.01 s;
+    - approval refused until the long scene was accepted;
+    - audio plays with seeking;
+    - the page refreshes itself.
+  - Fixed during the check: the page did not refresh while narrating; the character count was 2 short; the scene table was cut off on narrow windows.
+  - npm test 315/315 passed.
+- **Not tested:** live ElevenLabs in Spanish or Italian; a native speaker's listening; the edition render (L03, not built).
 
 ### 2026-10-20 - Language editions in Room 06 (0.43.0)
 

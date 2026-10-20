@@ -31,7 +31,7 @@ function editionCard(item, edition) {
   const changed = edition.sourceChanged ? `<p class="inline-warning">The main video's words changed after r${latest.revision}. Ask Claude again: only the changed sentences and words are adapted, the rest keeps its approved wording.</p>` : '';
   const actions = `<div class="card-actions">${!busy && connection ? action(latest ? 'Ask Claude to adapt again' : `Ask Claude to adapt into ${esc(edition.language)}`, 'edition-draft', key, latest && !edition.sourceChanged ? 'secondary' : 'primary') : ''}${!busy && !connection ? '<a class="button secondary" href="#connections">Set up Claude to adapt</a>' : ''}${!busy ? action(latest ? 'Edit' : 'Write it myself', 'edition-edit', key, 'secondary') : ''}${latest && !latest.approval?.current && !edition.sourceChanged && latest.checks.passed ? action('Approve this language', 'edition-approve', latest.id, 'primary') : ''}${latest ? `<a class="button secondary" href="/api/edition-revisions/${esc(latest.id)}/export" download>Download text</a>` : ''}</div>`;
   const approval = latest?.approval ? `<div class="handoff-rule"><strong>${latest.approval.current ? 'Approved' : 'Approval out of date'} · by ${esc(latest.approval.approvedBy)} · ${esc(date(latest.approval.at))}</strong><p>${esc(latest.approval.notes || 'No notes.')}</p>${latest.approval.current ? '' : `<p class="inline-warning">${esc(latest.approval.staleReason)}</p>`}</div>` : '';
-  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">${esc(edition.locale)}${latest ? ` · r${latest.revision} · ${esc(latest.actor === 'claude' ? 'Claude adaptation' : `edited by ${latest.createdBy}`)}` : ''}</span><h2>${esc(edition.language)}</h2></div>${status}</div>${jobLine}${changed}${actions}${approval}${latest ? editionView(latest) : ''}</section>`;
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">${esc(edition.locale)}${latest ? ` · r${latest.revision} · ${esc(latest.actor === 'claude' ? 'Claude adaptation' : `edited by ${latest.createdBy}`)}` : ''}</span><h2>${esc(edition.language)}</h2></div>${status}</div>${jobLine}${changed}${actions}${approval}${latest ? editionView(latest) : ''}${narrationSection(item, edition)}</section>`;
 }
 
 function editionView(rev) {
@@ -67,6 +67,7 @@ function editionFormPayload(form, src) {
 }
 
 function editionAction(command, id) {
+  if (['edition-voice', 'edition-narrate', 'edition-narration-retry', 'edition-narration-approve'].includes(command)) return editionNarrationAction(command, id);
   if (command === 'edition-draft') {
     const {item, edition, contentId, locale} = edEdition(id), connection = readyClaudeConnection();
     if (!connection) return toast('Set up and test a Claude connection first.', true);
@@ -83,5 +84,58 @@ function editionAction(command, id) {
     <label class="checkbox-label"><input type="checkbox" name="factsChecked">Names, numbers, dates and units are right for this market.</label>
     <label class="checkbox-label"><input type="checkbox" name="visibleChecked">Every on-screen word reads naturally and fits.</label>
     <label class="checkbox-label"><input type="checkbox" name="packageHonest">The title and thumbnail words promise only what the video shows.</label>`, 'Approve', {revisionId: id});
+  return toast('Unknown action.', true);
+}
+
+// L02: the language's narrator reads the approved words; the approved edit's scenes are measured in that voice.
+const NR_STATUS = {queued: 'Waiting to start', running: 'Being narrated', completed: 'Narrated', failed: 'Failed', interrupted: 'Interrupted', validation_failed: 'Failed the audio checks', blocked_budget: 'Over the monthly voice limit', stale: 'Out of date'};
+const NR_SCENE = {same: ['Same length', 'green'], retime: ['Retimed', 'gray'], long: ['Much longer', 'orange'], short: ['Much shorter', 'orange']};
+function narrationSection(item, edition) {
+  const key = `${item.contentId}|${edition.locale}`, approved = edition.latest?.approval?.current, voice = edition.voice, job = edition.narrations[0];
+  const head = '<span class="micro-label">NARRATION</span>';
+  if (!approved) return `<div class="handoff-rule">${head}<p>Approve this language's words first; then its narrator reads them and the scenes are timed to that voice.</p></div>`;
+  if (!item.primaryVoice) return `<div class="handoff-rule">${head}<p>Set up the main narrator in the Voice Room first: this language's narrator uses its connection and rights.</p><div class="card-actions"><button class="secondary" data-production-room="voice">Open the Voice Room</button></div></div>`;
+  const busy = job && ['queued', 'running'].includes(job.status), chars = edition.scriptCharacters;
+  const voiceLine = voice ? `<p>Narrator: <b>${esc(voice.voiceId)}</b> · ${esc(voice.model)}${voice.current ? '' : ' · <span class="inline-warning">its connection changed or is not tested</span>'}</p>` : '<p>No narrator chosen for this language yet.</p>';
+  const actions = `<div class="card-actions">${action(voice ? 'Change narrator' : 'Choose the narrator', 'edition-voice', key, voice ? 'secondary' : 'primary')}${voice?.current && item.hasEdit && !busy ? action(job ? 'Narrate again' : `Narrate (${chars.toLocaleString('en-US')} characters)`, 'edition-narrate', key, job ? 'secondary' : 'primary') : ''}</div>`;
+  const warn = item.hasEdit ? '' : '<p class="inline-warning">The approved master was not made from an edit, so its scenes cannot be retimed.</p>';
+  const standing = edition.narrations.find(entry => entry.approval?.current);
+  const older = standing && standing.id !== job?.id ? `<p class="hint"><b>Approved narration:</b> attempt ${standing.attempts}, by ${esc(standing.approval.approvedBy)} · ${esc(date(standing.approval.at))}. The newest attempt below is not approved.</p>` : '';
+  return `<div class="handoff-rule">${head}${voiceLine}${warn}${actions}${older}${job ? narrationView(job) : ''}</div>`;
+}
+function narrationView(job) {
+  const line = `<p class="${['failed', 'interrupted', 'validation_failed', 'blocked_budget', 'stale'].includes(job.status) ? 'inline-warning' : 'hint'}"><b>${esc(NR_STATUS[job.status] || job.status)}</b> · attempt ${job.attempts} of 3 · ${job.characters.toLocaleString('en-US')} characters${job.error ? `: ${esc(job.error)}` : ''}</p>`;
+  const retry = ['failed', 'interrupted', 'validation_failed', 'blocked_budget'].includes(job.status) && job.attempts < 3 && job.current ? action('Retry', 'edition-narration-retry', job.id, 'secondary') : '';
+  if (!job.analysis) return line + retry;
+  const a = job.analysis, sync = job.sync, approval = job.approval;
+  const checks = `<div class="qc-checks">${a.checks.map(check => `<span class="${check.passed ? 'pass' : 'fail'}" title="${esc(check.detail)}">${check.passed ? '✓' : '!'} ${esc(check.name.replace('_', ' '))}</span>`).join('')}</div>`;
+  const facts = `<p class="hint">${a.durationSeconds.toFixed(1)} s${a.pace ? ` · ${a.pace.wpm} words a minute` : ''} · word times ${a.timing === 'measured' ? 'measured by the voice service' : 'estimated'}</p>`;
+  const scenes = sync ? `<details class="scene-history" ${sync.counts.outside ? 'open' : ''}><summary>Scene timing · ${sync.counts.same} same, ${sync.counts.retime} retimed, ${sync.counts.outside} outside the natural range · scene changes within ${sync.maxDrift.toFixed(2)} s of their words</summary>
+    <table class="data-table sync-table"><thead><tr><th>Scene</th><th>Original</th><th>This language</th><th>Change</th></tr></thead><tbody>${sync.scenes.map(scene => { const [label, tone] = NR_SCENE[scene.status]; return `<tr><td>${esc(scene.label)}</td><td>${(scene.primary.end - scene.primary.start).toFixed(1)} s</td><td>${(scene.edition.end - scene.edition.start).toFixed(1)} s</td><td>${badge(label, tone)}</td></tr>`; }).join('')}</tbody></table>
+    ${sync.issues.map(issue => `<p class="${issue.severity === 'critical' ? 'inline-warning' : 'hint'}">${esc(issue.message)}</p>`).join('')}<p class="hint">The picture follows the voice: each scene is retimed to its new length (the voice is never sped up). Whole video: ${sync.primarySeconds.toFixed(1)} s in the original, ${sync.seconds.toFixed(1)} s in this language.</p></details>` : '';
+  const decision = approval ? `<p><b>${approval.current ? 'Approved' : 'Approval out of date'}</b> · by ${esc(approval.approvedBy)} · ${esc(date(approval.at))}${approval.current ? '' : ` · <span class="inline-warning">${esc(approval.staleReason)}</span>`}</p>`
+    : job.status === 'completed' && job.current && sync?.passed ? `<div class="card-actions">${action('Approve this narration', 'edition-narration-approve', job.id, 'primary')}</div>` : '';
+  return `${line}<audio controls preload="metadata" src="${esc(job.audioUrl)}"></audio>${facts}${checks}${scenes}${decision}`;
+}
+function editionNarrationAction(command, id) {
+  if (command === 'edition-voice') {
+    const {item, edition, locale} = edEdition(id), voice = edition.voice, primary = item.primaryVoice;
+    return renderDialog('edition-voice', `${edition.language} narrator`, 'VOICE · RECORDED BY NAME', `<p class="hint">The narrator uses the main narrator's connection, rights and delivery (${esc(primary.provider)}). ElevenLabs' multilingual models (for example eleven_multilingual_v2 or eleven_v3) speak ${esc(edition.language)} with the same voice; you can also give a voice ID from your ElevenLabs voice library that is made for this language.</p>
+      <div class="form-grid">${renderNameField()}<label>Voice ID<input name="voiceId" maxlength="128" value="${esc(voice?.voiceId || primary.voiceId)}"></label><label>Model<input name="model" maxlength="128" value="${esc(voice?.model || primary.model)}"></label></div>
+      <label class="checkbox-label"><input type="checkbox" name="languageConfirmed">This voice may narrate in ${esc(edition.language)} for commercial use (provider terms or the voice owner's licence).</label>`, 'Save narrator', {familyId: item.familyId, locale, expectedRevision: voice?.revision || 0});
+  }
+  if (command === 'edition-narrate') {
+    const {item, edition, contentId, locale} = edEdition(id), chars = edition.scriptCharacters, price = item.primaryVoice.priceCentsPerMillionCharacters;
+    return renderDialog('edition-narrate', `Narrate the ${edition.language} edition`, 'VOICE SERVICE · PAID', `<p class="hint">${esc(edition.voice.voiceId)} reads the approved ${esc(edition.language)} words (${chars.toLocaleString('en-US')} characters${price ? `, about $${(chars * price / 1e8).toFixed(2)} at your recorded price` : ''}). The characters count against the family's monthly voice limit. Nothing is retried by itself; at most 3 paid narrations for these words and this voice. Then every scene of the approved edit is measured in this voice.</p><div class="form-grid">${renderNameField()}</div>`, 'Narrate', {contentId, locale});
+  }
+  if (command === 'edition-narration-retry') return renderDialog('edition-narration-retry', 'Retry the narration', 'VOICE SERVICE · DELIBERATE RETRY', `<div class="form-grid">${renderNameField()}</div><label class="checkbox-label"><input type="checkbox" name="confirmInterrupted">I understand a stopped attempt may already have been charged.</label>`, 'Retry', {id});
+  if (command === 'edition-narration-approve') {
+    const job = (state.localization?.contents || []).flatMap(item => item.editions.flatMap(edition => edition.narrations)).find(entry => entry.id === id), outside = job?.sync?.counts.outside || 0;
+    return renderDialog('edition-narration-approve', 'Approve this narration', 'HUMAN APPROVAL · YOUR NAME IS RECORDED', `<p class="hint">The approval goes out of date by itself when the words, the narrator or the approved master change.</p><div class="form-grid">${renderNameField()}<label class="full">Notes<input name="notes" maxlength="2000"></label></div>
+      <label class="checkbox-label"><input type="checkbox" name="listened">A speaker of this language listened to the whole narration.</label>
+      <label class="checkbox-label"><input type="checkbox" name="pronunciation">Names, numbers and places are pronounced right.</label>
+      <label class="checkbox-label"><input type="checkbox" name="syncReviewed">I read the scene timing list.</label>
+      ${outside ? `<label class="checkbox-label"><input type="checkbox" name="syncAccepted">I accept the ${outside === 1 ? 'scene that changes' : `${outside} scenes that change`} length beyond the natural range.</label>` : ''}`, 'Approve', {id});
+  }
   return toast('Unknown action.', true);
 }
