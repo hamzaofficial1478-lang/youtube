@@ -6,6 +6,7 @@ const {MODELS, DEFAULT_MODELS, AiError} = require('./ai');
 
 const PROVIDERS = {
   youtube: {name: 'YouTube public research', test: 'Public channel lookup', ready: true},
+  'youtube-oauth': {name: 'YouTube channel access (Google OAuth client)', test: 'Checks the client ID and secret are saved; Google checks them when you connect a channel in Room 11', ready: true, oauth: true},
   openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
@@ -51,6 +52,8 @@ class ConnectorSlots {
     if(input.clearKey)encrypted=null;
     if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key)));
     const next={name,provider,notes,revision:old?JSON.parse(old.payload).revision+1:1,test:null,updatedAt:new Date().toISOString()};
+    // Y01: a Google OAuth client of type "Desktop app"; its ID is not a secret, its secret is kept like a key.
+    if(PROVIDERS[provider].oauth){const clientId=input.clientId??(old?JSON.parse(old.payload).clientId:undefined);if(typeof clientId!=='string'||!/^\d{6,30}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(clientId))throw new InputError('Enter the OAuth client ID from Google Cloud (it ends in .apps.googleusercontent.com).');next.clientId=clientId;}
     // The two Claude models a connection uses: main (scripts, editing, visuals, niches) and support (the rest).
     if(PROVIDERS[provider].ai){
       const pick=(value,role)=>{const model=value??(old?JSON.parse(old.payload).models?.[role]:undefined)??DEFAULT_MODELS[role];if(!Object.hasOwn(MODELS,model))throw new InputError(`Choose a supported Claude model for the ${role} role.`);return model;};
@@ -81,6 +84,8 @@ class ConnectorSlots {
       }else if(slot.provider==='youtube'){
         const research=new YouTubeResearch({get:()=>key},this.fetch);
         result=await research.lookup(channel);
+      }else if(PROVIDERS[slot.provider].oauth){
+        result={access:'oauth_client_saved',message:'The client ID and secret are saved. Nothing was sent to Google: Google checks them when you connect a channel in Room 11.'};
       }else if(slot.provider==='nexlev'){
         const {NexLevClient}=require('./intel-sources');
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');

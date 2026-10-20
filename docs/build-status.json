@@ -1,7 +1,7 @@
 {
-  "version": "0.45.0",
+  "version": "0.46.0",
   "updated": "2026-10-20",
-  "nextAction": "Owner: restart the program; for a family with more than one language, take one video through Room 06 (words, narrator, narration, video, release). Phase 04 is built. Next: the all-rooms production proof with real material, then publishing (Y01-Y02) or the parked script and competitor work, as the owner decides.",
+  "nextAction": "Owner: create a Desktop-app OAuth client in Google Cloud (docs/PUBLISHING.md), add it in Connections, connect a test channel in Room 11 and, when you decide, upload one approved video privately. Next build step: Y02 (thumbnail, captions and schedule), then Y03.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -189,7 +189,7 @@
           "id": "R01",
           "title": "Protected provider and channel credentials",
           "status": "testing",
-          "remaining": "Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters."
+          "remaining": "Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Per-channel OAuth for publishing is built in 0.46 (Room 11; live sign-in not yet verified). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters."
         },
         {
           "id": "R02",
@@ -513,8 +513,9 @@
         {
           "id": "Y01",
           "title": "Private resumable upload and reconciliation",
-          "status": "planned",
-          "remaining": "Implement and test per-channel destination binding, upload session recovery and unknown-outcome reconciliation on a real test channel."
+          "status": "testing",
+          "remaining": "Not yet run against the real Google sign-in and a real channel (needs the owner's Desktop-app OAuth client and go-ahead). YouTube's real processing times and a large file over a slow line are untested. Thumbnail, captions, schedule and public release are Y02.",
+          "evidence": "0.46.0 (2026-10-20): Room 11 Publishing. Per-channel Google sign-in (loopback, state, PKCE, offline access; pending until the owner confirms the returned channel by name; refresh token encrypted; replaced connections revoked; refused renewal pauses the channel), and private resumable upload of the approved master or released edition (durable record, session saved before the first byte, every confirmed chunk recorded, lost answers resolved by asking the session, resume after a stop, reconciliation against the channel before any second copy, processing checks, YouTube upload bucket and unit quota). Tested in tests/publishing.test.js against a stand-in Google, and in the browser on a throwaway workspace (sign-in return page, confirmation, a 44-MB master uploaded privately with live progress and processed; nothing was sent to Google). npm test 320/320 passed."
         },
         {
           "id": "Y02",
@@ -574,5 +575,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Language editions complete: render, thumbnail and release per language (L03)"
+  "milestone": "Room 11 Publishing: private resumable upload and reconciliation (Y01)"
 }

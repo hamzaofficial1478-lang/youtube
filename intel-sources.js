@@ -314,7 +314,8 @@ class YouTubePublicClient {
 }
 
 // ---------------------------------------------------------------- quota ledger
-const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000};
+// YouTube's videos.insert calls have their own daily bucket (100 a day by default), apart from the 10,000 shared units.
+const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, youtubeDailyUploadCap: 100, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000};
 // Stock libraries publish per-hour (Pexels 200/hour) and per-minute (Pixabay 100/60 s) limits; caps are counted per UTC hour.
 function hourPeriod(at = new Date()) { return at.toISOString().slice(0, 13); }
 function nexlevPeriod(at = new Date()) { return at.toISOString().slice(0, 7); }
@@ -354,9 +355,9 @@ class QuotaLedger {
       return this.settings();
     });
   }
-  periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : provider === 'youtube' ? youtubePeriod() : hourPeriod(); }
+  periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : provider.startsWith('youtube') ? youtubePeriod() : hourPeriod(); }
   capFor(provider) {
-    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap'}[provider];
+    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', 'youtube-upload': 'youtubeDailyUploadCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap'}[provider];
     requireValue(key, `Unknown data provider ${provider}.`, 500);
     return settings[key];
   }
@@ -393,6 +394,7 @@ class QuotaLedger {
       pixabay: {period: hour, used: this.committed('pixabay', hour), cap: settings.pixabayHourlyRequestCap, unit: 'requests this hour (UTC)'},
       nexlev: {period: nexlev, used: this.committed('nexlev', nexlev), cap: settings.nexlevMonthlyRequestCap, unit: 'requests this month (UTC)'},
       youtube: {period: youtube, used: this.committed('youtube', youtube), cap: settings.youtubeDailyUnitCap, unit: 'units today (Pacific time)'},
+      youtubeUploads: {period: youtube, used: this.committed('youtube-upload', youtube), cap: settings.youtubeDailyUploadCap, unit: 'uploads today (Pacific time)'},
     };
   }
   usageFor(jobId) {

@@ -68,7 +68,7 @@ A dependable local workspace that preserves every draft and distinguishes planni
 
 Approved data access and evidence-led research without invented metrics.
 
-- [ ] **R01 Protected provider and channel credentials** (testing) - Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters.
+- [ ] **R01 Protected provider and channel credentials** (testing) - Named connector CRUD, encrypted credentials and read-only YouTube/OpenAI/ElevenLabs tests implemented (37 checks passed). Per-channel OAuth for publishing is built in 0.46 (Room 11; live sign-in not yet verified). Remaining: per-channel OAuth state/PKCE, identity binding and refresh/revocation; MCP/Reddit live adapters.
 - [ ] **R02 YouTube read-only connector** (testing) - Implemented/tested bounded public channel lookup with synthetic responses. Remaining: real Google project/key verification, owner identity, recent-video collection, quota accounting and source retention.
 - [ ] **R03 Permitted web, Reddit and Agent-Reach tools** (planned) - Confirm platform access and permitted use; add narrow adapters and real health checks. Agent-Reach get_status alone is not reading/searching.
 - [x] **R04 Daily niche and topic evidence briefs** (done) - Version 0.5 stores revisioned permission-labeled evidence and immutable date-scoped review-only briefs with source links, confidence, deduplication, expiry, token accounting and deliberate retries. A live brief completed on 2026-09-11; desktop and 390 x 844 layouts passed. Automatic collection is intentionally not enabled.
@@ -129,7 +129,7 @@ Reuse the visual master while preserving meaning, natural voice and scene timing
 
 Publish the right approved version to the right channel without duplicates.
 
-- [ ] **Y01 Private resumable upload and reconciliation** (planned) - Implement and test per-channel destination binding, upload session recovery and unknown-outcome reconciliation on a real test channel.
+- [ ] **Y01 Private resumable upload and reconciliation** (testing) - 0.46.0 (2026-10-20): Room 11 Publishing. Per-channel Google sign-in (loopback, state, PKCE, offline access; pending until the owner confirms the returned channel by name; refresh token encrypted; replaced connections revoked; refused renewal pauses the channel), and private resumable upload of the approved master or released edition (durable record, session saved before the first byte, every confirmed chunk recorded, lost answers resolved by asking the session, resume after a stop, reconciliation against the channel before any second copy, processing checks, YouTube upload bucket and unit quota). Tested in tests/publishing.test.js against a stand-in Google, and in the browser on a throwaway workspace (sign-in return page, confirmation, a 44-MB master uploaded privately with live progress and processed; nothing was sent to Google). npm test 320/320 passed.
 - [ ] **Y02 Attach approved thumbnails/captions and schedule** (planned) - Attach already approved production assets, confirm future time zones, audience/disclosure settings, project audit status and each quota bucket, then schedule the exact approved edition.
 - [ ] **Y03 Rules-based unattended operation** (planned) - Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts.
 
@@ -144,6 +144,39 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Room 11 Publishing: private upload and reconciliation (0.46.0)
+
+- **Owner request:** proceed to the next plan. After phase 04 that is phase 05, controlled publishing, starting with Y01.
+- **Built** (docs/PUBLISHING.md):
+  - **Channel connection:**
+    - Each family language is connected to its YouTube channel through Google's own sign-in, using a Desktop-app OAuth client the owner adds in Connections.
+    - The returned channel waits until the owner confirms it by name.
+    - Access is kept encrypted; a replaced connection is revoked.
+    - When Google refuses the saved access, that channel pauses with "Connect again".
+  - **The upload:**
+    - The approved master (main language) or the released edition is uploaded privately, with the owner's made-for-kids answer, the AI disclosure and the chosen category.
+    - It goes in 8 MiB chunks through YouTube's resumable upload, with the session saved before the first byte.
+  - **Recovery:**
+    - A stop resumes the same session from where Google says it stopped.
+    - A forgotten session is reconciled against the channel before anything is sent again.
+    - One open record per language: never a blind second copy.
+  - **After the upload:** processing is checked until YouTube reports the video ready. Uploads and units count against YouTube's daily quota.
+- **Checked:**
+  - tests/publishing.test.js (3 tests, stand-in Google):
+    - sign-in safety (forged or reused state, nothing bound before confirmation, no secret in what the page receives, replacement revokes);
+    - upload with a lost chunk answer (exact bytes), private metadata, duplicate refusal, processing, quota;
+    - a refused renewal pauses the channel;
+    - stop and resume on the same session;
+    - a forgotten session reconciled with two candidates (the owner chooses), and with none (then discard and upload again).
+  - Browser check on a throwaway workspace (stand-in Google, nothing sent to Google):
+    - Room 11 lists languages, quota and what is ready;
+    - the sign-in return page;
+    - confirmation and made-for-kids refusals, then recorded;
+    - a 44-MB master uploaded privately with live progress and processed.
+  - Fixed: the connector form showed the Claude model fields for every connection type (the `hidden` attribute was overridden by the form style); the program now enforces `[hidden]`.
+  - npm test 320/320 passed.
+- **Not tested:** the real Google sign-in and a real upload (needs the owner's OAuth client and go-ahead); Y02 and Y03 are not built.
 
 ### 2026-10-20 - Language editions: render, thumbnail and release (0.45.0)
 
