@@ -121,7 +121,7 @@ A sourced primary-language master becomes a real, reviewable video.
 
 Reuse the visual master while preserving meaning, natural voice and scene timing.
 
-- [ ] **L01 Scene translation and local packaging** (planned) - Adapt scripts, visible text, titles, descriptions and thumbnails only for each family’s configured additional locales; keep every locale independently retryable.
+- [ ] **L01 Scene translation and local packaging** (testing) - 0.43.0 (2026-10-20): Room 06 language editions. An edition starts only from an approved, current final master. Narration sentences, every word on screen (drawn shots and graphics) and the package are adapted per extra language by Claude on a click inside a token reservation (parts of 150 sentences, finished parts kept) or by the owner; checks for missing items, lost figures and sentences that take much longer to say; immutable revisions and named approvals that go stale when the main video's words change; unchanged items keep their wording. Tested in tests/localization.test.js and in the browser on a throwaway workspace (Spanish edition of a real 20-s master with a fixture answer). npm test 313/313 passed.
 - [ ] **L02 Language narration and synchronization** (planned) - Generate actual voices, adjust natural wording/timing and verify with proficient language reviewers.
 - [ ] **L03 Independent edition approvals** (planned) - Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions.
 
@@ -144,6 +144,29 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Language editions in Room 06 (0.43.0)
+
+- **Owner request:** follow the progress plan to the next step. After P11 that is phase 04, optional language editions, starting with L01.
+- **Built** (docs/LOCALIZATION.md):
+  - **Start:** an edition starts only from an approved, current final master.
+  - **What is adapted:** the narration sentences, every word on screen (drawn shots and graphics) and the package words, per extra language of the family.
+  - **Claude:** adapts on a click inside a token reservation, in parts of 150 sentences. Finished parts are kept, so a retry never pays twice.
+  - **Owner:** can edit every line; the edit is checked strictly.
+  - **Checks:** missing items, lost figures, and sentences that take much longer to say.
+  - **Revisions and approval:** immutable revisions; a named approval with four confirmations that goes stale when the main video's words change.
+  - **Changes upstream:** unchanged sentences keep their wording and only changes are asked again.
+  - **Independence:** each language is independent.
+- **Checked:**
+  - tests/localization.test.js (3 tests):
+    - collection and checks;
+    - refusal before Room 10;
+    - reservation, immutability, approval rules, stale on a package change, carry-forward;
+    - independence of languages;
+    - an interrupted two-part adaptation resumes with the second part only.
+  - Browser check on a throwaway workspace: a Spanish edition of a 20-s master (fixture answer) shown side by side, the long-sentence suggestion flagged, approved by name.
+  - npm test 313/313 passed.
+- **Not tested:** live Claude adaptation of a real video; narration, timing and render of editions (L02/L03, not built).
 
 ### 2026-10-20 - Room 10 Render & Recovery: the final master (0.42.0)
 

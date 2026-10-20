@@ -1,7 +1,7 @@
 {
-  "version": "0.42.0",
+  "version": "0.43.0",
   "updated": "2026-10-20",
-  "nextAction": "Owner: restart the program and walk one video through Rooms 01-10 with real material (the primary-language production proof), then approve its master in Room 10. Next build step: localization (L01-L03) or the parked script and competitor work, as the owner decides.",
+  "nextAction": "Owner: restart the program; for a family with more than one language, open Room 06 after approving a master and ask Claude for an edition. Next build step: L02 (edition narration and timing), then L03; the parked script and competitor work when the owner decides.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -486,8 +486,9 @@
         {
           "id": "L01",
           "title": "Scene translation and local packaging",
-          "status": "planned",
-          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails only for each family\u2019s configured additional locales; keep every locale independently retryable."
+          "status": "testing",
+          "remaining": "Not yet run with live Claude on a real video. The localized thumbnail image and the edition's own words drawn into shots and graphics come with the edition render (L03); atelier (designed) shots keep the primary language until redesigned.",
+          "evidence": "0.43.0 (2026-10-20): Room 06 language editions. An edition starts only from an approved, current final master. Narration sentences, every word on screen (drawn shots and graphics) and the package are adapted per extra language by Claude on a click inside a token reservation (parts of 150 sentences, finished parts kept) or by the owner; checks for missing items, lost figures and sentences that take much longer to say; immutable revisions and named approvals that go stale when the main video's words change; unchanged items keep their wording. Tested in tests/localization.test.js and in the browser on a throwaway workspace (Spanish edition of a real 20-s master with a fixture answer). npm test 313/313 passed."
         },
         {
           "id": "L02",
@@ -571,5 +572,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Room 10 Render & Recovery: the final master (P11)"
+  "milestone": "Language editions in Room 06 (L01)"
 }

@@ -16,7 +16,7 @@ const MODELS = Object.freeze({'claude-opus-5-5': 'Claude Opus 5.5', 'claude-opus
 const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-opus-4-8'});
 // Owner decision 2026-10-06: Opus 5.5 writes scripts and makes the editing, visual and niche decisions;
 // Opus 4.8 does the rest.
-const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', research: 'support', competitors: 'support', frames: 'main', illustrate: 'main'});
+const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', localization: 'main', research: 'support', competitors: 'support', frames: 'main', illustrate: 'main'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
 // A frame's design is already settled by the plan (blueprint, beats, motions); writing it needs less deliberation
 // (live 0.25 run: about 10k thinking tokens per frame at high). A picture's subject is settled by the plan too
