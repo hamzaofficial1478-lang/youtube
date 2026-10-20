@@ -1,4 +1,4 @@
-# Room 11: Publishing, private upload and reconciliation (Y01, 0.46.0)
+# Room 11: Publishing: private upload, attachments and schedule (Y01 0.46.0, Y02 0.47.0)
 
 Phase 05 of the plan is controlled publishing. Y01 is built here:
 - each family language is connected to one YouTube channel;
@@ -6,7 +6,8 @@ Phase 05 of the plan is controlled publishing. Y01 is built here:
 - an upload that stops is resumed;
 - an upload whose outcome is unknown is reconciled before anything is sent again.
 
-Y02 (thumbnail, captions, schedule, going public) and Y03 (unattended operation) are not built.
+Y02 adds the thumbnail, the captions and the schedule that makes the video public (0.47.0, below). Y03 (unattended operation)
+is not built.
 
 The blueprint's rule (page 17): "A finished render, an uploaded video, a scheduled video and a published video are separate
 states." Never blindly upload a second copy.
@@ -110,6 +111,76 @@ Before the upload starts, these YouTube limits are checked: title 1-100 characte
   unknown when the request may have arrived.
 - **Quota used up:** the record waits with a plain message. Processing checks wait an hour.
 
+## Y02: thumbnail, captions and the schedule (0.47.0)
+
+The blueprint's sequence (page 17):
+- "Upload privately; verify processing and attach the required thumbnail and captions. An attachment failure retries that
+  attachment, not the entire video."
+- "After all mandatory checks pass, set the schedule. YouTube's publishAt requires a private video that has not previously
+  been published; a past time can publish immediately."
+- "Poll conservatively for final processing and actual visibility. Store the observed result."
+
+### Attachments (`assets`, `attachNext`, `runAttach`, `retryAttachment`)
+
+- When a video becomes `processed`, its attachments are listed. A video processed before this version gets its list on the
+  next round of the worker.
+  - **Thumbnail:** the chosen thumbnail of the approved package (Room 09) for the main language, or the edition's own
+    thumbnail with its words (L03). Its file is checked against its checksum.
+  - **Captions:** the captions the edit made, written as SubRip, in the video's language and named after it. A master uses
+    the edit's captions; an edition uses the captions built on its own voice.
+  - An item the video does not have is shown as "none approved".
+- **One try each, by themselves.** Each attachment is tried once by itself, then waits for the owner. A failed one is retried
+  alone with "Retry the thumbnail" or "Retry the captions", never by uploading the video again.
+- **The thumbnail** costs 50 units (`thumbnails.set`).
+  - YouTube refuses custom thumbnails on a channel not verified by phone (HTTP 403). The message then says to verify at
+    youtube.com/verify.
+  - Setting the thumbnail again is harmless.
+- **The captions** cost 400 units (`captions.insert`, `youtube.force-ssl`).
+  - When the answer to an insert is lost, the attachment is `unknown`.
+  - Its retry first reads the video's caption tracks (`captions.list`, 50 units). A track with the same language and name
+    means the captions are there, and nothing is added again.
+- **Quota.** YouTube charges a request it answered even when it refused it, so a refused attachment counts its units. A
+  request that never left (a missing file, no access) costs nothing. A request with an unknown outcome stays counted.
+
+### The schedule (`schedule`, `unschedule`)
+
+Only a `processed` private video can be scheduled, and only when all of these hold:
+- **Its channel is connected.**
+- **The upload is still the approved one:** the same render and the same approval as when it was queued.
+- **Every attachment is done**, or one that did not attach is waived by name in the dialog ("Schedule without the custom
+  thumbnail: ...").
+- **The time is right:**
+  - The owner enters a date and time in a time zone they choose: the family's time zone by default, or any IANA name such as
+    America/New_York.
+  - `G.zonedToUtc` turns it into the exact moment (UTC), daylight saving included. A time skipped by a clock change is
+    refused.
+  - It must be at least 30 minutes ahead, because YouTube publishes a past time at once. It must also be within a year.
+- **The owner confirms:**
+  - the audience settings (made for kids, altered or synthetic content);
+  - that YouTube has approved the Google project in its API audit. Without that audit, YouTube keeps uploads from the API
+    private even at the scheduled time.
+
+The program then:
+1. reads the video's status (1 unit) and refuses if YouTube does not show it as private;
+2. sends the status back with `publishAt` (`videos.update`, 50 units). Every other writable setting (licence, embeddable,
+   public stats, made for kids, synthetic media) is sent back unchanged, because an update replaces the whole status;
+3. records the schedule: the moment in UTC, the chosen time zone and wall clock, the family's wall clock, who set it, and
+   anything waived.
+
+**Cancel the schedule** removes `publishAt` before the time (51 units). The video stays private and can be scheduled again.
+
+If the approved video or package changes after scheduling, the record says plainly that YouTube will still make this upload
+public at its time, and offers the cancel.
+
+### After the time (`observe`)
+
+- **The first look** comes 5 minutes after the time (1 unit).
+- **Public:** the record becomes `published`, with the watch link and the observed status.
+- **The time was moved in YouTube Studio:** the record follows the new time and says so.
+- **Still private:** the program looks again every 30 minutes. After six looks the record becomes `kept_private`, with the
+  likely reason: the Google project is not yet approved in YouTube's API audit, or the schedule was removed in Studio.
+- "Check now" looks at once.
+
 ## Room 11 on the page
 
 **Channels:** each language of the family shows its channel (link to YouTube, who confirmed it) or "Not connected", with
@@ -129,7 +200,14 @@ shows:
 - the link to YouTube Studio;
 - the actions it allows: Resume, Look for it on the channel, This one is the upload, Check now, Discard.
 
-The page refreshes itself while an upload runs, and when you come back from Google's tab.
+Y02 adds to each record:
+- the thumbnail and captions status, with a retry for each;
+- **Schedule going public**: date and time, time zone, confirmations, waivers;
+- the time it goes public, in the chosen zone and the family's zone, and in UTC;
+- **Cancel the schedule**;
+- "Public on YouTube" with the watch link, or "YouTube kept it private" with the reason.
+
+The page refreshes itself while an upload or an attachment runs, and when you come back from Google's tab.
 
 ## Tested
 
@@ -173,7 +251,36 @@ Browser check on a throwaway workspace with a stand-in Google (nothing was sent 
   - The Claude model fields had been showing for every connection type: the form's style overrode `hidden`. Fixed for the
     whole program with `[hidden]{display:none !important}`.
 
+Y02 (`tests/publishing.test.js`, stand-in YouTube):
+- **Attachments:**
+  - After processing, both attachments are pending.
+  - The thumbnail is refused (channel not verified, with the hint), and the captions' answer is lost (unknown) although
+    YouTube kept the track (the SubRip text is checked).
+  - Scheduling is refused while the thumbnail failed and is not waived.
+  - The thumbnail retry attaches it.
+  - The captions retry finds the existing track, so there are no duplicate captions.
+- **Scheduling:**
+  - A time in the past, a missing audit confirmation and missing audience settings are refused.
+  - 20:00 in Asia/Karachi becomes 15:00 UTC.
+  - YouTube receives private plus `publishAt` with every other setting unchanged.
+  - Cancelling removes `publishAt` and keeps the video private; scheduling again works.
+- **After the time:** public becomes `published` with the watch link; private after six looks becomes `kept_private` with
+  the audit reason.
+- **Quota:** thumbnails (including the refused one), captions, the caption lookup and every schedule change are counted.
+
+Y02 browser check on the same throwaway workspace (stand-in Google):
+- The video processed under Y01 got its thumbnail and captions attached by itself after the update.
+- The schedule was refused without the audit confirmation, with YouTube's rule explained.
+- It was scheduled for 22 Oct 20:00 Asia/Karachi (15:00 UTC), with thumbnail and captions attached and 503 units shown.
+- The cancel kept it private, with the reason recorded.
+- The page footer still said publishing was locked; corrected.
+
 **Not tested:**
-- a real Google sign-in and a real upload to the owner's channel (needs the owner's OAuth client and the owner's go-ahead);
+- a real Google sign-in, a real upload, real attachments or a real schedule on the owner's channel (needs the owner's OAuth
+  client, a phone-verified channel for thumbnails, YouTube's audit for going public, and the owner's go-ahead);
 - YouTube's real processing times;
 - a large file over a slow line.
+
+**Known limits:**
+- An edition's description is its adapted description: it does not repeat the main package's chapters and visual credits.
+- Only one caption track (the video's own language) is attached; other languages' captions belong to their own editions.

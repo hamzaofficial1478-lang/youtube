@@ -1,10 +1,12 @@
 'use strict';
 // Room 11 - Publishing (Y01): each family language bound to one YouTube channel through Google's own sign-in and
 // confirmed by name; the approved master or released edition uploaded PRIVATELY, resumable, reconciled before anything
-// is sent again. Thumbnails, captions, schedule and public release are Y02. Loaded before app.js; helpers from app.js
-// and render-room.js are used only inside functions.
+// is sent again. Y02: the approved thumbnail and captions are attached after processing, the owner schedules when it
+// goes public, and the program observes whether YouTube really made it public. Loaded before app.js; helpers from
+// app.js and render-room.js are used only inside functions.
 
-const PUB_STATUS = {queued: ['Waiting to upload', 'gray'], uploading: ['Uploading', 'orange'], interrupted: ['Stopped: can resume', 'orange'], unknown: ['Outcome unknown: reconcile', 'orange'], uploaded: ['Uploaded privately', 'green'], processing: ['YouTube is processing', 'green'], processed: ['Ready on YouTube (private)', 'green'], failed: ['Failed', 'gray'], discarded: ['Discarded', 'gray']};
+const PUB_STATUS = {queued: ['Waiting to upload', 'gray'], uploading: ['Uploading', 'orange'], interrupted: ['Stopped: can resume', 'orange'], unknown: ['Outcome unknown: reconcile', 'orange'], uploaded: ['Uploaded privately', 'green'], processing: ['YouTube is processing', 'green'], processed: ['Ready on YouTube (private)', 'green'], failed: ['Failed', 'gray'], discarded: ['Discarded', 'gray'], scheduled: ['Scheduled', 'green'], published: ['Public on YouTube', 'green'], kept_private: ['YouTube kept it private', 'orange']};
+const PUB_ATTACH = {pending: 'being attached', done: 'attached', failed: 'did not attach', unknown: 'outcome unknown', none: 'none approved'};
 function pubOAuthConnection() { return state.connectors.find(item => item.provider === 'youtube-oauth' && item.hasKey && item.test?.status === 'passed'); }
 
 function publishingRoomView(family) {
@@ -42,12 +44,18 @@ function publicationRowView(family, channels, content, entry) {
     latest.status === 'interrupted' ? action('Resume upload', 'pub-resume', latest.id, 'primary') : '',
     ['interrupted', 'unknown'].includes(latest.status) ? action('Look for it on the channel', 'pub-reconcile', latest.id, latest.status === 'unknown' ? 'primary' : 'secondary') : '',
     latest.candidates?.length ? action('This one is the upload', 'pub-choose', latest.id, 'secondary') : '',
-    ['uploaded', 'processing', 'processed'].includes(latest.status) ? action('Check now', 'pub-check', latest.id, 'secondary') : '',
+    latest.status === 'processed' && latest.standing && latest.attachments && !Object.values(latest.attachments).some(item => item.status === 'pending') ? action('Schedule going public', 'pub-schedule', latest.id, 'primary') : '',
+    latest.status === 'scheduled' && Date.parse(latest.schedule.publishAt) > Date.now() + 60000 ? action('Cancel the schedule', 'pub-unschedule', latest.id, 'text-button danger') : '',
+    ...(latest.attachments ? ['thumbnail', 'captions'].filter(kind => ['failed', 'unknown'].includes(latest.attachments[kind].status) && ['processed', 'scheduled'].includes(latest.status)).map(kind => action(`Retry the ${kind}`, 'pub-attach', `${latest.id}|${kind}`, 'secondary')) : []),
+    ['uploaded', 'processing', 'processed', 'scheduled', 'kept_private'].includes(latest.status) ? action('Check now', 'pub-check', latest.id, 'secondary') : '',
     ['queued', 'failed', 'interrupted', 'unknown'].includes(latest.status) && !latest.videoId ? action('Discard this record', 'pub-discard', latest.id, 'text-button danger') : '',
   ].join('');
   return `${head}<div class="cap-row"><div><strong>${badge(label, tone)} ${esc(latest.title)}</strong><small>${latest.status === 'uploading' || latest.status === 'interrupted' ? `${percent}% sent (${(latest.sent / 1e6).toFixed(0)} of ${(latest.size / 1e6).toFixed(0)} MB) · ` : ''}private · made for kids: ${latest.madeForKids ? 'yes' : 'no'} · ${esc(date(latest.createdAt))} by ${esc(latest.createdBy)}${latest.processing?.processingStatus ? ` · YouTube: ${esc(latest.processing.processingStatus)}` : ''}</small>
     ${latest.error ? `<p class="${['failed', 'unknown'].includes(latest.status) ? 'inline-warning' : 'hint'}">${esc(latest.error)}</p>` : ''}${latest.candidates?.length ? `<p class="hint">Found on the channel: ${latest.candidates.map(item => `<a href="https://studio.youtube.com/video/${esc(item.videoId)}/edit" target="_blank" rel="noopener">${esc(item.videoId)} ↗</a>`).join(', ')}</p>` : ''}
-    ${latest.studioUrl ? `<p class="hint"><a href="${esc(latest.studioUrl)}" target="_blank" rel="noopener">Open in YouTube Studio ↗</a></p>` : ''}</div></div><div class="card-actions">${actions}</div>`;
+    ${latest.attachments ? `<p class="hint">Thumbnail: ${esc(PUB_ATTACH[latest.attachments.thumbnail.status])}${latest.attachments.thumbnail.error ? ` (${esc(latest.attachments.thumbnail.error)})` : ''} · Captions: ${esc(PUB_ATTACH[latest.attachments.captions.status])}${latest.attachments.captions.error ? ` (${esc(latest.attachments.captions.error)})` : ''}</p>` : ''}
+    ${latest.schedule ? `<p class="hint"><b>Goes public:</b> ${esc(latest.schedule.there)} (${esc(latest.schedule.timeZone)})${latest.schedule.homeZone !== latest.schedule.timeZone ? ` = ${esc(latest.schedule.home)} (${esc(latest.schedule.homeZone)})` : ''} · ${esc(latest.schedule.publishAt)} · set by ${esc(latest.schedule.scheduledBy)}${latest.schedule.waived.length ? ` · without the ${esc(latest.schedule.waived.join(' and '))}` : ''}</p>` : ''}
+    ${latest.status === 'scheduled' && latest.standing === false ? '<p class="inline-warning">The approved video or package for this language changed after this was scheduled. YouTube will still make this upload public at its time: cancel the schedule if it should not go out.</p>' : ''}
+    ${latest.studioUrl ? `<p class="hint">${latest.watchUrl ? `<a href="${esc(latest.watchUrl)}" target="_blank" rel="noopener">Watch on YouTube ↗</a> · ` : ''}<a href="${esc(latest.studioUrl)}" target="_blank" rel="noopener">Open in YouTube Studio ↗</a></p>` : ''}</div></div><div class="card-actions">${actions}</div>`;
 }
 
 function publishAction(command, id) {
@@ -79,6 +87,21 @@ function publishAction(command, id) {
   if (command === 'pub-choose') {
     const latest = pub.contents.flatMap(item => item.locales.flatMap(entry => entry.publications)).find(item => item.id === id);
     return renderDialog('pub-choose', 'Which video is the upload?', 'RECONCILIATION', `<p class="hint">More than one video with this title appeared on the channel after the upload started. Open them in YouTube Studio and choose the one this program uploaded.</p><div class="form-grid">${renderNameField()}<label class="full">Video<select name="videoId">${latest.candidates.map(item => `<option value="${esc(item.videoId)}">${esc(item.videoId)} · ${esc(item.publishedAt || '')}</option>`).join('')}</select></label></div>`, 'This is the upload', {id});
+  }
+  if (command === 'pub-schedule') {
+    const latest = pub.contents.flatMap(item => item.locales.flatMap(entry => entry.publications)).find(item => item.id === id), family = state.families.find(item => item.id === pub.contents.find(content => content.locales.some(entry => entry.publications.some(row => row.id === id))).familyId);
+    const zones = [...new Set([family.timezone, 'UTC', 'America/New_York', 'America/Chicago', 'America/Los_Angeles', 'America/Mexico_City', 'America/Bogota', 'Europe/London', 'Europe/Madrid', 'Europe/Rome', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dubai'])];
+    const failed = ['thumbnail', 'captions'].filter(kind => ['failed', 'unknown'].includes(latest.attachments[kind].status));
+    return renderDialog('pub-schedule', 'Schedule going public', 'YOUTUBE · SCHEDULE · YOUR NAME IS RECORDED', `<p class="hint">YouTube keeps “${esc(latest.title)}” private until the time you choose, then makes it public by itself. Choose the time in the time zone of the audience you have in mind; the record shows the exact moment.</p>
+      <div class="form-grid">${renderNameField()}<label>Date and time<input type="datetime-local" name="local" required></label><label>Time zone<input name="timeZone" list="pub-zones" value="${esc(family.timezone)}" maxlength="60"><datalist id="pub-zones">${zones.map(zone => `<option value="${esc(zone)}">`).join('')}</datalist></label></div>
+      <label class="checkbox-label"><input type="checkbox" name="settings">The audience settings are right: made for kids ${latest.madeForKids ? 'yes' : 'no'}; altered or synthetic content as declared in Room 09.</label>
+      <label class="checkbox-label"><input type="checkbox" name="audit">YouTube has approved my Google project in its API audit. (Until it does, YouTube keeps uploads from the program private, even at the scheduled time.)</label>
+      ${failed.map(kind => `<label class="checkbox-label"><input type="checkbox" name="waive-${kind}">Schedule without the ${kind === 'thumbnail' ? 'custom thumbnail' : 'captions'}: ${esc(latest.attachments[kind].error || 'it did not attach')}</label>`).join('')}`, 'Schedule', {id});
+  }
+  if (command === 'pub-unschedule') return renderDialog('pub-unschedule', 'Cancel the schedule', 'YOUTUBE · SCHEDULE', '<p class="hint">The video stays private on YouTube. You can schedule it again later.</p>' + `<div class="form-grid">${renderNameField()}</div>`, 'Cancel the schedule', {id});
+  if (command === 'pub-attach') {
+    const [pubId, kind] = id.split('|');
+    return api(`/api/publications/${pubId}/attach`, {kind}).then(refresh).then(() => toast(`Tried the ${kind} again.`)).catch(error => toast(error.message, true));
   }
   if (['pub-resume', 'pub-check', 'pub-reconcile'].includes(command)) {
     const kind = {'pub-resume': 'resume', 'pub-check': 'check', 'pub-reconcile': 'reconcile'}[command];

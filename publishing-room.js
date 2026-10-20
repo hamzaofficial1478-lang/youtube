@@ -4,17 +4,23 @@
 // released edition is uploaded PRIVATELY through YouTube's resumable upload. A publication is a durable record: the
 // session is saved before the first byte, every finished chunk is recorded, a stop resumes from where Google says it
 // stopped, and an upload whose outcome is unknown is reconciled against the channel before anything is sent again.
-// Never a blind second copy. Thumbnails, captions, scheduling and public release are Y02.
+// Never a blind second copy. Y02: after processing, the approved thumbnail and the edit's captions are
+// attached (each once, a failed one retried alone), and the owner schedules the time it goes public; the program then
+// observes whether YouTube really made it public.
 const fs = require('node:fs');
 const {randomUUID} = require('node:crypto');
 const G = require('./publishing');
 const R = require('./render');
+const Cap = require('./captions');
+const L = require('./localize');
 const {InputError} = require('./store');
 const {requireValue, now, object, person, text} = R;
 
 const PAUSE = [2000, 5000, 15000]; // status questions after a dropped chunk, within one run
 const CHECK_EVERY = 60000, MAX_CHECKS = 120; // processing checks: once a minute, for up to two hours
 const AUTH_TTL = 15 * 60000;
+// YouTube charges a request it answered even when it refuses it; a request that never left costs nothing.
+const answered = error => error instanceof G.GoogleError && !error.unknown && !error.reconnect;
 
 class PublishingRoom {
   constructor(store, connectors, {renders, packaging, localization, quota, fetch: fetchImpl = null, wait = ms => new Promise(done => setTimeout(done, ms))} = {}) {
@@ -25,6 +31,8 @@ class PublishingRoom {
       CREATE TABLE IF NOT EXISTS publications(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, kind TEXT NOT NULL, render_id TEXT NOT NULL, approval_id TEXT NOT NULL, binding_id TEXT NOT NULL REFERENCES youtube_bindings(id), channel_id TEXT NOT NULL, status TEXT NOT NULL, metadata TEXT NOT NULL, sha256 TEXT NOT NULL, size INTEGER NOT NULL, session BLOB, sent INTEGER NOT NULL DEFAULT 0, video_id TEXT, processing TEXT, checks INTEGER NOT NULL DEFAULT 0, next_check_at TEXT, attempts INTEGER NOT NULL DEFAULT 0, error TEXT, candidates TEXT, started_at TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE UNIQUE INDEX IF NOT EXISTS publications_video ON publications(video_id) WHERE video_id IS NOT NULL;
     `);
+    const columns = new Set(this.db.prepare('PRAGMA table_info(publications)').all().map(column => column.name));
+    for (const column of ['attachments', 'schedule', 'visibility']) if (!columns.has(column)) this.db.exec(`ALTER TABLE publications ADD COLUMN ${column} TEXT`);
     this.db.prepare("UPDATE publications SET status='interrupted', error='The program stopped during the upload. The upload session is kept; resuming asks Google where it stopped.', updated_at=? WHERE status='uploading'").run(now());
   }
 
@@ -176,7 +184,7 @@ class PublishingRoom {
   async processNext() {
     if (this.busy) return null;
     this.busy = true;
-    try { return await this.upload() || await this.checkNext(); } finally { this.busy = false; }
+    try { return await this.upload() || await this.attachNext() || await this.checkNext(); } finally { this.busy = false; }
   }
   async upload() {
     const job = this.claim();
@@ -236,25 +244,160 @@ class PublishingRoom {
   }
   // Processing after the upload, checked conservatively (1 unit a check, from the shared daily bucket).
   async checkNext(id = null) {
-    const row = id ? this.publicationRow(id) : this.db.prepare("SELECT * FROM publications WHERE status IN ('uploaded','processing') AND next_check_at<=? ORDER BY next_check_at LIMIT 1").get(now());
+    const row = id ? this.publicationRow(id) : this.db.prepare("SELECT * FROM publications WHERE status IN ('uploaded','processing','scheduled') AND next_check_at<=? ORDER BY next_check_at LIMIT 1").get(now());
     if (!row) return null;
-    requireValue(row.video_id && ['uploaded', 'processing', 'processed'].includes(row.status), 'This upload has no video to check yet.', 409);
+    requireValue(row.video_id && ['uploaded', 'processing', 'processed', 'scheduled', 'published', 'kept_private'].includes(row.status), 'This upload has no video to check yet.', 409);
     const job = `${row.id}:check:${row.checks + 1}`, reserved = this.store.transaction(() => this.quota.reserve(job, {youtube: 1}));
     const later = (status, error, extra = {}) => this.db.prepare('UPDATE publications SET status=?, error=?, processing=COALESCE(?, processing), checks=checks+1, next_check_at=?, updated_at=? WHERE id=?')
       .run(status, error, extra.processing ? JSON.stringify(extra.processing) : null, extra.next ?? null, now(), row.id);
     if (!reserved.ok) { later(row.status, `The daily YouTube unit limit (${reserved.cap}) is used up; the next check waits.`, {next: new Date(Date.now() + 3600000).toISOString()}); return null; }
     try {
+      if (['scheduled', 'published', 'kept_private'].includes(row.status)) {
+        await this.observe(row, (status, error, seen, next) => this.db.prepare('UPDATE publications SET status=?, error=?, visibility=?, checks=checks+1, next_check_at=?, updated_at=? WHERE id=?').run(status, error, JSON.stringify(seen), next, now(), row.id));
+        this.quota.settle(job, {youtube: 1});
+        return this.publicPublication(this.publicationRow(row.id));
+      }
       const token = await this.accessToken(this.bindingRow(row.binding_id)), state = await G.videoStatus(this.fetch, token, row.video_id);
       this.quota.settle(job, {youtube: 1});
       if (!state.found) later('failed', 'YouTube no longer finds this video (it was deleted or is not on this channel).');
       else if (['failed', 'rejected', 'deleted'].includes(state.uploadStatus) || state.processingStatus === 'failed') later('failed', `YouTube ${state.uploadStatus === 'rejected' ? `rejected the video (${state.rejectionReason || 'no reason given'})` : `could not process the video (${state.failureReason || state.processingStatus || state.uploadStatus})`}.`, {processing: state});
-      else if (state.uploadStatus === 'processed' || state.processingStatus === 'succeeded') later('processed', null, {processing: state});
+      else if (state.uploadStatus === 'processed' || state.processingStatus === 'succeeded') { later('processed', null, {processing: state}); this.prepareAttachments(row.id); }
       else later('processing', row.checks + 1 >= MAX_CHECKS ? 'Still processing after two hours of checks; use "Check now" later.' : null, {processing: state, next: row.checks + 1 >= MAX_CHECKS ? null : new Date(Date.now() + CHECK_EVERY).toISOString()});
     } catch (error) {
-      if (error.unknown) this.quota.markUnknown(job); else this.quota.release(job);
+      if (error.unknown) this.quota.markUnknown(job); else if (answered(error)) this.quota.settle(job, {youtube: 1}); else this.quota.release(job);
       later(row.status, error instanceof InputError ? error.message : 'The check failed.', {next: new Date(Date.now() + CHECK_EVERY * 5).toISOString()});
     }
     return this.publicPublication(this.publicationRow(row.id));
+  }
+
+  // ------------------------------------------------------------ Y02 attachments
+  // The approved thumbnail (Room 09, or the edition's own) and the captions the edit made, for this record's video.
+  assets(row) {
+    const scope = JSON.parse(this.renders.row(row.render_id).scope), out = {thumbnail: null, captions: null};
+    if (row.kind === 'master') {
+      const pkg = this.packaging.latestRow(row.content_id), chosen = pkg ? JSON.parse(pkg.payload).chosenThumbnail : null;
+      out.thumbnail = chosen ? JSON.parse(pkg.images || '{}')[chosen] || null : null;
+    } else out.thumbnail = scope.edition?.thumbnail || null;
+    if (scope.edit?.timeline?.captions?.groups?.length) out.captions = {text: Cap.srt(scope.edit.timeline.captions), language: row.locale, name: L.language(row.locale)};
+    return out;
+  }
+  prepareAttachments(id) {
+    const row = this.publicationRow(id);
+    if (row.attachments) return;
+    const assets = this.assets(row);
+    this.db.prepare('UPDATE publications SET attachments=?, updated_at=? WHERE id=?').run(JSON.stringify({thumbnail: {status: assets.thumbnail ? 'pending' : 'none'}, captions: {status: assets.captions ? 'pending' : 'none'}}), now(), id);
+  }
+  // Attachments are tried once by themselves after processing; a failed one is retried alone, by the owner.
+  async attachNext() {
+    // A video processed before attachments existed (or before this check) gets its list now.
+    const fresh = this.db.prepare("SELECT id FROM publications WHERE status='processed' AND attachments IS NULL LIMIT 1").get();
+    if (fresh) this.prepareAttachments(fresh.id);
+    const row = this.db.prepare("SELECT * FROM publications WHERE status='processed' AND attachments LIKE '%\"pending\"%' ORDER BY updated_at LIMIT 1").get();
+    if (!row) return null;
+    const kind = ['thumbnail', 'captions'].find(item => JSON.parse(row.attachments)[item].status === 'pending');
+    await this.runAttach(row, kind);
+    return this.publicPublication(this.publicationRow(row.id));
+  }
+  async runAttach(row, kind) {
+    const attachments = JSON.parse(row.attachments), before = attachments[kind].status, lookFirst = kind === 'captions' && before === 'unknown';
+    const units = (kind === 'thumbnail' ? 50 : 400) + (lookFirst ? 50 : 0), job = `${row.id}:${kind}:${Date.now()}`;
+    const set = value => { attachments[kind] = {...value, at: now()}; this.db.prepare('UPDATE publications SET attachments=?, updated_at=? WHERE id=?').run(JSON.stringify(attachments), now(), row.id); };
+    const reserved = this.store.transaction(() => this.quota.reserve(job, {youtube: units}));
+    if (!reserved.ok) { set({status: 'failed', error: `The daily YouTube unit limit (${reserved.cap}) is used up. Retry tomorrow.`}); return; }
+    let used = 0;
+    try {
+      const token = await this.accessToken(this.bindingRow(row.binding_id)), asset = this.assets(row)[kind];
+      requireValue(asset, `This video has no ${kind === 'thumbnail' ? 'approved thumbnail' : 'captions'} any more.`, 409);
+      if (kind === 'thumbnail') {
+        const file = this.renders.localFile(asset.relativePath);
+        requireValue(fs.existsSync(file) && R.fileSha256(file) === asset.sha256, 'The approved thumbnail file is missing or changed.', 409);
+        await G.setThumbnail(this.fetch, token, row.video_id, fs.readFileSync(file));
+        used = 50;
+        set({status: 'done', sha256: asset.sha256});
+      } else {
+        // An insert whose answer was lost may have added the track: look before adding it again.
+        if (lookFirst) {
+          const found = (await G.listCaptions(this.fetch, token, row.video_id)).find(track => track.language === asset.language && track.name === asset.name);
+          used = 50;
+          if (found) { set({status: 'done', captionId: found.id, language: asset.language}); this.quota.settle(job, {youtube: used}); return; }
+        }
+        const captionId = await G.insertCaption(this.fetch, token, {videoId: row.video_id, ...asset});
+        used += 400;
+        set({status: 'done', captionId, language: asset.language});
+      }
+      this.quota.settle(job, {youtube: used});
+    } catch (error) {
+      if (error.unknown) this.quota.markUnknown(job); else this.quota.settle(job, {youtube: answered(error) ? units : used});
+      set({status: kind === 'captions' && error.unknown ? 'unknown' : 'failed', error: error instanceof InputError ? error.message : 'The attachment failed.'});
+    }
+  }
+  async retryAttachment(id, input) {
+    object(input);
+    const row = this.publicationRow(id), kind = input.kind;
+    requireValue(['thumbnail', 'captions'].includes(kind), 'Choose the thumbnail or the captions.', 400);
+    requireValue(['processed', 'scheduled'].includes(row.status) && row.attachments, 'Attachments are added once YouTube has processed the video.', 409);
+    const attachments = JSON.parse(row.attachments);
+    requireValue(['failed', 'unknown'].includes(attachments[kind].status), 'Only a failed attachment is retried.', 409);
+    await this.runAttach(row, kind);
+    return this.publicPublication(this.publicationRow(id));
+  }
+
+  // ------------------------------------------------------------ Y02 schedule
+  // The time a processed private video goes public, set only when everything mandatory is in place and confirmed.
+  async schedule(id, input) {
+    object(input);
+    const by = person(input.scheduledBy, 'Your name'), row = this.publicationRow(id);
+    requireValue(row.status === 'processed', 'Only a processed private upload can be scheduled.', 409);
+    requireValue(this.bindingRow(row.binding_id).status === 'active', 'Connect this channel again (Room 11) before scheduling.', 409);
+    const item = this.deliverable(row.content_id, row.locale);
+    requireValue(item.renderId === row.render_id && item.approvalId === row.approval_id, 'A different video or approval stands now for this language: this upload is no longer the approved one.', 409);
+    const attachments = JSON.parse(row.attachments || '{}'), waive = input.waive && typeof input.waive === 'object' ? input.waive : {};
+    for (const kind of ['thumbnail', 'captions']) {
+      const status = attachments[kind]?.status, label = kind === 'thumbnail' ? 'custom thumbnail' : 'captions';
+      requireValue(status !== 'pending' && status !== undefined, `The ${label} is still being attached. Wait a moment.`, 409);
+      if (['failed', 'unknown'].includes(status)) requireValue(waive[kind] === true, `The ${label} did not attach (${attachments[kind].error || status}). Retry it, or confirm scheduling without it.`, 409);
+    }
+    const timeZone = text(input.timeZone, 'Time zone', 3, 60), publishAt = G.zonedToUtc(input.local, timeZone), at = Date.parse(publishAt);
+    requireValue(at >= Date.now() + 30 * 60000, 'Choose a time at least 30 minutes from now. (YouTube would publish a time in the past at once.)', 400);
+    requireValue(at <= Date.now() + 365 * 86400000, 'Choose a time within the next year.', 400);
+    const meta = JSON.parse(row.metadata), c = object(input.confirmations, 'Confirmations');
+    requireValue(c.settings === true, `Confirm the audience settings: made for kids ${meta.status.selfDeclaredMadeForKids ? 'yes' : 'no'}, altered or synthetic content ${meta.status.containsSyntheticMedia ? 'yes' : 'no'}.`);
+    requireValue(c.audit === true, 'Confirm that YouTube has approved your Google project in its API audit. Until then YouTube keeps uploads from the API private, and the video would not go public at this time.');
+    const job = `${row.id}:schedule:${Date.now()}`, reserved = this.store.transaction(() => this.quota.reserve(job, {youtube: 51}));
+    requireValue(reserved.ok, `The daily YouTube unit limit (${reserved.cap}) is used up. Schedule tomorrow.`, 409);
+    try {
+      const token = await this.accessToken(this.bindingRow(row.binding_id)), current = await G.currentStatus(this.fetch, token, row.video_id);
+      requireValue(current.privacyStatus === 'private', `YouTube shows this video as ${current.privacyStatus}. Only a private video that was never public can be scheduled.`, 409);
+      await G.setSchedule(this.fetch, token, row.video_id, current, publishAt);
+      this.quota.settle(job, {youtube: 51});
+    } catch (error) { if (error.unknown) this.quota.markUnknown(job); else if (answered(error)) this.quota.settle(job, {youtube: 51}); else this.quota.release(job); throw error; }
+    const schedule = {publishAt, timeZone, local: input.local, scheduledBy: by, at: now(), waived: ['thumbnail', 'captions'].filter(kind => waive[kind] === true && ['failed', 'unknown'].includes(attachments[kind]?.status)), auditConfirmedBy: by};
+    this.db.prepare("UPDATE publications SET status='scheduled', schedule=?, checks=0, next_check_at=?, error=NULL, updated_at=? WHERE id=?").run(JSON.stringify(schedule), new Date(at + 5 * 60000).toISOString(), now(), id);
+    this.store.event(`Scheduled "${this.store.content(row.content_id).title}" (${row.locale}) to go public ${G.wallClock(publishAt, timeZone)} ${timeZone}, by ${by}`);
+    return this.publicPublication(this.publicationRow(id));
+  }
+  async unschedule(id, input) {
+    object(input);
+    const by = person(input.requestedBy), row = this.publicationRow(id), schedule = JSON.parse(row.schedule || 'null');
+    requireValue(row.status === 'scheduled' && Date.parse(schedule.publishAt) > Date.now() + 60000, 'Only a schedule that has not happened yet can be cancelled.', 409);
+    const job = `${row.id}:unschedule:${Date.now()}`, reserved = this.store.transaction(() => this.quota.reserve(job, {youtube: 51}));
+    requireValue(reserved.ok, `The daily YouTube unit limit (${reserved.cap}) is used up. Remove the schedule in YouTube Studio instead.`, 409);
+    try {
+      const token = await this.accessToken(this.bindingRow(row.binding_id));
+      await G.setSchedule(this.fetch, token, row.video_id, await G.currentStatus(this.fetch, token, row.video_id), null);
+      this.quota.settle(job, {youtube: 51});
+    } catch (error) { if (error.unknown) this.quota.markUnknown(job); else if (answered(error)) this.quota.settle(job, {youtube: 51}); else this.quota.release(job); throw error; }
+    this.db.prepare("UPDATE publications SET status='processed', schedule=NULL, next_check_at=NULL, error=?, updated_at=? WHERE id=?").run(`The schedule for ${schedule.publishAt} was cancelled by ${by}; the video stays private.`, now(), id);
+    this.store.event(`Cancelled the schedule of "${this.store.content(row.content_id).title}" (${row.locale}), by ${by}`);
+    return this.publicPublication(this.publicationRow(id));
+  }
+  // After its time: did YouTube really make it public? Checked 5 minutes after, then every 30 minutes, six times.
+  async observe(row, set) {
+    const token = await this.accessToken(this.bindingRow(row.binding_id)), current = await G.currentStatus(this.fetch, token, row.video_id), seen = {privacyStatus: current.privacyStatus, publishAt: current.publishAt || null, observedAt: now()};
+    if (current.privacyStatus === 'public') { set('published', null, seen, null); this.store.event(`"${this.store.content(row.content_id).title}" (${row.locale}) is public on YouTube (${row.video_id})`); return; }
+    if (current.publishAt && Date.parse(current.publishAt) > Date.now()) { set('scheduled', current.publishAt !== JSON.parse(row.schedule).publishAt ? `The time was changed in YouTube Studio to ${current.publishAt}.` : null, seen, new Date(Date.parse(current.publishAt) + 5 * 60000).toISOString()); return; }
+    if (row.checks + 1 >= 6) { set('kept_private', 'YouTube kept the video private after its time. Either your Google project is not yet approved in YouTube\'s API audit, or the schedule was removed in YouTube Studio.', seen, null); return; }
+    set('scheduled', 'The time has passed and YouTube still shows the video as private; checking again in 30 minutes.', seen, new Date(Date.now() + 30 * 60000).toISOString());
   }
 
   // ------------------------------------------------------------ owner actions on a record
@@ -313,12 +456,16 @@ class PublishingRoom {
     const meta = JSON.parse(row.metadata);
     return {id: row.id, contentId: row.content_id, locale: row.locale, kind: row.kind, renderId: row.render_id, status: row.status, videoId: row.video_id, channelId: row.channel_id, title: meta.snippet.title, privacy: meta.status.privacyStatus, madeForKids: meta.status.selfDeclaredMadeForKids,
       size: row.size, sent: row.sent, attempts: row.attempts, error: row.error, processing: row.processing ? JSON.parse(row.processing) : null, candidates: row.candidates ? JSON.parse(row.candidates) : null, hasSession: !!row.session, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
-      studioUrl: row.video_id ? `https://studio.youtube.com/video/${row.video_id}/edit` : null};
+      studioUrl: row.video_id ? `https://studio.youtube.com/video/${row.video_id}/edit` : null, watchUrl: row.status === 'published' ? `https://www.youtube.com/watch?v=${row.video_id}` : null,
+      attachments: row.attachments ? JSON.parse(row.attachments) : null, visibility: row.visibility ? JSON.parse(row.visibility) : null,
+      schedule: row.schedule ? (() => { const s = JSON.parse(row.schedule), family = this.store.family(row.family_id); return {...s, there: G.wallClock(s.publishAt, s.timeZone), home: G.wallClock(s.publishAt, family.timezone), homeZone: family.timezone}; })() : null,
+      // A scheduled video stays scheduled on YouTube even when the approval behind it changes here: say so.
+      standing: ['scheduled', 'processed'].includes(row.status) ? (() => { try { const item = this.deliverable(row.content_id, row.locale); return item.renderId === row.render_id && item.approvalId === row.approval_id; } catch { return false; } })() : null};
   }
   state() {
     const families = this.store.families().filter(family => !family.archived);
     return {
-      busy: !!this.db.prepare("SELECT 1 FROM publications WHERE status IN ('queued','uploading') OR (status IN ('uploaded','processing') AND next_check_at IS NOT NULL) LIMIT 1").get(),
+      busy: !!this.db.prepare("SELECT 1 FROM publications WHERE status IN ('queued','uploading') OR (status IN ('uploaded','processing') AND next_check_at IS NOT NULL) OR (status='processed' AND attachments LIKE '%\"pending\"%') LIMIT 1").get(),
       quota: this.quota.summary(),
       families: families.map(family => ({familyId: family.id, locales: family.locales.map(locale => {
         const bindings = this.db.prepare("SELECT * FROM youtube_bindings WHERE family_id=? AND locale=? AND status IN ('pending','active','reconnect') ORDER BY created_at DESC").all(family.id, locale).map(row => this.publicBinding(row));

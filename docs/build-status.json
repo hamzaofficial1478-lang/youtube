@@ -1,7 +1,7 @@
 {
-  "version": "0.46.0",
+  "version": "0.47.0",
   "updated": "2026-10-20",
-  "nextAction": "Owner: create a Desktop-app OAuth client in Google Cloud (docs/PUBLISHING.md), add it in Connections, connect a test channel in Room 11 and, when you decide, upload one approved video privately. Next build step: Y02 (thumbnail, captions and schedule), then Y03.",
+  "nextAction": "Owner: set up the Google OAuth client (docs/PUBLISHING.md), verify the channel by phone for custom thumbnails, connect a test channel in Room 11 and, when you decide, upload one approved video privately and schedule it. Going public needs YouTube's API audit of your Google project. Next build step: Y03 (unattended operation) only after the pilot gates pass, or the parked script and competitor work.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -520,8 +520,9 @@
         {
           "id": "Y02",
           "title": "Attach approved thumbnails/captions and schedule",
-          "status": "planned",
-          "remaining": "Attach already approved production assets, confirm future time zones, audience/disclosure settings, project audit status and each quota bucket, then schedule the exact approved edition."
+          "status": "testing",
+          "remaining": "Not yet run on a real channel: needs the owner's OAuth client, a phone-verified channel for custom thumbnails, YouTube's API audit for videos to really go public, and the owner's go-ahead. Edition descriptions do not repeat the main package's chapters and credits; one caption track per video.",
+          "evidence": "0.47.0 (2026-10-20): after processing, the approved thumbnail and the edit's captions are attached by themselves once each, a failed one retried alone (a lost caption answer is looked up first, so no duplicate track); the owner schedules the time the private video goes public in a chosen time zone (daylight saving and clock-change gaps handled), with every attachment done or waived by name and the audience settings and YouTube's API audit confirmed; the update sends every other setting back unchanged; the schedule can be cancelled; after the time the program observes public or kept private. Tested in tests/publishing.test.js against a stand-in YouTube, and in the browser on a throwaway workspace (attachments added, schedule refused without the audit confirmation, scheduled for 20:00 Karachi = 15:00 UTC, cancelled). npm test 319/321; the 2 failures were footer-text checks, fixed and rerun (control-room.test.js 29/29) passed."
         },
         {
           "id": "Y03",
@@ -575,5 +576,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Room 11 Publishing: private resumable upload and reconciliation (Y01)"
+  "milestone": "Room 11: thumbnail, captions and the schedule (Y02)"
 }

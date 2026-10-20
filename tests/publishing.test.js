@@ -17,7 +17,7 @@ const CHANNEL = 'UCabcdefghijklmnopqrstuv';
 
 // A stand-in for Google: sign-in, channel identity, one resumable session per upload, processing and recent uploads.
 function fakeGoogle() {
-  const g = {calls: [], sessions: new Map(), metadata: [], refreshRefused: false, dropAt: null, down: false, expire: false, processing: 1, uploads: [], revoked: []};
+  const g = {calls: [], sessions: new Map(), metadata: [], refreshRefused: false, dropAt: null, down: false, expire: false, processing: 1, uploads: [], revoked: [], thumbnails: 0, thumbnailRefusals: 0, captions: [], dropCaption: false, status: {privacyStatus: 'private', license: 'youtube', embeddable: true, publicStatsViewable: true, selfDeclaredMadeForKids: false, containsSyntheticMedia: true, uploadStatus: 'processed'}};
   const reply = (status, body, headers = {}) => new Response(body === null ? null : JSON.stringify(body), {status, headers: {'content-type': 'application/json', ...headers}});
   g.fetch = async (url, init = {}) => {
     const u = new URL(url), method = init.method || 'GET';
@@ -51,6 +51,11 @@ function fakeGoogle() {
       if (g.dropAt === Number(start)) { g.dropAt = null; throw new TypeError('connection reset'); }
       return now === session.size ? done() : reply(308, null, {range: `bytes=0-${now - 1}`});
     }
+    if (u.pathname === '/upload/youtube/v3/thumbnails/set') { g.thumbnails++; assert.equal(init.headers['Content-Type'], 'image/jpeg'); return g.thumbnailRefusals-- > 0 ? reply(403, {error: {errors: [{reason: 'forbidden'}]}}) : reply(200, {items: [{default: {url: 'https://i.ytimg.com/x.jpg'}}]}); }
+    if (u.pathname === '/upload/youtube/v3/captions') { const body = Buffer.from(init.body).toString('utf8'); g.captionBody = body.split('application/octet-stream\r\n\r\n')[1]; const meta = JSON.parse(/\{"snippet"[^\r]*/.exec(body)[0]); g.captions.push({id: `cap${g.captions.length + 1}`, snippet: meta.snippet}); if (g.dropCaption) { g.dropCaption = false; throw new TypeError('connection reset'); } return reply(200, {id: g.captions.at(-1).id}); }
+    if (u.pathname === '/youtube/v3/captions') return reply(200, {items: g.captions});
+    if (u.pathname === '/youtube/v3/videos' && method === 'PUT') { const body = JSON.parse(init.body); g.status = body.status; return reply(200, {id: body.id, status: body.status}); }
+    if (u.pathname === '/youtube/v3/videos' && u.searchParams.get('part') === 'status') return reply(200, {items: [{status: g.status}]});
     if (u.pathname === '/youtube/v3/videos') return reply(200, {items: [{status: {uploadStatus: g.processing-- > 0 ? 'uploaded' : 'processed', privacyStatus: 'private'}, processingDetails: {processingStatus: g.processing >= 0 ? 'processing' : 'succeeded'}}]});
     if (u.pathname === '/youtube/v3/playlistItems') return reply(200, {items: g.uploads});
     throw new Error(`unexpected Google call ${method} ${u.href}`);
@@ -72,9 +77,12 @@ function setup(t) {
   const files = {m1: path.join(root, 'master.mp4'), e1: path.join(root, 'edition.mp4')};
   fs.writeFileSync(files.m1, randomBytes(20 * 1024 * 1024)); fs.writeFileSync(files.e1, randomBytes(9 * 1024 * 1024));
   const ok = {master: true, release: true};
-  const renders = {file: id => ({file: files[id], size: fs.statSync(files[id]).size}), row: id => ({result: JSON.stringify({video: {sha256: R.fileSha256(files[id])}}), scope: JSON.stringify({edition: {package: {title: 'La primera empresa', description: 'Cómo nacieron las acciones.', tags: ['historia']}}})}), masterApproval: () => ({id: 'approval-1', current: ok.master})};
+  // The approved thumbnail and the edit's captions travel with the deliverable.
+  fs.writeFileSync(path.join(root, 'thumb.jpg'), randomBytes(120 * 1024));
+  const captions = {groups: [{start: 0, end: 2.5, lines: ['In 1602 a group of Dutch merchants']}, {start: 2.5, end: 5, lines: ['did something no one had tried.']}]};
+  const renders = {file: id => ({file: files[id], size: fs.statSync(files[id]).size}), localFile: relative => path.join(root, relative), row: id => ({result: JSON.stringify({video: {sha256: R.fileSha256(files[id])}}), scope: JSON.stringify({edit: {timeline: {captions}}, edition: {package: {title: 'La primera empresa', description: 'Cómo nacieron las acciones.', tags: ['historia']}}})}), masterApproval: () => ({id: 'approval-1', current: ok.master})};
   const localization = {approvedMaster: () => (ok.master ? {id: 'm1'} : null), currentRelease: () => (ok.release ? {renderId: 'e1', releaseId: 'release-1'} : null)};
-  const packaging = {latestRow: () => ({payload: JSON.stringify({titles: [{id: 't1', text: 'The first company you could own'}], chosenTitle: 't1', tags: ['history'], disclosure: {synthetic: true}}), checks: JSON.stringify({description: 'How shares began.\n\nVisuals: stock footage.'})})};
+  const packaging = {latestRow: () => ({payload: JSON.stringify({titles: [{id: 't1', text: 'The first company you could own'}], chosenTitle: 't1', chosenThumbnail: 'k1', tags: ['history'], disclosure: {synthetic: true}}), images: JSON.stringify({k1: {relativePath: 'thumb.jpg', sha256: R.fileSha256(path.join(root, 'thumb.jpg'))}}), checks: JSON.stringify({description: 'How shares began.\n\nVisuals: stock footage.'})})};
   const room = new PublishingRoom(store, connectors, {renders, packaging, localization, quota: new QuotaLedger(store), wait: async () => {}});
   return {store, family, content, g, connectors, client, room, ok, root};
 }
@@ -202,4 +210,58 @@ test('Y01: a stopped upload resumes from where Google says it stopped; a lost se
   assert.equal(restarted.discard(second.id, {requestedBy: 'Owner'}).status, 'discarded');
   g.expire = false;
   assert.equal(queue().status, 'queued');
+});
+
+test('Y02: the approved thumbnail and captions attach after processing (each retried alone), the video is scheduled in a chosen time zone and observed going public', async t => {
+  const env = setup(t), {room, content, g, store} = env;
+  await connected(env);
+  const queued = room.queueUpload(content.id, {requestedBy: 'Owner', locale: 'en-US', categoryId: 27, madeForKids: false});
+  await room.processNext();
+  await room.checkNext(queued.id);
+  // The channel is not verified for custom thumbnails yet, and the answer to the caption upload is lost.
+  g.thumbnailRefusals = 1; g.dropCaption = true;
+  assert.equal((await room.checkNext(queued.id)).status, 'processed');
+  assert.deepEqual(room.publicPublication(room.publicationRow(queued.id)).attachments, {thumbnail: {status: 'pending'}, captions: {status: 'pending'}});
+  await room.processNext(); await room.processNext();
+  let row = room.publicPublication(room.publicationRow(queued.id));
+  assert.equal(row.attachments.thumbnail.status, 'failed');
+  assert.match(row.attachments.thumbnail.error, /verified by phone/);
+  assert.equal(row.attachments.captions.status, 'unknown');
+  assert.equal(g.captions.length, 1, 'YouTube did receive the captions');
+  assert.match(g.captionBody, /1\n00:00:00,000 --> 00:00:02,500\nIn 1602 a group/);
+  // Each attachment is retried alone; the captions are looked up first, so the track is never added twice.
+  const tomorrow = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(Date.now() + 2 * 86400000));
+  const schedule = extra => room.schedule(queued.id, {scheduledBy: 'Owner', local: `${tomorrow}T20:00`, timeZone: 'Asia/Karachi', confirmations: {settings: true, audit: true}, ...extra});
+  await assert.rejects(schedule({}), /custom thumbnail did not attach[\s\S]*confirm scheduling without it/);
+  row = await room.retryAttachment(queued.id, {kind: 'thumbnail'});
+  assert.deepEqual([row.attachments.thumbnail.status, g.thumbnails], ['done', 2]);
+  row = await room.retryAttachment(queued.id, {kind: 'captions'});
+  assert.deepEqual([row.attachments.captions.status, g.captions.length], ['done', 1]);
+  await assert.rejects(room.retryAttachment(queued.id, {kind: 'captions'}), /Only a failed attachment/);
+  // Scheduling: a future time in the chosen zone, the audience settings and YouTube's audit confirmed by name.
+  await assert.rejects(room.schedule(queued.id, {scheduledBy: 'Owner', local: '2020-01-01T10:00', timeZone: 'Asia/Karachi', confirmations: {settings: true, audit: true}}), /at least 30 minutes from now/);
+  await assert.rejects(schedule({confirmations: {settings: true}}), /API audit/);
+  await assert.rejects(schedule({confirmations: {audit: true}}), /made for kids no, altered or synthetic content yes/);
+  row = await schedule({});
+  const publishAt = G.zonedToUtc(`${tomorrow}T20:00`, 'Asia/Karachi');
+  assert.equal(publishAt.slice(11), '15:00:00Z', 'Karachi is five hours ahead of UTC');
+  assert.deepEqual([row.status, row.schedule.publishAt, row.schedule.timeZone, row.schedule.there.endsWith('20:00')], ['scheduled', publishAt, 'Asia/Karachi', true]);
+  assert.deepEqual(g.status, {privacyStatus: 'private', publishAt, license: 'youtube', embeddable: true, publicStatsViewable: true, selfDeclaredMadeForKids: false, containsSyntheticMedia: true}, 'every other setting is sent back unchanged');
+  // Cancelling keeps the video private; scheduling again works.
+  row = await room.unschedule(queued.id, {requestedBy: 'Owner'});
+  assert.deepEqual([row.status, g.status.publishAt, g.status.privacyStatus], ['processed', undefined, 'private']);
+  row = await schedule({});
+  assert.equal(row.status, 'scheduled');
+  // After its time, the program looks: public means published.
+  store.db.prepare('UPDATE publications SET next_check_at=? WHERE id=?').run(new Date(Date.now() - 1000).toISOString(), queued.id);
+  g.status = {...g.status, privacyStatus: 'public', publishAt: undefined};
+  row = await room.processNext();
+  assert.deepEqual([row.status, row.watchUrl, row.visibility.privacyStatus], ['published', `https://www.youtube.com/watch?v=${row.videoId}`, 'public']);
+  // Still private after its time and six looks: YouTube kept it private (an unaudited project, or the schedule removed).
+  store.db.prepare("UPDATE publications SET status='scheduled', checks=5, next_check_at=? WHERE id=?").run(new Date(Date.now() - 1000).toISOString(), queued.id);
+  g.status = {...g.status, privacyStatus: 'private'};
+  row = await room.processNext();
+  assert.equal(row.status, 'kept_private');
+  assert.match(row.error, /not yet approved in YouTube's API audit/);
+  assert.ok(room.quota.summary().youtube.used >= 50 * 2 + 400 + 50 + 51 * 3, 'thumbnails, captions, the caption lookup and every schedule change count against the daily units');
 });

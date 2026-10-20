@@ -130,7 +130,7 @@ Reuse the visual master while preserving meaning, natural voice and scene timing
 Publish the right approved version to the right channel without duplicates.
 
 - [ ] **Y01 Private resumable upload and reconciliation** (testing) - 0.46.0 (2026-10-20): Room 11 Publishing. Per-channel Google sign-in (loopback, state, PKCE, offline access; pending until the owner confirms the returned channel by name; refresh token encrypted; replaced connections revoked; refused renewal pauses the channel), and private resumable upload of the approved master or released edition (durable record, session saved before the first byte, every confirmed chunk recorded, lost answers resolved by asking the session, resume after a stop, reconciliation against the channel before any second copy, processing checks, YouTube upload bucket and unit quota). Tested in tests/publishing.test.js against a stand-in Google, and in the browser on a throwaway workspace (sign-in return page, confirmation, a 44-MB master uploaded privately with live progress and processed; nothing was sent to Google). npm test 320/320 passed.
-- [ ] **Y02 Attach approved thumbnails/captions and schedule** (planned) - Attach already approved production assets, confirm future time zones, audience/disclosure settings, project audit status and each quota bucket, then schedule the exact approved edition.
+- [ ] **Y02 Attach approved thumbnails/captions and schedule** (testing) - 0.47.0 (2026-10-20): after processing, the approved thumbnail and the edit's captions are attached by themselves once each, a failed one retried alone (a lost caption answer is looked up first, so no duplicate track); the owner schedules the time the private video goes public in a chosen time zone (daylight saving and clock-change gaps handled), with every attachment done or waived by name and the audience settings and YouTube's API audit confirmed; the update sends every other setting back unchanged; the schedule can be cancelled; after the time the program observes public or kept private. Tested in tests/publishing.test.js against a stand-in YouTube, and in the browser on a throwaway workspace (attachments added, schedule refused without the audit confirmation, scheduled for 20:00 Karachi = 15:00 UTC, cancelled). npm test 319/321; the 2 failures were footer-text checks, fixed and rerun (control-room.test.js 29/29) passed.
 - [ ] **Y03 Rules-based unattended operation** (planned) - Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts.
 
 ### 06 · Learning and portfolio scale
@@ -144,6 +144,38 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Room 11: thumbnail, captions and the schedule (0.47.0)
+
+- **Owner request:** proceed to Y02.
+- **Built** (docs/PUBLISHING.md "Y02"):
+  - **Attachments:** after YouTube processes a private upload, the approved thumbnail and the edit's captions are attached by themselves, once each.
+    - A failed one is retried alone, never by uploading the video again.
+    - A caption upload whose answer was lost is looked up on the video first, so the track is never added twice.
+  - **The schedule:** the owner schedules the time the video goes public, in a time zone they choose (daylight saving and clock-change gaps handled). It requires:
+    - every attachment done or waived by name;
+    - the audience settings confirmed;
+    - the owner's confirmation that YouTube has audited the Google project.
+    - The update sends every other video setting back unchanged. A schedule can be cancelled before its time.
+  - **After the time:** the program checks whether YouTube really made the video public, or kept it private, and why.
+- **Checked:**
+  - tests/publishing.test.js gained a test with a stand-in YouTube:
+    - the thumbnail refused, then retried;
+    - the captions' answer lost, then found without a duplicate;
+    - scheduling refused in the past and without confirmations;
+    - 20:00 Karachi = 15:00 UTC;
+    - settings preserved;
+    - cancel and schedule again;
+    - published and kept-private observations;
+    - quota counted.
+  - Browser check on a throwaway workspace:
+    - the earlier upload got its attachments by itself;
+    - the schedule was refused without the audit confirmation, then set;
+    - it was shown in the chosen zone and UTC;
+    - it was cancelled.
+  - Fixed: a refused YouTube request is now counted against the daily units (YouTube charges it); the page footer no longer says publishing is locked.
+  - npm test 319/321; the 2 failures were footer-text checks, fixed and rerun (control-room.test.js 29/29) passed.
+- **Not tested:** a real channel (needs the owner's OAuth client, phone verification for thumbnails, YouTube's audit for going public, and the owner's go-ahead).
 
 ### 2026-10-20 - Room 11 Publishing: private upload and reconciliation (0.46.0)
 

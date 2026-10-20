@@ -128,4 +128,64 @@ function matchUpload(items, {title, after}) {
   return items.filter(item => item.title === title && (!item.publishedAt || Date.parse(item.publishedAt) >= since));
 }
 
-module.exports = {SCOPES, CHUNK, CATEGORIES, GoogleError, pkce, authUrl, exchangeCode, refresh, revoke, myChannels, metadata, startUpload, uploadStatus, sendChunk, videoStatus, recentUploads, matchUpload};
+// ------------------------------------------------------------ Y02: attachments and schedule
+const UPLOAD_ROOT = 'https://www.googleapis.com/upload/youtube/v3';
+// The custom thumbnail (50 units). YouTube allows it only on channels verified by phone.
+async function setThumbnail(fetchImpl, accessToken, videoId, buffer) {
+  if (buffer.length > 2 * 1024 * 1024) throw new InputError('YouTube takes thumbnails up to 2 MB.', 400);
+  const response = await call(fetchImpl, `${UPLOAD_ROOT}/thumbnails/set?uploadType=media&videoId=${encodeURIComponent(videoId)}`, {method: 'POST', headers: {...bearer(accessToken), 'Content-Type': 'image/jpeg', 'Content-Length': String(buffer.length)}, body: buffer}, 'Setting the thumbnail');
+  if (!response.ok) {
+    const error = await failure(response, 'Setting the thumbnail');
+    if (response.status === 403) error.message += ' Custom thumbnails need a channel verified by phone (youtube.com/verify).';
+    throw error;
+  }
+  return true;
+}
+// One caption track (400 units): the captions the edit made, as SubRip.
+async function insertCaption(fetchImpl, accessToken, {videoId, language, name, text}) {
+  const boundary = `cr${randomBytes(12).toString('hex')}`;
+  const body = Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({snippet: {videoId, language, name, isDraft: false}})}\r\n--${boundary}\r\nContent-Type: application/octet-stream\r\n\r\n${text}\r\n--${boundary}--\r\n`, 'utf8');
+  const answer = await json(fetchImpl, `${UPLOAD_ROOT}/captions?uploadType=multipart&part=snippet`, {method: 'POST', headers: {...bearer(accessToken), 'Content-Type': `multipart/related; boundary=${boundary}`, 'Content-Length': String(body.length)}, body}, 'Adding the captions');
+  if (typeof answer?.id !== 'string') throw new GoogleError('Google added the captions but returned no caption ID.', {unknown: true});
+  return answer.id;
+}
+// The video's caption tracks (50 units), to find one whose insert answer was lost.
+async function listCaptions(fetchImpl, accessToken, videoId) {
+  const body = await json(fetchImpl, `${API}/captions?part=snippet&videoId=${encodeURIComponent(videoId)}`, {headers: bearer(accessToken)}, 'Reading the caption tracks');
+  return (body.items || []).map(item => ({id: item.id, language: item.snippet?.language || '', name: item.snippet?.name || ''}));
+}
+// The status part as YouTube has it now (1 unit); an update must send every writable field back.
+const WRITABLE = ['privacyStatus', 'publishAt', 'license', 'embeddable', 'publicStatsViewable', 'selfDeclaredMadeForKids', 'containsSyntheticMedia'];
+async function currentStatus(fetchImpl, accessToken, id) {
+  const body = await json(fetchImpl, `${API}/videos?part=status&id=${encodeURIComponent(id)}`, {headers: bearer(accessToken)}, 'Reading the video status');
+  const status = body.items?.[0]?.status;
+  if (!status) throw new GoogleError('YouTube no longer finds this video.', {status: 404});
+  return status;
+}
+// Sets or removes the time the private video goes public (50 units). YouTube's publishAt needs a private video that
+// has never been public; a time in the past would publish at once, so the room never sends one.
+async function setSchedule(fetchImpl, accessToken, id, current, publishAt) {
+  const status = Object.fromEntries(WRITABLE.filter(key => current[key] !== undefined).map(key => [key, current[key]]));
+  status.privacyStatus = 'private';
+  if (publishAt) status.publishAt = publishAt; else delete status.publishAt;
+  const body = await json(fetchImpl, `${API}/videos?part=status`, {method: 'PUT', headers: {...bearer(accessToken), 'Content-Type': 'application/json; charset=UTF-8'}, body: JSON.stringify({id, status})}, publishAt ? 'Scheduling the video' : 'Removing the schedule');
+  return body.status || {};
+}
+// A wall-clock time in a time zone to the exact moment (UTC). A time skipped by a clock change does not exist.
+function zoneOffset(ms, timeZone) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit'}).formatToParts(new Date(ms)).map(part => [part.type, part.value]));
+  return Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second) - Math.floor(ms / 1000) * 1000;
+}
+function zonedToUtc(local, timeZone) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(local || ''));
+  if (!match) throw new InputError('Enter the date and time as YYYY-MM-DDTHH:MM.', 400);
+  try { new Intl.DateTimeFormat('en-US', {timeZone}); } catch { throw new InputError(`${timeZone} is not a time zone name (for example Asia/Karachi or America/New_York).`, 400); }
+  const guess = Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5]);
+  let utc = guess - zoneOffset(guess, timeZone);
+  utc = guess - zoneOffset(utc, timeZone);
+  if (utc + zoneOffset(utc, timeZone) !== guess) throw new InputError(`${local} does not exist in ${timeZone} (the clocks change then). Choose another time.`, 400);
+  return new Date(utc).toISOString().replace('.000Z', 'Z');
+}
+const wallClock = (iso, timeZone) => new Intl.DateTimeFormat('en-GB', {timeZone, weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(iso));
+
+module.exports = {SCOPES, CHUNK, CATEGORIES, GoogleError, pkce, authUrl, exchangeCode, refresh, revoke, myChannels, metadata, startUpload, uploadStatus, sendChunk, videoStatus, recentUploads, matchUpload, setThumbnail, insertCaption, listCaptions, currentStatus, setSchedule, zonedToUtc, wallClock};
