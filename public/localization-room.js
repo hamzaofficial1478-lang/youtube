@@ -31,7 +31,7 @@ function editionCard(item, edition) {
   const changed = edition.sourceChanged ? `<p class="inline-warning">The main video's words changed after r${latest.revision}. Ask Claude again: only the changed sentences and words are adapted, the rest keeps its approved wording.</p>` : '';
   const actions = `<div class="card-actions">${!busy && connection ? action(latest ? 'Ask Claude to adapt again' : `Ask Claude to adapt into ${esc(edition.language)}`, 'edition-draft', key, latest && !edition.sourceChanged ? 'secondary' : 'primary') : ''}${!busy && !connection ? '<a class="button secondary" href="#connections">Set up Claude to adapt</a>' : ''}${!busy ? action(latest ? 'Edit' : 'Write it myself', 'edition-edit', key, 'secondary') : ''}${latest && !latest.approval?.current && !edition.sourceChanged && latest.checks.passed ? action('Approve this language', 'edition-approve', latest.id, 'primary') : ''}${latest ? `<a class="button secondary" href="/api/edition-revisions/${esc(latest.id)}/export" download>Download text</a>` : ''}</div>`;
   const approval = latest?.approval ? `<div class="handoff-rule"><strong>${latest.approval.current ? 'Approved' : 'Approval out of date'} · by ${esc(latest.approval.approvedBy)} · ${esc(date(latest.approval.at))}</strong><p>${esc(latest.approval.notes || 'No notes.')}</p>${latest.approval.current ? '' : `<p class="inline-warning">${esc(latest.approval.staleReason)}</p>`}</div>` : '';
-  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">${esc(edition.locale)}${latest ? ` · r${latest.revision} · ${esc(latest.actor === 'claude' ? 'Claude adaptation' : `edited by ${latest.createdBy}`)}` : ''}</span><h2>${esc(edition.language)}</h2></div>${status}</div>${jobLine}${changed}${actions}${approval}${latest ? editionView(latest) : ''}${narrationSection(item, edition)}</section>`;
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">${esc(edition.locale)}${latest ? ` · r${latest.revision} · ${esc(latest.actor === 'claude' ? 'Claude adaptation' : `edited by ${latest.createdBy}`)}` : ''}</span><h2>${esc(edition.language)}</h2></div>${status}</div>${jobLine}${changed}${actions}${approval}${latest ? editionView(latest) : ''}${narrationSection(item, edition)}${editionVideoSection(item, edition)}</section>`;
 }
 
 function editionView(rev) {
@@ -68,6 +68,7 @@ function editionFormPayload(form, src) {
 
 function editionAction(command, id) {
   if (['edition-voice', 'edition-narrate', 'edition-narration-retry', 'edition-narration-approve'].includes(command)) return editionNarrationAction(command, id);
+  if (['edition-render', 'edition-release'].includes(command)) return editionVideoAction(command, id);
   if (command === 'edition-draft') {
     const {item, edition, contentId, locale} = edEdition(id), connection = readyClaudeConnection();
     if (!connection) return toast('Set up and test a Claude connection first.', true);
@@ -136,6 +137,50 @@ function editionNarrationAction(command, id) {
       <label class="checkbox-label"><input type="checkbox" name="pronunciation">Names, numbers and places are pronounced right.</label>
       <label class="checkbox-label"><input type="checkbox" name="syncReviewed">I read the scene timing list.</label>
       ${outside ? `<label class="checkbox-label"><input type="checkbox" name="syncAccepted">I accept the ${outside === 1 ? 'scene that changes' : `${outside} scenes that change`} length beyond the natural range.</label>` : ''}`, 'Approve', {id});
+  }
+  return toast('Unknown action.', true);
+}
+
+// L03: the language's own video, rendered from the approved master's recipe on its voice, and its release decision.
+const ER_STATUS = {queued: 'Waiting for the render worker', running: 'Rendering', completed: 'Rendered', failed: 'Failed', interrupted: 'Interrupted', cancelled: 'Cancelled', stale: 'Out of date'};
+const ER_BLOCKING = ['full decode', 'audio/video alignment', 'duration', 'frame', 'narration audio', 'delivery format'];
+function editionVideoSection(item, edition) {
+  const head = '<span class="micro-label">VIDEO</span>', key = `${item.contentId}|${edition.locale}`, job = edition.renders[0];
+  if (!edition.narrations.some(entry => entry.approval?.current)) return `<div class="handoff-rule">${head}<p>Approve this language's narration first; then its video is rendered from the approved master on that voice.</p></div>`;
+  const busy = job && ['queued', 'running'].includes(job.status), standing = edition.renders.find(entry => entry.release?.current);
+  const older = standing && standing.id !== job?.id ? `<p class="hint"><b>Released:</b> the render of ${esc(date(standing.createdAt))}, approved by ${esc(standing.release.approvedBy)}. The newest render below is not approved.</p>` : '';
+  const actions = busy ? action('Cancel', 'render-cancel', job.id, 'text-button danger') : action(job ? 'Render again' : `Render the ${esc(edition.language)} video`, 'edition-render', key, job ? 'secondary' : 'primary');
+  return `<div class="handoff-rule">${head}${older}<div class="card-actions">${actions}</div>${job ? editionRenderView(job, edition) : ''}</div>`;
+}
+function editionRenderView(job, edition) {
+  const progress = job.progress, line = `<p class="${['failed', 'interrupted', 'cancelled', 'stale'].includes(job.status) ? 'inline-warning' : 'hint'}"><b>${esc(ER_STATUS[job.status] || job.status)}</b>${job.status === 'running' && progress?.stage ? ` · ${esc(progress.stage)}` : ''} · attempt ${job.attempts}/3${job.error ? `: ${esc(job.error)}` : ''}</p>`;
+  const retry = ['failed', 'interrupted', 'cancelled', 'stale'].includes(job.status) && job.attempts < 3 && job.standing ? action('Retry from the finished parts', 'render-retry', job.id, 'secondary') : '';
+  if (!job.result) return line + retry;
+  const r = job.result, failed = r.qc.filter(check => !check.passed), blocking = failed.filter(check => ER_BLOCKING.includes(check.name));
+  const checks = `<div class="qc-checks">${r.qc.map(check => `<span class="${check.passed ? 'pass' : 'fail'}" title="${esc(check.detail)}">${check.passed ? '✓' : '!'} ${esc(check.name)}</span>`).join('')}</div>${failed.map(check => `<p class="inline-warning"><b>${esc(check.name)}:</b> ${esc(check.detail)}</p>`).join('')}`;
+  const size = r.video.sizeBytes >= 1e9 ? `${(r.video.sizeBytes / 1e9).toFixed(2)} GB` : `${(r.video.sizeBytes / 1e6).toFixed(1)} MB`;
+  const pkg = job.package ? `<dl class="style-facts"><div><dt>Title</dt><dd>${esc(job.package.title)}</dd></div><div><dt>Tags</dt><dd>${esc((job.package.tags || []).join(', ') || '—')}</dd></div></dl>` : '';
+  const release = job.release
+    ? `<p><b>${job.release.current ? 'Released' : 'Release out of date'}</b> · by ${esc(job.release.approvedBy)} · ${esc(date(job.release.at))}${job.release.current ? '' : ` · <span class="inline-warning">${esc(job.release.staleReason)}</span>`}</p>`
+    : !job.standing ? '<p class="inline-warning">The words, the narration or the master changed after this render. Render the edition again.</p>'
+    : blocking.length ? `<p class="inline-warning">This edition cannot be approved: ${esc(blocking[0].name)} - ${esc(blocking[0].detail)}</p>`
+    : `<div class="card-actions">${action('Approve for release', 'edition-release', job.id, 'primary')}</div>`;
+  return `${line}<div class="render-player"><video controls preload="metadata" src="${esc(r.videoUrl)}"></video><div class="render-facts"><p class="hint">${r.preset.width}×${r.preset.height} · ${r.preset.fps} fps · ${esc(size)} · ${esc(renderClock(r.renderSeconds || 0))} to render · scenes timed ${job.sync?.method === 'measured' ? 'on the measured words' : 'by estimate'}</p>${checks}
+    ${job.thumbnailUrl ? `<img class="pkg-full" alt="${esc(edition.language)} thumbnail" src="${esc(job.thumbnailUrl)}">` : '<p class="hint">No thumbnail words in this edition, so no thumbnail was drawn.</p>'}${pkg}
+    <p class="hint"><a href="${esc(r.videoUrl)}" download>Download the video</a>${job.thumbnailUrl ? ` · <a href="${esc(job.thumbnailUrl)}" download>thumbnail</a>` : ''}${edition.latest ? ` · <a href="/api/edition-revisions/${esc(edition.latest.id)}/export" download>title, description and tags</a>` : ''} · <a href="${esc(r.manifestUrl)}" target="_blank" rel="noopener">render manifest ↗</a></p></div></div>${release}`;
+}
+function editionVideoAction(command, id) {
+  if (command === 'edition-render') {
+    const {item, edition, contentId, locale} = edEdition(id);
+    return renderDialog('edition-render', `Render the ${edition.language} video`, 'LOCAL RENDER · NO COST · FULL QUALITY', `<p class="hint">Renders "${esc(item.title)}" for ${esc(edition.language)} viewers from the approved master's own recipe (the same edit, visuals, music, style and FFmpeg build), with this language's approved narration, its words on screen, captions on its voice and every scene retimed to that voice. The thumbnail is drawn again with this language's words. Then the video is checked for YouTube's upload format.</p>${renderNameField()}`, 'Render', {contentId, locale});
+  }
+  if (command === 'edition-release') {
+    const job = (state.localization?.contents || []).flatMap(entry => entry.editions.flatMap(edition => edition.renders)).find(entry => entry.id === id), failed = job?.result?.qc.filter(check => !check.passed) || [];
+    return renderDialog('edition-release', 'Approve this edition for release', 'HUMAN DECISION · YOUR NAME IS RECORDED', `<p class="hint">This is the video, title, description and thumbnail for this language. The approval goes out of date by itself when the words, the narration or the master change. Nothing is published.</p><div class="form-grid">${renderNameField()}<label class="full">Notes<input name="notes" maxlength="2000"></label></div>
+      <label class="checkbox-label"><input type="checkbox" name="watched">A speaker of this language watched the opening, a middle part and the ending at full quality.</label>
+      <label class="checkbox-label"><input type="checkbox" name="listened">I listened to the sound of this edition.</label>
+      <label class="checkbox-label"><input type="checkbox" name="packageMatches">The title, description and thumbnail words fit this edition.</label>
+      ${failed.length ? `<label class="checkbox-label"><input type="checkbox" name="qcAccepted">I accept the ${failed.length} remaining check finding${failed.length === 1 ? '' : 's'} listed for this edition.</label>` : ''}`, 'Approve', {id});
   }
   return toast('Unknown action.', true);
 }

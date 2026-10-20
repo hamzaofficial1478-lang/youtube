@@ -1,7 +1,7 @@
 {
-  "version": "0.44.0",
+  "version": "0.45.0",
   "updated": "2026-10-20",
-  "nextAction": "Owner: restart the program; for a family with more than one language, approve a language's words in Room 06, choose its narrator and narrate it (ElevenLabs, paid, on a click), then approve the narration. Next build step: L03 (each edition's render, thumbnail and approval); the parked script and competitor work when the owner decides.",
+  "nextAction": "Owner: restart the program; for a family with more than one language, take one video through Room 06 (words, narrator, narration, video, release). Phase 04 is built. Next: the all-rooms production proof with real material, then publishing (Y01-Y02) or the parked script and competitor work, as the owner decides.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -500,8 +500,9 @@
         {
           "id": "L03",
           "title": "Independent edition approvals",
-          "status": "planned",
-          "remaining": "Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions."
+          "status": "testing",
+          "remaining": "Not yet run on a real video with live Claude and ElevenLabs, nor on a long video or a drawn-engine style. Designed (atelier) shots keep the primary language; drawn shots' word cues fall back to time-spread beats in an edition. Publishing the released editions comes with Y01-Y02.",
+          "evidence": "0.45.0 (2026-10-20): each language edition renders its own 1080p video from the approved master's recipe on its approved narration, with every scene retimed to the new voice, its words on screen and in the graphics, captions on its voice, music and effects kept in their scenes, and the package thumbnail drawn again with its words; the render worker treats it like a master (upload format, checks, recovery from verified parts) and keeps it out of the preview and master lists; a named release decision per language goes stale with new words, a new narration or another master. Tested in tests/localization.test.js (pure retiming) and tests/editing.test.js (real-FFmpeg edition render from a real master, thumbnail, release rules), and in the browser on a throwaway 55-s master (Spanish edition 61.7 s, all 10 checks passed, Spanish captions on the frame, release refused then recorded). npm test 316/316 (the pure L03 retiming test, added after that run, passed on its own) passed."
         }
       ]
     },
@@ -573,5 +574,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Edition narration and timing in Room 06 (L02)"
+  "milestone": "Language editions complete: render, thumbnail and release per language (L03)"
 }

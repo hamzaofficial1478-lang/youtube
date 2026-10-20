@@ -53,7 +53,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // R05c: the program learns a look from a reference the owner names (a video file or screenshots on this PC).
   const styleStudies=new StyleStudies(store,styles,connectors,ai,renderRoom,{studyDir:path.join(dataRoot,'studies')});
   const packagingRoom=new PackagingRoom(store,sceneRoom,renderRoom,editingRoom,connectors,ai,{dataRoot});renderRoom.packaging=packagingRoom;
-  const localizationRoom=new LocalizationRoom(store,renderRoom,packagingRoom,connectors,ai,{dataRoot,ffmpeg,ffprobe});
+  const localizationRoom=new LocalizationRoom(store,renderRoom,packagingRoom,connectors,ai,{dataRoot,ffmpeg,ffprobe});renderRoom.localization=localizationRoom;
   const voiceDirector=new VoiceDirector(store,connectors,{ai,competitorIntel,styles});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe});
   editingRoom.soundtrack=soundtrack;
@@ -97,6 +97,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const packageExport=pathname.match(/^\/api\/package-revisions\/([a-f0-9-]+)\/export\.txt$/);
         const editionAudio=req.method==='GET'&&pathname.match(/^\/api\/edition-narrations\/([a-f0-9-]+)\/audio$/);
         if(editionAudio){const {file,size,mime}=localizationRoom.narrationFile(editionAudio[1]),range=req.headers.range,match=range&&range.match(/^bytes=(\d+)-(\d*)$/);if(match){const start=Number(match[1]),end=match[2]?Math.min(Number(match[2]),size-1):size-1;if(!(start<=end&&end<size))throw new InputError('Audio byte range is outside the file.',416);res.writeHead(206,{'Content-Type':mime,'Accept-Ranges':'bytes','Content-Range':`bytes ${start}-${end}/${size}`,'Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(file,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':mime,'Accept-Ranges':'bytes','Content-Length':size,'Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
+        const editionThumb=req.method==='GET'&&pathname.match(/^\/api\/edition-renders\/([a-f0-9-]+)\/thumbnail$/);
+        if(editionThumb){const file=localizationRoom.editionThumbnailFile(editionThumb[1]);res.writeHead(200,{'Content-Type':'image/jpeg','Content-Length':fs.statSync(file).size,'Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
         const editionExport=req.method==='GET'&&pathname.match(/^\/api\/edition-revisions\/([a-f0-9-]+)\/export$/);
         if(editionExport){const {text,filename}=localizationRoom.exportText(editionExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="edition.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
         if(packageExport){const {text,filename}=packagingRoom.exportText(packageExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="package.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
@@ -162,8 +164,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(packageJob&&req.method==='POST')return json(res,200,packagingRoom.retryDraft(packageJob[1],body));
         const packageApprove=pathname.match(/^\/api\/package-revisions\/([a-f0-9-]+)\/approve$/);
         if(packageApprove&&req.method==='POST')return json(res,200,packagingRoom.approve(packageApprove[1],body));
-        const editionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/edition(?:\/(draft|narrate))?$/);
-        if(editionRoute&&req.method==='POST')return json(res,200,editionRoute[2]==='draft'?localizationRoom.queueDraft(editionRoute[1],body):editionRoute[2]==='narrate'?localizationRoom.queueNarration(editionRoute[1],body):localizationRoom.save(editionRoute[1],body));
+        const editionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/edition(?:\/(draft|narrate|render))?$/);
+        if(editionRoute&&req.method==='POST')return json(res,200,editionRoute[2]==='draft'?localizationRoom.queueDraft(editionRoute[1],body):editionRoute[2]==='narrate'?localizationRoom.queueNarration(editionRoute[1],body):editionRoute[2]==='render'?await localizationRoom.queueEditionRender(editionRoute[1],body):localizationRoom.save(editionRoute[1],body));
+        const editionRelease=pathname.match(/^\/api\/edition-renders\/([a-f0-9-]+)\/approve$/);
+        if(editionRelease&&req.method==='POST')return json(res,200,localizationRoom.approveEditionRender(editionRelease[1],body));
         const editionVoice=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/edition-voices$/);
         if(editionVoice&&req.method==='POST')return json(res,200,localizationRoom.saveVoice(editionVoice[1],body));
         const editionNarration=pathname.match(/^\/api\/edition-narrations\/([a-f0-9-]+)\/(retry|approve)$/);

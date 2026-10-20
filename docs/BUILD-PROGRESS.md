@@ -123,7 +123,7 @@ Reuse the visual master while preserving meaning, natural voice and scene timing
 
 - [ ] **L01 Scene translation and local packaging** (testing) - 0.43.0 (2026-10-20): Room 06 language editions. An edition starts only from an approved, current final master. Narration sentences, every word on screen (drawn shots and graphics) and the package are adapted per extra language by Claude on a click inside a token reservation (parts of 150 sentences, finished parts kept) or by the owner; checks for missing items, lost figures and sentences that take much longer to say; immutable revisions and named approvals that go stale when the main video's words change; unchanged items keep their wording. Tested in tests/localization.test.js and in the browser on a throwaway workspace (Spanish edition of a real 20-s master with a fixture answer). npm test 313/313 passed.
 - [ ] **L02 Language narration and synchronization** (testing) - 0.44.0 (2026-10-20): edition narration and timing in Room 06. Each language gets its narrator (the main narrator's connection and rights with this language's voice and model, named language-rights confirmation); the approved words are narrated on a click through the Voice Room's own speaking and audio-check code, inside the family's shared monthly voice limit, at most 3 paid attempts, interrupted attempts need a confirmed retry; every scene of the approved edit is timed to the new voice from measured word times (scene changes within 0.25 s of their words, scenes that change length beyond the natural range named with the sentences to shorten); named approval that goes stale with new words, a new voice, a changed file or another master. Tested in tests/localization.test.js (stand-in ElevenLabs returning real FFmpeg audio with character timing) and in the browser on a throwaway 55-s master (narration 61.7 s, all audio checks passed, scene changes within 0.01 s, one long scene accepted at approval). npm test 315/315 passed.
-- [ ] **L03 Independent edition approvals** (planned) - Track outputs and revisions by configured locale; propagate source corrections and permit independent retry and release decisions.
+- [ ] **L03 Independent edition approvals** (testing) - 0.45.0 (2026-10-20): each language edition renders its own 1080p video from the approved master's recipe on its approved narration, with every scene retimed to the new voice, its words on screen and in the graphics, captions on its voice, music and effects kept in their scenes, and the package thumbnail drawn again with its words; the render worker treats it like a master (upload format, checks, recovery from verified parts) and keeps it out of the preview and master lists; a named release decision per language goes stale with new words, a new narration or another master. Tested in tests/localization.test.js (pure retiming) and tests/editing.test.js (real-FFmpeg edition render from a real master, thumbnail, release rules), and in the browser on a throwaway 55-s master (Spanish edition 61.7 s, all 10 checks passed, Spanish captions on the frame, release refused then recorded). npm test 316/316 (the pure L03 retiming test, added after that run, passed on its own) passed.
 
 ### 05 · Controlled publishing
 
@@ -144,6 +144,41 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Language editions: render, thumbnail and release (0.45.0)
+
+- **Owner request:** proceed to L03.
+- **Built** (docs/LOCALIZATION.md "L03"):
+  - **The render.** Each language renders its own video from the approved master's own recipe, with four things changed:
+    - its approved narration;
+    - every scene stretched or squeezed onto its new length;
+    - its words in the drawings and graphics;
+    - captions on its voice.
+    - Music and effects keep their place in their scenes. A footage clip that would run out starts earlier, then slows down, never below half speed.
+  - **The thumbnail.** The approved package's thumbnail is drawn again with the language's words.
+  - **Rendering.** The render worker treats an edition like the final master: upload format, checks and recovery from verified parts. Editions stay out of the preview and master lists.
+  - **The release.** A named release decision per language. It goes stale with new words, a new narration or another master.
+- **Checked:**
+  - A pure test of the retiming:
+    - clip spans;
+    - graphics and marks moved;
+    - adapted words;
+    - a footage clip slowed to 79%;
+    - drawn-shot words at their pointers;
+    - music and effects moved.
+  - A real-FFmpeg test from a real master:
+    - Spanish words and a stand-in voice;
+    - the edition scope and the thumbnail drawn with the Spanish words;
+    - the 1080x1920 edition passes upload format and duration;
+    - the release rules;
+    - staleness.
+  - Browser check on a throwaway 55-s master:
+    - a 61.7-s Spanish edition with all 10 checks passed in 5:22;
+    - Spanish captions with accents on the frame;
+    - the video plays;
+    - the release was refused with a confirmation missing, then recorded.
+  - npm test 316/316 (the pure L03 retiming test, added after that run, passed on its own) passed.
+- **Not tested:** a real video with live Claude and ElevenLabs; a long video; a drawn-engine style edition; publishing (not built).
 
 ### 2026-10-20 - Edition narration and timing in Room 06 (0.44.0)
 

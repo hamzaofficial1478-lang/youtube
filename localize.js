@@ -1,4 +1,5 @@
 'use strict';
+const Cap = require('./captions');
 // L01 language editions (pure): what a locked primary video says and shows, how Claude adapts it into a family's other
 // languages, and the checks an edition must pass. The blueprint's localization loop: lock the primary meaning and
 // scene structure, adapt (not word for word) to the locale, review idioms, names, units and facts, keep spoken length
@@ -198,4 +199,67 @@ function sync({timeline, payload, src, words = null, narrationSeconds, locale = 
     passed: !issues.some(item => item.severity === 'critical'), counts: {same: scenes.filter(item => item.status === 'same').length, retime: scenes.filter(item => item.status === 'retime').length, outside: scenes.filter(item => item.status === 'long' || item.status === 'short').length}};
 }
 
-module.exports = {SCHEMA, VISIBLE, LIMITS, RATE, DRIFT_LIMIT, NATURAL, seconds, language, visibleTexts, packageSource, source, syllables, figures, messages, normalise, check, script, carry, sentenceTimes, sync};
+// L03: the approved edit retimed onto the edition's voice. Each scene's frames are stretched or squeezed linearly
+// onto its new span, so cuts, graphics and marks keep their place inside their scene; clips stay contiguous; a footage
+// clip that would run past the end of its source starts earlier, then slows (never below half speed); transitions
+// shrink to fit; the words on screen are the edition's; captions are built again on the edition's voice.
+function retime(timeline, sync) {
+  const spans = timeline.scenes.map(scene => { const s = sync.scenes.find(item => item.id === scene.id); return {from: scene.startFrame, to: scene.endFrame, start: s.startFrame, end: s.endFrame}; });
+  return frame => {
+    const span = spans.find((item, k) => frame < item.to || k === spans.length - 1);
+    return span.start + (frame - span.from) * (span.end - span.start) / Math.max(1, span.to - span.from);
+  };
+}
+// A visible item's id is "d:<clip><JSON pointer>" or "g:<graphic>/title|lines/<k>" (visibleTexts).
+function setAt(target, pointer, value) {
+  const keys = pointer.split('/').slice(1);
+  let node = target;
+  for (const key of keys.slice(0, -1)) { node = node?.[key]; if (!node || typeof node !== 'object') return false; }
+  if (typeof node?.[keys.at(-1)] !== 'string') return false;
+  node[keys.at(-1)] = value;
+  return true;
+}
+function editionDrawings(drawings, payload) {
+  const out = structuredClone(drawings || {});
+  for (const item of payload.visible.filter(entry => entry.id.startsWith('d:'))) {
+    const clipId = Object.keys(out).find(id => item.id.startsWith(`d:${id}/`));
+    if (clipId && out[clipId].sketch) setAt({elements: out[clipId].sketch.elements}, item.id.slice(`d:${clipId}`.length), item.text);
+  }
+  return out;
+}
+function editionTimeline(timeline, sync, {payload, words = null, narrationSeconds, locale}) {
+  const fps = timeline.fps, map = retime(timeline, sync), at = frame => Math.round(map(frame)), total = sync.scenes.at(-1).endFrame, r2 = value => Math.round(value * 100) / 100;
+  const starts = [];
+  timeline.clips.forEach((clip, k) => starts.push(k ? Math.min(total - (timeline.clips.length - k), Math.max(starts[k - 1] + 1, at(clip.start))) : 0));
+  const clips = timeline.clips.map((clip, k) => {
+    const frames = (k < starts.length - 1 ? starts[k + 1] : total) - starts[k], out = {...clip, start: starts[k], frames};
+    if (clip.mediaType === 'video' && clip.clipSeconds) {
+      const need = speed => frames / fps * speed;
+      if (out.inSeconds + need(out.speed) > clip.clipSeconds) out.inSeconds = Math.max(0, r2(clip.clipSeconds - need(out.speed) - 0.02));
+      if (out.inSeconds + need(out.speed) > clip.clipSeconds) { out.speed = Math.max(0.5, Math.floor((clip.clipSeconds - 0.02) / (frames / fps) * 100) / 100); out.inSeconds = 0; }
+      if (out.inSeconds !== clip.inSeconds || out.speed !== clip.speed) out.trimReason = `Retimed for ${language(locale)}: the clip runs ${out.speed < clip.speed ? `at ${Math.round(out.speed * 100)}% speed` : `from ${out.inSeconds.toFixed(2)} s`} so it lasts the scene's new length.`;
+    }
+    return out;
+  });
+  const joins = timeline.joins.map((join, k) => { if (join.type === 'cut') return join; const frames = Math.min(join.frames, Math.floor(Math.min(clips[k].frames, clips[k + 1].frames) / 2)); return frames >= 2 ? {...join, frames} : {...join, type: 'cut', frames: 0}; });
+  const text = new Map(payload.visible.filter(item => item.id.startsWith('g:')).map(item => [item.id, item.text]));
+  const graphics = timeline.graphics.map(graphic => {
+    const start = Math.min(total - 1, at(graphic.start)), end = Math.min(total, at(graphic.start + graphic.frames));
+    return {...graphic, start, frames: Math.max(1, end - start), title: text.get(`g:${graphic.id}/title`) ?? graphic.title, lines: (graphic.lines || []).map((line, k) => text.get(`g:${graphic.id}/lines/${k}`) ?? line)};
+  });
+  const scenes = timeline.scenes.map(scene => { const s = sync.scenes.find(item => item.id === scene.id); return {...scene, startFrame: s.startFrame, endFrame: s.endFrame}; });
+  const byN = new Map(payload.sentences.map(item => [item.n, item.text]));
+  const sentences = sync.sentences.map((item, k) => ({n: item.n, text: byN.get(item.n) || '', startSeconds: item.start, durationSeconds: r3((sync.sentences[k + 1]?.start ?? narrationSeconds) - item.start)}));
+  return {...timeline, totalFrames: total, narrationSeconds: r3(narrationSeconds), scenes, clips, joins, graphics,
+    markers: (timeline.markers || []).map(marker => ({...marker, frame: at(marker.frame)})).filter(marker => marker.frame < total),
+    ending: timeline.ending ? {...timeline.ending, fadeOutFrames: Math.min(timeline.ending.fadeOutFrames, Math.floor(clips.at(-1).frames / 2))} : timeline.ending,
+    captions: Cap.buildCaptions({sentences, pauses: [], narrationSeconds, format: timeline.format, locale, measured: words})};
+}
+// Music cues and sound effects keep their place inside their scene.
+function editionSoundtrack(soundtrack, timeline, sync) {
+  if (!soundtrack) return soundtrack;
+  const map = retime(timeline, sync), fps = timeline.fps, sec = seconds => r3(map(seconds * fps) / fps), end = sync.scenes.at(-1).endFrame / fps;
+  return {...soundtrack, music: soundtrack.music.map(cue => ({...cue, start: sec(cue.start), end: r3(Math.min(end, sec(cue.end)))})), sfx: soundtrack.sfx.map(hit => ({...hit, seconds: sec(hit.seconds)}))};
+}
+
+module.exports = {SCHEMA, VISIBLE, LIMITS, RATE, DRIFT_LIMIT, NATURAL, seconds, language, visibleTexts, packageSource, source, syllables, figures, messages, normalise, check, script, carry, sentenceTimes, sync, retime, editionDrawings, editionTimeline, editionSoundtrack};

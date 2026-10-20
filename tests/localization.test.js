@@ -224,3 +224,28 @@ test('L02: a narration that stops after the voice service was asked needs a conf
   new LocalizationRoom(store, {masterApproval: () => ({current: true})}, {latestRow: () => null}, {}, {});
   assert.equal(store.db.prepare("SELECT count(*) AS n FROM edition_narrations WHERE status='interrupted' AND usage_status='unknown'").get().n, 1);
 });
+
+test('L03: the edit is retimed scene by scene onto the edition voice, with its own words and music in place', () => {
+  const timeline = {fps: 30, format: 'long-form', totalFrames: 600, narrationSeconds: 20,
+    scenes: [{id: 'a', label: 'S1', startFrame: 0, endFrame: 300, sentenceStart: 1, sentenceEnd: 1}, {id: 'b', label: 'S2', startFrame: 300, endFrame: 600, sentenceStart: 2, sentenceEnd: 2}],
+    clips: [{id: 'c1', sceneId: 'a', mediaType: 'image', start: 0, frames: 150, speed: 1, inSeconds: 0}, {id: 'c2', sceneId: 'a', mediaType: 'video', start: 150, frames: 150, speed: 1, inSeconds: 1, clipSeconds: 6}, {id: 'c3', sceneId: 'b', mediaType: 'image', start: 300, frames: 300, speed: 1, inSeconds: 0}],
+    joins: [{type: 'cut', frames: 0}, {type: 'fade', frames: 12}], graphics: [{id: 'g1', status: 'accepted', template: 'title-card', start: 330, frames: 90, title: 'The first company', lines: ['1602']}],
+    markers: [{kind: 'hook-end', frame: 450}], ending: {fadeOutFrames: 18}, captions: null};
+  // The edition says scene 1 in 15 s and scene 2 in 15 s (30 s in all).
+  const sync = {sentences: [{n: 1, start: 0}, {n: 2, start: 15}], scenes: [{id: 'a', startFrame: 0, endFrame: 450}, {id: 'b', startFrame: 450, endFrame: 900}]};
+  const payload = {sentences: [{n: 1, text: 'Uno dos tres.'}, {n: 2, text: 'Cuatro cinco.'}], visible: [{id: 'g:g1/title', text: 'La primera empresa'}, {id: 'd:c1/elements/0/text', text: 'CUALQUIERA'}, {id: 'd:c1/elements/1/labels/0', text: 'Barcos'}]};
+  const tl = L.editionTimeline(timeline, sync, {payload, narrationSeconds: 30, locale: 'es-419'});
+  assert.deepEqual(tl.clips.map(clip => [clip.start, clip.frames]), [[0, 225], [225, 225], [450, 450]]);
+  assert.deepEqual([tl.totalFrames, tl.scenes[1].startFrame, tl.graphics[0].start, tl.graphics[0].frames, tl.markers[0].frame], [900, 450, 495, 135, 675]);
+  assert.deepEqual([tl.graphics[0].title, tl.graphics[0].lines], ['La primera empresa', ['1602']]);
+  // 7.5 s of a 6-s clip from 1 s: it starts earlier, then slows down (never below half speed).
+  assert.deepEqual([tl.clips[1].inSeconds, tl.clips[1].speed], [0, 0.79]);
+  assert.match(tl.clips[1].trimReason, /Retimed for Latin American Spanish: the clip runs at 79% speed/);
+  assert.equal(tl.joins[1].frames, 12);
+  assert.ok(tl.captions.groups.length && tl.captions.groups[0].words[0].text === 'Uno');
+  const drawings = L.editionDrawings({c1: {sketch: {elements: [{kind: 'text', text: 'ANYONE'}, {kind: 'chart', labels: ['Ships', 'Gold']}]}}, c9: {composition: {html: '<p>x</p>'}}}, payload);
+  assert.deepEqual(drawings.c1.sketch.elements.map(item => item.text || item.labels), ['CUALQUIERA', ['Barcos', 'Gold']]);
+  assert.deepEqual(drawings.c9, {composition: {html: '<p>x</p>'}});
+  const music = L.editionSoundtrack({music: [{start: 10, end: 20}], sfx: [{seconds: 5}]}, timeline, sync);
+  assert.deepEqual([music.music[0].start, music.music[0].end, music.sfx[0].seconds], [15, 30, 7.5]);
+});

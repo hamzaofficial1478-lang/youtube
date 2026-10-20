@@ -16,6 +16,7 @@ const {FrameScanner} = require('../frame-scan');
 const {PackagingRoom} = require('../packaging-room');
 const {ConnectorSlots} = require('../connectors');
 const {EditingRoom} = require('../editing-room');
+const {LocalizationRoom} = require('../localization-room');
 const {SkillsEngine} = require('../skills');
 const B = require('../editing-brain');
 const T = require('../transitions');
@@ -305,13 +306,13 @@ const script = [
   'Over time the tokens became smaller and easier to carry. People trusted the mark more than the clay itself. That trust is still inside every coin you spend today, and it started with a simple promise.',
 ].join('\n\n');
 
-function setup(t, {seconds = 36} = {}) {
+function setup(t, {seconds = 36, locales = ['en-US']} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'editing-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
   const skills = new SkillsEngine(store, {root: path.join(__dirname, '..')}).attach();
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
-  const family = store.saveFamily({name: 'Money Stories', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'shorts', monthlyTokenLimit: 200000, scriptTokenLimit: 4000, researchTokenLimit: 4000});
+  const family = store.saveFamily({name: 'Money Stories', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales, timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'shorts', monthlyTokenLimit: 200000, scriptTokenLimit: 4000, researchTokenLimit: 4000});
   let content = store.saveContent({familyId: family.id, title: 'The first promise', kind: 'fiction', angle: 'Invented villages show how trust became money.', hook, script, sources: [], rightsConfirmed: true});
   store.reviewContent(content.id, {revision: content.revision, action: 'submit'});
   content = store.reviewContent(content.id, {revision: content.revision, action: 'approve'});
@@ -773,6 +774,87 @@ test('Room 10 renders the final master from the approved preview, checks it, res
   const approvedSecond = renders.approveMaster(second.id, {approvedBy: 'Owner', confirmations: {spotChecked: true, listened: true, packageMatches: true, qcAccepted: true}});
   assert.equal(approvedSecond.master.approval.current, true);
   assert.match(renders.publicJob(renders.row(queued.id)).master.approval.staleReason, /newer master/, 'the newer approved master supersedes the older');
+});
+
+test('L03: a language edition renders from the approved master on its own voice, retimed scene by scene, and is released by name', {skip}, async t => {
+  const env = setup(t, {seconds: 20, locales: ['en-US', 'es-419']});
+  const {editing, renders, store, content, scenes, dataRoot, family} = env;
+  const {approval} = await approvedBoard(env);
+  const readiness = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: readiness.id, pinnedBy: 'Owner', reason: 'Reviewed build for the master.'});
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const preview = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  await renders.processNext();
+  renders.review(preview.id, {decision: 'pass', reviewer: 'Owner', confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, critiqueAccepted: true, audioReviewed: true}});
+  const packaging = new PackagingRoom(store, scenes, renders, editing, new ConnectorSlots(store, {transform: (op, input) => input}), {complete: async () => { throw new Error('not used'); }}, {dataRoot});
+  renders.packaging = packaging;
+  const started = await packaging.startFromScript(content.id, {requestedBy: 'Owner'});
+  const pkg = await packaging.save(content.id, {createdBy: 'Owner', expectedRevision: started.revision, package: {...started.payload, thumbnails: started.payload.thumbnails.map((thumb, k) => k === 0 ? {...thumb, text: 'THE FIRST PROMISE', accent: 'PROMISE'} : thumb)}});
+  packaging.approve(pkg.id, {approvedBy: 'Owner', confirmations: {titleHonest: true, thumbnailChecked: true, disclosureReviewed: true, creditsReviewed: true}});
+  renders.queueMaster(preview.id, {requestedBy: 'Owner'});
+  const master = await renders.processNext();
+  renders.approveMaster(master.id, {approvedBy: 'Owner', confirmations: {spotChecked: true, listened: true, packageMatches: true, qcAccepted: true}});
+
+  // L01 and L02 for Spanish: a fixture adaptation, and a stand-in OpenAI voice that returns real audio (no word times,
+  // so the scene timing is estimated and says so).
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude', 'claude', JSON.stringify({name: 'claude', provider: 'claude-code', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), null);
+  let spoken = 0;
+  const connectors = {row: id => store.db.prepare('SELECT * FROM connectors WHERE id=?').get(id), key: () => 'fixture-key', fetch: async (url, options) => {
+    const words = JSON.parse(options.body).input.split(/\s+/).filter(Boolean).length, file = path.join(dataRoot, `tts-${++spoken}.wav`);
+    ffmpeg(['-f', 'lavfi', '-i', `sine=frequency=262:sample_rate=44100:duration=${words * 0.3}`, '-af', 'volume=0.5', '-c:a', 'pcm_s16le', '-y', file]);
+    return new Response(fs.readFileSync(file), {status: 200, headers: {'content-type': 'audio/wav'}});
+  }};
+  const ai = {complete: async ({messages}) => { const packet = JSON.parse(messages[1].content); return {content: JSON.stringify({sentences: packet.sentences.map(item => ({n: item.n, text: `ES ${item.text.replace(/[A-Za-z]+/g, 'palabra')}`})), visible: packet.visible.map(item => ({id: item.id, text: `ES ${item.text}`.slice(0, item.maxLength)})), package: {title: 'La primera promesa', description: 'Cómo la confianza se volvió dinero.', tags: ['historia'], thumbnail: {text: 'LA PRIMERA PROMESA', accent: 'PROMESA'}}, notes: ''}), usage: {promptTokens: 500, completionTokens: 300, totalTokens: 800}, model: 'fixture'}; }};
+  const room = new LocalizationRoom(store, renders, packaging, connectors, ai, {dataRoot, ffmpeg: 'ffmpeg', ffprobe: 'ffprobe'});
+  renders.localization = room;
+  room.queueDraft(content.id, {requestedBy: 'Owner', locale: 'es-419', connector: {id: 'claude', revision: 1}});
+  const words = await room.processNext();
+  assert.ok(words.payload.visible.some(item => item.id.startsWith('g:')), 'the edit\'s graphics have words to adapt');
+  await assert.rejects(room.queueEditionRender(content.id, {requestedBy: 'Owner', locale: 'es-419'}), /narration first/);
+  room.approve(words.id, {approvedBy: 'Owner', confirmations: {meaningReviewed: true, factsChecked: true, visibleChecked: true, packageHonest: true}});
+  room.saveVoice(family.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: 0, languageConfirmed: true});
+  const asked = room.queueNarration(content.id, {requestedBy: 'Owner', locale: 'es-419'});
+  const narration = await room.processNextNarration();
+  assert.equal(narration.status, 'completed', narration.error);
+  assert.equal(narration.sync.method, 'estimated');
+  room.approveNarration(asked.id, {approvedBy: 'Owner', confirmations: {listened: true, pronunciation: true, syncReviewed: true, syncAccepted: true}});
+
+  // L03: the edition renders like a master, from the master's recipe with the edition's voice, words and timing.
+  const queued = await room.queueEditionRender(content.id, {requestedBy: 'Owner', locale: 'es-419'});
+  assert.equal(queued.preset, 'edition');
+  const scope = JSON.parse(renders.row(queued.id).scope), tl = scope.edit.timeline, original = JSON.parse(renders.row(master.id).scope).edit.timeline;
+  assert.equal(tl.totalFrames, narration.sync.scenes.at(-1).endFrame);
+  assert.deepEqual(tl.scenes.map(scene => scene.startFrame), narration.sync.scenes.map(scene => scene.startFrame), 'every scene starts on its words in this language');
+  assert.equal(tl.clips.length, original.clips.length);
+  tl.clips.forEach((clip, k) => { if (k) assert.equal(clip.start, tl.clips[k - 1].start + tl.clips[k - 1].frames); });
+  const accepted = tl.graphics.filter(item => item.status === 'accepted');
+  assert.ok(accepted.length && accepted.every(item => [item.title, ...(item.lines || [])].every(line => !/\p{L}{2}/u.test(line || '') || line.startsWith('ES '))), 'graphics speak Spanish');
+  assert.ok(tl.captions.groups.flatMap(group => group.words).every(word => word.start <= scope.narration.durationSeconds + 0.05), 'captions follow the Spanish voice');
+  assert.match(tl.captions.groups[0].words.map(word => word.text).join(' '), /^ES palabra/);
+  assert.deepEqual([scope.edition.thumbnail.text, scope.edition.thumbnail.width, scope.edition.thumbnail.height], ['LA PRIMERA PROMESA', 1280, 720]);
+  const done = await renders.processNext();
+  assert.equal(done.status, 'completed', JSON.stringify(renders.row(queued.id).error));
+  const result = JSON.parse(renders.row(queued.id).result), check = name => result.qc.find(item => item.name === name);
+  assert.equal(check('delivery format').passed, true, check('delivery format').detail);
+  assert.equal(check('duration').passed, true, check('duration').detail);
+  assert.equal(check('matches the approved preview'), undefined, 'an edition has no preview of its own to match');
+  assert.ok(Math.abs(result.video.probe.durationSeconds - scope.narration.durationSeconds) < 0.2);
+  // Editions stay out of the previews and masters of Rooms 05, 08 and 10.
+  const roomState = renders.state().contents.find(item => item.contentId === content.id);
+  assert.deepEqual([roomState.renders.every(job => job.preset === 'proxy'), roomState.masters.every(job => job.preset === 'master')], [true, true]);
+  const listed = room.state().contents[0].editions[0].renders[0];
+  assert.deepEqual([listed.id, listed.standing, listed.thumbnailUrl], [queued.id, true, `/api/edition-renders/${queued.id}/thumbnail`]);
+  assert.ok(fs.existsSync(room.editionThumbnailFile(queued.id)));
+
+  // The release decision, by name; it goes out of date when the Spanish words change.
+  assert.throws(() => room.approveEditionRender(queued.id, {approvedBy: 'Owner', confirmations: {watched: true, listened: true}}), /title, description and thumbnail/);
+  const released = room.approveEditionRender(queued.id, {approvedBy: 'Owner', confirmations: {watched: true, listened: true, packageMatches: true, qcAccepted: true}});
+  assert.equal(released.release.current, true);
+  assert.equal(room.currentRelease(content.id, 'es-419').renderId, queued.id);
+  assert.throws(() => store.db.prepare('UPDATE edition_releases SET notes=?').run('x'), /immutable/);
+  room.save(content.id, {createdBy: 'Owner', locale: 'es-419', expectedRevision: words.revision, edition: {...words.payload, package: {...words.payload.package, title: 'La promesa original'}}});
+  assert.equal(room.currentRelease(content.id, 'es-419'), null);
+  assert.match(room.publicEditionRender(renders.row(queued.id)).release.staleReason, /words, the narration or the master changed/);
 });
 
 test('HTTP edit routes need the local token and expose the room in state', async t => {

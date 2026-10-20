@@ -9,6 +9,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
 const V = require('./voice');
+const B = require('./editing-brain');
+const F = require('./fonts');
 const L = require('./localize');
 const R = require('./render');
 const {splitSentences} = require('./scene-room');
@@ -19,6 +21,8 @@ const {connectorReference, connectorCurrent} = require('./intel-sources');
 const {requireValue, now, object, person, text} = R;
 
 const PART_SENTENCES = 150, MAX_ANSWER = 16000;
+// Checks that prove an edition file is sound and in the upload format; they can never be accepted away.
+const EDITION_BLOCKING = ['full decode', 'audio/video alignment', 'duration', 'frame', 'narration audio', 'delivery format'];
 const hash = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
 // The answer room one packet needs: about 2 characters a token for adapted text and JSON, plus a margin.
 const answerTokens = messages => Math.min(MAX_ANSWER, Math.ceil(Buffer.byteLength(messages[1].content, 'utf8') / 2) + 2000);
@@ -51,6 +55,8 @@ class LocalizationRoom {
       CREATE TABLE IF NOT EXISTS edition_narrations(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, edition_revision_id TEXT NOT NULL REFERENCES edition_revisions(id), voice_id TEXT NOT NULL REFERENCES edition_voices(id), status TEXT NOT NULL, scope TEXT NOT NULL, result TEXT, error TEXT, attempts INTEGER NOT NULL, usage_status TEXT NOT NULL, reserved_characters INTEGER NOT NULL DEFAULT 0, period_month TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS edition_narration_approvals(id TEXT PRIMARY KEY, narration_id TEXT NOT NULL REFERENCES edition_narrations(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, edition_approval_id TEXT NOT NULL, master_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE TRIGGER IF NOT EXISTS edition_narration_approvals_immutable BEFORE UPDATE ON edition_narration_approvals BEGIN SELECT RAISE(ABORT, 'Narration approvals are immutable.'); END;
+      CREATE TABLE IF NOT EXISTS edition_releases(id TEXT PRIMARY KEY, render_id TEXT NOT NULL, content_id TEXT NOT NULL, locale TEXT NOT NULL, narration_approval_id TEXT NOT NULL, master_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TRIGGER IF NOT EXISTS edition_releases_immutable BEFORE UPDATE ON edition_releases BEGIN SELECT RAISE(ABORT, 'Edition releases are immutable.'); END;
       CREATE TABLE IF NOT EXISTS edition_jobs(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL, locale TEXT NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, parts TEXT NOT NULL DEFAULT '{}', revision_id TEXT, error TEXT, attempts INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     `);
     for (const row of this.db.prepare("SELECT id FROM edition_jobs WHERE status='running'").all()) {
@@ -422,6 +428,96 @@ class LocalizationRoom {
       ...(result ? {analysis, audioUrl: `/api/edition-narrations/${row.id}/audio`, sync: (() => { try { return this.syncFor(row, inputs); } catch { return null; } })(), approval: this.narrationApproval(row)} : {})};
   }
 
+  // ------------------------------------------------------------ L03 edition render and release
+  // An edition renders like the final master (same pinned FFmpeg, renderer, upload format, checks and recovery), from
+  // the approved master's own recipe with the edition's voice, its words on screen, captions on its voice and every
+  // scene retimed to that voice. It stands while its narration approval and the master are the ones approved now.
+  editionRenderCurrent(row, scope = JSON.parse(row.scope)) {
+    try { return this.currentNarration(row.content_id, scope.edition.locale)?.approvalId === scope.edition.narrationApprovalId && this.approvedMaster(row.content_id)?.id === scope.edition.masterId; } catch { return false; }
+  }
+  // The approved package's chosen thumbnail, drawn again with this language's words (same shot, frame and layout).
+  async editionThumbnail(contentId, payload) {
+    const row = this.packaging.latestRow(contentId), pkg = row ? JSON.parse(row.payload) : null, chosen = pkg?.thumbnails?.find(item => item.id === pkg.chosenThumbnail), words = payload.package?.thumbnail;
+    if (!chosen || !words?.text) return null;
+    const images = await this.packaging.drawThumbnails({thumbnails: [{...chosen, text: words.text, accent: words.accent || ''}]}, this.packaging.inputs(contentId));
+    return {...images[chosen.id], text: words.text, accent: words.accent || ''};
+  }
+  async queueEditionRender(contentId, input) {
+    object(input);
+    const by = person(input.requestedBy), inputs = this.inputs(contentId);
+    requireValue(inputs.ready, inputs.blockers[0], 409);
+    const locale = this.locale(inputs, input.locale), narration = this.currentNarration(contentId, locale);
+    requireValue(narration, `Approve the ${L.language(locale)} narration first.`, 409);
+    const nrow = this.narrationRow(narration.id), nscope = JSON.parse(nrow.scope), result = JSON.parse(nrow.result), sync = this.syncFor(nrow, inputs);
+    requireValue(sync?.passed, sync?.issues.find(item => item.severity === 'critical')?.message || 'The approved master has no edit to follow.', 409);
+    const master = inputs.master, scope = JSON.parse(master.scope), edition = this.revisionRow(nscope.editionRevisionId), payload = JSON.parse(edition.payload);
+    const timeline = L.editionTimeline(scope.edit.timeline, sync, {payload, words: result.analysis.alignment?.words || null, narrationSeconds: result.analysis.durationSeconds, locale});
+    try { B.validateTimeline(timeline); } catch (error) { throw new InputError(`The ${L.language(locale)} edit could not be retimed: ${error.message}`, 409); }
+    const thumbnail = await this.editionThumbnail(contentId, payload);
+    const renderScope = {...scope, source: undefined,
+      narration: {approvalId: narration.approvalId, relativePath: result.artifact.relativePath, sha256: result.artifact.sha256, durationSeconds: result.analysis.durationSeconds},
+      edit: {...scope.edit, timeline, drawings: L.editionDrawings(scope.edit.drawings, payload), graphicsAss: B.graphicsAss(timeline, F.withFonts(scope.style.spec)) || null, soundtrack: L.editionSoundtrack(scope.edit.soundtrack, scope.edit.timeline, sync)},
+      edition: {locale, language: L.language(locale), masterId: master.id, editionRevisionId: edition.id, editionRevision: edition.revision, narrationId: nrow.id, narrationApprovalId: narration.approvalId, thumbnail, package: payload.package, sync: {method: sync.method, counts: sync.counts, maxDrift: sync.maxDrift}}};
+    return this.store.transaction(() => {
+      requireValue(!this.db.prepare("SELECT 1 FROM render_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'A render for this script is already queued or running.', 409);
+      const id = randomUUID(), at = now();
+      this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'edition','queued',?,0,?,?,?)").run(id, master.family_id, contentId, master.visual_approval_id, JSON.stringify(renderScope), by, at, at);
+      this.store.event(`Queued the ${L.language(locale)} edition of "${inputs.content.title}" (${timeline.clips.length} clips retimed to its voice)`);
+      return this.publicEditionRender(this.renders.row(id));
+    });
+  }
+  approveEditionRender(renderId, input) {
+    object(input);
+    const by = person(input.approvedBy, 'Your name');
+    return this.store.transaction(() => {
+      const row = this.renders.row(renderId), scope = JSON.parse(row.scope);
+      requireValue(row.preset === 'edition' && row.status === 'completed', 'Only a finished language edition can be approved.', 409);
+      requireValue(!this.db.prepare('SELECT 1 FROM edition_releases WHERE render_id=?').get(renderId), 'This edition is already approved.', 409);
+      requireValue(this.editionRenderCurrent(row, scope), 'The words, the narration or the master changed after this render. Render the edition again.', 409);
+      for (const kind of ['video', 'manifest']) this.renders.file(renderId, kind);
+      const result = JSON.parse(row.result), blocking = result.qc.filter(check => !check.passed && EDITION_BLOCKING.includes(check.name));
+      requireValue(!blocking.length, `The edition cannot be approved: ${blocking[0]?.name} - ${blocking[0]?.detail}`, 409);
+      const c = object(input.confirmations, 'Confirmations');
+      for (const [key, message] of [['watched', `Confirm that a speaker of ${scope.edition.language} watched the opening, a middle part and the ending at full quality.`], ['listened', 'Confirm that you listened to the sound of this edition.'], ['packageMatches', 'Confirm that the title, description and thumbnail words fit this edition.']]) requireValue(c[key] === true, message);
+      if (!result.qcPassed) requireValue(c.qcAccepted === true, 'Accept the remaining check findings listed for this edition, or fix them first.');
+      const id = randomUUID();
+      this.db.prepare('INSERT INTO edition_releases(id,render_id,content_id,locale,narration_approval_id,master_id,approved_by,notes,confirmations,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)')
+        .run(id, renderId, row.content_id, scope.edition.locale, scope.edition.narrationApprovalId, scope.edition.masterId, by, text(input.notes || '', 'Notes', 0, 2000), JSON.stringify({watched: true, listened: true, packageMatches: true, qcAccepted: c.qcAccepted === true}), now());
+      this.store.event(`${scope.edition.language} edition of "${this.store.content(row.content_id).title}" approved for release by ${by}`);
+      return this.publicEditionRender(row);
+    });
+  }
+  // A release holds while it is the newest for its language, its render still stands and its files are intact.
+  editionRelease(row) {
+    const approval = this.db.prepare('SELECT * FROM edition_releases WHERE render_id=? ORDER BY created_at DESC LIMIT 1').get(row.id);
+    if (!approval) return null;
+    const newer = this.db.prepare('SELECT 1 FROM edition_releases WHERE content_id=? AND locale=? AND created_at>? LIMIT 1').get(row.content_id, approval.locale, approval.created_at);
+    let reason = newer ? 'A newer edition was approved.' : !this.editionRenderCurrent(row) ? 'The words, the narration or the master changed.' : null;
+    if (!reason) { try { this.renders.file(row.id, 'video'); } catch (error) { reason = error.message; } }
+    return {id: approval.id, approvedBy: approval.approved_by, notes: approval.notes, at: approval.created_at, current: !reason, staleReason: reason};
+  }
+  // The released edition of one language (publishing, when it is built, takes this).
+  currentRelease(contentId, locale) {
+    for (const row of this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='edition' AND status='completed' ORDER BY created_at DESC, rowid DESC").all(contentId)) {
+      if (JSON.parse(row.scope).edition.locale !== locale) continue;
+      const release = this.editionRelease(row);
+      if (release?.current) return {renderId: row.id, releaseId: release.id, approvedBy: release.approvedBy};
+    }
+    return null;
+  }
+  editionThumbnailFile(renderId) {
+    const thumb = JSON.parse(this.renders.row(renderId).scope).edition?.thumbnail;
+    requireValue(thumb, 'This edition has no thumbnail.', 404);
+    const file = this.renders.localFile(thumb.relativePath);
+    requireValue(fs.existsSync(file) && R.fileSha256(file) === thumb.sha256, 'The thumbnail file is missing or changed.', 409);
+    return file;
+  }
+  publicEditionRender(row) {
+    const scope = JSON.parse(row.scope);
+    return {...this.renders.publicJob(row), locale: scope.edition.locale, editionRevision: scope.edition.editionRevision, sync: scope.edition.sync, standing: this.editionRenderCurrent(row, scope), release: this.editionRelease(row),
+      thumbnailUrl: scope.edition.thumbnail ? `/api/edition-renders/${row.id}/thumbnail` : null, package: scope.edition.package};
+  }
+
   // ------------------------------------------------------------ approval
   approve(revisionId, input) {
     object(input);
@@ -470,7 +566,7 @@ class LocalizationRoom {
     const families = new Map(this.store.families().map(family => [family.id, family]));
     const contents = this.store.contents().filter(content => (families.get(content.familyId)?.locales.length || 0) > 1 && (content.state === 'approved' || this.db.prepare('SELECT 1 FROM edition_revisions WHERE content_id=? LIMIT 1').get(content.id)));
     return {
-      busy: !!this.db.prepare("SELECT 1 FROM edition_jobs WHERE status IN ('queued','running') UNION ALL SELECT 1 FROM edition_narrations WHERE status IN ('queued','running') LIMIT 1").get(),
+      busy: !!this.db.prepare("SELECT 1 FROM edition_jobs WHERE status IN ('queued','running') UNION ALL SELECT 1 FROM edition_narrations WHERE status IN ('queued','running') UNION ALL SELECT 1 FROM render_jobs WHERE preset='edition' AND status IN ('queued','running') LIMIT 1").get(),
       contents: contents.map(content => {
         const inputs = (() => { try { return this.inputs(content.id); } catch (error) { return {ready: false, blockers: [error.message], targets: [], source: null}; } })();
         return {contentId: content.id, familyId: content.familyId, title: content.title, ready: inputs.ready, blockers: inputs.blockers, masterId: inputs.master?.id || null, primaryLocale: families.get(content.familyId).primaryLocale,
@@ -480,6 +576,7 @@ class LocalizationRoom {
             const latest = this.latestRow(content.id, locale);
             const voice = this.voiceOf(this.latestVoice(content.familyId, locale));
             return {locale, language: L.language(locale), latest: latest ? this.publicRevision(latest, inputs.ready ? inputs : null) : null, voice: voice ? {...voice, current: this.voiceCurrent(voice)} : null, scriptCharacters: latest ? L.script(JSON.parse(latest.payload), JSON.parse(latest.source)).length : 0,
+              renders: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='edition' ORDER BY created_at DESC, rowid DESC").all(content.id).filter(row => JSON.parse(row.scope).edition.locale === locale).slice(0, 3).map(row => this.publicEditionRender(row)),
               narrations: this.db.prepare("SELECT * FROM edition_narrations WHERE content_id=? AND locale=? AND status!='retried' ORDER BY created_at DESC, rowid DESC LIMIT 3").all(content.id, locale).map(row => this.publicNarration(row, inputs.ready ? inputs : null)), sourceChanged: !!(latest && inputs.sourceHash && latest.source_hash !== inputs.sourceHash),
               history: this.db.prepare('SELECT id, revision, actor, note, created_by, created_at FROM edition_revisions WHERE content_id=? AND locale=? ORDER BY revision DESC LIMIT 10').all(content.id, locale).map(item => ({id: item.id, revision: item.revision, actor: item.actor, note: item.note, createdBy: item.created_by, createdAt: item.created_at})),
               jobs: this.db.prepare('SELECT * FROM edition_jobs WHERE content_id=? AND locale=? ORDER BY created_at DESC, rowid DESC LIMIT 3').all(content.id, locale).map(row => this.publicJob(row))};

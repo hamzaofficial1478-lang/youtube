@@ -1,8 +1,8 @@
-# Room 06: language editions (L01 0.43.0, L02 0.44.0)
+# Room 06: language editions (L01 0.43.0, L02 0.44.0, L03 0.45.0)
 
 A family can have up to 10 languages (Studio). The first is the primary language: every room before this one works on it.
 Each other language gets an **edition** of a finished video. L01 adapts its words; L02 narrates them and times the scenes to
-that voice. L03 (each edition's render and release decision) is not built yet.
+that voice; L03 renders the edition's own video and thumbnail and records its release decision.
 
 ## When an edition can start
 
@@ -155,15 +155,75 @@ Each language card has a **Narration** part:
 
 The page keeps itself up to date while a narration is being made.
 
+## L03: each edition's video, thumbnail and release (0.45.0)
+
+The blueprint's last localization step: review and render each edition on its own. One language can be released while
+another is still being adapted, narrated or fixed.
+
+### The render (`queueEditionRender`, render preset `edition`)
+
+- It needs the language's approved narration (`currentNarration`) and timing that passes (`syncFor`).
+- The edition is rendered from the approved master's own recipe: the same edit revision, visuals, music, style, pinned FFmpeg
+  build and renderer. Four things change:
+  - **The voice:** the edition's approved narration (its checksum is verified before rendering, like every input).
+  - **The timing** (`L.editionTimeline`, pure): every scene of the edit is stretched or squeezed onto its span in the new voice
+    (`L.retime`), so cuts, graphics and retention marks keep their place inside their scene.
+    - Clips stay contiguous.
+    - A footage clip that would run past the end of its source starts earlier, then slows down, never below half speed.
+    - Transitions shrink to fit their shorter neighbour or become cuts.
+    - The fade-out fits the last clip.
+    - The retimed timeline must pass the editing brain's own `validateTimeline`.
+  - **The words on screen:**
+    - drawn shots get the edition's words at their JSON pointers (`L.editionDrawings`);
+    - accepted graphics get their adapted title and lines.
+  - **Captions:** built again from the edition's sentences on its voice: measured word times when the voice gave them,
+    otherwise the estimate. The graphics and caption layer is written again (`B.graphicsAss`, with the fonts this PC has).
+  - Music cues and sound effects keep their place inside their scene (`L.editionSoundtrack`).
+- **The thumbnail:**
+  - The approved package's chosen thumbnail is drawn again with the edition's thumbnail words and accent: same shot, frame
+    and layout, the same content-addressed drawing as Room 09.
+  - It is drawn only when the edition has thumbnail words.
+- **Rendering:** the render worker treats an edition like a final master.
+  - It uses the master preset (1080p, H.264 High, AAC 384 kb/s stereo, fast start).
+  - It gets the same checks, including `delivery format`, but not `matches the approved preview`: an edition has no preview
+    of its own.
+  - It gets the same recovery from verified parts after a stop or failure, and the same retry and cancel.
+  - It stays out of the previews of Rooms 05 and 08 and the masters of Room 10.
+  - It is refused, or marked out of date before it starts, when the language's narration approval or the approved master
+    changed.
+
+### The release (`approveEditionRender`, immutable `edition_releases`)
+
+- **Confirmations, by name:**
+  - a speaker of the language watched the opening, a middle part and the ending at full quality;
+  - the sound was heard;
+  - the title, description and thumbnail words fit;
+  - remaining check findings were accepted, when there are any.
+- These checks can never be accepted away: full decode, audio/video alignment, duration, frame, narration audio, delivery
+  format (`EDITION_BLOCKING`).
+- **Current only while all of these hold:**
+  - it is the newest release for that language;
+  - the render still stands (same narration approval, same master);
+  - the video file is intact.
+- `currentRelease(contentId, locale)` is what publishing will take when it is built. Nothing is published now.
+
+### Room 06 on the page
+
+Each language card has a **Video** part:
+- "Render the <language> video";
+- live progress, with "Cancel" while it renders and "Retry from the finished parts" after a stop;
+- the player and every check;
+- the thumbnail, title and tags;
+- downloads for the video, the thumbnail and the title, description and tags;
+- "Approve for release";
+- when the newest render is not the released one, which render stands.
+
 ## Not built yet
 
-- **L03:**
-  - the edition's render: picture retimed scene by scene, its own words drawn into drawn shots and graphics, captions from
-    the measured words;
-  - the localized thumbnail image;
-  - its own review and master approval.
-- Redesigning atelier shots per language.
+- Publishing (Y01-Y02) of the released master and editions.
+- Redesigning atelier shots per language: designed shots keep the primary language's words.
 - Voice direction (emotion per sentence) for editions. Editions are spoken with the narrator's base delivery.
+- A drawn shot's word cues are the primary language's words, so in an edition its beats are spread by time instead.
 
 ## Tested
 
@@ -210,4 +270,39 @@ L02 browser check on a throwaway workspace: a 55-s master, Spanish words approve
   - the character count in the button was 2 short (paragraph breaks);
   - the scene table was cut off on narrow windows.
 
-Not tested: live Claude or live ElevenLabs on a real video, and an ElevenLabs voice speaking a language other than English.
+L03 retiming (`tests/localization.test.js`, pure):
+- clips keep their spans inside each stretched scene;
+- graphics and marks move with their scene;
+- the graphics speak the edition;
+- a 6-s footage clip asked for 7.5 s starts at 0 and plays at 79%;
+- drawn-shot words land at their pointers, labels included, and designed shots stay untouched;
+- music and effects move with their scene.
+
+L03 (`tests/editing.test.js` "L03: a language edition renders...", real FFmpeg):
+- a real preview, package with thumbnail words and master;
+- the Spanish words, a stand-in OpenAI voice without word times (estimated timing) and the narration approval;
+- the render is refused before the narration is approved;
+- the edition scope:
+  - every scene starts on its frame from the timing;
+  - clips stay contiguous;
+  - accepted graphics speak Spanish;
+  - captions follow the Spanish voice;
+  - the thumbnail is drawn again with the Spanish words at 1280x720;
+- the rendered 1080x1920 edition passes delivery format and duration, has no preview-match check, and its length follows the
+  Spanish narration;
+- editions stay out of the Room 05/08/10 lists;
+- the release needs every confirmation, is immutable, and goes out of date when the Spanish words change.
+
+L03 browser check on the same throwaway workspace (55-s master, approved Spanish narration):
+- "Render the Latin American Spanish video" showed live progress ("rendering S02A").
+- The 61.7-s 1920x1080 edition passed all 10 checks in 5:22.
+- A frame at 12 s shows the Spanish caption with its accents.
+- The video plays with seeking, and the Spanish title and tags were shown.
+- No thumbnail was drawn: this demo's Spanish adaptation had no thumbnail words, and the page said so.
+- The release was refused with a confirmation missing, then recorded as "Released".
+
+Not tested:
+- live Claude or live ElevenLabs on a real video;
+- an ElevenLabs voice speaking a language other than English;
+- an edition of a long video or of a drawn-engine style (drawn shots are drawn again with the edition's words, which only
+  the unit checks cover).

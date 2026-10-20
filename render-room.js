@@ -59,8 +59,8 @@ class RenderRoom {
   // that are still exactly what was made; anything that was running when the program stopped is made again.
   recoverInterrupted() {
     for (const row of this.db.prepare("SELECT id, preset FROM render_jobs WHERE status='running'").all())
-      this.db.prepare("UPDATE render_jobs SET status='interrupted', error=?, updated_at=? WHERE id=?").run(row.preset === 'master' ? 'The program stopped during this master render. Its finished parts are kept with their checksums; a retry checks them and continues from there.' : 'The program stopped during this render. Partial files were discarded; retry when ready.', now(), row.id);
-    const keep = new Set(this.db.prepare("SELECT id FROM render_jobs WHERE preset='master' AND status IN ('interrupted','failed','queued')").all().map(row => row.id)), workRoot = path.join(this.renderDir, '.work');
+      this.db.prepare("UPDATE render_jobs SET status='interrupted', error=?, updated_at=? WHERE id=?").run(['master', 'edition'].includes(row.preset) ? 'The program stopped during this master render. Its finished parts are kept with their checksums; a retry checks them and continues from there.' : 'The program stopped during this render. Partial files were discarded; retry when ready.', now(), row.id);
+    const keep = new Set(this.db.prepare("SELECT id FROM render_jobs WHERE preset IN ('master','edition') AND status IN ('interrupted','failed','queued')").all().map(row => row.id)), workRoot = path.join(this.renderDir, '.work');
     for (const name of fs.existsSync(workRoot) ? fs.readdirSync(workRoot) : []) if (!keep.has(name)) fs.rmSync(path.join(workRoot, name), {recursive: true, force: true});
     for (const row of this.db.prepare('SELECT DISTINCT job_id FROM render_stages').all()) if (!keep.has(row.job_id)) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(row.job_id);
   }
@@ -314,6 +314,10 @@ class RenderRoom {
         this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run('The edit changed after this render was queued. Render the newest revision.', at, row.id);
         return null;
       }
+      if (row.preset === 'edition' && !this.localization?.editionRenderCurrent(row, scope)) {
+        this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run('The language edition\'s words, narration or master changed before it was rendered. Nothing was rendered.', at, row.id);
+        return null;
+      }
       if (row.preset === 'master' && this.approvedPreview(row.content_id) !== scope.source.renderId) {
         this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run('The preview this master is made from is no longer the approved one in Room 08. Nothing was rendered.', at, row.id);
         return null;
@@ -342,7 +346,8 @@ class RenderRoom {
     const work = path.join(this.renderDir, '.work', job.id), finalDir = path.join(this.renderDir, job.family_id, job.content_id, job.id);
     const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
     // P11: a master renders at the master preset and keeps its verified parts until it finishes or is cancelled.
-    const preset = R.PRESETS[job.preset] || R.PRESETS.proxy, master = job.preset === 'master';
+    // L03: a language edition renders and resumes like a master (it has no preview of its own to match).
+    const preset = R.PRESETS[job.preset === 'edition' ? 'master' : job.preset] || R.PRESETS.proxy, master = job.preset === 'master' || job.preset === 'edition';
     let keepWork = false;
     // Runs a part, or reuses it when a master already finished it (same command, same checksum).
     const part = async (key, file, command, make) => {
@@ -610,6 +615,8 @@ class RenderRoom {
       // P11: the master is checked for YouTube's upload format and compared frame by frame with the approved preview.
       if (master) {
         checks.push(R.deliveryCheck(streams, R.atomOrder(out), {width: plan.preset.width, height: plan.preset.height, fps: plan.preset.fps}));
+      }
+      if (job.preset === 'master') {
         const preview = this.file(scope.source.renderId, 'video'), previewSize = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'];
         requireValue(R.fileSha256(preview.file) === scope.source.videoSha256, 'The approved preview file changed.', 409);
         await exec('compare with the approved preview', job.paths.ffmpeg, R.ssimArgs(out, preview.file, previewSize, 'ssim.log'), Math.max(120000, plan.totalFrames * 200), work);
@@ -666,7 +673,7 @@ class RenderRoom {
       };
       this.store.transaction(() => {
         this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
-        this.store.event(`${master ? 'Final master' : 'Proxy render'} ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
+        this.store.event(`${job.preset === 'edition' ? `${scope.edition.language} edition` : master ? 'Final master' : 'Proxy render'} ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
         if (master) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
       });
       // Claude's frame scan reviews previews; the master is compared with the reviewed preview instead.
