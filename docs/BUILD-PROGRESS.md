@@ -115,7 +115,7 @@ A sourced primary-language master becomes a real, reviewable video.
 - [ ] **P08 Audio Room for licensed music, SFX and mix** (testing) - 0.15.0: narration-only Audio Room reuses immutable edit revisions and the pinned render queue. Original levels or two-pass loudness normalization, 48 kHz stereo WAV, encoded AAC loudness/true-peak/silence/layout/duration checks, checksum-verified downloads and named listening confirmation. Real FFmpeg regression tests and browser checks are recorded in BUILD-PROGRESS.md.
 - [ ] **P09 Review & QC Room with video intelligence** (testing) - 0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md. 0.17.0: Claude frame scan (frame-scan.js): frames at every clip, graphic and hook half-second, contact sheets from the pinned FFmpeg, per-answer token reservation, kept answers, findings with frames and repair links in the review, optional named per-family automatic scan; after a completed scan the verdict may confirm flagged moments instead of a full watch. Videos of any length: targetMinutes 1-180 scales the script, job token limit, streamed answers, scene planning in parts, narration and render limits; a 25.5-minute synthetic edit rendered and reviewed with every check passing.
 - [ ] **P10 Packaging Room** (testing) - 0.18.0 (2026-10-08): Room 09 Packaging. packaging.js (pure) validates packages, checks honest figures (digits or English words), YouTube limits, title/thumbnail craft, writing voice, disclosure and chapters, composes the description with chapters, AI note and visual credits, and builds the thumbnail ASS layer. packaging-room.js keeps immutable revisions, draws content-addressed 1280x720 thumbnails from the approved visuals with the pinned FFmpeg, drafts with Claude inside a token reservation and approves by name only for a Room 08-approved render; approvals go stale on a newer package, script or Room 08 change. Browser check on a scratch workspace: free start drew 3 thumbnails at 1280x720; the edit dialog saved r2; Room 08 approval by flagged moments; package approval refused until the phone-size confirmation. One real Claude draft (7,196 tokens) was rejected for an accent word not among its overlay words; the parser now drops such an accent instead, and the real draft was not repeated.
-- [ ] **P11 Final render, recovery and primary master approval** (planned) - Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master.
+- [ ] **P11 Final render, recovery and primary master approval** (testing) - 0.42.0 (2026-10-20): Room 10. The final master renders only from the preview approved in Room 08 with its approved package, the same pinned FFmpeg build and renderer; YouTube upload preset (H.264 High, 1080p, AAC 384 kb/s stereo, fast start); checks for the upload format and a frame-by-frame match with the preview (SSIM); finished parts recorded with checksums so a stopped or failed master resumes from verified parts and gives a byte-identical file; immutable named approval that goes stale with the preview, the package or a newer master. Tested with real FFmpeg (tests/editing.test.js Room 10) and in the browser on a throwaway workspace (a 20-s 1080p master passed all 11 checks, similarity 0.978; approval refused without confirmations, recorded with them, shown out of date after a package change). npm test 310/310 passed.
 
 ### 04 · Optional configured-language editions
 
@@ -144,6 +144,27 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-20 - Room 10 Render & Recovery: the final master (0.42.0)
+
+- **Owner request:** keep scripts and competitors aside for now and proceed to the next building step: P11, final render, recovery and the primary master approval.
+- **Built** (docs/RENDER-RECOVERY.md):
+  - **Master preset:** 1080p, H.264 High, closed GOP of half the frame rate, AAC 384 kb/s stereo, fast start.
+  - **Exact inputs only:** a master renders only from the newest preview approved in Room 08, with the same pinned FFmpeg and renderer.
+  - **Checks:** the preview's checks, plus the upload format and a frame-by-frame match with the approved preview.
+  - **Recovery:** a ledger of finished parts with checksums, so an interrupted or failed master continues only from verified parts.
+  - **Approval:** an immutable named approval that goes stale with the preview, the package or a newer master.
+  - **The room:** Room 10 is live. Room 05 and Room 08 list previews only.
+- **Checked:**
+  - Real-FFmpeg test: refused before Room 08; delivery and match pass; approval rules; stale on a package change; failure keeps 2 parts; restart marks interrupted with work kept; a corrupted part is redone; the resumed master is byte-identical; a newer master supersedes the older.
+  - Browser check on a throwaway workspace:
+    - a 20-s 1080p master passed all 11 checks (similarity 0.978 over 601 frames);
+    - approval was refused without confirmations, then recorded;
+    - it was shown out of date after a package change.
+  - The demo data folder hit the Windows 260-character path limit when nested deep in the scratch folder. A short folder fixed it; the owner's data folder is short.
+  - Masters render stereo even from a mono narration (found by the test).
+  - npm test 310/310 passed.
+- **Not tested:** a long real video with drawn engines at full size; real owner material; publishing, which is not built.
 
 ### 2026-10-19 - word colour, natural media, motion blur, fonts, caption looks and eight repositories (0.41.0)
 

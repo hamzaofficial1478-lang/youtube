@@ -22,7 +22,10 @@ REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS
 REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox', 'normalize');
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
-  proxy: {label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
+  proxy: {name: 'proxy', label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
+  // P11: the final master at YouTube's recommended upload settings (H.264 High, closed GOP of half the frame rate,
+  // two B-frames, 4:2:0, BT.709, AAC-LC 48 kHz stereo at 384 kb/s, moov atom first), at the style's own frame rate.
+  master: {name: 'master', label: 'Final master 1080p', 'long-form': {width: 1920, height: 1080}, shorts: {width: 1080, height: 1920}, crf: 17, x264: 'slow', audioKbps: 384, maxFps: 60, profile: 'high', halfSecondGop: true, stereo: true},
 };
 const LOG_LIMIT = 4096;
 
@@ -138,7 +141,7 @@ async function inspectFFmpeg({ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', workDir}) 
 
 // ---------------------------------------------------------------- proxy plan
 function encodeVideo(preset, fps) {
-  return ['-c:v', 'libx264', '-preset', preset.x264, '-crf', String(preset.crf), '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-g', String(fps * 2), '-r', String(fps), '-fflags', '+bitexact', '-flags:v', '+bitexact', '-map_metadata', '-1', '-video_track_timescale', String(fps * 1000)];
+  return ['-c:v', 'libx264', '-preset', preset.x264, '-crf', String(preset.crf), ...(preset.profile ? ['-profile:v', preset.profile, '-bf', '2'] : []), '-pix_fmt', 'yuv420p', '-color_range', 'tv', '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-g', String(preset.halfSecondGop ? Math.max(1, Math.round(fps / 2)) : fps * 2), '-r', String(fps), '-fflags', '+bitexact', '-flags:v', '+bitexact', '-map_metadata', '-1', '-video_track_timescale', String(fps * 1000)];
 }
 // Camera moves the FFmpeg montage adapter can draw; amplitude follows the style's motion intensity.
 function zoompanFor(move, index, frames, intensity) {
@@ -209,7 +212,7 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     }
     return {index, shotId: shot.shotId, label: shot.label, assetId: shot.assetId, mediaType: shot.mediaType, startFrame: boundaries[index], frames: frames[index], extraFrames: extra, motion: motion.kind, file, args};
   });
-  const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
+  const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', ...(preset.stereo ? ['-ac', '2'] : []), '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
   let final;
   const listFile = path.join(workDir, 'segments.txt');
   if (!transitionFrames || segments.length === 1) {
@@ -226,7 +229,7 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     final = {mode: 'xfade', transition: fade, transitionSeconds: td,
       args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...segments.flatMap(item => ['-i', item.file]), '-i', narration.file, '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${segments.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
   }
-  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {style: transition, applied: fade || 'cut', frames: transitionFrames}, totalFrames, segments, final, ...(look ? {look} : {})};
+  return {preset: {name: preset.name || 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {style: transition, applied: fade || 'cut', frames: transitionFrames}, totalFrames, segments, final, ...(look ? {look} : {})};
 }
 
 // ---------------------------------------------------------------- edit render (P06)
@@ -311,9 +314,68 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
   const fadeFrames = Math.min(scale(timeline.ending?.fadeOutFrames || 0), Math.floor(frames[frames.length - 1] / 2));
   const tailFilters = [...(graphics ? ['ass=graphics.ass'] : []), ...(fadeFrames ? [`fade=t=out:st=${round((totalFrames - fadeFrames) / fps, 6)}:d=${round(fadeFrames / fps, 6)}`] : []), 'format=yuv420p'];
   parts.push(`[${label}]${tailFilters.join(',')}[vout]`);
-  const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
+  const audio = ['-c:a', 'aac', '-b:a', `${preset.audioKbps}k`, '-ar', '48000', ...(preset.stereo ? ['-ac', '2'] : []), '-af', 'apad', '-shortest', '-flags:a', '+bitexact', '-movflags', '+faststart'];
   const final = {mode: 'edit', graphics: !!graphics, args: ['-hide_banner', '-nostdin', '-loglevel', 'error', ...chunks.flatMap(chunk => ['-i', chunk.file]), '-i', narration.file, ...overlays.flatMap(overlay => ['-i', overlay.file]), '-filter_complex', parts.join(';'), '-map', '[vout]', '-map', `${chunks.length}:a:0`, ...encodeVideo(preset, fps), ...audio, '-y', outFile]};
-  return {preset: {name: 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames, overlays: overlays.length, ...(look ? {look} : {})};
+  return {preset: {name: preset.name || 'proxy', label: preset.label, width: size.width, height: size.height, fps, crf: preset.crf, x264: preset.x264}, transition: {applied: [...new Set(joins.map(join => join.type))].join(', '), soft: joins.filter(join => join.type !== 'cut').length, frames: joins.reduce((sum, join) => sum + join.frames, 0)}, totalFrames, segments, chunks, final, fadeFrames, overlays: overlays.length, ...(look ? {look} : {})};
+}
+
+// ---------------------------------------------------------------- the final master (P11)
+// The top-level boxes of an MP4 in order (size, type), read from the file's headers only: a master that starts
+// playing at once has its 'moov' before its 'mdat'.
+function atomOrder(file, limit = 16) {
+  const fd = fs.openSync(file, 'r'), size = fs.fstatSync(fd).size, out = [];
+  try {
+    let at = 0;
+    while (at + 8 <= size && out.length < limit) {
+      const head = Buffer.alloc(16);
+      fs.readSync(fd, head, 0, 16, at);
+      let length = head.readUInt32BE(0);
+      const type = head.toString('latin1', 4, 8);
+      if (length === 1) length = Number(head.readBigUInt64BE(8));
+      else if (length === 0) length = size - at;
+      if (length < 8) break;
+      out.push(type);
+      at += length;
+    }
+  } finally { fs.closeSync(fd); }
+  return out;
+}
+// The master is what YouTube asks for: H.264 High, 4:2:0, BT.709, progressive, at the preset's size and the edit's
+// frame rate; AAC-LC 48 kHz stereo; the moov box before the media.
+function deliveryCheck(streams, atoms, {width, height, fps}) {
+  const video = streams.find(stream => stream.codec_type === 'video'), audio = streams.find(stream => stream.codec_type === 'audio'), problems = [];
+  if (!video) problems.push('no video stream');
+  else {
+    if (video.codec_name !== 'h264' || !/^High/.test(video.profile || '')) problems.push(`video is ${video.codec_name} ${video.profile || ''} (H.264 High expected)`);
+    if (video.pix_fmt !== 'yuv420p') problems.push(`pixel format ${video.pix_fmt} (yuv420p expected)`);
+    if (video.width !== width || video.height !== height) problems.push(`${video.width}x${video.height} (${width}x${height} expected)`);
+    const [num, den] = String(video.r_frame_rate || '0/1').split('/').map(Number);
+    if (!den || Math.abs(num / den - fps) > 0.01) problems.push(`${video.r_frame_rate} fps (${fps} expected)`);
+    for (const key of ['color_space', 'color_transfer', 'color_primaries']) if (video[key] && video[key] !== 'bt709') problems.push(`${key} ${video[key]} (bt709 expected)`);
+    if (video.field_order && video.field_order !== 'progressive') problems.push(`field order ${video.field_order}`);
+  }
+  if (!audio) problems.push('no audio stream');
+  else if (audio.codec_name !== 'aac' || Number(audio.sample_rate) !== 48000 || audio.channels !== 2) problems.push(`audio ${audio.codec_name} ${audio.sample_rate} Hz ${audio.channels} ch (AAC 48 kHz stereo expected)`);
+  const moov = atoms.indexOf('moov'), mdat = atoms.indexOf('mdat');
+  if (moov < 0 || mdat < 0 || moov > mdat) problems.push('the moov box is not before the media (playback would wait for the whole file)');
+  return {name: 'delivery format', passed: !problems.length, detail: problems.length ? problems.join('; ') : `H.264 ${video.profile}, ${width}x${height} at ${fps} fps, yuv420p BT.709, AAC 48 kHz stereo, fast start`};
+}
+// The master is compared frame by frame with the approved preview, scaled down to it (SSIM). The same picture at two
+// sizes scores about 0.98; a different shot about 0.5. A run of frames below 0.8 for a quarter of a second or more
+// means the master shows something the owner did not approve.
+const ssimArgs = (master, preview, {width, height}, statsFile) => ['-hide_banner', '-nostdin', '-i', master, '-i', preview, '-an', '-lavfi', `[0:v]settb=AVTB,setpts=PTS-STARTPTS,scale=${width}:${height}:flags=area,format=yuv420p,setsar=1[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS,format=yuv420p,setsar=1[b];[a][b]ssim=stats_file=${statsFile}`, '-f', 'null', '-'];
+function previewMatch(stats, fps) {
+  const scores = [...String(stats).matchAll(/All:([0-9.]+)/g)].map(match => Number(match[1])).filter(Number.isFinite);
+  if (!scores.length) return {name: 'matches the approved preview', passed: false, detail: 'no frames were compared', spans: []};
+  const spans = [];
+  let from = null;
+  scores.forEach((score, k) => {
+    if (score < 0.8 && from === null) from = k;
+    if ((score >= 0.8 || k === scores.length - 1) && from !== null) { const to = score < 0.8 ? k + 1 : k; if ((to - from) / fps >= 0.25) spans.push({start: round(from / fps, 2), end: round(to / fps, 2)}); from = null; }
+  });
+  const mean = scores.reduce((sum, value) => sum + value, 0) / scores.length, min = Math.min(...scores);
+  return {name: 'matches the approved preview', passed: !spans.length && mean >= 0.9, spans, mean: round(mean, 4), min: round(min, 4), frames: scores.length,
+    detail: `similarity ${mean.toFixed(3)} on average over ${scores.length} frames (lowest ${min.toFixed(3)})${spans.length ? `; differs at ${spans.map(span => `${span.start.toFixed(1)}-${span.end.toFixed(1)} s`).join(', ')}` : ''}`};
 }
 
 // Parses blackdetect/freezedetect output into spans.
@@ -361,4 +423,4 @@ function sheetGeometry({width, height}, cols, rows) {
   return {cols, rows, width, height, tileWidth: (width - 8 - (cols - 1) * 4) / cols, tileHeight: (height - 8 - (rows - 1) * 4) / rows};
 }
 
-module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, GRADE_FILTERS, lookFilters, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, decodeArgs, decodeCheck, avAlignment, sheetGeometry, tail, object, text, person, requireValue, now, round};
+module.exports = {RENDERER_VERSION, PRESETS, REQUIRED_FILTERS, GRADE_FILTERS, lookFilters, atomOrder, deliveryCheck, ssimArgs, previewMatch, REQUIRED_ENCODERS, SCENE_CUT_THRESHOLD, resolveExecutable, fileSha256, run, inspectFFmpeg, planProxy, planTimeline, easedZoompan, zoompanFor, encodeVideo, detections, sceneCutTimes, sceneCuts, decodeArgs, decodeCheck, avAlignment, sheetGeometry, tail, object, text, person, requireValue, now, round};

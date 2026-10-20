@@ -20,6 +20,8 @@ const E = require('./engines');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
+// Checks that prove a master is sound and is what was approved; the owner can never accept these away (P11).
+const MASTER_BLOCKING = ['full decode', 'audio/video alignment', 'duration', 'frame', 'narration audio', 'delivery format', 'matches the approved preview'];
 
 class RenderRoom {
   constructor(store, styles, sceneRoom, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', browser = findBrowser()} = {}) {
@@ -45,14 +47,34 @@ class RenderRoom {
       CREATE TABLE IF NOT EXISTS render_pins(id TEXT PRIMARY KEY, readiness_id TEXT NOT NULL REFERENCES render_readiness(id), ffmpeg_sha256 TEXT NOT NULL, ffprobe_sha256 TEXT NOT NULL, version TEXT NOT NULL, pinned_by TEXT NOT NULL, reason TEXT NOT NULL, created_at TEXT NOT NULL, ended_at TEXT);
       CREATE TABLE IF NOT EXISTS render_jobs(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL REFERENCES content(id), visual_approval_id TEXT NOT NULL, preset TEXT NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, progress TEXT, result TEXT, error TEXT, attempts INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, review TEXT);
       CREATE TRIGGER IF NOT EXISTS render_results_final BEFORE UPDATE OF result ON render_jobs WHEN OLD.result IS NOT NULL BEGIN SELECT RAISE(ABORT, 'A completed render result is immutable.'); END;
+      -- P11: a final master's finished parts (recorded with their checksum and the command that made them) and the
+      -- owner's approval of a master (immutable; it goes out of date when anything it was made from changes).
+      CREATE TABLE IF NOT EXISTS render_stages(job_id TEXT NOT NULL REFERENCES render_jobs(id), key TEXT NOT NULL, file TEXT NOT NULL, command TEXT NOT NULL, sha256 TEXT NOT NULL, meta TEXT, created_at TEXT NOT NULL, PRIMARY KEY(job_id, key));
+      CREATE TABLE IF NOT EXISTS master_approvals(id TEXT PRIMARY KEY, render_id TEXT NOT NULL REFERENCES render_jobs(id), source_render_id TEXT NOT NULL, package_approval_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TRIGGER IF NOT EXISTS master_approvals_final BEFORE UPDATE ON master_approvals BEGIN SELECT RAISE(ABORT, 'A master approval is immutable.'); END;
     `);
   }
-  // Rendering is local: an interrupted render cost nothing and may be retried, but never silently.
+  // Rendering is local: an interrupted render cost nothing and may be retried, but never silently. A final master
+  // (P11) keeps its finished parts: each was recorded with its checksum when it finished, so a retry reuses only parts
+  // that are still exactly what was made; anything that was running when the program stopped is made again.
   recoverInterrupted() {
-    for (const row of this.db.prepare("SELECT id FROM render_jobs WHERE status='running'").all())
-      this.db.prepare("UPDATE render_jobs SET status='interrupted', error='The program stopped during this render. Partial files were discarded; retry when ready.', updated_at=? WHERE id=?").run(now(), row.id);
-    fs.rmSync(path.join(this.renderDir, '.work'), {recursive: true, force: true});
+    for (const row of this.db.prepare("SELECT id, preset FROM render_jobs WHERE status='running'").all())
+      this.db.prepare("UPDATE render_jobs SET status='interrupted', error=?, updated_at=? WHERE id=?").run(row.preset === 'master' ? 'The program stopped during this master render. Its finished parts are kept with their checksums; a retry checks them and continues from there.' : 'The program stopped during this render. Partial files were discarded; retry when ready.', now(), row.id);
+    const keep = new Set(this.db.prepare("SELECT id FROM render_jobs WHERE preset='master' AND status IN ('interrupted','failed','queued')").all().map(row => row.id)), workRoot = path.join(this.renderDir, '.work');
+    for (const name of fs.existsSync(workRoot) ? fs.readdirSync(workRoot) : []) if (!keep.has(name)) fs.rmSync(path.join(workRoot, name), {recursive: true, force: true});
+    for (const row of this.db.prepare('SELECT DISTINCT job_id FROM render_stages').all()) if (!keep.has(row.job_id)) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(row.job_id);
   }
+  // A part counts as done only when its file is still there with the checksum recorded when it finished and it was
+  // made by the same command (the command and its inputs' checksums are part of the record).
+  stageDone(jobId, key, file, command) {
+    const row = this.db.prepare('SELECT * FROM render_stages WHERE job_id=? AND key=?').get(jobId, key);
+    if (!row || row.command !== createHash('sha256').update(JSON.stringify(command)).digest('hex') || !fs.existsSync(file) || R.fileSha256(file) !== row.sha256) return null;
+    return {meta: row.meta ? JSON.parse(row.meta) : null};
+  }
+  stageRecord(jobId, key, file, command, meta = null) {
+    this.db.prepare('INSERT OR REPLACE INTO render_stages(job_id,key,file,command,sha256,meta,created_at) VALUES(?,?,?,?,?,?,?)').run(jobId, key, path.basename(file), createHash('sha256').update(JSON.stringify(command)).digest('hex'), R.fileSha256(file), meta ? JSON.stringify(meta) : null, now());
+  }
+  stagesOf(jobId) { return this.db.prepare('SELECT COUNT(*) AS count FROM render_stages WHERE job_id=?').get(jobId).count; }
 
   // ------------------------------------------------------------ readiness and pinned build
   latestReadiness() {
@@ -145,6 +167,7 @@ class RenderRoom {
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg,
         edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, criticals: scope.edit.criticals, verdict: scope.edit.critiqueVerdict, graphics: scope.edit.timeline.graphics.filter(item => item.status === 'accepted').length} : null},
+      ...(row.preset === 'master' ? {master: {sourceRenderId: scope.source.renderId, sourceReviewer: scope.source.reviewer, partsKept: this.stagesOf(row.id), ...this.masterStatus(row), approval: this.masterApproval(row)}} : {}),
       result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, hookUrl: result.hook ? `/api/renders/${row.id}/hook` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
   }
   queueRender(contentId, input) {
@@ -185,6 +208,71 @@ class RenderRoom {
       return this.publicJob(this.row(id));
     });
   }
+  // ------------------------------------------------------------ P11 final master
+  // The preview the owner approved in Room 08 that is still current, newest first (the master is made from it).
+  approvedPreview(contentId) {
+    for (const row of this.db.prepare("SELECT id FROM render_jobs WHERE content_id=? AND preset='proxy' AND status='completed' AND review IS NOT NULL ORDER BY created_at DESC, rowid DESC").all(contentId))
+      if (this.qcReport(row.id).status === 'approved') return row.id;
+    return null;
+  }
+  // Whether a master still stands for what was approved: its preview is still the approved, current one, the package
+  // approved for that preview is still current, and the inputs have not changed (the same checks as a preview).
+  masterStatus(row) {
+    const scope = JSON.parse(row.scope), content = (() => { try { return this.store.content(row.content_id); } catch { return null; } })();
+    const preview = this.approvedPreview(row.content_id), pkg = this.packaging?.currentApproval(row.content_id) || null;
+    const reason = !content ? 'The script is gone.' : preview !== scope.source.renderId ? (preview ? 'A newer preview was approved in Room 08. Render the master from it.' : 'The preview this master was made from is no longer approved or current in Room 08.') : !pkg ? 'Approve the package (Room 09) for the approved preview.' : pkg.renderId !== scope.source.renderId ? 'The approved package belongs to another render.' : null;
+    return {current: !reason, staleReason: reason, packageApprovalId: pkg?.id || null, packageRevision: pkg?.revision || null};
+  }
+  masterApproval(row) {
+    const approval = this.db.prepare('SELECT * FROM master_approvals WHERE render_id=? ORDER BY created_at DESC LIMIT 1').get(row.id);
+    if (!approval) return null;
+    const status = this.masterStatus(row), newer = this.db.prepare("SELECT 1 FROM master_approvals a JOIN render_jobs r ON r.id=a.render_id WHERE r.content_id=? AND a.created_at>? LIMIT 1").get(row.content_id, approval.created_at);
+    const reason = newer ? 'A newer master was approved.' : status.staleReason || (status.packageApprovalId !== approval.package_approval_id ? 'The package approval changed.' : null);
+    return {id: approval.id, approvedBy: approval.approved_by, notes: approval.notes, at: approval.created_at, packageApprovalId: approval.package_approval_id, current: !reason, staleReason: reason};
+  }
+  queueMaster(sourceId, input) {
+    object(input);
+    const by = person(input.requestedBy);
+    return this.store.transaction(() => {
+      const source = this.row(sourceId), scope = JSON.parse(source.scope);
+      requireValue(source.preset === 'proxy' && source.status === 'completed', 'A final master is made from a finished preview render.', 409);
+      requireValue(this.approvedPreview(source.content_id) === source.id, 'Approve this render in Room 08 (Review & QC) first: the master is made from the preview you approved, and only from the newest one.', 409);
+      const pin = this.pinCheck();
+      requireValue(pin.ok, pin.reason, 409);
+      requireValue(pin.pin.id === scope.ffmpeg.pinId, 'A different FFmpeg build is pinned than the one that made the approved preview. Render and approve a new preview with this build first.', 409);
+      requireValue(scope.rendererVersion === R.RENDERER_VERSION, 'The renderer changed since the approved preview. Render and approve a new preview first.', 409);
+      requireValue(!this.db.prepare("SELECT 1 FROM render_jobs WHERE content_id=? AND status IN ('queued','running')").get(source.content_id), 'A render for this script is already queued or running.', 409);
+      const verdict = this.qcReport(source.id).verdict, id = randomUUID(), at = now();
+      const master = {...scope, source: {renderId: source.id, reviewer: verdict.reviewer, approvedAt: verdict.at, videoSha256: JSON.parse(source.result).video.sha256}};
+      this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'master','queued',?,0,?,?,?)").run(id, source.family_id, source.content_id, source.visual_approval_id, JSON.stringify(master), by, at, at);
+      this.store.event(`Queued the final master for "${this.store.content(source.content_id).title}" from the preview approved by ${verdict.reviewer}`);
+      return this.publicJob(this.row(id));
+    });
+  }
+  // The owner's final decision on the master: by name, after the checks on the real master file, with the approved
+  // package. Checks that prove the file is sound and is what was approved can never be accepted away.
+  approveMaster(id, input) {
+    object(input);
+    const by = person(input.approvedBy, 'Your name');
+    return this.store.transaction(() => {
+      const row = this.row(id);
+      requireValue(row.preset === 'master' && row.status === 'completed', 'Only a finished final master can be approved.', 409);
+      requireValue(!this.db.prepare('SELECT 1 FROM master_approvals WHERE render_id=?').get(id), 'This master is already approved.', 409);
+      const status = this.masterStatus(row);
+      requireValue(status.current, status.staleReason, 409);
+      for (const kind of ['video', 'manifest']) this.file(id, kind);
+      const result = JSON.parse(row.result), blocking = result.qc.filter(check => !check.passed && MASTER_BLOCKING.includes(check.name));
+      requireValue(!blocking.length, `The master cannot be approved: ${blocking[0]?.name} - ${blocking[0]?.detail}`, 409);
+      const c = object(input.confirmations, 'Confirmations');
+      for (const [key, message] of [['spotChecked', 'Confirm that you watched the opening, a middle part and the ending of the master at full quality.'], ['listened', 'Confirm that you listened to the master\'s sound.'], ['packageMatches', 'Confirm that the approved title and thumbnail fit this master.']]) requireValue(c[key] === true, message);
+      if (!result.qcPassed) requireValue(c.qcAccepted === true, 'Accept the remaining check findings listed for this master, or fix them first.');
+      const approvalId = randomUUID();
+      this.db.prepare('INSERT INTO master_approvals(id,render_id,source_render_id,package_approval_id,approved_by,notes,confirmations,created_at) VALUES(?,?,?,?,?,?,?,?)')
+        .run(approvalId, id, JSON.parse(row.scope).source.renderId, status.packageApprovalId, by, text(input.notes || '', 'Notes', 0, 2000), JSON.stringify({spotChecked: true, listened: true, packageMatches: true, qcAccepted: c.qcAccepted === true}), now());
+      this.store.event(`Final master for "${this.store.content(row.content_id).title}" approved by ${by}`);
+      return this.publicJob(this.row(id));
+    });
+  }
   retry(id, input) {
     object(input);
     return this.store.transaction(() => {
@@ -192,7 +280,7 @@ class RenderRoom {
       requireValue(['failed', 'interrupted', 'cancelled', 'stale'].includes(row.status), `A ${row.status} render cannot be retried.`, 409);
       requireValue(row.attempts < 3, 'This render already used 3 attempts. Start a new render.', 409);
       this.db.prepare("UPDATE render_jobs SET status='queued', error=NULL, progress=NULL, updated_at=? WHERE id=?").run(now(), id);
-      this.store.event(`Requeued proxy render ${id}`);
+      this.store.event(row.preset === 'master' ? `Requeued the final master ${id.slice(0, 8)} (finished parts are checked and reused)` : `Requeued proxy render ${id}`);
       return this.publicJob(this.row(id));
     });
   }
@@ -203,6 +291,9 @@ class RenderRoom {
     requireValue(ACTIVE.includes(row.status), 'Only a queued or running render can be cancelled.', 409);
     if (row.status === 'queued') {
       this.db.prepare("UPDATE render_jobs SET status='cancelled', error=?, updated_at=? WHERE id=? AND status='queued'").run(`Cancelled by ${by} before it started.`, now(), id);
+      // A cancelled master gives up the parts it kept from an earlier attempt.
+      this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(id);
+      fs.rmSync(path.join(this.renderDir, '.work', id), {recursive: true, force: true});
     } else if (this.current?.id === id) {
       this.current.cancelledBy = by;
       this.current.handle?.kill('cancelled');
@@ -221,6 +312,10 @@ class RenderRoom {
       }
       if (scope.edit && !this.editing?.isLatest(scope.edit.revisionId)) {
         this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run('The edit changed after this render was queued. Render the newest revision.', at, row.id);
+        return null;
+      }
+      if (row.preset === 'master' && this.approvedPreview(row.content_id) !== scope.source.renderId) {
+        this.db.prepare("UPDATE render_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run('The preview this master is made from is no longer the approved one in Room 08. Nothing was rendered.', at, row.id);
         return null;
       }
       const pin = this.pinCheck();
@@ -246,6 +341,17 @@ class RenderRoom {
     this.current = {id: job.id, handle: null, cancelledBy: null};
     const work = path.join(this.renderDir, '.work', job.id), finalDir = path.join(this.renderDir, job.family_id, job.content_id, job.id);
     const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
+    // P11: a master renders at the master preset and keeps its verified parts until it finishes or is cancelled.
+    const preset = R.PRESETS[job.preset] || R.PRESETS.proxy, master = job.preset === 'master';
+    let keepWork = false;
+    // Runs a part, or reuses it when a master already finished it (same command, same checksum).
+    const part = async (key, file, command, make) => {
+      const done = master ? this.stageDone(job.id, key, file, command) : null;
+      if (done) { logs.push({step: `reused ${key}`, ok: true, stderr: ''}); return done.meta; }
+      const meta = await make();
+      if (master) this.stageRecord(job.id, key, file, command, meta || null);
+      return meta;
+    };
     const exec = async (label, command, args, timeout, cwd) => {
       if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
       try {
@@ -260,7 +366,7 @@ class RenderRoom {
       }
     };
     try {
-      fs.rmSync(work, {recursive: true, force: true});
+      if (!master || !this.stagesOf(job.id)) fs.rmSync(work, {recursive: true, force: true});
       fs.mkdirSync(work, {recursive: true});
       // 1. Every input must still match the checksum recorded when it was approved.
       let narrationFile = this.localFile(scope.narration.relativePath);
@@ -310,7 +416,7 @@ class RenderRoom {
         requireValue(fs.existsSync(file) && R.fileSha256(file) === shot.sha256, `${shot.label}: the approved visual file is missing or changed.`, 409);
         return {...shot, file};
       });
-      const out = path.join(work, 'proxy.mp4');
+      const out = path.join(work, `${preset.name}.mp4`);
       let plan, motionInfo = null;
       const drawnInfo = [];
       if (scope.edit) {
@@ -330,7 +436,7 @@ class RenderRoom {
         Sk.carry(ordered);
         const carried = Object.fromEntries(ordered.filter(item => item.sketch).map(item => [item.clipId, item.sketch]));
         if (drawings.length) {
-          const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], tl = scope.edit.timeline, fps = Math.min(tl.fps, R.PRESETS.proxy.maxFps);
+          const size = preset[scope.format] || preset['long-form'], tl = scope.edit.timeline, fps = Math.min(tl.fps, preset.maxFps);
           const spec = scope.style.spec, spoken = (tl.captions?.groups || []).flatMap(group => group.words);
           // Lossless PNG frames, drawn by up to three local browsers side by side (each frame stays a pure function of
           // its shot, so parallel drawing changes nothing in the picture).
@@ -357,6 +463,8 @@ class RenderRoom {
                 vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
               }
             };
+            const kept = master ? this.stageDone(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}) : null;
+            if (kept) { files[clipId] = path.join(work, file); drawnInfo.push({clipId, label: clip.label, ...kept.meta, index: k}); logs.push({step: `reused drawing ${clip.label}`, ok: true, stderr: ''}); this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total); return; }
             let drawn;
             try { drawn = await drawIt(); } catch (error) {
               if (!/did not answer|did not start/i.test(String(error.message))) throw error;
@@ -371,6 +479,7 @@ class RenderRoom {
             fs.rmSync(path.join(work, folder), {recursive: true, force: true});
             files[clipId] = path.join(work, file);
             drawnInfo.push({clipId, label: clip.label, frames: drawn.frames, framesSha256: drawn.sha256, index: k});
+            if (master) this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}, {frames: drawn.frames, framesSha256: drawn.sha256});
             this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total);
           };
           try {
@@ -391,7 +500,7 @@ class RenderRoom {
         const canvasGraphics = scope.edit.timeline.graphics.filter(item => item.status === 'accepted' && B.CANVAS_TEMPLATES.includes(item.template));
         const overlays = [];
         if (canvasGraphics.length) {
-          const size = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'], fps = Math.min(scope.edit.timeline.fps, R.PRESETS.proxy.maxFps);
+          const size = preset[scope.format] || preset['long-form'], fps = Math.min(scope.edit.timeline.fps, preset.maxFps);
           const spec = scope.style.spec, renderer = new MotionRenderer({browser: this.browser});
           this.current.handle = {kill: () => { renderer.close(); }};
           try {
@@ -400,6 +509,9 @@ class RenderRoom {
               if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
               this.progress(job.id, `drawing ${graphic.template} ${k + 1} of ${canvasGraphics.length}`, 0, total);
               const frames = Math.max(1, Math.round(graphic.frames * fps / scope.edit.timeline.fps)), dir = path.join(work, `graphic-${k + 1}`);
+              const graphicCommand = {graphic: createHash('sha256').update(JSON.stringify(graphic)).digest('hex'), size, fps, frames, style: scope.style.specHash};
+              const keptGraphic = master ? this.stageDone(job.id, `graphic:${graphic.id}`, path.join(work, `graphic-${k + 1}.mov`), graphicCommand) : null;
+              if (keptGraphic) { overlays.push({file: `graphic-${k + 1}.mov`, start: graphic.start, frames, graphicId: graphic.id, template: graphic.template, framesSha256: keptGraphic.meta.framesSha256}); continue; }
               const drawn = await renderer.render({template: graphic.template, data: B.canvasData(graphic.template, graphic.title, graphic.lines), finish: graphic.finish || 'clean', vertical: scope.format === 'shorts',
                 palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
                 width: size.width, height: size.height, fps, duration: frames / fps, outDir: dir});
@@ -407,6 +519,7 @@ class RenderRoom {
               await exec(`pack ${graphic.template}`, job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(`graphic-${k + 1}`, 'f%05d.png'), '-c:v', 'png', '-pix_fmt', 'rgba', '-fflags', '+bitexact', '-map_metadata', '-1', '-y', clip], Math.max(60000, frames * 200), work);
               fs.rmSync(dir, {recursive: true, force: true});
               overlays.push({file: clip, start: graphic.start, frames, graphicId: graphic.id, template: graphic.template, framesSha256: drawn.sha256});
+              if (master) this.stageRecord(job.id, `graphic:${graphic.id}`, path.join(work, clip), graphicCommand, {framesSha256: drawn.sha256});
             }
             motionInfo = {browser: renderer.version, path: path.basename(this.browser), graphics: overlays.map(item => ({graphicId: item.graphicId, template: item.template, frames: item.frames, framesSha256: item.framesSha256}))};
           } finally {
@@ -414,25 +527,26 @@ class RenderRoom {
             this.current.handle = null;
           }
         }
-        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss, overlays, look: this.lookOf(scope)});
+        plan = R.planTimeline({timeline: scope.edit.timeline, files, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, format: scope.format, preset, workDir: work, outFile: out, graphics: !!scope.edit.graphicsAss, overlays, look: this.lookOf(scope)});
       } else {
-        plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, workDir: work, outFile: out, look: this.lookOf(scope)});
+        plan = R.planProxy({shots, narration: {file: narrationFile, durationSeconds: scope.narration.durationSeconds}, spec: scope.style.spec, format: scope.format, preset, workDir: work, outFile: out, look: this.lookOf(scope)});
       }
       // 2. One segment per shot or clip, frame-exact.
       for (const segment of plan.segments) {
         this.progress(job.id, `rendering ${segment.label}`, segment.index + 1, total);
-        await exec(`segment ${segment.label}`, job.paths.ffmpeg, segment.args, Math.max(60000, (segment.frames + segment.extraFrames) * 400));
+        await part(`segment:${segment.index}`, segment.file, segment.args, () => exec(`segment ${segment.label}`, job.paths.ffmpeg, segment.args, Math.max(60000, (segment.frames + segment.extraFrames) * (master ? 1200 : 400))).then(() => null));
       }
       // 3. Assemble with the narration (an edit first joins its runs of hard cuts losslessly).
       this.progress(job.id, 'assembling with narration', plan.segments.length + 1, total);
       for (const chunk of plan.chunks || []) {
         fs.writeFileSync(chunk.listFile, chunk.list);
-        await exec(`join ${chunk.file}`, job.paths.ffmpeg, chunk.args, Math.max(60000, chunk.frames * 20), work);
+        await part(`chunk:${chunk.file}`, path.join(work, chunk.file), {args: chunk.args, list: chunk.list}, () => exec(`join ${chunk.file}`, job.paths.ffmpeg, chunk.args, Math.max(60000, chunk.frames * 20), work).then(() => null));
       }
       if (plan.final.mode === 'concat') fs.writeFileSync(plan.final.listFile, plan.final.list);
-      await exec('assemble', job.paths.ffmpeg, plan.final.args, Math.max(120000, plan.totalFrames * 200), plan.final.mode === 'edit' ? work : undefined);
+      // The final file depends on the finished sound too, so its record carries the sound file's checksum.
+      await part('final', out, {args: plan.final.args, sound: R.fileSha256(narrationFile)}, () => exec('assemble', job.paths.ffmpeg, plan.final.args, Math.max(120000, plan.totalFrames * (master ? 600 : 200)), plan.final.mode === 'edit' ? work : undefined).then(() => null));
       // 4. Technical QC on the real file.
-      this.progress(job.id, 'checking the proxy', plan.segments.length + 2, total);
+      this.progress(job.id, master ? 'checking the master' : 'checking the proxy', plan.segments.length + 2, total);
       const probe = await VS.probeMedia(out, job.paths.ffprobe);
       const streams = JSON.parse((await exec('ffprobe streams', job.paths.ffprobe, ['-v', 'error', '-show_streams', '-of', 'json', out], 60000)).stdout).streams || [];
       const audio = streams.find(stream => stream.codec_type === 'audio');
@@ -493,6 +607,14 @@ class RenderRoom {
         ...(audioInfo ? audioInfo.output.checks : []),
         ...(clipping ? [clipping] : []),
       ];
+      // P11: the master is checked for YouTube's upload format and compared frame by frame with the approved preview.
+      if (master) {
+        checks.push(R.deliveryCheck(streams, R.atomOrder(out), {width: plan.preset.width, height: plan.preset.height, fps: plan.preset.fps}));
+        const preview = this.file(scope.source.renderId, 'video'), previewSize = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'];
+        requireValue(R.fileSha256(preview.file) === scope.source.videoSha256, 'The approved preview file changed.', 409);
+        await exec('compare with the approved preview', job.paths.ffmpeg, R.ssimArgs(out, preview.file, previewSize, 'ssim.log'), Math.max(120000, plan.totalFrames * 200), work);
+        checks.push(R.previewMatch(fs.readFileSync(path.join(work, 'ssim.log'), 'utf8'), Math.min(plan.preset.fps, R.PRESETS.proxy.maxFps)));
+      }
       // 5. Contact sheet for review.
       this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);
       let every = qc.contactSheetEverySeconds;
@@ -509,8 +631,9 @@ class RenderRoom {
       const sheetSize = async file => JSON.parse((await exec('sheet size', job.paths.ffprobe, ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'json', file], 30000)).stdout).streams[0];
       // 6. Immutable outputs and manifest.
       this.progress(job.id, 'saving', total, total);
+      fs.rmSync(finalDir, {recursive: true, force: true});
       fs.mkdirSync(finalDir, {recursive: true});
-      const video = path.join(finalDir, 'proxy.mp4'), sheetFinal = path.join(finalDir, 'contact-sheet.jpg'), hookFinal = path.join(finalDir, 'hook-sheet.jpg');
+      const video = path.join(finalDir, `${preset.name}.mp4`), sheetFinal = path.join(finalDir, 'contact-sheet.jpg'), hookFinal = path.join(finalDir, 'hook-sheet.jpg');
       const sheetGrid = R.sheetGeometry(await sheetSize(sheet), cols, rows), hookGrid = R.sheetGeometry(await sheetSize(hook), hookCols, hookRows);
       fs.renameSync(out, video);
       fs.renameSync(sheet, sheetFinal);
@@ -543,18 +666,22 @@ class RenderRoom {
       };
       this.store.transaction(() => {
         this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
-        this.store.event(`Proxy render ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
+        this.store.event(`${master ? 'Final master' : 'Proxy render'} ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
+        if (master) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
       });
-      this.onRendered?.(job.id);
+      // Claude's frame scan reviews previews; the master is compared with the reviewed preview instead.
+      if (!master) this.onRendered?.(job.id);
       return this.publicJob(this.row(job.id));
     } catch (error) {
       const cancelled = !!error.cancelled || !!this.current.cancelledBy;
       const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : 'The render failed.';
-      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
+      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', master && !cancelled ? `${message} Finished parts are kept; a retry continues from them.` : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
       fs.rmSync(finalDir, {recursive: true, force: true});
+      if (master && cancelled) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
+      keepWork = master && !cancelled;
       return null;
     } finally {
-      fs.rmSync(work, {recursive: true, force: true});
+      if (!keepWork) fs.rmSync(work, {recursive: true, force: true});
       this.current = null;
       this.busy = false;
     }
@@ -648,7 +775,10 @@ class RenderRoom {
         return {
           contentId: content.id, familyId: content.familyId, title: content.title, contentRevision: content.revision,
           inputs: {ready: inputs.ready, blockers: inputs.blockers, visualApprovalId: inputs.visual.approvalId || null, shots: inputs.visual.shots || 0, style: inputs.spec ? {name: inputs.spec.name, adapter: inputs.spec.renderer.adapter, transition: inputs.spec.transitions.default, fps: inputs.spec.canvas.frameRate} : null, narrationSeconds: inputs.voice?.analysis?.durationSeconds ?? null},
-          renders: this.db.prepare('SELECT * FROM render_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 10').all(content.id).map(row => this.publicJob(row)),
+          renders: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='proxy' ORDER BY created_at DESC, rowid DESC LIMIT 10").all(content.id).map(row => this.publicJob(row)),
+          // P11: the final masters, and what a new one would be made from.
+          masters: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='master' ORDER BY created_at DESC, rowid DESC LIMIT 5").all(content.id).map(row => this.publicJob(row)),
+          masterFrom: (() => { const id = this.approvedPreview(content.id), pkg = this.packaging?.currentApproval(content.id) || null; return {previewId: id, packageApproval: pkg && pkg.renderId === id ? {id: pkg.id, revision: pkg.revision, approvedBy: pkg.approvedBy} : null}; })(),
         };
       }),
     };

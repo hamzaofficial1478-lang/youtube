@@ -694,6 +694,87 @@ test('Room 09 packages an approved video: thumbnails from the board, honest chec
   assert.equal(room.state().contents.find(item => item.contentId === content.id).latest.revision, 4);
 });
 
+// P11: the final master is made only from the preview approved in Room 08 (with its package), checked for YouTube's
+// upload format and against that preview frame by frame, approved by name, and goes out of date when its package
+// changes; a master that stops half way continues from its checked parts and gives the same file.
+test('Room 10 renders the final master from the approved preview, checks it, resumes from verified parts and is approved by name', {skip}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, renders, store, content, scenes, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  const readiness = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: readiness.id, pinnedBy: 'Owner', reason: 'Reviewed build for the master.'});
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const preview = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  await renders.processNext();
+  const room = new PackagingRoom(store, scenes, renders, editing, new ConnectorSlots(store, {transform: (op, input) => input}), {complete: async () => { throw new Error('not used'); }}, {dataRoot});
+  renders.packaging = room;
+  assert.throws(() => renders.queueMaster(preview.id, {requestedBy: 'Owner'}), /Room 08/, 'the master is made only from an approved preview');
+  renders.review(preview.id, {decision: 'pass', reviewer: 'Owner', confirmations: {watchedFully: true, styleMatches: true, syncReviewed: true, qcAccepted: true, critiqueAccepted: true, audioReviewed: true}});
+  const pkg = await room.startFromScript(content.id, {requestedBy: 'Owner'});
+  const approvedPackage = room.approve(pkg.id, {approvedBy: 'Owner', confirmations: {titleHonest: true, thumbnailChecked: true, disclosureReviewed: true, creditsReviewed: true}});
+  assert.equal(approvedPackage.approval.current, true);
+
+  const queued = renders.queueMaster(preview.id, {requestedBy: 'Owner'});
+  assert.equal(queued.preset, 'master');
+  assert.throws(() => renders.queueMaster(preview.id, {requestedBy: 'Owner'}), /already queued/);
+  const done = await renders.processNext();
+  assert.equal(done.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.deepEqual([result.preset.name, result.video.probe.width, result.video.probe.height], ['master', 1080, 1920]);
+  const check = name => result.qc.find(item => item.name === name);
+  assert.equal(check('delivery format').passed, true, check('delivery format').detail);
+  assert.equal(check('matches the approved preview').passed, true, check('matches the approved preview').detail);
+  assert.ok(check('matches the approved preview').mean > 0.9);
+  assert.equal(fs.existsSync(path.join(dataRoot, 'renders', '.work', queued.id)), false, 'a finished master leaves no work files');
+  assert.equal(renders.stagesOf(queued.id), 0, 'and no kept parts');
+  // The master lives in Room 10, not among the previews of Room 05 and Room 08.
+  const roomState = renders.state().contents.find(item => item.contentId === content.id);
+  assert.deepEqual([roomState.renders.every(job => job.preset === 'proxy'), roomState.masters[0].id, roomState.masterFrom.previewId], [true, queued.id, preview.id]);
+
+  // The owner's decision, by name, on the real master.
+  assert.throws(() => renders.approveMaster(queued.id, {approvedBy: 'Owner', confirmations: {spotChecked: true, listened: true}}), /title and thumbnail/);
+  const approvedMaster = renders.approveMaster(queued.id, {approvedBy: 'Owner', notes: 'Ready to upload.', confirmations: {spotChecked: true, listened: true, packageMatches: true, qcAccepted: true}});
+  assert.deepEqual([approvedMaster.master.approval.current, approvedMaster.master.approval.approvedBy], [true, 'Owner']);
+  assert.throws(() => renders.approveMaster(queued.id, {approvedBy: 'Owner', confirmations: {spotChecked: true, listened: true, packageMatches: true}}), /already approved/);
+  assert.throws(() => store.db.prepare('UPDATE master_approvals SET notes=?').run('x'), /immutable/);
+  // A new package revision makes the approved master out of date.
+  await room.save(content.id, {createdBy: 'Owner', expectedRevision: pkg.revision, package: {...pkg.payload, tags: [...pkg.payload.tags, 'clay tokens']}});
+  const stale = renders.publicJob(renders.row(queued.id)).master;
+  assert.deepEqual([stale.current, stale.approval.current], [false, false]);
+  assert.match(stale.approval.staleReason, /package/i);
+
+  // Recovery: a master that fails half way keeps its checked parts; one that was running when the program stopped is
+  // marked interrupted with its parts kept; the retry reuses them and makes the same file.
+  const latest = room.latestRow(content.id);
+  room.approve(latest.id, {approvedBy: 'Owner', confirmations: {titleHonest: true, thumbnailChecked: true, disclosureReviewed: true, creditsReviewed: true}});
+  const second = renders.queueMaster(preview.id, {requestedBy: 'Owner'});
+  const record = renders.stageRecord.bind(renders);
+  let recorded = 0;
+  renders.stageRecord = (...args) => { record(...args); if (++recorded === 2) throw new Error('simulated power cut'); };
+  assert.equal(await renders.processNext(), null);
+  renders.stageRecord = record;
+  assert.equal(renders.row(second.id).status, 'failed');
+  assert.equal(renders.stagesOf(second.id), 2, 'the finished parts are kept');
+  assert.ok(fs.existsSync(path.join(dataRoot, 'renders', '.work', second.id)), 'with their files');
+  store.db.prepare("UPDATE render_jobs SET status='running' WHERE id=?").run(second.id);
+  renders.recoverInterrupted();
+  assert.equal(renders.row(second.id).status, 'interrupted');
+  assert.match(renders.row(second.id).error, /finished parts are kept/);
+  assert.ok(fs.existsSync(path.join(dataRoot, 'renders', '.work', second.id)), 'an interrupted master keeps its work after a restart');
+  // A kept part whose file changed is never reused: it is made again.
+  const kept = store.db.prepare('SELECT file FROM render_stages WHERE job_id=? ORDER BY created_at').all(second.id);
+  fs.appendFileSync(path.join(dataRoot, 'renders', '.work', second.id, kept[0].file), 'x');
+  renders.retry(second.id, {requestedBy: 'Owner'});
+  const resumed = await renders.processNext();
+  assert.equal(resumed.status, 'completed', JSON.stringify(renders.publicJob(renders.row(second.id)).error));
+  const secondResult = JSON.parse(renders.row(second.id).result);
+  assert.equal(secondResult.logs.filter(item => /^reused /.test(item.step)).length, 1, 'only the unchanged part was reused');
+  assert.equal(secondResult.video.sha256, result.video.sha256, 'a resumed master is byte for byte the master made in one go');
+  const approvedSecond = renders.approveMaster(second.id, {approvedBy: 'Owner', confirmations: {spotChecked: true, listened: true, packageMatches: true, qcAccepted: true}});
+  assert.equal(approvedSecond.master.approval.current, true);
+  assert.match(renders.publicJob(renders.row(queued.id)).master.approval.staleReason, /newer master/, 'the newer approved master supersedes the older');
+});
+
 test('HTTP edit routes need the local token and expose the room in state', async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'editing-http-'));
   const {server} = createApp({dataFile: path.join(dir, 'workspace.sqlite'), worker: false, protector: {transform: (op, input) => Buffer.from([...input].reverse())}, voiceOptions: {ffmpeg: 'missing-ffmpeg-for-test', ffprobe: 'missing-ffprobe-for-test'}});

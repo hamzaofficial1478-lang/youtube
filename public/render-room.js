@@ -6,7 +6,7 @@
 let renderContentId = '';
 const RENDER_STATUS = {queued: ['Queued', 'orange'], running: ['Rendering', 'orange'], completed: ['Rendered', 'green'], failed: ['Failed', 'gray'], cancelled: ['Cancelled', 'gray'], interrupted: ['Interrupted', 'orange'], stale: ['Stale', 'gray']};
 const renderBadge = status => { const [label, color] = RENDER_STATUS[status] || [status, 'gray']; return badge(label, color); };
-function renderBusy() { const renders = state?.renders; return !!renders && (renders.checking || renders.contents.some(content => content.renders.some(job => ['queued', 'running'].includes(job.status)))); }
+function renderBusy() { const renders = state?.renders; return !!renders && (renders.checking || renders.contents.some(content => [...content.renders, ...(content.masters || [])].some(job => ['queued', 'running'].includes(job.status)))); }
 function renderPerson() { try { return localStorage.getItem('control-room-person') || ''; } catch { return ''; } }
 function renderRemember(name) { try { if (name) localStorage.setItem('control-room-person', name); } catch { /* optional */ } }
 const renderNameField = (label = 'Your name') => `<label>${label}<input name="person" required minlength="2" maxlength="80" autocomplete="name" value="${esc(renderPerson())}"></label>`;
@@ -114,6 +114,8 @@ document.getElementById('render-form').addEventListener('submit', event => {
     if (kind === 'scan') { await api(`/api/renders/${data.id}/frame-scan`, {requestedBy: person, connector: data.connector, again: data.again}); message = 'Claude frame scan queued.'; return; }
     if (kind === 'scan-retry') { await api(`/api/frame-scans/${data.scanId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Frame scan requeued.'; return; }
     if (kind === 'scan-auto') { await api(`/api/families/${data.familyId}/frame-scan-settings`, {updatedBy: person, auto: data.auto, connector: data.connector}); message = data.auto ? 'Every new render will be scanned by Claude.' : 'Automatic scan switched off.'; return; }
+    if (kind === 'master-start') { await api(`/api/renders/${data.id}/master`, {requestedBy: person}); message = 'Final master queued.'; return; }
+    if (kind === 'master-approve') { await api(`/api/renders/${data.id}/approve-master`, {approvedBy: person, notes: value('notes'), confirmations: {spotChecked: checked('spotChecked'), listened: checked('listened'), packageMatches: checked('packageMatches'), qcAccepted: checked('qcAccepted')}}); message = 'Final master approved.'; return; }
     if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), flaggedReviewed: checked('flaggedReviewed'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), audioReviewed: checked('audioReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
     throw new Error('Unknown form.');
   }, () => message);

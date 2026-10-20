@@ -28,7 +28,7 @@ const craft=require('./craft');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
-const files={ '/audio-room.js':['public/audio-room.js','text/javascript; charset=utf-8'], '/packaging-room.js':['public/packaging-room.js','text/javascript; charset=utf-8'], '/voice-direction.js':['public/voice-direction.js','text/javascript; charset=utf-8'], '/review-room.js':['public/review-room.js','text/javascript; charset=utf-8'], '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
+const files={ '/audio-room.js':['public/audio-room.js','text/javascript; charset=utf-8'], '/packaging-room.js':['public/packaging-room.js','text/javascript; charset=utf-8'], '/master-room.js':['public/master-room.js','text/javascript; charset=utf-8'], '/voice-direction.js':['public/voice-direction.js','text/javascript; charset=utf-8'], '/review-room.js':['public/review-room.js','text/javascript; charset=utf-8'], '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
 function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={},claudeCode=null}={}) {
   // In-memory fixtures must never share media, recovery cleanup or credentials with the owner's program.
   const dataRoot=dataFile===':memory:'?fs.mkdtempSync(path.join(os.tmpdir(),'control-room-memory-')):path.dirname(path.resolve(dataFile));
@@ -51,7 +51,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const frameScanner=new FrameScanner(store,renderRoom,connectors,ai);renderRoom.frameScanner=frameScanner;
   // R05c: the program learns a look from a reference the owner names (a video file or screenshots on this PC).
   const styleStudies=new StyleStudies(store,styles,connectors,ai,renderRoom,{studyDir:path.join(dataRoot,'studies')});
-  const packagingRoom=new PackagingRoom(store,sceneRoom,renderRoom,editingRoom,connectors,ai,{dataRoot});
+  const packagingRoom=new PackagingRoom(store,sceneRoom,renderRoom,editingRoom,connectors,ai,{dataRoot});renderRoom.packaging=packagingRoom;
   const voiceDirector=new VoiceDirector(store,connectors,{ai,competitorIntel,styles});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe});
   editingRoom.soundtrack=soundtrack;
@@ -177,8 +177,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(studyAction&&req.method==='POST'){const [,id,kind]=studyAction;return json(res,200,kind==='retry'?styleStudies.retry(id,body):kind==='review'?styleStudies.review(id,body):styleStudies.styleDraft(id,body));}
         const scanSettings=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/frame-scan-settings$/);
         if(scanSettings&&req.method==='POST')return json(res,200,frameScanner.saveSettings(scanSettings[1],body));
-        const renderAction=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(cancel|retry|review)$/);
-        if(renderAction&&req.method==='POST'){const [,id,kind]=renderAction;return json(res,200,kind==='cancel'?renderRoom.cancel(id,body):kind==='retry'?renderRoom.retry(id,body):renderRoom.review(id,body));}
+        const renderAction=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(cancel|retry|review|master|approve-master)$/);
+        if(renderAction&&req.method==='POST'){const [,id,kind]=renderAction;return json(res,200,kind==='cancel'?renderRoom.cancel(id,body):kind==='retry'?renderRoom.retry(id,body):kind==='master'?renderRoom.queueMaster(id,body):kind==='approve-master'?renderRoom.approveMaster(id,body):renderRoom.review(id,body));}
         const visualSettings=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/visual-settings$/);
         if(visualSettings&&req.method==='POST')return json(res,200,sceneRoom.saveSettings(visualSettings[1],body));
         const scenePlan=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plans$/);

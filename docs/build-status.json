@@ -1,7 +1,7 @@
 {
-  "version": "0.41.0",
-  "updated": "2026-10-19",
-  "nextAction": "Owner: restart the program, review the new word colours, natural media, caption looks and the studio-craft skills (approve the pack if it fits); then scripts, competitor finding, trending topics and competitor top-video analysis with the owner's collected data (decide how competitor videos may be read: owner-provided files only, or another route).",
+  "version": "0.42.0",
+  "updated": "2026-10-20",
+  "nextAction": "Owner: restart the program and walk one video through Rooms 01-10 with real material (the primary-language production proof), then approve its master in Room 10. Next build step: localization (L01-L03) or the parked script and competitor work, as the owner decides.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -134,7 +134,7 @@
   ],
   "phases": [
     {
-      "title": "01 · Local foundation",
+      "title": "01 \u00b7 Local foundation",
       "goal": "A dependable local workspace that preserves every draft and distinguishes planning from live automation.",
       "tasks": [
         {
@@ -177,12 +177,12 @@
           "id": "F07",
           "title": "Family competitor channels",
           "status": "done",
-          "evidence": "2026-10-04: families store 0-10 validated competitor channels (@handle, UC… ID, /channel/, /user/ links; duplicates, video, /c/ and non-YouTube links rejected). Edits keep approved scripts. 3 automated checks in tests/competitors.test.js."
+          "evidence": "2026-10-04: families store 0-10 validated competitor channels (@handle, UC\u2026 ID, /channel/, /user/ links; duplicates, video, /c/ and non-YouTube links rejected). Edits keep approved scripts. 3 automated checks in tests/competitors.test.js."
         }
       ]
     },
     {
-      "title": "02 · Accounts and research",
+      "title": "02 \u00b7 Accounts and research",
       "goal": "Approved data access and evidence-led research without invented metrics.",
       "tasks": [
         {
@@ -220,7 +220,7 @@
           "title": "Style studies: the program learns a reference video's look from frames on this PC (measured rhythm and colours, Claude study, 30/70 and copy guard, named approval, style draft with a planning brief)",
           "status": "testing",
           "remaining": "A study of a real competitor video file; planning a video with a learned style draft; the owner's verdict.",
-          "evidence": "0.30.0 (2026-10-15): live study of our own preview (37 s, 7,757 tokens) mapped to Stickman · Whiteboard with 5 learned techniques and 12 of our own; dialog checked in the browser; npm test 263/263 passed."
+          "evidence": "0.30.0 (2026-10-15): live study of our own preview (37 s, 7,757 tokens) mapped to Stickman \u00b7 Whiteboard with 5 learned techniques and 12 of our own; dialog checked in the browser; npm test 263/263 passed."
         },
         {
           "id": "R06",
@@ -231,7 +231,7 @@
       ]
     },
     {
-      "title": "03 · Original scripts and production",
+      "title": "03 \u00b7 Original scripts and production",
       "goal": "A sourced primary-language master becomes a real, reviewable video.",
       "tasks": [
         {
@@ -460,7 +460,7 @@
           "id": "P09",
           "title": "Review & QC Room with video intelligence",
           "status": "testing",
-          "remaining": "Not yet proven on real owner material. Final masters (P11) need the same review on the master file. Text-safe areas are kept by fixed layouts, not measured in pixels. Claude's scan reads sampled frames of the 360p preview; a clean scan is not a guarantee.",
+          "remaining": "Not yet proven on real owner material. Final masters (P11, 0.42) get the same checks plus the upload format and a frame-by-frame match with the reviewed preview; Claude does not rescan masters. Text-safe areas are kept by fixed layouts, not measured in pixels. Claude's scan reads sampled frames of the 360p preview; a clean scan is not a guarantee.",
           "evidence": "0.16.0 (2026-10-08): Room 08 Review & QC. Renders add full decode, audio/video alignment, clipping (without a narration finish), a dense hook contact sheet and tile geometry; black/frozen/unplanned-cut checks keep time spans. review.js (pure) builds one timecoded issue list (render checks per moment, the critic, captions caption by caption with narration coverage) with repair links, a sentence-by-sentence aligned read with frame thumbnails, and blockers (out of date, changed files, failed or missing decode proof) that the verdict cannot accept. The style-proof verdict stays the only approval, now opened from Room 08. Failing fixtures: truncated and damaged MP4s fail the decode, a 0.5 s audio shift fails alignment; verdict invalidation tested. Full suite and browser checks recorded in BUILD-PROGRESS.md. 0.17.0: Claude frame scan (frame-scan.js): frames at every clip, graphic and hook half-second, contact sheets from the pinned FFmpeg, per-answer token reservation, kept answers, findings with frames and repair links in the review, optional named per-family automatic scan; after a completed scan the verdict may confirm flagged moments instead of a full watch. Videos of any length: targetMinutes 1-180 scales the script, job token limit, streamed answers, scene planning in parts, narration and render limits; a 25.5-minute synthetic edit rendered and reviewed with every check passing."
         },
         {
@@ -473,20 +473,21 @@
         {
           "id": "P11",
           "title": "Final render, recovery and primary master approval",
-          "status": "planned",
-          "remaining": "Render from the exact approved inputs, resume only verified stages, reconcile unknown external outcomes, invalidate stale downstream approvals, and require a human decision on the final primary-language master."
+          "status": "testing",
+          "remaining": "Not yet proven on real owner material or a long video (drawn shots at full size for many minutes); publishing (Y01-Y02) will attach the approved master and package.",
+          "evidence": "0.42.0 (2026-10-20): Room 10. The final master renders only from the preview approved in Room 08 with its approved package, the same pinned FFmpeg build and renderer; YouTube upload preset (H.264 High, 1080p, AAC 384 kb/s stereo, fast start); checks for the upload format and a frame-by-frame match with the preview (SSIM); finished parts recorded with checksums so a stopped or failed master resumes from verified parts and gives a byte-identical file; immutable named approval that goes stale with the preview, the package or a newer master. Tested with real FFmpeg (tests/editing.test.js Room 10) and in the browser on a throwaway workspace (a 20-s 1080p master passed all 11 checks, similarity 0.978; approval refused without confirmations, recorded with them, shown out of date after a package change). npm test 310/310 passed."
         }
       ]
     },
     {
-      "title": "04 · Optional configured-language editions",
+      "title": "04 \u00b7 Optional configured-language editions",
       "goal": "Reuse the visual master while preserving meaning, natural voice and scene timing.",
       "tasks": [
         {
           "id": "L01",
           "title": "Scene translation and local packaging",
           "status": "planned",
-          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails only for each family’s configured additional locales; keep every locale independently retryable."
+          "remaining": "Adapt scripts, visible text, titles, descriptions and thumbnails only for each family\u2019s configured additional locales; keep every locale independently retryable."
         },
         {
           "id": "L02",
@@ -503,7 +504,7 @@
       ]
     },
     {
-      "title": "05 · Controlled publishing",
+      "title": "05 \u00b7 Controlled publishing",
       "goal": "Publish the right approved version to the right channel without duplicates.",
       "tasks": [
         {
@@ -527,7 +528,7 @@
       ]
     },
     {
-      "title": "06 · Learning and portfolio scale",
+      "title": "06 \u00b7 Learning and portfolio scale",
       "goal": "Use actual owner evidence and measured capacity to reach 10-15 families.",
       "tasks": [
         {
@@ -570,5 +571,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Word colour, natural media, motion blur, fonts and eight repositories (P06v)"
+  "milestone": "Room 10 Render & Recovery: the final master (P11)"
 }

@@ -254,6 +254,12 @@ class PackagingRoom {
     const reason = latest.id !== row.id ? 'A newer package revision was saved.' : content.revision !== approval.content_revision || content.state !== 'approved' ? 'The script changed.' : render?.id !== approval.render_id ? 'The approved render changed or is no longer approved.' : null;
     return {id: approval.id, approvedBy: approval.approved_by, notes: approval.notes, at: approval.created_at, renderId: approval.render_id, current: !reason, staleReason: reason};
   }
+  // The package approval that stands now for a script (P11 attaches the final master to it): the newest revision's
+  // approval while it is current.
+  currentApproval(contentId) {
+    const latest = this.latestRow(contentId), approval = latest ? this.approvalFor(latest) : null;
+    return approval?.current ? {id: approval.id, revision: latest.revision, renderId: approval.renderId, approvedBy: approval.approvedBy, at: approval.at} : null;
+  }
   thumbnailFile(revisionId, thumbId) {
     const images = JSON.parse(this.revisionRow(revisionId).images), image = images[thumbId];
     requireValue(image, 'Thumbnail not found.', 404);
