@@ -147,6 +147,17 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Implementation log
 
+### 2026-10-21 - Retention writing: skills from the owner's screenshots and a "Will viewers stay?" check (0.51.0)
+
+- **Owner request:** use the attached screenshots to make hooks and scripts stronger, understand what viewers love to watch and keep them watching.
+- **Built** (docs/RETENTION-WRITING.md):
+  - `skills/retention-craft.json`: 16 draft skills restated from the screenshots (Kallaway's structure, HOOK/VALUE/SOLUTION/CTA, Paul Hilse's prompts 1-5) plus a viewer model; approve them in Skills → Packs.
+  - `retention.js`: an advice-only check on every draft (no intro in the first 15 seconds, a promise in the first minute, specifics, sections that pull forward, a re-hook, an ending that answers the hook, one call to action at the end).
+  - Creating a family from an approved niche carries the viewers' reasons to stay and leave, and how we win, into the family form.
+- **Checked:** tests/retention.test.js (3 tests) and tests/skills.test.js (436 skills; the new pack validates and passes the quality advice); browser check on a throwaway workspace (the viewer study in the family form; a weak draft 1 of 7 with each problem named, the rewritten draft 7 of 7).
+- npm test (335 tests, 335 passing) passed.
+- **Not tested:** the effect of the approved skills on real Claude scripts.
+
 ### 2026-10-21 - Niche intake by link and screenshot, rising competitors and the go/no-go (0.50.0)
 
 - **Owner request:** niches from pasted links and attached screenshots; about 10 competitors per niche that did well in the last 2-3 months; decide whether to go ahead and how to be different (what competitors miss); viewer analysis.

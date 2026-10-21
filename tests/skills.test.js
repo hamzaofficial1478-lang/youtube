@@ -77,21 +77,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 420, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 160 editing-brain skills');
+  assert.equal(loaded.length, 436, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 420);
+  assert.equal(ids.size, 436);
   const state = skills.state();
-  assert.equal(state.counts.total, 420);
-  assert.equal(state.counts.draft, 420);
+  assert.equal(state.counts.total, 436);
+  assert.equal(state.counts.draft, 436);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 420);
+  assert.equal(state.counts.builtin, 436);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root});
-  assert.equal(second.skills().length, 420);
+  assert.equal(second.skills().length, 436);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -473,7 +473,7 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.skills.counts.total, 420);
+  assert.equal(state.skills.counts.total, 436);
   assert.equal(state.skills.counts.approved, 0);
   assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
@@ -524,6 +524,16 @@ test('0.39: a whole pack is approved in one named review of the exact drafts sho
   assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 9000);
   assert.equal(skills.brief('script.candidate').byteBudget, BRIEF_BYTE_BUDGET, 'other rooms keep the default share');
   assert.ok(!skills.brief('scene.plan').skillIds.some(id => id.startsWith('profile.')), 'channel profiles reach a family only where pinned');
+});
+
+// 0.51: the retention-craft pack from the owner's screenshots (2026-10-21) seeds as drafts and passes the quality advice.
+test('the retention-craft pack seeds as drafts and every skill says why, when and what to do', () => {
+  const S = require('../skills');
+  assert.ok(S.PACK_FILES.some(pack => pack.file === 'skills/retention-craft.json'));
+  const pack = JSON.parse(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'skills', 'retention-craft.json'), 'utf8'));
+  assert.equal(pack.length, 16);
+  for (const raw of pack) { const skill = S.validateSkill(raw); assert.deepEqual(S.skillQuality(skill), [], `${skill.id} explains why, says when, and stays lean`); assert.match(skill.source, /restated/); }
+  assert.ok(pack.some(skill => skill.tasks.includes('niche.evaluate')) && pack.some(skill => skill.tasks.includes('ideas.titles')) && pack.some(skill => skill.tasks.includes('script.candidate')));
 });
 
 // 0.41: the studio-craft pack (eight repositories studied 2026-10-19) and skill-creator's advice on each skill.

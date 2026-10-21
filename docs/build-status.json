@@ -1,7 +1,7 @@
 {
-  "version": "0.50.0",
+  "version": "0.51.0",
   "updated": "2026-10-21",
-  "nextAction": "Building next by the owner's request of 2026-10-21: S03 retention writing (skills from the owner's screenshots, a retention structure check on scripts). Live NexLev, YouTube and Claude runs need the owner's go-ahead.",
+  "nextAction": "Owner: approve the \"Retention craft\" pack in Skills \u2192 Packs (and the other packs you want), then try a live trend scan, a screenshot read and a niche go/no-go with your connections (they spend YouTube quota, NexLev requests and Claude tokens). Next build phase in the plan: 06 (authorized analytics, backup/restore, scale).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -457,6 +457,13 @@
           "evidence": "Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks."
         },
         {
+          "id": "S03",
+          "title": "Retention writing (skills from the owner's screenshots, retention check)",
+          "status": "testing",
+          "evidence": "0.51.0 (2026-10-21): 16 retention-craft draft skills restated from the owner's screenshots (script skeleton, 3-6 points, best first, re-hook after point 2, points tied to the promise, cold open, escalating beats with cliffhangers, payoff to hook, specificity, hook/value/solution/CTA, one aligned CTA, retention breakdown, underserved niche, title-promise-differentiator, revenue beyond AdSense, viewer model); a pure advice-only retention check on every draft (intro, promise, specifics, pulling sections, re-hook, payoff, one late CTA); the viewer study travels into the family form. Tested in tests/retention.test.js and tests/skills.test.js. npm test (335 tests, 335 passing) passed.",
+          "remaining": "The skills are drafts until the owner approves them; their effect on real Claude scripts is not measured yet."
+        },
+        {
           "id": "P07",
           "title": "Captions & Localization Room",
           "status": "testing",
@@ -591,5 +598,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Niche intake by link and screenshot, rising competitors and the go/no-go (R08)"
+  "milestone": "Retention writing: skills from the owner's screenshots and a \"Will viewers stay?\" check (S03)"
 }

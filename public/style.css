@@ -134,5 +134,6 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .trend-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:12px 0}.trend-filters label{min-width:160px}
 .table-scroll{overflow-x:auto}.trend-table td:nth-child(2){min-width:240px}
 .read-row{display:grid;grid-template-columns:120px 1fr;gap:12px;border-top:1px solid var(--line,#E6E1D8);padding:12px 0}.shot-thumb{width:120px;max-height:220px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line,#E6E1D8)}
+.retention-list{list-style:none;padding:0;margin:6px 0}.retention-list li{margin:4px 0;font-size:.92em}.retention-list li.fail b{color:#a5521b}.retention-list li.pass b{color:#2f6b3f}
 .topic-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:12px 0}.topic-card{border:1px solid var(--line,#E6E1D8);border-radius:10px;padding:12px}.topic-card h4{margin:4px 0 8px}.topic-card p{margin:4px 0;font-size:.9em}
 .handoff-record>div{flex:1;min-width:0}

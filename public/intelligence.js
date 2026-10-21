@@ -540,7 +540,9 @@ function intelAction(command, id, button) {
     familyDialog();
     const form = document.getElementById('family-form');
     form.dataset.nicheEvaluationId = id;
-    form.elements.name.value = draft.name; form.elements.audience.value = draft.audience; form.elements.niche.value = `${draft.niche}\n${evaluation.result.positioning}`.slice(0, 1000);
+    // The viewer study travels with the family, so the writer sees why viewers stay and what makes them leave.
+    const viewers = evaluation.result.audience ? `\nThey stay for: ${evaluation.result.audience.staysFor.join('; ')}.\nThey leave when: ${evaluation.result.audience.leavesWhen.join('; ')}.` : '';
+    form.elements.name.value = draft.name; form.elements.audience.value = `${draft.audience}${viewers}`.slice(0, 2000); form.elements.niche.value = `${draft.niche}\n${evaluation.result.positioning}${evaluation.result.howWeWin ? `\nHow we win: ${evaluation.result.howWeWin}` : ''}`.slice(0, 1000);
     form.elements.countries.value = draft.countries.join(', '); form.elements.format.value = draft.format;
     form.elements.competitors.value = (evaluation.result.recommendedCompetitorChannels || []).map(item => `https://www.youtube.com/channel/${item.channelId}`).join('\n');
     toast('Family form prefilled from the approved niche. Check every field before saving.');

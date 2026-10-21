@@ -6,6 +6,7 @@ const path = require('node:path');
 const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/youtube-metadata-validator');
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount}=require('./writer');
 const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
+const Retention=require('./retention');
 const Delivery=require('./delivery');
 
 class InputError extends Error {
@@ -104,7 +105,8 @@ function writingVoiceInput(value) {
 function contentCraft(content, family) {
   const locale = family.primaryLocale;
   return {hook: content.hook ? scoreHook(content.hook, {locale}) : null, title: lintPackaging({title: content.title, locale}),
-    neverWords: neverWordsUsed([content.title, content.hook, content.script].join(' \n '), family.writingVoice)};
+    neverWords: neverWordsUsed([content.title, content.hook, content.script].join(' \n '), family.writingVoice),
+    retention: Retention.check({script: content.script, hook: content.hook, locale})};
 }
 
 function contentInput(input) {
