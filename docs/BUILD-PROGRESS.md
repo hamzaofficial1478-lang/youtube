@@ -131,7 +131,7 @@ Publish the right approved version to the right channel without duplicates.
 
 - [ ] **Y01 Private resumable upload and reconciliation** (testing) - 0.46.0 (2026-10-20): Room 11 Publishing. Per-channel Google sign-in (loopback, state, PKCE, offline access; pending until the owner confirms the returned channel by name; refresh token encrypted; replaced connections revoked; refused renewal pauses the channel), and private resumable upload of the approved master or released edition (durable record, session saved before the first byte, every confirmed chunk recorded, lost answers resolved by asking the session, resume after a stop, reconciliation against the channel before any second copy, processing checks, YouTube upload bucket and unit quota). Tested in tests/publishing.test.js against a stand-in Google, and in the browser on a throwaway workspace (sign-in return page, confirmation, a 44-MB master uploaded privately with live progress and processed; nothing was sent to Google). npm test 320/320 passed.
 - [ ] **Y02 Attach approved thumbnails/captions and schedule** (testing) - 0.47.0 (2026-10-20): after processing, the approved thumbnail and the edit's captions are attached by themselves once each, a failed one retried alone (a lost caption answer is looked up first, so no duplicate track); the owner schedules the time the private video goes public in a chosen time zone (daylight saving and clock-change gaps handled), with every attachment done or waived by name and the audience settings and YouTube's API audit confirmed; the update sends every other setting back unchanged; the schedule can be cancelled; after the time the program observes public or kept private. Tested in tests/publishing.test.js against a stand-in YouTube, and in the browser on a throwaway workspace (attachments added, schedule refused without the audit confirmation, scheduled for 20:00 Karachi = 15:00 UTC, cancelled). npm test 319/321; the 2 failures were footer-text checks, fixed and rerun (control-room.test.js 29/29) passed.
-- [ ] **Y03 Rules-based unattended operation** (planned) - Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts.
+- [ ] **Y03 Rules-based unattended operation** (testing) - 0.48.0 (2026-10-21): per-family publishing rules (windows, time zone, lead time, caps, made for kids, category; immutable revisions); the blueprint's gate measured from the family's own records (10 consecutive published videos with today's niche, voice and style and no reported error, a recovered upload, no unknown charge, no access issue); unattended mode only when the gate passes now, switched on by name; the autopilot queues approved videos, attaches and schedules them into the next free window, and never retries, waives or pays; portfolio and family pauses hold everything new; every exception becomes an alert; reported factual/rights/language/destination errors and recipe changes send the family back to review. Tested in tests/publishing.test.js (stand-in YouTube) and in the browser on a throwaway workspace (locked gate with real numbers, rules saved, pauses, a reported error with its alert). npm test 322/322 passed.
 
 ### 06 · Learning and portfolio scale
 
@@ -144,6 +144,41 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-21 - Room 11: rules-based unattended publishing behind the pilot gate (0.48.0)
+
+- **Owner request:** proceed to Y03.
+- **Built** (docs/PUBLISHING.md "Y03"):
+  - **Publishing rules per family:** publication windows in a time zone, the lead time, daily and weekly caps, the made-for-kids answer and the category, saved as named revisions.
+  - **The gate**, measured from the family's own records:
+    - 10 consecutive published videos with today's niche, voice and style and no reported error;
+    - one upload recovered after a stop;
+    - no paid request with an unknown outcome;
+    - no account or access problem.
+  - **Unattended publishing:** it can be switched on, by name, only while the gate passes.
+    - It uploads approved videos, attaches their thumbnail and captions, and schedules them into the next free window.
+    - It goes back to review by itself when the gate stops passing.
+    - It never retries, waives an attachment or pays for anything.
+  - **Pauses:** a portfolio pause and a family pause hold everything new.
+  - **Alerts:** every exception becomes an alert in Room 11.
+  - **Problem reports:** a factual, rights, language or destination error reported on a video sends the family back to review.
+- **Checked:**
+  - tests/publishing.test.js (stand-in YouTube):
+    - locked with no evidence;
+    - a pilot record passes the gate except while a charge is unknown;
+    - switching on needs the confirmations;
+    - the autopilot queued, uploaded, attached and scheduled the master on a Tue or Thu 18:00 New York time;
+    - a pause held a hand-queued upload;
+    - a reported error returned the family to review with alerts;
+    - a new voice reset the count.
+  - Browser check on a throwaway workspace:
+    - the locked gate with real numbers;
+    - rules saved after clear refusals;
+    - portfolio and family pauses;
+    - a reported error with its alert.
+  - Fixed: a paused review-level family showed "Review"; short gate rows were pushed to the right.
+  - npm test 322/322 passed.
+- **Not tested:** a real pilot on a real channel; the gate cannot pass until one exists.
 
 ### 2026-10-20 - Room 11: thumbnail, captions and the schedule (0.47.0)
 

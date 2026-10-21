@@ -1,7 +1,7 @@
 {
-  "version": "0.47.0",
-  "updated": "2026-10-20",
-  "nextAction": "Owner: set up the Google OAuth client (docs/PUBLISHING.md), verify the channel by phone for custom thumbnails, connect a test channel in Room 11 and, when you decide, upload one approved video privately and schedule it. Going public needs YouTube's API audit of your Google project. Next build step: Y03 (unattended operation) only after the pilot gates pass, or the parked script and competitor work.",
+  "version": "0.48.0",
+  "updated": "2026-10-21",
+  "nextAction": "Owner: to start the real pilot, set up the Google OAuth client (docs/PUBLISHING.md), connect a test channel, then publish approved videos by hand in review mode; after 10 clean published videos and one recovery drill, Room 11 offers unattended publishing for that family. Next build phase in the plan: 06 (authorized analytics, backup/restore, scale), or the parked script and competitor work.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -527,8 +527,9 @@
         {
           "id": "Y03",
           "title": "Rules-based unattended operation",
-          "status": "planned",
-          "remaining": "Enable only after pilot quality and recovery gates pass; enforce spend limits, pause/cancel and exception alerts."
+          "status": "testing",
+          "remaining": "The gate cannot pass until a real pilot exists: 10 clean published videos on a real channel (needs the owner's Google setup and YouTube's API audit) and one real recovery drill. Only publishing is unattended; production stays review-gated by design. Alerts show in Room 11 (no e-mail or phone notification).",
+          "evidence": "0.48.0 (2026-10-21): per-family publishing rules (windows, time zone, lead time, caps, made for kids, category; immutable revisions); the blueprint's gate measured from the family's own records (10 consecutive published videos with today's niche, voice and style and no reported error, a recovered upload, no unknown charge, no access issue); unattended mode only when the gate passes now, switched on by name; the autopilot queues approved videos, attaches and schedules them into the next free window, and never retries, waives or pays; portfolio and family pauses hold everything new; every exception becomes an alert; reported factual/rights/language/destination errors and recipe changes send the family back to review. Tested in tests/publishing.test.js (stand-in YouTube) and in the browser on a throwaway workspace (locked gate with real numbers, rules saved, pauses, a reported error with its alert). npm test 322/322 passed."
         }
       ]
     },
@@ -576,5 +577,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Room 11: thumbnail, captions and the schedule (Y02)"
+  "milestone": "Room 11: rules-based unattended publishing behind the pilot gate (Y03)"
 }

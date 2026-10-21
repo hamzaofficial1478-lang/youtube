@@ -177,6 +177,13 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(bindingAction&&req.method==='POST')return json(res,200,bindingAction[2]==='confirm'?publishingRoom.confirm(bindingAction[1],body):publishingRoom.disconnect(bindingAction[1],body));
         const publishRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/publish$/);
         if(publishRoute&&req.method==='POST')return json(res,200,publishingRoom.queueUpload(publishRoute[1],body));
+        const rulesRoute=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/publishing-rules$/);
+        if(rulesRoute&&req.method==='POST')return json(res,200,publishingRoom.setPolicy(rulesRoute[1],body));
+        if(pathname==='/api/publishing/pause'&&req.method==='POST')return json(res,200,publishingRoom.setPause(body));
+        const alertRoute=pathname.match(/^\/api\/publishing-alerts\/([a-f0-9-]+)\/acknowledge$/);
+        if(alertRoute&&req.method==='POST')return json(res,200,publishingRoom.acknowledge(alertRoute[1],body));
+        const reportRoute=pathname.match(/^\/api\/publications\/([a-f0-9-]+)\/report$/);
+        if(reportRoute&&req.method==='POST')return json(res,200,publishingRoom.report(reportRoute[1],body));
         const publicationAction=pathname.match(/^\/api\/publications\/([a-f0-9-]+)\/(resume|check|reconcile|choose|discard|attach|schedule|unschedule)$/);
         if(publicationAction&&req.method==='POST'){const [,id,kind]=publicationAction;return json(res,200,kind==='resume'?publishingRoom.resume(id,body):kind==='check'?await publishingRoom.checkNext(id):kind==='reconcile'?await publishingRoom.reconcile(id,body):kind==='choose'?publishingRoom.choose(id,body):kind==='attach'?await publishingRoom.retryAttachment(id,body):kind==='schedule'?await publishingRoom.schedule(id,body):kind==='unschedule'?await publishingRoom.unschedule(id,body):publishingRoom.discard(id,body));}
         if(editionRelease&&req.method==='POST')return json(res,200,localizationRoom.approveEditionRender(editionRelease[1],body));

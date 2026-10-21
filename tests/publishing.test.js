@@ -81,7 +81,7 @@ function setup(t) {
   fs.writeFileSync(path.join(root, 'thumb.jpg'), randomBytes(120 * 1024));
   const captions = {groups: [{start: 0, end: 2.5, lines: ['In 1602 a group of Dutch merchants']}, {start: 2.5, end: 5, lines: ['did something no one had tried.']}]};
   const renders = {file: id => ({file: files[id], size: fs.statSync(files[id]).size}), localFile: relative => path.join(root, relative), row: id => ({result: JSON.stringify({video: {sha256: R.fileSha256(files[id])}}), scope: JSON.stringify({edit: {timeline: {captions}}, edition: {package: {title: 'La primera empresa', description: 'Cómo nacieron las acciones.', tags: ['historia']}}})}), masterApproval: () => ({id: 'approval-1', current: ok.master})};
-  const localization = {approvedMaster: () => (ok.master ? {id: 'm1'} : null), currentRelease: () => (ok.release ? {renderId: 'e1', releaseId: 'release-1'} : null)};
+  const localization = {approvedMaster: () => (ok.master ? {id: 'm1'} : null), currentRelease: () => (ok.release ? {renderId: 'e1', releaseId: 'release-1'} : null), latestVoice: () => null, voiceOf: () => null};
   const packaging = {latestRow: () => ({payload: JSON.stringify({titles: [{id: 't1', text: 'The first company you could own'}], chosenTitle: 't1', chosenThumbnail: 'k1', tags: ['history'], disclosure: {synthetic: true}}), images: JSON.stringify({k1: {relativePath: 'thumb.jpg', sha256: R.fileSha256(path.join(root, 'thumb.jpg'))}}), checks: JSON.stringify({description: 'How shares began.\n\nVisuals: stock footage.'})})};
   const room = new PublishingRoom(store, connectors, {renders, packaging, localization, quota: new QuotaLedger(store), wait: async () => {}});
   return {store, family, content, g, connectors, client, room, ok, root};
@@ -264,4 +264,77 @@ test('Y02: the approved thumbnail and captions attach after processing (each ret
   assert.equal(row.status, 'kept_private');
   assert.match(row.error, /not yet approved in YouTube's API audit/);
   assert.ok(room.quota.summary().youtube.used >= 50 * 2 + 400 + 50 + 51 * 3, 'thumbnails, captions, the caption lookup and every schedule change count against the daily units');
+});
+
+test('Y03: unattended publishing stays locked until the gate passes on real records; then it uploads and schedules by the rules, a pause holds it, and an error or a change returns it to review', async t => {
+  const env = setup(t), {room, content, store, family, connectors, client} = env;
+  await connected(env);
+  const rules = {level: 'unattended', timeZone: 'America/New_York', windows: [{day: 2, time: '18:00'}, {day: 4, time: '18:00'}], madeForKids: false, categoryId: 27, minLeadHours: 24, maxPerDay: 2, maxPerWeek: 10};
+  const unattended = (expectedRevision, confirmations = {rules: true, audit: true}) => room.setPolicy(family.id, {updatedBy: 'Owner', expectedRevision, rules, confirmations});
+  // No evidence yet: locked, with every missing piece named.
+  assert.throws(() => unattended(0), /stays locked until the gate passes: 0 of 10 consecutive reviewed videos/);
+  let gate = room.gateFor(family.id);
+  assert.deepEqual(gate.checks.map(check => check.passed), [false, false, false, false]);
+  assert.match(gate.checks[3].detail, /Google client connection is missing or not tested/);
+  await connectors.test(client.id, client.revision);
+  assert.equal(room.gateFor(family.id).checks[3].passed, true);
+  // Review rules can be kept ready; nothing is automatic.
+  const ready = room.setPolicy(family.id, {updatedBy: 'Owner', expectedRevision: 0, rules: {...rules, level: 'review'}});
+  assert.deepEqual([ready.policy.revision, ready.effective.level, ready.policy.windowText], [1, 'review', 'Tue 18:00, Thu 18:00']);
+  assert.throws(() => store.db.prepare('UPDATE publishing_policies SET payload=?').run('{}'), /immutable/);
+  // The pilot's evidence: ten reviewed videos that went public with today's recipe, one of them recovered after a stop.
+  const binding = room.activeBinding(family.id, 'en-US'), recipe = room.currentRecipe(family.id, 'en-US');
+  for (let k = 0; k < 10; k++) store.db.prepare("INSERT INTO publications(id,family_id,content_id,locale,kind,render_id,approval_id,binding_id,channel_id,status,metadata,sha256,size,video_id,recipe,recovered,created_by,created_at,updated_at) VALUES(?,?,?,?,'master','old','old',?,?,'published',?,'x',1,?,?,?,'Owner',?,?)")
+    .run(`pilot-${k}`, family.id, `pilot-content-${k}`, 'en-US', binding.id, binding.channel_id, JSON.stringify({snippet: {title: `Pilot ${k}`}, status: {privacyStatus: 'private', selfDeclaredMadeForKids: false}}), `pilotvid${String(k).padStart(3, '0')}`, recipe, k === 3 ? 1 : 0, new Date(Date.now() - (20 - k) * 86400000).toISOString(), new Date().toISOString());
+  store.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,total_tokens,created_at,updated_at) VALUES('job-1',?,'scene_plan','2026-10','unknown',5000,NULL,?,?)").run(family.id, new Date().toISOString(), new Date().toISOString());
+  gate = room.gateFor(family.id);
+  assert.deepEqual([gate.streak, gate.checks.map(check => check.passed)], [10, [true, true, false, true]], 'an interrupted paid request leaves the cost unknown');
+  store.db.prepare("UPDATE intelligence_usage SET status='settled', total_tokens=48000 WHERE job_id='job-1'").run();
+  assert.equal(room.gateFor(family.id).passed, true);
+  assert.throws(() => unattended(1, {audit: true}), /may upload and schedule this family's approved videos/);
+  const on = unattended(1);
+  assert.deepEqual([on.policy.revision, on.policy.enabledBy, on.effective.level], [2, 'Owner', 'unattended']);
+  // The autopilot takes the approved master: queues it with the rules' settings, uploads it, attaches, then schedules
+  // it into the next window at least 24 hours away.
+  const queued = await room.processNext();
+  assert.deepEqual([queued.status, queued.createdBy, queued.madeForKids], ['queued', 'Autopilot (rules r2 of Owner)', false]);
+  assert.equal((await room.processNext()).status, 'uploaded');
+  assert.equal((await room.processNext()).status, 'processing');
+  store.db.prepare('UPDATE publications SET next_check_at=? WHERE id=?').run(new Date(Date.now() - 1000).toISOString(), queued.id);
+  assert.equal((await room.processNext()).status, 'processed');
+  await room.processNext(); await room.processNext();
+  const scheduled = await room.processNext();
+  assert.equal(scheduled.status, 'scheduled', JSON.stringify(scheduled.attachments));
+  const at = new Date(scheduled.schedule.publishAt), there = new Intl.DateTimeFormat('en-US', {timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(at);
+  assert.match(there, /^(Tue|Thu) 18:00$/);
+  assert.ok(at.getTime() >= Date.now() + 23.9 * 3600000);
+  assert.match(scheduled.schedule.scheduledBy, /^Autopilot \(rules r2 of Owner\)$/);
+  assert.equal(await room.processNext(), null, 'nothing else to do: the next video is not approved yet');
+  // A pause holds everything new: even an upload queued by hand waits.
+  await connected(env, 'es-419');
+  room.setPause({requestedBy: 'Owner', scope: 'portfolio', paused: true, reason: 'Holiday week.'});
+  assert.equal(room.effective(family.id).level, 'paused');
+  const held = room.queueUpload(content.id, {requestedBy: 'Owner', locale: 'es-419', categoryId: 27, madeForKids: false});
+  assert.equal(await room.processNext(), null);
+  assert.equal(room.publicationRow(held.id).status, 'queued');
+  room.setPause({requestedBy: 'Owner', scope: 'portfolio', paused: false});
+  assert.equal((await room.processNext()).status, 'uploaded');
+  // A material error reported afterwards ends the clean run: back to review, with the reason and an alert.
+  room.report(scheduled.id, {reportedBy: 'Owner', kind: 'factual', note: 'The founding year is wrong in the title card.'});
+  assert.throws(() => room.report(scheduled.id, {reportedBy: 'Owner', kind: 'taste', note: 'Not a material error.'}), /factual, rights, language or destination/);
+  const back = room.automation(family.id);
+  assert.equal(back.effective.level, 'review');
+  assert.match(back.effective.reason, /gate no longer passes[\s\S]*factual error was reported/);
+  await room.autopilotNext();
+  const alerts = room.automation(family.id).alerts;
+  assert.deepEqual(alerts.map(alert => alert.kind).sort(), ['gate', 'incident']);
+  room.acknowledge(alerts[0].id, {requestedBy: 'Owner'});
+  assert.equal(room.automation(family.id).alerts.length, 1);
+  // A new voice is a new recipe: the earlier videos no longer count.
+  store.db.prepare('UPDATE publications SET incident=NULL WHERE id=?').run(scheduled.id);
+  store.db.prepare("INSERT INTO connectors(id,name_key,payload,secret) VALUES('eleven','eleven',?,?)").run(JSON.stringify({name: 'eleven', provider: 'elevenlabs', revision: 1, test: {status: 'passed', at: new Date().toISOString()}}), Buffer.from('protected'));
+  store.saveVoiceProfile(family.id, {revision: 0, familyRevision: store.family(family.id).revision, name: 'Narrator', connectorId: 'eleven', connectorRevision: 1, provider: 'elevenlabs', model: 'eleven_multilingual_v2', voiceId: 'voice_fixture_123', voiceVersion: 'current', ownershipBasis: 'provider_stock_voice', rightsHolder: 'Provider voice catalog', consentConfirmed: true, commercialUseConfirmed: true, evidenceReference: 'Terms reviewed.', termsReviewedAt: '2026-10-09', pace: 1, energy: 55, emotion: 'warm', pauseScale: 1, emphasis: 50, instructions: '', lexicon: [], monthlyCharacterLimit: 100000, maxCharactersPerAudition: 12000, priceCentsPerMillionCharacters: 1500});
+  gate = room.gateFor(family.id);
+  assert.equal(gate.streak, 0);
+  assert.match(gate.checks[0].detail, /another niche, voice, provider or style/);
 });

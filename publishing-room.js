@@ -13,6 +13,7 @@ const G = require('./publishing');
 const R = require('./render');
 const Cap = require('./captions');
 const L = require('./localize');
+const A = require('./autopilot');
 const {InputError} = require('./store');
 const {requireValue, now, object, person, text} = R;
 
@@ -32,7 +33,15 @@ class PublishingRoom {
       CREATE UNIQUE INDEX IF NOT EXISTS publications_video ON publications(video_id) WHERE video_id IS NOT NULL;
     `);
     const columns = new Set(this.db.prepare('PRAGMA table_info(publications)').all().map(column => column.name));
-    for (const column of ['attachments', 'schedule', 'visibility']) if (!columns.has(column)) this.db.exec(`ALTER TABLE publications ADD COLUMN ${column} TEXT`);
+    for (const column of ['attachments', 'schedule', 'visibility', 'recipe', 'incident']) if (!columns.has(column)) this.db.exec(`ALTER TABLE publications ADD COLUMN ${column} TEXT`);
+    for (const column of ['recovered', 'auto']) if (!columns.has(column)) this.db.exec(`ALTER TABLE publications ADD COLUMN ${column} INTEGER NOT NULL DEFAULT 0`);
+    // Y03: the owner's publishing rules (immutable revisions), the pauses and the alerts that bring exceptions back.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS publishing_policies(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), revision INTEGER NOT NULL, payload TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(family_id, revision));
+      CREATE TRIGGER IF NOT EXISTS publishing_policies_immutable BEFORE UPDATE ON publishing_policies BEGIN SELECT RAISE(ABORT, 'Publishing rules are immutable.'); END;
+      CREATE TABLE IF NOT EXISTS publishing_controls(key TEXT PRIMARY KEY, paused INTEGER NOT NULL, reason TEXT, by_name TEXT NOT NULL, at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS publishing_alerts(id TEXT PRIMARY KEY, family_id TEXT NOT NULL, publication_id TEXT, kind TEXT NOT NULL, message TEXT NOT NULL, created_at TEXT NOT NULL, resolved_at TEXT, resolved_by TEXT);
+    `);
     this.db.prepare("UPDATE publications SET status='interrupted', error='The program stopped during the upload. The upload session is kept; resuming asks Google where it stopped.', updated_at=? WHERE status='uploading'").run(now());
   }
 
@@ -143,7 +152,7 @@ class PublishingRoom {
     return {kind: 'edition', renderId: release.renderId, approvalId: release.releaseId, title: edition.package.title, description: edition.package.description, tags: edition.package.tags, synthetic};
   }
   publicationRow(id) { const row = this.db.prepare('SELECT * FROM publications WHERE id=?').get(id); requireValue(row, 'Upload record not found.', 404); return row; }
-  queueUpload(contentId, input) {
+  queueUpload(contentId, input, {auto = false} = {}) {
     object(input);
     const by = person(input.requestedBy), content = this.store.content(contentId), locale = text(input.locale, 'Language', 2, 20);
     const binding = this.activeBinding(content.familyId, locale);
@@ -154,8 +163,8 @@ class PublishingRoom {
       const open = this.db.prepare("SELECT status FROM publications WHERE content_id=? AND locale=? AND status NOT IN ('failed','discarded')").get(contentId, locale);
       requireValue(!open, `This language already has an upload record (${open?.status}). Finish, reconcile or discard it first; a second copy is never uploaded blindly.`, 409);
       const id = randomUUID(), at = now();
-      this.db.prepare("INSERT INTO publications(id,family_id,content_id,locale,kind,render_id,approval_id,binding_id,channel_id,status,metadata,sha256,size,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?,?,?)")
-        .run(id, content.familyId, contentId, locale, item.kind, item.renderId, item.approvalId, binding.id, binding.channel_id, JSON.stringify(body), video.sha256, file.size, by, at, at);
+      this.db.prepare("INSERT INTO publications(id,family_id,content_id,locale,kind,render_id,approval_id,binding_id,channel_id,status,metadata,sha256,size,recipe,auto,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'queued',?,?,?,?,?,?,?,?)")
+        .run(id, content.familyId, contentId, locale, item.kind, item.renderId, item.approvalId, binding.id, binding.channel_id, JSON.stringify(body), video.sha256, file.size, this.currentRecipe(content.familyId, locale), auto ? 1 : 0, by, at, at);
       this.store.event(`Queued the private upload of "${content.title}" (${locale}) to "${binding.channel_title}"`);
       return this.publicPublication(this.publicationRow(id));
     });
@@ -164,7 +173,8 @@ class PublishingRoom {
   // ------------------------------------------------------------ the upload
   claim() {
     return this.store.transaction(() => {
-      const row = this.db.prepare("SELECT * FROM publications WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
+      // A paused family's queued uploads wait (the pause holds them; nothing new starts).
+      const row = this.db.prepare("SELECT * FROM publications WHERE status='queued' ORDER BY created_at, rowid").all().find(item => !this.paused(item.family_id));
       if (!row) return null;
       const fail = message => { this.db.prepare("UPDATE publications SET status=?, error=?, updated_at=? WHERE id=?").run(row.session ? 'interrupted' : 'failed', message, now(), row.id); return null; };
       const binding = this.bindingRow(row.binding_id);
@@ -184,7 +194,7 @@ class PublishingRoom {
   async processNext() {
     if (this.busy) return null;
     this.busy = true;
-    try { return await this.upload() || await this.attachNext() || await this.checkNext(); } finally { this.busy = false; }
+    try { return await this.upload() || await this.attachNext() || await this.checkNext() || await this.autopilotNext(); } finally { this.busy = false; }
   }
   async upload() {
     const job = this.claim();
@@ -225,6 +235,7 @@ class PublishingRoom {
         if (answer.video) return this.uploaded(job, answer.video, set);
         at = answer.next;
         set('sent=?', [at]);
+        if (this.paused(job.family_id)) throw new InputError('Publishing was paused, so the upload stopped between chunks.');
       }
     } catch (error) {
       const row = this.publicationRow(job.id), message = error instanceof InputError ? error.message : 'The upload stopped.';
@@ -236,7 +247,8 @@ class PublishingRoom {
   }
   uploaded(job, video, set) {
     this.store.transaction(() => {
-      set("status='uploaded', video_id=?, sent=size, session=NULL, next_check_at=?, error=NULL", [video.id, now()]);
+      // An upload that needed more than one run was recovered without a second copy (the gate's recovery drill).
+      set("status='uploaded', video_id=?, sent=size, session=NULL, next_check_at=?, error=NULL, recovered=?", [video.id, now(), job.attempts >= 1 ? 1 : 0]);
       this.quota.settle(job.id, {'youtube-upload': 1});
       this.store.event(`Uploaded "${this.store.content(job.content_id).title}" (${job.locale}) privately as ${video.id}`);
     });
@@ -292,7 +304,7 @@ class PublishingRoom {
     // A video processed before attachments existed (or before this check) gets its list now.
     const fresh = this.db.prepare("SELECT id FROM publications WHERE status='processed' AND attachments IS NULL LIMIT 1").get();
     if (fresh) this.prepareAttachments(fresh.id);
-    const row = this.db.prepare("SELECT * FROM publications WHERE status='processed' AND attachments LIKE '%\"pending\"%' ORDER BY updated_at LIMIT 1").get();
+    const row = this.db.prepare("SELECT * FROM publications WHERE status='processed' AND attachments LIKE '%\"pending\"%' ORDER BY updated_at").all().find(item => !this.paused(item.family_id));
     if (!row) return null;
     const kind = ['thumbnail', 'captions'].find(item => JSON.parse(row.attachments)[item].status === 'pending');
     await this.runAttach(row, kind);
@@ -400,6 +412,141 @@ class PublishingRoom {
     set('scheduled', 'The time has passed and YouTube still shows the video as private; checking again in 30 minutes.', seen, new Date(Date.now() + 30 * 60000).toISOString());
   }
 
+  // ------------------------------------------------------------ Y03 rules, gate, pauses and alerts
+  // What makes this language's videos now: the family's format and niche, its assigned style and this language's voice.
+  currentRecipe(familyId, locale) {
+    const family = this.store.family(familyId), style = this.renders.styles?.handoffs().find(item => item.familyId === familyId)?.revisionId || null;
+    const voice = locale === family.primaryLocale ? this.store.voiceProfiles(familyId).at(-1) : this.localization.voiceOf(this.localization.latestVoice(familyId, locale));
+    return A.recipeKey({format: family.format, niche: family.niche, style, voice: voice ? `${voice.id}:${voice.revision}:${voice.provider}:${voice.model}` : null});
+  }
+  policyRow(familyId) { return this.db.prepare('SELECT * FROM publishing_policies WHERE family_id=? ORDER BY revision DESC LIMIT 1').get(familyId) || null; }
+  policy(familyId) { const row = this.policyRow(familyId); return row ? {...JSON.parse(row.payload), revision: row.revision, createdBy: row.created_by, createdAt: row.created_at} : null; }
+  paused(familyId) {
+    const row = this.db.prepare("SELECT key, reason, by_name, at FROM publishing_controls WHERE paused=1 AND key IN ('portfolio', ?) ORDER BY key='portfolio' DESC LIMIT 1").get(`family:${familyId}`);
+    return row ? {scope: row.key === 'portfolio' ? 'portfolio' : 'family', reason: row.reason, by: row.by_name, at: row.at} : null;
+  }
+  setPause(input) {
+    object(input);
+    const by = person(input.requestedBy), scope = input.scope === 'portfolio' ? 'portfolio' : `family:${this.store.family(text(input.familyId, 'Family', 8, 80)).id}`, pause = input.paused === true;
+    const reason = pause ? text(input.reason || 'Paused by the owner.', 'Reason', 3, 300) : null;
+    this.db.prepare('INSERT INTO publishing_controls(key,paused,reason,by_name,at) VALUES(?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET paused=excluded.paused, reason=excluded.reason, by_name=excluded.by_name, at=excluded.at').run(scope, pause ? 1 : 0, reason, by, now());
+    this.store.event(`${pause ? 'Paused' : 'Resumed'} publishing for ${scope === 'portfolio' ? 'every family' : this.store.family(scope.slice(7)).name}, by ${by}${pause ? `: ${reason}` : ''}`);
+    return this.state();
+  }
+  // The gate, measured from this family's own records.
+  gateFor(familyId) {
+    const family = this.store.family(familyId), rows = this.db.prepare("SELECT * FROM publications WHERE family_id=? AND status NOT IN ('discarded','queued') ORDER BY created_at DESC, rowid DESC").all(familyId);
+    const recipes = new Map(family.locales.map(locale => [locale, this.currentRecipe(familyId, locale)]));
+    const history = rows.filter(row => ['published', 'failed', 'kept_private'].includes(row.status) || row.incident).map(row => ({status: row.status, current: row.recipe === recipes.get(row.locale), incident: row.incident ? JSON.parse(row.incident) : null}));
+    // A table another room creates may not exist in a smaller setup: it then has nothing to count.
+    const count = (sql, ...args) => { try { return this.db.prepare(sql).get(...args).n; } catch { return 0; } };
+    const unknownCharges = count("SELECT count(*) AS n FROM intelligence_usage WHERE family_id=? AND status='unknown'", familyId) + count("SELECT count(*) AS n FROM voice_usage WHERE family_id=? AND status='unknown'", familyId) + count("SELECT count(*) AS n FROM edition_narrations WHERE family_id=? AND usage_status='unknown'", familyId);
+    const accessIssues = [];
+    if (!this.connectors.list().some(item => item.provider === 'youtube-oauth' && item.hasKey && item.test?.status === 'passed')) accessIssues.push('The Google client connection is missing or not tested.');
+    const bindings = family.locales.map(locale => ({locale, binding: this.activeBinding(familyId, locale)}));
+    if (!bindings.some(item => item.binding?.status === 'active')) accessIssues.push('No channel of this family is connected.');
+    for (const item of bindings.filter(entry => entry.binding?.status === 'reconnect')) accessIssues.push(`Google asked to connect the ${item.locale} channel again.`);
+    const open = count("SELECT count(*) AS n FROM publications WHERE family_id=? AND status IN ('interrupted','unknown')", familyId);
+    if (open) accessIssues.push(`${open} upload${open === 1 ? ' has' : 's have'} an open outcome (stopped or unknown).`);
+    const published = rows.filter(row => row.status === 'published').length;
+    const cost = {videos: published, voiceCents: count("SELECT COALESCE(SUM(estimated_cost_cents),0) AS n FROM voice_usage WHERE family_id=? AND status='settled'", familyId), tokens: count("SELECT COALESCE(SUM(total_tokens),0) AS n FROM intelligence_usage WHERE family_id=? AND status='settled'", familyId)};
+    return A.gate({history, recovered: rows.filter(row => row.recovered).length, unknownCharges, accessIssues, cost});
+  }
+  // Unattended only while the owner chose it, nothing is paused and the gate still passes; otherwise review.
+  effective(familyId) {
+    const policy = this.policy(familyId), pause = this.paused(familyId);
+    // A pause holds every level: nothing new starts, not even an upload queued by hand.
+    if (pause) return {level: 'paused', reason: `Paused${pause.scope === 'portfolio' ? ' for every family' : ''} by ${pause.by}: ${pause.reason}. Nothing new starts; videos YouTube already accepted keep their schedule.`};
+    if (!policy || policy.level !== 'unattended') return {level: 'review', reason: 'Every upload and schedule waits for your click.'};
+    const gate = this.gateFor(familyId);
+    if (!gate.passed) return {level: 'review', reason: `Unattended publishing is switched on but its gate no longer passes, so the family is back to review: ${gate.checks.find(check => !check.passed).detail}`};
+    return {level: 'unattended', reason: `Approved videos are uploaded and scheduled into ${A.windowText(policy.windows)} (${policy.timeZone}) by the rules of revision ${policy.revision}.`};
+  }
+  setPolicy(familyId, input) {
+    object(input);
+    const by = person(input.updatedBy, 'Your name'), family = this.store.family(familyId);
+    let rules;
+    try { rules = A.validatePolicy(input.rules); } catch (error) { throw new InputError(error.message, 400); }
+    const current = this.policyRow(familyId);
+    requireValue((current?.revision || 0) === input.expectedRevision, 'The rules changed in another tab. Reload before saving.', 409);
+    if (rules.level === 'unattended') {
+      const gate = this.gateFor(familyId);
+      if (!gate.passed) throw new InputError(`Unattended publishing stays locked until the gate passes: ${gate.checks.find(check => !check.passed).detail}`, 409);
+      const c = object(input.confirmations, 'Confirmations');
+      requireValue(c.rules === true, 'Confirm that the program may upload and schedule this family\'s approved videos by these rules without asking.');
+      requireValue(c.audit === true, 'Confirm that YouTube has approved your Google project in its API audit (otherwise nothing it schedules goes public).');
+      rules.enabledBy = by;
+    }
+    const revision = (current?.revision || 0) + 1;
+    this.db.prepare('INSERT INTO publishing_policies(id,family_id,revision,payload,created_by,created_at) VALUES(?,?,?,?,?,?)').run(randomUUID(), familyId, revision, JSON.stringify(rules), by, now());
+    this.store.event(`Publishing rules r${revision} for ${family.name}: ${rules.level === 'unattended' ? 'unattended publishing switched on' : 'review before publishing'}, by ${by}`);
+    return this.automation(familyId);
+  }
+  // Exceptions return to the control room: one open alert per family, video and kind.
+  raise(familyId, publicationId, kind, message) {
+    if (this.db.prepare('SELECT 1 FROM publishing_alerts WHERE family_id=? AND COALESCE(publication_id, \'\')=? AND kind=? AND resolved_at IS NULL').get(familyId, publicationId || '', kind)) return;
+    this.db.prepare('INSERT INTO publishing_alerts(id,family_id,publication_id,kind,message,created_at) VALUES(?,?,?,?,?,?)').run(randomUUID(), familyId, publicationId, kind, message, now());
+    this.store.event(`Publishing alert (${this.store.family(familyId).name}): ${message}`);
+  }
+  acknowledge(id, input) {
+    object(input);
+    const by = person(input.requestedBy);
+    this.db.prepare('UPDATE publishing_alerts SET resolved_at=?, resolved_by=? WHERE id=? AND resolved_at IS NULL').run(now(), by, text(id, 'Alert', 8, 80));
+    return this.state();
+  }
+  // A material error found after the fact: it ends the clean run (and so any unattended publishing) until ten more.
+  report(id, input) {
+    object(input);
+    const by = person(input.reportedBy), row = this.publicationRow(id), kind = input.kind;
+    requireValue(Object.hasOwn(A.INCIDENTS, kind), 'Choose a factual, rights, language or destination error.', 400);
+    requireValue(row.video_id, 'Only an uploaded video can have a reported error.', 409);
+    const note = text(input.note, 'What went wrong', 5, 500);
+    this.db.prepare('UPDATE publications SET incident=?, updated_at=? WHERE id=?').run(JSON.stringify({kind, note, by, at: now()}), now(), id);
+    this.raise(row.family_id, id, 'incident', `A ${kind} error was reported on "${JSON.parse(row.metadata).snippet.title}" (${row.locale}) by ${by}: ${note}`);
+    return this.publicPublication(this.publicationRow(id));
+  }
+  // The autopilot: one step per round, only for families that are unattended now. It never pays for anything, never
+  // waives an attachment and never repeats an upload; whatever it cannot do itself becomes an alert.
+  async autopilotNext() {
+    for (const family of this.store.families().filter(item => !item.archived)) {
+      const policy = this.policy(family.id);
+      if (policy?.level !== 'unattended') continue;
+      const state = this.effective(family.id);
+      if (state.level === 'review') { this.raise(family.id, null, 'gate', state.reason); continue; }
+      if (state.level !== 'unattended') continue;
+      for (const row of this.db.prepare("SELECT * FROM publications WHERE family_id=? AND auto=1 AND status IN ('failed','interrupted','unknown','kept_private')").all(family.id))
+        this.raise(family.id, row.id, row.status, `The automatic upload of "${JSON.parse(row.metadata).snippet.title}" (${row.locale}) needs you: ${row.error || row.status}`);
+      for (const locale of family.locales) if (this.activeBinding(family.id, locale)?.status === 'reconnect') this.raise(family.id, null, `reconnect:${locale}`, `Google asked to connect the ${locale} channel again.`);
+      // Schedule a processed automatic upload into the next free window of its channel.
+      for (const row of this.db.prepare("SELECT * FROM publications WHERE family_id=? AND auto=1 AND status='processed' AND attachments IS NOT NULL").all(family.id)) {
+        const attachments = JSON.parse(row.attachments);
+        if (Object.values(attachments).some(item => item.status === 'pending')) continue;
+        if (Object.values(attachments).some(item => ['failed', 'unknown'].includes(item.status))) { this.raise(family.id, row.id, 'attachment', `"${JSON.parse(row.metadata).snippet.title}" (${row.locale}): an attachment did not go on (${Object.entries(attachments).filter(([, item]) => ['failed', 'unknown'].includes(item.status)).map(([kind]) => kind).join(', ')}). Retry it or schedule by hand; the autopilot never schedules without it.`); continue; }
+        const taken = this.db.prepare("SELECT schedule FROM publications WHERE channel_id=? AND status='scheduled'").all(row.channel_id).map(item => Date.parse(JSON.parse(item.schedule).publishAt));
+        const publishAt = A.nextWindow({windows: policy.windows, timeZone: policy.timeZone, after: Date.now() + policy.minLeadHours * 3600000, taken});
+        if (!publishAt) { this.raise(family.id, row.id, 'window', 'No free publication window in the next five weeks. Add windows to the rules.'); continue; }
+        const local = new Intl.DateTimeFormat('sv-SE', {timeZone: policy.timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23'}).format(new Date(publishAt)).replace(' ', 'T');
+        try { return await this.schedule(row.id, {scheduledBy: `Autopilot (rules r${policy.revision} of ${policy.enabledBy})`, local, timeZone: policy.timeZone, confirmations: {settings: true, audit: true}}); } catch (error) { this.raise(family.id, row.id, 'schedule', `Scheduling "${JSON.parse(row.metadata).snippet.title}" failed: ${error.message}`); }
+      }
+      // Upload the next approved video that has no record yet, within the day and week limits.
+      const recent = since => this.db.prepare('SELECT count(*) AS n FROM publications WHERE family_id=? AND auto=1 AND created_at>=?').get(family.id, new Date(Date.now() - since).toISOString()).n;
+      if (recent(86400000) >= policy.maxPerDay || recent(7 * 86400000) >= policy.maxPerWeek) continue;
+      for (const content of this.store.contents().filter(item => item.familyId === family.id && item.state === 'approved')) {
+        for (const locale of family.locales) {
+          if (this.activeBinding(family.id, locale)?.status !== 'active' || this.db.prepare("SELECT 1 FROM publications WHERE content_id=? AND locale=? AND status!='discarded'").get(content.id, locale)) continue;
+          try { this.deliverable(content.id, locale); } catch { continue; }
+          try { return this.queueUpload(content.id, {requestedBy: `Autopilot (rules r${policy.revision} of ${policy.enabledBy})`, locale, madeForKids: policy.madeForKids, categoryId: policy.categoryId}, {auto: true}); } catch (error) { this.raise(family.id, null, `queue:${content.id}:${locale}`, `Could not queue "${content.title}" (${locale}): ${error.message}`); }
+        }
+      }
+    }
+    return null;
+  }
+  automation(familyId) {
+    const policy = this.policy(familyId);
+    return {familyId, policy: policy ? {...policy, windowText: A.windowText(policy.windows)} : null, effective: this.effective(familyId), gate: this.gateFor(familyId), paused: this.paused(familyId),
+      alerts: this.db.prepare('SELECT * FROM publishing_alerts WHERE family_id=? AND resolved_at IS NULL ORDER BY created_at DESC LIMIT 30').all(familyId).map(row => ({id: row.id, kind: row.kind, message: row.message, publicationId: row.publication_id, createdAt: row.created_at}))};
+  }
+
   // ------------------------------------------------------------ owner actions on a record
   resume(id, input) {
     object(input);
@@ -420,7 +567,7 @@ class PublishingRoom {
     let found;
     try { found = G.matchUpload(await G.recentUploads(this.fetch, await this.accessToken(binding), binding.uploads_playlist), {title: JSON.parse(row.metadata).snippet.title, after: row.started_at || row.created_at}); this.quota.settle(job, {youtube: 2}); } catch (error) { this.quota.markUnknown(job); throw error; }
     if (found.length === 1) {
-      this.store.transaction(() => { this.db.prepare("UPDATE publications SET status='uploaded', video_id=?, session=NULL, candidates=NULL, next_check_at=?, error=NULL, updated_at=? WHERE id=?").run(found[0].videoId, now(), now(), id); this.quota.settle(row.id, {'youtube-upload': 1}); });
+      this.store.transaction(() => { this.db.prepare("UPDATE publications SET status='uploaded', video_id=?, session=NULL, candidates=NULL, next_check_at=?, error=NULL, recovered=1, updated_at=? WHERE id=?").run(found[0].videoId, now(), now(), id); this.quota.settle(row.id, {'youtube-upload': 1}); });
       this.store.event(`Reconciled the upload of "${this.store.content(row.content_id).title}" (${row.locale}): found ${found[0].videoId} on the channel (by ${by})`);
     } else {
       this.db.prepare('UPDATE publications SET candidates=?, error=?, updated_at=? WHERE id=?').run(JSON.stringify(found), found.length ? `${found.length} videos on the channel match this title. Open them in YouTube Studio, then choose the right one or discard this record.` : 'No video with this title appeared on the channel after the upload started. If the upload can resume, resume it; otherwise discard this record and upload again.', now(), id);
@@ -432,7 +579,7 @@ class PublishingRoom {
     object(input);
     const by = person(input.requestedBy), row = this.publicationRow(id), candidates = JSON.parse(row.candidates || '[]');
     requireValue(['unknown', 'interrupted'].includes(row.status) && candidates.some(item => item.videoId === input.videoId), 'Choose one of the videos reconciliation found.', 400);
-    this.store.transaction(() => { this.db.prepare("UPDATE publications SET status='uploaded', video_id=?, session=NULL, candidates=NULL, next_check_at=?, error=NULL, updated_at=? WHERE id=?").run(input.videoId, now(), now(), id); this.quota.settle(row.id, {'youtube-upload': 1}); });
+    this.store.transaction(() => { this.db.prepare("UPDATE publications SET status='uploaded', video_id=?, session=NULL, candidates=NULL, next_check_at=?, error=NULL, recovered=1, updated_at=? WHERE id=?").run(input.videoId, now(), now(), id); this.quota.settle(row.id, {'youtube-upload': 1}); });
     this.store.event(`${by} named ${input.videoId} as the upload of "${this.store.content(row.content_id).title}" (${row.locale})`);
     return this.publicPublication(this.publicationRow(id));
   }
@@ -457,7 +604,7 @@ class PublishingRoom {
     return {id: row.id, contentId: row.content_id, locale: row.locale, kind: row.kind, renderId: row.render_id, status: row.status, videoId: row.video_id, channelId: row.channel_id, title: meta.snippet.title, privacy: meta.status.privacyStatus, madeForKids: meta.status.selfDeclaredMadeForKids,
       size: row.size, sent: row.sent, attempts: row.attempts, error: row.error, processing: row.processing ? JSON.parse(row.processing) : null, candidates: row.candidates ? JSON.parse(row.candidates) : null, hasSession: !!row.session, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       studioUrl: row.video_id ? `https://studio.youtube.com/video/${row.video_id}/edit` : null, watchUrl: row.status === 'published' ? `https://www.youtube.com/watch?v=${row.video_id}` : null,
-      attachments: row.attachments ? JSON.parse(row.attachments) : null, visibility: row.visibility ? JSON.parse(row.visibility) : null,
+      auto: !!row.auto, incident: row.incident ? JSON.parse(row.incident) : null, attachments: row.attachments ? JSON.parse(row.attachments) : null, visibility: row.visibility ? JSON.parse(row.visibility) : null,
       schedule: row.schedule ? (() => { const s = JSON.parse(row.schedule), family = this.store.family(row.family_id); return {...s, there: G.wallClock(s.publishAt, s.timeZone), home: G.wallClock(s.publishAt, family.timezone), homeZone: family.timezone}; })() : null,
       // A scheduled video stays scheduled on YouTube even when the approval behind it changes here: say so.
       standing: ['scheduled', 'processed'].includes(row.status) ? (() => { try { const item = this.deliverable(row.content_id, row.locale); return item.renderId === row.render_id && item.approvalId === row.approval_id; } catch { return false; } })() : null};
@@ -466,8 +613,8 @@ class PublishingRoom {
     const families = this.store.families().filter(family => !family.archived);
     return {
       busy: !!this.db.prepare("SELECT 1 FROM publications WHERE status IN ('queued','uploading') OR (status IN ('uploaded','processing') AND next_check_at IS NOT NULL) OR (status='processed' AND attachments LIKE '%\"pending\"%') LIMIT 1").get(),
-      quota: this.quota.summary(),
-      families: families.map(family => ({familyId: family.id, locales: family.locales.map(locale => {
+      quota: this.quota.summary(), portfolioPause: (() => { const row = this.db.prepare("SELECT * FROM publishing_controls WHERE key='portfolio' AND paused=1").get(); return row ? {reason: row.reason, by: row.by_name, at: row.at} : null; })(),
+      families: families.map(family => ({familyId: family.id, automation: this.automation(family.id), locales: family.locales.map(locale => {
         const bindings = this.db.prepare("SELECT * FROM youtube_bindings WHERE family_id=? AND locale=? AND status IN ('pending','active','reconnect') ORDER BY created_at DESC").all(family.id, locale).map(row => this.publicBinding(row));
         return {locale, active: bindings.find(item => ['active', 'reconnect'].includes(item.status)) || null, pending: bindings.filter(item => item.status === 'pending')};
       })})),

@@ -1,4 +1,4 @@
-# Room 11: Publishing: private upload, attachments and schedule (Y01 0.46.0, Y02 0.47.0)
+# Room 11: Publishing: private upload, attachments, schedule and unattended rules (Y01 0.46.0, Y02 0.47.0, Y03 0.48.0)
 
 Phase 05 of the plan is controlled publishing. Y01 is built here:
 - each family language is connected to one YouTube channel;
@@ -6,8 +6,8 @@ Phase 05 of the plan is controlled publishing. Y01 is built here:
 - an upload that stops is resumed;
 - an upload whose outcome is unknown is reconciled before anything is sent again.
 
-Y02 adds the thumbnail, the captions and the schedule that makes the video public (0.47.0, below). Y03 (unattended operation)
-is not built.
+Y02 adds the thumbnail, the captions and the schedule that makes the video public (0.47.0, below). Y03 adds the rules,
+the gate, the pauses and the alerts for unattended publishing (0.48.0, below).
 
 The blueprint's rule (page 17): "A finished render, an uploaded video, a scheduled video and a published video are separate
 states." Never blindly upload a second copy.
@@ -181,6 +181,103 @@ public at its time, and offers the cancel.
   likely reason: the Google project is not yet approved in YouTube's API audit, or the schedule was removed in Studio.
 - "Check now" looks at once.
 
+## Y03: rules-based unattended publishing (0.48.0)
+
+**The blueprint's gate** (page 25): "Require at least ten consecutive reviewed editions for a specific format with no material
+factual, rights, language or destination error; a successful recovery drill; known per-pack cost; and no unresolved
+account/access issue ... The user can then enable unattended publication for that format and budget only. New niches, new
+voices, changed providers or materially different templates return to sampling and review. Keep a visible portfolio pause
+and a per-family pause."
+
+**What becomes unattended: publishing only.** The autopilot uploads, attaches and schedules videos the owner already
+approved by name in Rooms 06-10 (final masters and released editions). Script, voice, visuals, review, package and master
+approvals stay human. The autopilot never pays for anything: narration, Claude and music are still started by the owner's
+clicks.
+
+### The rules (`autopilot.js` `validatePolicy`, immutable `publishing_policies`)
+
+Each family has revisioned rules, named by who saved them:
+- **level:** review before publishing (the default) or unattended;
+- **publication windows:** weekdays and times, such as Tue 18:00 and Thu 18:00, in an IANA time zone;
+- **lead time:** the hours between the upload and going public (1-336);
+- **limits:** uploads a day (1-20) and publications a week (1-100);
+- **made for kids:** the answer YouTube requires, given once for the family's automatic uploads;
+- **category**.
+
+Rules can be saved at the review level at any time; they then change nothing.
+
+### The gate (`gateFor`, `A.gate`), measured from the family's own records
+
+1. **10 reviewed videos in a row.** Counted from the newest. Each must have:
+   - gone public on YouTube (observed `published`);
+   - been made with **today's recipe** for its language;
+   - no reported error.
+
+   The recipe (`currentRecipe`) is the family's format and niche, its assigned style revision, and the language's voice:
+   the main narrator's profile revision, provider and model, or the edition voice. A new niche, voice, provider or style
+   is a new recipe, so the earlier videos stop counting. The count also stops at a failed upload or a video YouTube kept
+   private.
+2. **A recovery drill:** at least one upload that needed more than one run (stopped, then resumed or reconciled) and ended
+   uploaded without a second copy. The way to run one is to stop the program during a private upload, start it again and
+   resume.
+3. **Known cost per video:** no paid request of the family has an unknown outcome (Claude, narration, edition narration),
+   and at least one video went public. The card shows narration dollars and Claude tokens per published video.
+4. **No account or access problem:**
+   - the Google client connection is tested;
+   - at least one channel is connected;
+   - no channel asks to be connected again;
+   - no upload outcome is open (stopped or unknown).
+
+**Switch on unattended publishing** is refused until all four pass. Switching on needs the owner's name and two
+confirmations:
+- the program may upload and schedule this family's approved videos by these rules without asking;
+- YouTube has approved the Google project in its API audit.
+
+### What the autopilot does (`autopilotNext`, one step per round)
+
+The autopilot runs for a family only while all of these hold (`effective`); otherwise the family is in review, with the
+reason shown:
+- its rules say unattended;
+- nothing is paused;
+- the gate passes **now**.
+
+It never retries an upload, never waives an attachment and never repeats a video.
+1. **Upload.** It takes the next approved video of a connected language that has no upload record yet, within the day and
+   week limits. It uploads it privately with the rules' made-for-kids answer and category. The record shows "Autopilot
+   (rules rN of <name>)".
+2. **Attach.** As under Y02: the thumbnail and captions, once each.
+3. **Schedule.** When both are attached, it schedules the video into the next free window of its channel. That window is at
+   least the lead time away, and an hour from any other scheduled video of the same channel (`A.nextWindow`, five weeks
+   ahead, daylight saving included). It uses the owner's named audit confirmation from the rules.
+
+### Exceptions come back to the control room (`publishing_alerts`)
+
+An alert is raised once per family, video and kind, and stays until the owner acknowledges it. Alerts are raised when:
+- an automatic upload failed, stopped, has an unknown outcome, or was kept private;
+- an attachment did not go on (the autopilot never schedules without it);
+- no window is free in five weeks;
+- a channel asks to be connected again;
+- a queue or schedule step failed;
+- the family's rules say unattended but the gate no longer passes (the family is back in review);
+- a material error is reported.
+
+### Pauses (`publishing_controls`)
+
+**Pause all publishing** (the portfolio) and **Pause this family** are always on the page, with a reason and a name.
+A pause holds every level:
+- nothing new starts, not even an upload queued by hand;
+- a running upload stops between chunks and can resume later;
+- nothing is attached or scheduled by itself.
+
+Videos YouTube has already accepted keep their schedule. The card says so, and each one offers **Cancel the schedule** in
+the Uploads list.
+
+### Reporting a problem (`report`)
+
+Any uploaded video can be marked with a material **factual, rights, language or destination** error and a note. That ends
+the clean run, so unattended publishing goes back to review until ten more videos go out clean. It also raises an alert.
+Fixing the video itself is done in YouTube Studio.
+
 ## Room 11 on the page
 
 **Channels:** each language of the family shows its channel (link to YouTube, who confirmed it) or "Not connected", with
@@ -274,6 +371,35 @@ Y02 browser check on the same throwaway workspace (stand-in Google):
 - It was scheduled for 22 Oct 20:00 Asia/Karachi (15:00 UTC), with thumbnail and captions attached and 503 units shown.
 - The cancel kept it private, with the reason recorded.
 - The page footer still said publishing was locked; corrected.
+
+Y03 (`tests/publishing.test.js`, stand-in YouTube; `autopilot.js` checked by it):
+- **Locked with no evidence:** all four checks fail with their reasons. The Google client counts only once tested.
+- **Review rules:** they can be saved without effect, and rules are immutable.
+- **The pilot record:** 10 published videos with today's recipe and one recovered upload pass the gate, except while a
+  paid request has an unknown outcome.
+- **Switching on** needs the two confirmations.
+- **The autopilot by itself:**
+  - it queued the approved master ("Autopilot (rules r2 of Owner)", made for kids no);
+  - uploaded it, waited for processing and attached both pieces;
+  - scheduled it on a Tue or Thu 18:00 New York time at least 24 hours ahead;
+  - then had nothing else to do.
+- **The pause:** a portfolio pause held an upload queued by hand; resuming uploaded it.
+- **A reported factual error:**
+  - the family went back to review with the reason;
+  - a second-kind (taste) report was refused;
+  - the incident and gate alerts were raised once each, and acknowledging removed one.
+- **A new voice profile** reset the count to 0 ("another niche, voice, provider or style").
+
+Y03 browser check on the same throwaway workspace (stand-in Google):
+- The Automation card showed the gate from the workspace's real records (0 of 10, no recovery, no cost yet, access in
+  order), with no switch-on button.
+- The rules were refused with a badly written window and without the made-for-kids answer, then saved as r1.
+- Pause all publishing showed its banner, and resume restored it.
+- A family pause showed "Paused" with the reason. While paused, a review-level family had still shown "Review before
+  publishing"; fixed.
+- "Report a problem" recorded a factual error and raised its alert.
+- The short gate rows were pushed to the right; a style rule keeps the text next to its tick (checked in five other
+  rooms, nothing overflowed).
 
 **Not tested:**
 - a real Google sign-in, a real upload, real attachments or a real schedule on the owner's channel (needs the owner's OAuth

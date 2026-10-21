@@ -131,3 +131,4 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .engine-features { margin: 6px 0 8px; padding-left: 18px; font-size: 13px; color: var(--muted, #6B6459); }
 .engine-features li { margin: 2px 0; }
 [hidden]{display:none !important}
+.handoff-record>div{flex:1;min-width:0}
