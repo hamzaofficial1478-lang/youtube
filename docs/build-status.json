@@ -1,5 +1,5 @@
 {
-  "version": "0.51.1",
+  "version": "0.52.0",
   "updated": "2026-10-21",
   "nextAction": "Owner: start the program, follow \"Make your first video\" on the Overview: add the ElevenLabs key in Connections, run and pin the render check (Room 05), create the family, approve and assign a style, approve the skill packs you want, then write the first script. Live ElevenLabs is untested until then.",
   "repositories": [
@@ -451,6 +451,13 @@
           "evidence": "0.41.0 (2026-10-19): every change rendered and reviewed (poster in gold, natural media, motion blur, seven caption looks burned with FFmpeg); font detection matches the drawing browser (Inter and Source Serif 4 missing); tests added (drawn, sketch, fonts, captions, soundtrack, voice, skills); npm test 309/309 passed."
         },
         {
+          "id": "P06w",
+          "title": "Owner review of a test video: scene-building standard, lip sync, nightfall, narrator vs story character",
+          "status": "testing",
+          "evidence": "0.52.0 (2026-10-21): the owner's 16-point review answered. The same script was planned by Claude twice (58,114 and 56,024 tokens). The second plan, with the new rules: story characters with roles, era armour, animated key words, nightfall, no lock/clock/calendar symbols for unnamed words, faces matching the words. Engine: lip sync on spoken words, nightfall indoors and outdoors. Fixes: the kit set dropped by continuity mend, viewer lines era-checked, captions stopped by word times past the narration. Free draft labelled test-only and improved. npm test (337 tests, 337 passing) passed.",
+          "remaining": "Judged on a Windows test voice; the first real ElevenLabs video will show lip sync and caption timing on measured words. Rivers on maps are not built."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -598,5 +605,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "All rooms together: one video from script to approved master; first-video checklist"
+  "milestone": "Owner review of a test video: scene-building standard, lip sync, nightfall, narrator vs story"
 }

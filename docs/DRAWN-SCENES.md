@@ -488,3 +488,80 @@ or a cinematic colour? The owner also asked for a deep study of eight repositori
   warns about them. Launch library v12 uses fonts Windows ships with.
 - Typed notes grow from a fixed left edge (they slid while typing).
 - `drawn-scene/24`.
+
+## 28. The owner's line-by-line review: scene building, lip sync, night and the narrator (0.52.0)
+
+The owner reviewed a 63-second test video line by line (2026-10-21) and rejected it as plain, boring and
+unmatched to the script. That video came from the **free rules planner**, which had been used only to test the
+machinery end to end. The same script was then planned twice with **Claude's planner**: once as it was, once
+with the fixes below. Each result was checked against the owner's 16 points.
+
+**What caused the problems:**
+- **The free planner:**
+  - it mapped words to stock symbols ("private" became a lock, "year" a calendar, "minutes" a clock, "Earth" a globe, "because" a lightbulb);
+  - it put a rotating symbol in shots where nothing was named;
+  - it used one generic figure for everyone;
+  - it gave a smiling face by default.
+- **The engine:** the talking mouth opened on a random rhythm, not on the voice.
+- **The world check:**
+  - it treated the modern narrator as out of era;
+  - it moved the viewer's room ("Tonight, take a pen") into an ancient chamber.
+- **Continuity:**
+  - `Sk.mend` kept a scene's place without carrying that place's kit drawing, so two shots rendered on a blank backdrop;
+  - it called a move between the viewer's world and the story a mistake.
+- **Captions:** word times that ran past the narration stopped the edit, instead of falling back to the estimate.
+
+**Fixed:**
+- **The owner's standard for Claude** (`Sk.promptGuide`, read by the planner, the story director and the review):
+  - WHO IS ON SCREEN: a named person is drawn as that person in their era and place; a narrator or "you" character appears only on lines that address the viewer; only a speaker uses a talking pose; every cast member has a role.
+  - KEY WORDS ON SCREEN: the promise, turns, emotions and numbers become animated words; at least one in every two shots.
+  - HOLD: about 3.5 s at most without something new; no repeated compositions.
+  - LIVING CHARACTERS: turn toward what appears; the face is the emotion of the line, never a smile on anger or mystery.
+  - TIME OF DAY: night words show night (the night set or mood, or `nightfall`).
+  - ERA AND PLACE: objects, uniforms and arms of the era; places the narration names are drawn; no stock symbol for a concrete word.
+- **The continuity review** adds "(7) OWNER STANDARD", the same points as checks on every shot, including white or empty backdrops where the story has a place.
+- **Lip sync:**
+  - every drawn shot receives its words with start and end at render (`speech`);
+  - a talking figure's mouth moves only while words are spoken and rests in pauses;
+  - previews without word times keep the old rhythm.
+- **`nightfall`** (a new backdrop effect; `drawn-scene/25`):
+  - from its word, over about 3 s, the sky darkens more than the ground (so a set's daytime sun disappears and people stay readable);
+  - outdoors, the sun sets, the moon rises with a glow and stars come out one by one and twinkle;
+  - indoors, the room only darkens.
+- **World and continuity:**
+  - a line that speaks to the viewer ("you", "your", "tonight", "this video") happens today, so the era check no longer flags or moves it;
+  - a move between such a line and the story is not a continuity slip;
+  - `Sk.mend` carries the kit item of the place it keeps.
+- **Captions:** measured word times that end more than 0.5 s after the narration are not trusted (the labelled estimate is used); a small overshoot is trimmed.
+- **The free draft** (labelled in Room 04 as "Rough free draft (test only)", with a warning on every such plan):
+  - no stock symbols for words that do not name them;
+  - the line's own key word on screen when nothing is named;
+  - the face from the emotion words (anger, strange, fear, sad, shock);
+  - `nightfall` on night words;
+  - the hook's burst behind its key word.
+
+**Checked:**
+- **The first Claude plan** (58,114 tokens, 27 shots) had era props, a map, a painted picture and kinetic words. It also had a lock, question marks, a smile on a question, two blank backdrops (the kit bug), and the narrator inside Marcus's room.
+- **The second Claude plan** (56,024 tokens, 26 shots, with these fixes) had:
+  - a cast with roles (Marcus Aurelius, a modern "You" only on "you" lines, the General, a Young Soldier);
+  - helmeted soldiers at the Danube camp;
+  - "By the end of this video, *you will know*" as an animated statement;
+  - "Marcus Aurelius" as a title in a spotlight;
+  - "ANGER" slammed with a fist;
+  - a painted picture of Marcus shouting at his soldiers, with "TEMPER";
+  - the wax tablet with "private" (no lock);
+  - "STRANGER" with a suspicious face;
+  - "NEVER MEANT FOR READERS" with the readers crossed out;
+  - nightfall three times, "5 minutes" and "19 years" counting.
+- **Tests:**
+  - sketch tests: the free draft's new choices on the owner's lines, and night and hook;
+  - caption tests: times past the narration;
+  - drawing, world and scene tests.
+- **A test drawing:** nightfall outdoors and indoors, and the mouth open on words and closed in the pause.
+
+**Not built:** rivers on maps (the map data has countries only; a river the narration names is drawn in the scene or a picture).
+
+**Found while proving the fixes (render):**
+- A master whose edit has a **dissolve** transition could never be approved: FFmpeg's dissolve draws new random noise at every size, so those frames never match the preview, and "matches the approved preview" cannot be accepted away. `R.previewMatch` now skips frames of dissolve transitions (`exempt`, the join's window ± 0.1 s) and still checks everything else. The real 1080p master of this test then matched: 0.979 on average, lowest 0.934, 43 dissolve frames skipped.
+- An unexpected render error now names its cause and goes to the program's error log, instead of only "The render failed.".
+- An interrupted master resumed from its kept parts after the program stopped.

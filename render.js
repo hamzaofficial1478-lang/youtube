@@ -364,8 +364,12 @@ function deliveryCheck(streams, atoms, {width, height, fps}) {
 // sizes scores about 0.98; a different shot about 0.5. A run of frames below 0.8 for a quarter of a second or more
 // means the master shows something the owner did not approve.
 const ssimArgs = (master, preview, {width, height}, statsFile) => ['-hide_banner', '-nostdin', '-i', master, '-i', preview, '-an', '-lavfi', `[0:v]settb=AVTB,setpts=PTS-STARTPTS,scale=${width}:${height}:flags=area,format=yuv420p,setsar=1[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS,format=yuv420p,setsar=1[b];[a][b]ssim=stats_file=${statsFile}`, '-f', 'null', '-'];
-function previewMatch(stats, fps) {
-  const scores = [...String(stats).matchAll(/All:([0-9.]+)/g)].map(match => Number(match[1])).filter(Number.isFinite);
+// exempt: [[from, to]] seconds whose picture is random by design (FFmpeg's dissolve draws new noise at every size;
+// 2026-10-21 a master could never be approved because its dissolve differed from the preview's).
+function previewMatch(stats, fps, {exempt = []} = {}) {
+  const inside = k => exempt.some(([from, to]) => k / fps >= from && k / fps <= to);
+  const all = [...String(stats).matchAll(/All:([0-9.]+)/g)].map(match => Number(match[1])).filter(Number.isFinite);
+  const scores = all.map((score, k) => (inside(k) ? 1 : score)), skipped = all.filter((score, k) => inside(k)).length;
   if (!scores.length) return {name: 'matches the approved preview', passed: false, detail: 'no frames were compared', spans: []};
   const spans = [];
   let from = null;
@@ -375,7 +379,7 @@ function previewMatch(stats, fps) {
   });
   const mean = scores.reduce((sum, value) => sum + value, 0) / scores.length, min = Math.min(...scores);
   return {name: 'matches the approved preview', passed: !spans.length && mean >= 0.9, spans, mean: round(mean, 4), min: round(min, 4), frames: scores.length,
-    detail: `similarity ${mean.toFixed(3)} on average over ${scores.length} frames (lowest ${min.toFixed(3)})${spans.length ? `; differs at ${spans.map(span => `${span.start.toFixed(1)}-${span.end.toFixed(1)} s`).join(', ')}` : ''}`};
+    detail: `similarity ${mean.toFixed(3)} on average over ${scores.length} frames (lowest ${min.toFixed(3)})${skipped ? `; ${skipped} frames of random-noise transitions not compared` : ''}${spans.length ? `; differs at ${spans.map(span => `${span.start.toFixed(1)}-${span.end.toFixed(1)} s`).join(', ')}` : ''}`};
 }
 
 // Parses blackdetect/freezedetect output into spans.

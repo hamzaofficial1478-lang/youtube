@@ -8,6 +8,7 @@ const os = require('node:os');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const R = require('./render');
+const T = require('./transitions');
 const B = require('./editing-brain');
 const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
 const VS = require('./visual-sources');
@@ -452,7 +453,8 @@ class RenderRoom {
             const [clipId, drawing] = drawings[k];
             const index = tl.clips.findIndex(item => item.id === clipId), clip = tl.clips[index], extra = index < tl.clips.length - 1 ? tl.joins[index].frames : 0;
             const start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
-            const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3)}));
+            // Each word keeps its end too: a talking character's mouth moves only while words are being spoken (2026-10-21).
+            const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start, 3), end: round(Math.max(word.start, word.end ?? word.start) - start, 3)}));
             const folder = `drawn-${k + 1}`, file = `${folder}.mp4`;
             // Drawing is local: a browser that stalls (a busy or throttled PC) is restarted and the shot drawn again, so
             // one stalled frame never throws away a long render (live 0.26 run: a stall after 3.6 hours).
@@ -464,7 +466,7 @@ class RenderRoom {
                 return renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, outDir: path.join(work, folder)});
               } else {
               const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: E.ENGINES[scope.edit.engine]?.draws ? scope.edit.engine : 'motion', lenient: true});
-              return renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words)}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, drawing: spec.drawing || null,
+              return renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words), speech: words.map(word => [word.start, word.end])}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, drawing: spec.drawing || null,
                 vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
               }
             };
@@ -620,7 +622,8 @@ class RenderRoom {
         const preview = this.file(scope.source.renderId, 'video'), previewSize = R.PRESETS.proxy[scope.format] || R.PRESETS.proxy['long-form'];
         requireValue(R.fileSha256(preview.file) === scope.source.videoSha256, 'The approved preview file changed.', 409);
         await exec('compare with the approved preview', job.paths.ffmpeg, R.ssimArgs(out, preview.file, previewSize, 'ssim.log'), Math.max(120000, plan.totalFrames * 200), work);
-        checks.push(R.previewMatch(fs.readFileSync(path.join(work, 'ssim.log'), 'utf8'), Math.min(plan.preset.fps, R.PRESETS.proxy.maxFps)));
+        const tl = scope.edit?.timeline, exempt = (tl?.joins || []).flatMap((join, k) => (T.xfadeOf(join.type) === 'dissolve' && tl.clips[k + 1] ? [[(tl.clips[k + 1].start - join.frames) / tl.fps - 0.1, (tl.clips[k + 1].start + join.frames) / tl.fps + 0.1]] : []));
+        checks.push(R.previewMatch(fs.readFileSync(path.join(work, 'ssim.log'), 'utf8'), Math.min(plan.preset.fps, R.PRESETS.proxy.maxFps), {exempt}));
       }
       // 5. Contact sheet for review.
       this.progress(job.id, 'contact sheet', plan.segments.length + 3, total);
@@ -681,7 +684,10 @@ class RenderRoom {
       return this.publicJob(this.row(job.id));
     } catch (error) {
       const cancelled = !!error.cancelled || !!this.current.cancelledBy;
-      const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : 'The render failed.';
+      // An unexpected error names its cause and goes to the program's error log (2026-10-21: a resumed master said only
+      // "The render failed." and its cause could not be found).
+      if (!cancelled && !(error instanceof InputError)) console.error(`${now()} Render ${job.id} failed:`, error?.stack || error);
+      const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : `The render failed: ${String(error?.message || error).slice(0, 200)}`;
       this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', master && !cancelled ? `${message} Finished parts are kept; a retry continues from them.` : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
       fs.rmSync(finalDir, {recursive: true, force: true});
       if (master && cancelled) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);

@@ -21,7 +21,9 @@
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
   const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : ENTER_SECONDS[enter] ?? 0.34);
   const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind']);
-  const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse']);
+  const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse', 'nightfall']);
+  // Places under the open sky (nightfall draws its sun, moon and stars only there).
+  const OUTDOOR_SETS = new Set(['none', 'abstract', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'night', 'storm', 'castle', 'harbor', 'market', 'village', 'battlefield']);
   const MARKS = new Set(['underline', 'circle', 'cross', 'check', 'spotlight']);
   // The doodle look's ground: a bold strip under the action, coloured by the place.
   const DOODLE_GROUND = {park: '#7BC043', nature: '#7BC043', mountains: '#7BC043', storm: '#6FA53A', night: '#3F6E2E', beach: '#F2C14E', desert: '#F2C14E', street: '#B8BCC2', road: '#B8BCC2', city: '#B8BCC2', stage: '#C98B4E', classroom: '#D9B38C', home: '#D9B38C', room: '#D9B38C', office: '#C9CDD2', kitchen: '#D9B38C', bedroom: '#D9B38C', shop: '#D9B38C', bank: '#C9CDD2', hospital: '#C9CDD2', lab: '#C9CDD2'};
@@ -354,7 +356,9 @@
   function drawFigure(el, i, t, local, p) {
     const s = figureState(el, i, t), pose = K.POSE[s.pose] || {};
     if (!['lie', 'sleep', 'fall'].includes(s.pose)) shadow(s.x * K.W, el.y * K.H, 0.24 * figureH(el) * (1 - Math.min(0.5, Math.max(0, s.A.lift || 0) * 3)) * p);
-    const a = K.drawFigure({x: s.x * K.W, y: el.y * K.H, dir: s.facing === 'left' ? -1 : 1, size: el.size, A: s.A, pose: s.pose, expression: s.expression, emote: s.emote, talk: !!pose.talk, holds: el.holds, tl: local, seed: LAYOUT.el[i].seed, look: el.look, engine: D.engine}, p);
+    // Lip sync (owner review 2026-10-21): at render time the shot knows when words are spoken; the mouth moves only then.
+    const speaking = Array.isArray(D.speech) ? D.speech.some(([from, to]) => t >= from - 0.03 && t <= to) : null;
+    const a = K.drawFigure({x: s.x * K.W, y: el.y * K.H, dir: s.facing === 'left' ? -1 : 1, size: el.size, A: s.A, pose: s.pose, expression: s.expression, emote: s.emote, talk: !!pose.talk, speaking, holds: el.holds, tl: local, seed: LAYOUT.el[i].seed, look: el.look, engine: D.engine}, p);
     LAYOUT.anchors[i] = {center: [(a.box[0] + a.box[2]) / 2, (a.box[1] + a.box[3]) / 2], r: (a.box[2] - a.box[0]) / 2, box: a.box, head: a.head};
     if (el.label && p >= 1) K.pill(el.label, a.head[0], a.head[1] - a.head[2] * 1.7, 46 * K.u);
   }
@@ -1577,6 +1581,29 @@
       case 'dust': for (let k = 0; k < 8; k++) { const q = clamp01((local - k * 0.03) / 0.9); if (q <= 0 || q >= 1) continue; const side = k % 2 ? 1 : -1, d = (g.w * 0.4 + r * 0.9 * ease.outCubic(q)) * side, y = g.cy + g.h * 0.48 - q * r * 0.25 * (1 + (k % 3) * 0.3); K.render([{pts: K.frame(g.cx + d * (0.6 + (k % 4) * 0.15), y, r * (0.14 + 0.2 * q)).ring(0, 0, 1, 0.8, 22), fill: '#E6DCCB', color: K.alpha(K.PAL.ink, 0.35), px: 2.5 * u, alpha: 1 - q}]); } break;
       case 'spiral': { const pts = Array.from({length: 120}, (_, k) => { const a = k * 0.17 - local * 5, rr = r * 0.9 * k / 120; return [g.cx + Math.cos(a) * rr, g.cy + Math.sin(a) * rr]; }); K.render([{pts: K.partial(pts, ease.outCubic(clamp01(local / 0.4))), color: color || C.purple, px: 6 * u}]); break; }
       case 'crack': { const rand = K.seeded(seed), q = ease.outCubic(clamp01(local / 0.3)), lines = []; for (let k = 0; k < 7; k++) { let a = k * TAU / 7 + rand() * 0.5, x = g.cx, y = g.cy; const pts = [[x, y]], n = 5, len = r * (1 + rand() * 0.7); for (let s = 1; s <= n; s++) { a += (rand() - 0.5) * 0.7; x += Math.cos(a) * len / n; y += Math.sin(a) * len / n; pts.push([x, y]); } lines.push({pts: K.partial(pts, q), color: K.PAL.ink, px: (5 - k % 3) * u}); } K.render(lines); break; }
+      // Day turns into night on its word (owner review 2026-10-21): the sky darkens behind the scene, the sun sinks,
+      // the moon rises and the stars come out one by one and twinkle. Drawn behind characters and words.
+      case 'nightfall': {
+        const q = ease.inOutSine(clamp01(local / 3)), big = Math.max(W, H) * 3, rand = K.seeded(seed);
+        // The sky goes darker than the ground, so the place's own daytime sun disappears and people still read.
+        const sky = ctx.createLinearGradient(0, 0, 0, H);
+        sky.addColorStop(0, `rgba(10,16,46,${0.9 * q})`); sky.addColorStop(0.5, `rgba(14,22,56,${0.72 * q})`); sky.addColorStop(1, `rgba(14,22,56,${0.5 * q})`);
+        ctx.save(); ctx.fillStyle = sky; ctx.fillRect(-big / 3, -big / 3, big, big); ctx.restore();
+        // Indoors the room only darkens: no sun, moon or stars inside a bedroom (2026-10-21 render).
+        if (!OUTDOOR_SETS.has(D.set) && !/camp|field|river|valley|village|street|road|forest|plain|shore|coast|harbou?r|market|square|hill|garden|yard|beach|desert|mountain|city/.test(String(D.set))) break;
+        if (q < 1) K.render([{pts: K.frame(W * 0.82, H * (0.16 + 0.62 * q), 72 * u).ring(0, 0, 1, 1, 36), fill: K.mix(C.yellow, C.orange, q), stroke: false, alpha: 1 - 0.9 * q}]);
+        const mq = ease.outCubic(clamp01((local - 1.2) / 2.2)), mx = W * 0.2, my = H * (0.52 - 0.34 * mq);
+        if (mq > 0) {
+          const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 150 * u); glow.addColorStop(0, `rgba(255,250,220,${0.35 * mq})`); glow.addColorStop(1, 'rgba(255,250,220,0)');
+          ctx.save(); ctx.fillStyle = glow; ctx.fillRect(mx - 150 * u, my - 150 * u, 300 * u, 300 * u); ctx.restore();
+          K.render([{pts: K.frame(mx, my, 54 * u).ring(0, 0, 1, 1, 36), fill: '#F6F2DC', stroke: false, alpha: mq}]);
+        }
+        for (let k = 0; k < 28; k++) {
+          const x = rand() * W, y = rand() * H * 0.42, appear = 1.4 + rand() * 1.8, s = (5 + rand() * 7) * u, sq = clamp01((local - appear) / 0.4);
+          if (sq > 0) K.render([{pts: K.frame(x, y, s).star(0, 0, 1, 0.42, 4), fill: '#FFF7D1', stroke: false, alpha: sq * (0.55 + 0.45 * Math.sin(local * 3.1 + k * 1.7))}]);
+        }
+        break;
+      }
       case 'stars': { const c = g.head ? [g.head[0], g.head[1] - g.head[2] * 1.05] : [g.cx, g.cy - g.h * 0.5], rr = g.head ? g.head[2] : r * 0.5; for (let k = 0; k < 3; k++) { const a = local * 4 + k * TAU / 3; K.render([{pts: K.frame(c[0] + Math.cos(a) * rr, c[1] + Math.sin(a) * rr * 0.28, rr * 0.2).star(0, 0, 1, 0.42), fill: C.yellow, px: 2 * u}]); } break; }
       default: break;
     }

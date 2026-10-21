@@ -31,7 +31,7 @@ function weight(token) {
 // speaking time by spoken weight, and each pause measured inside the sentence is anchored at the clause
 // break nearest its time (or the nearest word break), so commas and breaths split the words correctly.
 function wordTimings({sentences, pauses = [], narrationSeconds, measured = null}) {
-  if (measured?.length) { const exact = measuredTimings(sentences, measured); if (exact) return exact; }
+  if (measured?.length) { const exact = measuredTimings(sentences, measured, narrationSeconds); if (exact) return exact; }
   const words = [];
   sentences.forEach((sentence, index) => {
     const tokens = String(sentence.text).match(/\S+/g) || [];
@@ -77,8 +77,12 @@ function wordTimings({sentences, pauses = [], narrationSeconds, measured = null}
 
 // Measured timing (the voice provider's own word timestamps): the script's words are matched in order to the
 // spoken words; a word said differently (a pronunciation fix) takes the time between its matched neighbours.
-// Null when too few words match to trust it, so the estimate is used instead.
-function measuredTimings(sentences, measured) {
+// Null when too few words match to trust it, or when the times run past the narration (a clock that does not fit
+// the audio; 2026-10-21 a test voice reported 85 s of words for 63 s of sound and the edit stopped on its captions),
+// so the estimate is used instead. A small overshoot at the very end is trimmed to the narration.
+function measuredTimings(sentences, measured, narrationSeconds = null) {
+  const last = Math.max(...measured.map(word => Number(word.end)).filter(Number.isFinite));
+  if (Number.isFinite(narrationSeconds) && last > narrationSeconds + 0.5) return null;
   const key = text => bare(String(text)).toLowerCase();
   const spoken = measured.map(word => ({key: key(word.text), start: Number(word.start), end: Number(word.end)})).filter(word => Number.isFinite(word.start) && Number.isFinite(word.end));
   const tokens = sentences.flatMap((sentence, index) => (String(sentence.text).match(/\S+/g) || []).map(text => ({text, sentence: sentence.n ?? index + 1, key: key(text)})));
@@ -96,7 +100,8 @@ function measuredTimings(sentences, measured) {
     for (let k = i; k < j; k++) { words[k].start = round(from + (to - from) * (k - i) / (j - i)); words[k].end = round(from + (to - from) * (k - i + 1) / (j - i)); }
     i = j - 1;
   }
-  return words.map(word => ({...word, start: round(word.start), end: round(Math.max(word.start, word.end))}));
+  const cap = Number.isFinite(narrationSeconds) ? narrationSeconds : Infinity;
+  return words.map(word => ({...word, start: round(Math.min(word.start, cap - 0.01)), end: round(Math.min(cap, Math.max(word.start, word.end)))}));
 }
 
 function lineBreak(text, lineChars) {
@@ -148,7 +153,7 @@ function splitPhrase(phrase, {maxWords, maxChars, maxSeconds, english}) {
 // rate) is split into the fewest, most even captions, never ending one on a weak word like "the" or "did".
 function buildCaptions({sentences, pauses = [], narrationSeconds, format = 'long-form', locale = 'en', measured = null}) {
   const limits = LIMITS[format] || LIMITS['long-form'], english = !locale || /^en(?:-|$)/i.test(locale);
-  const exact = measured?.length ? measuredTimings(sentences, measured) : null, words = exact || wordTimings({sentences, pauses, narrationSeconds});
+  const exact = measured?.length ? measuredTimings(sentences, measured, narrationSeconds) : null, words = exact || wordTimings({sentences, pauses, narrationSeconds});
   const rate = new Map();
   for (const word of words) { const item = rate.get(word.sentence) || {n: 0, from: word.start, to: word.end}; item.n++; item.to = word.end; rate.set(word.sentence, item); }
   const cap = sentence => {

@@ -94,11 +94,11 @@ function sceneInputsCard(content) {
     ${row(content.contentState === 'approved', `Approved script v${content.contentRevision}`, esc(content.title))}
     ${row(inputs.voice.ready, 'Approved narration', inputs.voice.ready ? `${sceneClock(inputs.voice.durationSeconds)} · timing source for every scene` : esc(inputs.voice.blocker || 'Approve a narration in the Voice Room.'))}
     ${row(inputs.style.ready, inputs.style.ready ? `${esc(inputs.style.name)} r${inputs.style.revision}` : 'Family style', inputs.style.ready ? `Sources: ${esc(inputs.sources.map(styleLabel).join(', '))}` : esc(inputs.style.blocker || 'Assign a style in Room 03.'))}
-    <div class="card-actions">${inputs.ready ? action('Split narration (free)', 'scene-plan-rules', content.contentId, 'secondary') + action('Plan with Claude', 'scene-plan-claude', content.contentId, 'primary') : ''}</div>
+    <div class="card-actions">${inputs.ready ? action('Rough free draft (test only)', 'scene-plan-rules', content.contentId, 'secondary') + action('Plan with Claude', 'scene-plan-claude', content.contentId, 'primary') : ''}</div>
     ${planJobs ? `<div class="history-list">${planJobs}</div>` : ''}</section>`;
 }
 function sceneEmptyPlan(content) {
-  return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Start with the free narration split (whole sentences grouped to the style\'s scene length) or ask Claude to direct scenes and shots. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
+  return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Ask Claude to direct the scenes and shots (the real planner: it builds every scene from the story). The rough free draft is only for testing. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
 }
 
 function scenePlanCard(content, manifest) {
@@ -109,7 +109,7 @@ function scenePlanCard(content, manifest) {
     !manifest.scope.current && manifest.contentRevision === content.contentRevision ? action('Refresh for current narration and style', 'scene-refresh', manifest.id, 'primary') : '',
     action('Visual settings', 'scene-settings', content.familyId, 'secondary'),
   ].join('');
-  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'claude' ? 'Claude' : manifest.source === 'hermes' ? 'Earlier AI planner' : manifest.source === 'rules' ? 'Narration split' : 'Edited')}</div></div>
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'claude' ? 'Claude' : manifest.source === 'hermes' ? 'Earlier AI planner' : manifest.source === 'rules' ? 'Rough free draft' : 'Edited')}</div></div>
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
@@ -204,7 +204,7 @@ function sceneFind(shotId) {
 function sceneAction(command, id, button) {
   const content = sceneContent(), manifest = sceneLatest(content);
   const nameAndNote = `<div class="form-grid">${scenePersonField()}<label>Change note <span class="hint">Optional</span><input name="note" maxlength="300"></label></div>`;
-  if (command === 'scene-plan-rules') return sceneDialog('plan-rules', 'Split the narration into scenes', 'FREE · NO PROVIDER CALL', `<p class="hint">Groups whole sentences toward the middle of the style's scene length, sets shots from its shot limits and fills search words from the narration. You can edit everything afterwards.</p><div class="form-grid">${scenePersonField()}</div>`, 'Create plan', {contentId: id});
+  if (command === 'scene-plan-rules') return sceneDialog('plan-rules', 'Split the narration into scenes', 'FREE · NO PROVIDER CALL · TEST ONLY', `<p class="hint">Groups whole sentences toward the middle of the style's scene length and draws each shot from words it finds in the narration. It does not build scenes from the story (no story characters, places, era or key words on screen), so it is for testing the machinery, not for a video you will publish. For real videos use <strong>Plan with Claude</strong>.</p><div class="form-grid">${scenePersonField()}</div>`, 'Create plan', {contentId: id});
   if (command === 'scene-plan-claude') {
     const settings = state.scenes.settings[content.familyId];
     return sceneDialog('plan-claude', 'Ask Claude to direct the scenes', 'CLAUDE · TOKEN BUDGET', `<p class="hint">Claude reads the numbered narration sentences, the style limits and any approved competitor technique guidance, and returns scenes and shots. Reserves up to ${settings.plannerTokenLimit.toLocaleString()} tokens from the family's monthly limit. Plans that break the style's limits are saved as drafts with issues to fix.</p><div class="form-grid"><label>Claude connector<select name="connector">${sceneConnectorOptions('ai')}</select></label>${scenePersonField()}</div>`, 'Ask Claude', {contentId: id});

@@ -80,9 +80,17 @@ test('the free fallback builds a scene from the narration: a set, the narrator a
   assert.deepEqual([sea.set, sea.mood, sea.camera, sea.elements.filter(el => el.kind === 'prop').map(el => el.prop)], ['storm', 'tense', 'punch', ['ship', 'chart-down']]);
   assert.equal(Sk.fromText('Their ships sailed for months.', {cast}).set, 'harbor', 'ships at sea are not under water');
   assert.equal(Sk.fromText('Merchants sold spices.', {primary: 'motion', cast}).set, 'market', 'documentary drawn shots stand in a place too');
-  assert.notEqual(Sk.fromText('Nothing named.', {shotIndex: 1}).elements.find(el => el.kind === 'prop').prop, Sk.fromText('Nothing named.', {shotIndex: 2}).elements.find(el => el.kind === 'prop').prop);
-  const hook = Sk.fromText('Nothing to see.', {purpose: 'hook'});
-  assert.deepEqual([hook.camera, hook.elements[1].effect, hook.elements[1].on, hook.elements[2].prop], ['punch', 'burst', 3, 'exclamation'], 'a hook opens on a punch with a burst behind its prop');
+  // Owner review 2026-10-21: nothing named shows the line's own key word, never a stock symbol taking turns.
+  const plain = Sk.fromText('Historians argued for decades.', {shotIndex: 1});
+  assert.equal(plain.elements.some(el => el.kind === 'prop'), false);
+  assert.deepEqual(plain.elements.find(el => el.kind === 'text'), {kind: 'text', text: 'HISTORIANS', style: 'keyword', animate: 'rise', at: 'Historians', x: 0.3, y: 0.3, size: 'l', accent: true, enter: 'auto'});
+  const hook = Sk.fromText('Nothing to see here tonight.', {purpose: 'hook'});
+  assert.deepEqual([hook.camera, hook.elements[0].effect, hook.elements[2].effect, hook.elements[2].on, hook.elements[3].kind], ['punch', 'nightfall', 'burst', 4, 'text'], 'night words bring the night; a hook bursts behind its key word');
+  // The face is the emotion of the words, and words that only sound like a thing draw no symbol.
+  const anger = Sk.fromText('The first line was about anger.');
+  assert.deepEqual([anger.elements.find(el => el.kind === 'figure').expression, anger.elements.find(el => el.kind === 'text').text], ['angry', 'ANGER']);
+  assert.equal(Sk.fromText('Here is where it gets stranger.').elements.find(el => el.kind === 'figure').expression, 'suspicious');
+  assert.deepEqual(Sk.fromText('Why would an emperor need a private notebook, in the year 170, on Earth, in five minutes?').elements.filter(el => el.kind === 'prop').map(el => el.prop).filter(prop => ['lock', 'calendar', 'globe', 'clock'].includes(prop)), []);
   assert.equal(Sk.fromText('Prices rise.', {primary: 'motion'}).elements.some(el => el.kind === 'figure'), false, 'motion graphics without a cast draw no figure');
   assert.deepEqual(Sk.fromText('A single bolt of lightning.'), Sk.fromText('A single bolt of lightning.'), 'deterministic');
 });

@@ -181,7 +181,8 @@
     // The mouth: talking alternates open shapes on the narration's rhythm.
     const mx = ox + 0.02, my = 0.42;
     let mouth = E.mouth;
-    if (st.talk) { const n = K.noise(st.tl * 9 + st.seed); mouth = n > 0.35 ? 'O' : n > -0.2 ? 'o' : E.mouth === 'O' ? 'o' : E.mouth; }
+    // speaking: false between the narrator's words (the mouth rests), true inside them, null when the times are unknown.
+    if (st.talk && st.speaking !== false) { const n = K.noise(st.tl * 9 + st.seed); mouth = n > 0.35 ? 'O' : n > -0.2 ? 'o' : E.mouth === 'O' ? 'o' : E.mouth; }
     if (body === 'robot' && !['O', 'o'].includes(mouth)) { shape(f.rect(mx - 0.22, my - 0.06, 0.44, 0.12), {fill: C.dark}); [0, 1, 2].forEach(n => shape([f.p(mx - 0.11 + n * 0.11, my - 0.06), f.p(mx - 0.11 + n * 0.11, my + 0.06)], {width: lw * 0.4, stroke: C.metal, closed: false})); return; }
     const mouthInk = ink;
     switch (mouth) {

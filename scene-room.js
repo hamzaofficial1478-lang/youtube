@@ -154,6 +154,7 @@ function structural(scenes, sentenceCount, sources, motions, {primary = 'stickma
 // Continuity notes are derived from the plan itself, so they follow today's rules: an older plan does not keep a
 // note the program no longer raises (a cut to an abstract backdrop, a place the words go to).
 const CONTINUITY_NOTE = / inside one scene; keep the place unless the words move\.$| jumps to the other side of the screen and turns round between /;
+const ROUGH_DRAFT = 'Rough free draft: scenes come from matching words, not from the story (no characters of the story, places, era or key words on screen). Fine for a test; plan with Claude for a video you will publish.';
 function currentWarnings(warnings, payload) {
   if (!payload.cast || !warnings.some(item => CONTINUITY_NOTE.test(item))) return warnings;
   const words = Cap.wordTimings({sentences: payload.sentences, pauses: [], narrationSeconds: payload.timing.narrationSeconds});
@@ -335,6 +336,8 @@ function reviewMessages(input) {
     'Any "continuityNotes" were found by the program; fix each one, or, when the story truly moves there, keep it and say why in the "notes" of that shot (naming the place). A note left unanswered is fixed by the program: the place stays the place of the scene, and a character who changes sides keeps facing the same way.',
     'Fix what fails by returning a full replacement drawing for that shot (the same vocabulary; keep the cast ids, add new characters in "cast" only if the story needs them). Leave good shots alone. You may move a cue to other words inside its own scene.',
     '(6) WORD COLOUR - every word reads at a glance and looks designed: its colour suits its role and stands out from what lies behind it (a pale word on a bright sky or place, or a dark word on a dark backdrop, fails; give the key word or number the accent or a strong warm colour with text "color"). (5) WORLD - the shot obeys the story\'s world (input "world": its era and rules) and plain physics: people stand on ground or floors and are under water only when diving, ships float on the surface, things keep their size and era, and what the words name is shown (use the kit, input "kit", for what the vocabulary lacks).',
+    // The owner's line-by-line review of a weak video (2026-10-21), as checks on every shot.
+    '(7) OWNER STANDARD - fix every shot that fails one of these: a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
     E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix', boards: input.board === 'mix', designs: input.design === 'mix'}),
@@ -581,7 +584,9 @@ class SceneRoom {
     const result = {
       id: row.id, familyId: row.family_id, contentId: row.content_id, revision: row.revision, contentRevision: row.content_revision, voiceApprovalId: row.voice_approval_id,
       styleRevisionId: row.style_revision_id, source: row.source, parentId: row.parent_id, changeNote: row.change_note, createdBy: row.created_by, createdAt: row.created_at,
-      payloadHash: row.payload_hash, review, status, latest: latest?.id === row.id, issues: checks.issues, warnings: currentWarnings(checks.warnings, payload),
+      payloadHash: row.payload_hash, review, status, latest: latest?.id === row.id, issues: checks.issues,
+      // Owner review 2026-10-21: a free draft looked like a finished video and was judged as one; it says what it is.
+      warnings: [...(row.source === 'rules' ? [ROUGH_DRAFT] : []), ...currentWarnings(checks.warnings, payload)],
       sceneCount: payload.scenes.length, shotCount: payload.scenes.reduce((sum, scene) => sum + scene.shots.length, 0), narrationSeconds: payload.timing.narrationSeconds,
       scope: this.scopeOf(row, inputs),
     };

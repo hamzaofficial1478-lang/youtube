@@ -229,3 +229,16 @@ test('caption themes change how burned-in captions look; the style checks the na
   assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, theme: 'clean'}}).captions.theme, undefined);
   assert.throws(() => validateStyleSpec({...spec, captions: {...spec.captions, theme: 'neon'}}), /caption theme/);
 });
+
+// 2026-10-21: a voice whose word clock does not fit its audio (85 s of words for 63 s of sound) stopped the edit on its
+// captions. Word times that run past the narration are not trusted (the estimate is used); a tiny overshoot is trimmed.
+test('measured word times that run past the narration fall back to the estimate; a small overshoot is trimmed', () => {
+  const Cap = require('../captions');
+  const sentences = [{n: 1, text: 'One two three four.', startSeconds: 0}];
+  const words = [{text: 'One', start: 0, end: 0.5}, {text: 'two', start: 0.5, end: 1}, {text: 'three', start: 1, end: 1.5}, {text: 'four.', start: 1.5, end: 2.3}];
+  assert.equal(Cap.measuredTimings(sentences, words, 1.5), null, 'ends 0.8 s after the narration: not trusted');
+  const trimmed = Cap.measuredTimings(sentences, words, 2.0);
+  assert.equal(trimmed.at(-1).end, 2, 'a 0.3 s overshoot is trimmed to the narration');
+  const captions = Cap.buildCaptions({sentences, narrationSeconds: 1.5, measured: words});
+  assert.ok(captions.groups.every(group => group.end <= 1.5 + 1e-6), 'the estimate keeps every caption inside the narration');
+});

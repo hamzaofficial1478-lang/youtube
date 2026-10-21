@@ -55,7 +55,7 @@ const DOCS = Object.freeze(['newspaper', 'letter', 'report', 'post']);
 // choice of more appealing colours"): the style's accent or ink, or a named colour. Claude chooses it for the word's role.
 const WORD_COLORS = Object.freeze(['accent', 'ink', 'red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'grey', 'brown', 'gold', 'teal']);
 const TEXT_STYLES = Object.freeze(['title', 'note', 'number', 'counter', 'stamp', 'highlight', 'pop', 'label', 'headline', 'chapter', 'sticky', 'tag', 'callout', 'keyword', 'versus', 'statement', 'poster']);
-const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars', 'impact', 'lightning', 'explosion', 'fire', 'dust', 'wind', 'spiral', 'crack']);
+const FX = Object.freeze(['burst', 'speedlines', 'flash', 'shake', 'punch', 'confetti', 'smoke', 'sparkles', 'circle', 'underline', 'cross', 'check', 'spotlight', 'money-rain', 'rain', 'snow', 'hearts', 'glow', 'shockwave', 'glitch', 'scan', 'pulse', 'ink-splat', 'progress', 'stars', 'impact', 'lightning', 'explosion', 'fire', 'dust', 'wind', 'spiral', 'crack', 'nightfall']);
 // Near-miss expression names Claude uses (live 0.25 run: "curious"), drawn as the closest real face.
 const FACE_NEAR = Object.freeze({wondering: 'curious', serious: 'focused', puzzled: 'confused', afraid: 'scared', anxious: 'nervous', impressed: 'amazed', astonished: 'shocked', horrified: 'terrified', joyful: 'happy', cheerful: 'happy', delighted: 'happy', calm: 'relieved', frustrated: 'angry', mad: 'furious', upset: 'sad', tired: 'exhausted', ashamed: 'guilty', envious: 'jealous', nauseous: 'sick', scheming: 'mischievous', bashful: 'shy', hopeless: 'sad', overwhelmed: 'panic'});
 const FX_NEAR = Object.freeze({highlight: 'circle', sparkle: 'sparkles', star: 'stars', heart: 'hearts', boom: 'impact', pow: 'impact', bang: 'impact', bolt: 'lightning', thunder: 'lightning', flames: 'fire', flame: 'fire', puff: 'dust', breeze: 'wind', swirl: 'spiral', hypno: 'spiral', cracks: 'crack', zoom: 'punch', money: 'money-rain', splat: 'ink-splat', wave: 'shockwave', ring: 'circle', tick: 'check', 'x': 'cross'});
@@ -64,7 +64,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/24';
+const VERSION = 'drawn-scene/25';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -377,7 +377,9 @@ function validateSetting(raw, {strict = false, kit = null} = {}) {
 // prehistoric, ancient or medieval story unless the line itself is about today. Notes for the owner and the
 // continuity review; worldMend moves people who were left under water to the beach (the sea surface).
 const DIVING = /\b(dive[sd]?|diving|divers?|underwater|under water|scuba|snorkel\w*|sea ?floor|seabed|ocean floor|submarine|coral|reefs?|swim\w*|deep sea)\b/i;
-const NOWADAYS = /\b(today|nowadays|these days|modern|now)\b/i;
+// A line that speaks to the viewer happens today, in the viewer's world (2026-10-21: "Tonight, take a pen" was moved
+// from the viewer's room into an ancient chamber, and the modern narrator was flagged as out of era).
+const NOWADAYS = /\b(today|nowadays|these days|modern|now|you|your|yours|yourself|tonight|this video|subscribe)\b/i;
 const OLD_ERAS = ['prehistoric', 'ancient', 'medieval', 'early-modern'];
 // A place of today in a story of the past becomes that world's place (0.37: the pepper demo's king stood in a room
 // with a TV and a floor lamp).
@@ -431,7 +433,9 @@ function continuityIssues(shots, cast = []) {
   for (let k = 1; k < shots.length; k++) {
     const a = shots[k - 1], b = shots[k];
     if (!a.sketch || !b.sketch || a.sceneId !== b.sceneId) continue;
-    const insert = a.sketch.engine !== b.sketch.engine || [a.sketch.set, b.sketch.set].includes('abstract');
+    // Moving between the viewer's world ("you", "tonight") and the story's is a change of world, not a slip
+    // (2026-10-21: keeping the place would have put the emperor in the viewer's bedroom).
+    const insert = a.sketch.engine !== b.sketch.engine || [a.sketch.set, b.sketch.set].includes('abstract') || NOWADAYS.test(a.words || '') !== NOWADAYS.test(b.words || '');
     if (!insert && a.sketch.set !== 'none' && b.sketch.set !== 'none' && a.sketch.set !== b.sketch.set && !goesThere(b, b.sketch.set)) issues.push({kind: 'place', shot: b, previous: a, message: `${b.label} moves from the ${a.sketch.set} to the ${b.sketch.set} inside one scene; keep the place unless the words move.`});
     for (const fig of b.sketch.elements.filter(el => el.kind === 'figure' && el.who)) {
       const before = a.sketch.elements.find(el => el.kind === 'figure' && el.who === fig.who);
@@ -448,7 +452,14 @@ function mend(shots, cast = []) {
   const fixes = [], name = id => cast.find(item => item.id === id)?.name || id;
   for (let k = 1; k < shots.length; k++) {
     for (const issue of continuityIssues(shots.slice(k - 1, k + 1), cast)) {
-      if (issue.kind === 'place') { fixes.push({label: issue.shot.label, fix: `Kept the ${issue.previous.sketch.set}: its words do not move the story to the ${issue.shot.sketch.set}.`}); issue.shot.sketch.set = issue.previous.sketch.set; }
+      if (issue.kind === 'place') {
+        fixes.push({label: issue.shot.label, fix: `Kept the ${issue.previous.sketch.set}: its words do not move the story to the ${issue.shot.sketch.set}.`});
+        issue.shot.sketch.set = issue.previous.sketch.set;
+        // A kit place travels with its drawing (2026-10-21: two shots kept a kit:camp set but carried the tent's
+        // drawing, so they rendered on a blank backdrop).
+        const id = String(issue.previous.sketch.set).replace(/^kit:/, ''), item = issue.previous.sketch.kit?.[id];
+        if (String(issue.previous.sketch.set).startsWith('kit:') && item) issue.shot.sketch.kit = {...(issue.shot.sketch.kit || {}), [id]: item};
+      }
       else { issue.figure.facing = issue.before.facing; fixes.push({label: issue.shot.label, fix: `${name(issue.figure.who)} keeps facing ${issue.before.facing} after changing sides, so the direction on screen holds.`}); }
     }
     fixes.push(...carryOne(shots[k - 1], shots[k], name));
@@ -516,16 +527,21 @@ function timing(sketch, words) {
 // Free planner (audit 2026-10-19): a year is a date, not a count; many people are a crowd; nothing named takes turns.
 const YEAR = /^(1[0-9]{3}|20[0-9]{2}|21[0-9]{2})$/;
 const PEOPLE = /\b(employees|workers|people|investors|soldiers|army|armies|crowds?|citizens|voters|customers|traders|shareholders|population)\b/;
-const FALLBACK_PROPS = ['lightbulb', 'question', 'magnifier', 'target', 'key'];
+// The emotion a line is about decides the face (first match wins), and night words bring the night.
+const EMOTION_WORDS = [['angry', /\b(anger|angry|temper|rage|furious|shout\w*)\b/], ['suspicious', /\b(strange\w*|myster\w*|secrets?|odd|weird)\b/],
+  ['scared', /\b(fear\w*|afraid|scared|terrif\w*|panic\w*)\b/], ['sad', /\b(sad\w*|grief|griev\w*|died|death)\b/], ['shocked', /\b(shock\w*|surpris\w*|suddenly)\b/]];
+const NIGHT_WORDS = /\b(night|nights|nightly|tonight|evening|midnight)\b/;
 const PROP_WORDS = [
   ['ship', /\b(ships?|boats?|fleet|voyages?)\b/], ['shield', /\b(insur\w*|protect\w*)\b/], ['pie-chart', /\b(shares?|pieces?|split\w*|portions?)\b/], ['crown', /\b(king|queen|emperor|royal)\b/], ['sword', /\b(army|armies|soldiers?|war)\b/],
   ['bolt', /\b(lightning|bolt|strikes?|striking|flash|spark|electric\w*)\b/], ['storm', /\b(storm|thunder\w*|clouds?)\b/], ['sun', /\b(sun|sunlight|solar)\b/], ['fire', /\b(fire|burn\w*|flames?|hot|hotter|heat)\b/],
   ['moneybag', /\b(rich|wealth\w*|fortune|million\w*|billion\w*)\b/], ['money', /\b(money|cash|dollars?|salary|income|paid|pay)\b/], ['coin', /\b(coins?|price|cost\w*|cheap|save\w*)\b/], ['chart-down', /\b(fall\w*|drop\w*|crash\w*|loss\w*|lose|wipe\w*|ruin\w*)\b/], ['chart-up', /\b(grow\w*|increase\w*|rise|rising|profit\w*)\b/],
   ['laptop', /\b(computer|laptop|online|internet|website\w*|hack\w*)\b/], ['phone', /\b(phone|app|apps|text\w*|call\w*)\b/], ['brain', /\b(brain|mind|think\w*|smart|memory|learn\w*)\b/],
-  ['heart', /\b(heart|love\w*|alive)\b/], ['skull', /\b(death|dead|die\w*|deadly|kill\w*|poison\w*)\b/], ['lock', /\b(secret\w*|private|hidden|lock\w*)\b/], ['key', /\b(key|unlock\w*|access)\b/],
-  ['globe', /\b(earth|world|globe|planet|countries)\b/], ['clock', /\b(seconds?|minutes?|hours?|time|clock)\b/], ['calendar', /\b(days?|weeks?|months?|years?)\b/], ['book', /\b(book|story|history|read\w*)\b/],
+  ['heart', /\b(heart|love\w*|alive)\b/], ['skull', /\b(death|dead|die\w*|deadly|kill\w*|poison\w*)\b/], ['lock', /\b(locks?|locked|padlock)\b/], ['key', /\b(key|unlock\w*)\b/],
+  // Only the thing itself (owner review 2026-10-21: "private" drew a lock, "years" a calendar, "minutes" a clock,
+  // "Earth" a globe - symbols the line never named).
+  ['globe', /\b(globe|planet)\b/], ['clock', /\b(clocks?|o'clock)\b/], ['calendar', /\b(calendars?)\b/], ['book', /\b(books?|notebooks?|diary|journal|letters?|wrote|write|writing|readers?)\b/],
   ['city', /\b(city|cities|town)\b/], ['house', /\b(house|home)\b/], ['tree', /\b(trees?|forest|wood)\b/], ['sand', /\b(sand|desert|beach|dune)\b/], ['glass', /\b(glass|crystal)\b/],
-  ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea|seas)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(search\w*|find|discover\w*|investigat\w*)\b/], ['lightbulb', /\b(idea|because|reason|explain\w*|means|trick)\b/],
+  ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea|seas)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(investigat\w*|magnif\w*|clues?)\b/], ['lightbulb', /\b(ideas?|invent\w*)\b/],
   ['trophy', /\b(win\w*|best|champion\w*|advantage\w*)\b/], ['warning', /\b(danger\w*|warning|risk\w*|careful)\b/], ['pill', /\b(medicine|pills?|drug\w*|doctor\w*|health)\b/], ['car', /\b(car|cars|drive|driving|traffic)\b/],
 ].filter(([prop]) => PROPS.includes(prop));
 const SET_WORDS = [['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['storm', /\b(lost at sea|sank|sink\w*|shipwreck\w*|wreck\w*)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyages?|ships?|sailors?|sea)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
@@ -554,9 +570,10 @@ function countriesIn(narration) {
 function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null} = {}) {
   const lower = ` ${String(narration).toLowerCase()} `;
   const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(0, 2);
-  // Nothing named: a hook gets an exclamation, other lines take turns so neighbouring shots differ (audit 2026-10-19:
-  // one light bulb on shot after shot).
-  if (!props.length) props.push(purpose === 'hook' ? 'exclamation' : FALLBACK_PROPS[shotIndex % FALLBACK_PROPS.length]);
+  // Nothing named: the line's own key word goes on screen instead of a stock symbol (owner review 2026-10-21: an
+  // exclamation, a question mark and a light bulb stood in for words they had nothing to do with).
+  const felt = EMOTION_WORDS.find(([, pattern]) => pattern.test(lower)), night = NIGHT_WORDS.test(lower);
+  const keyWord = felt ? lower.match(felt[1])[0].trim() : props.length ? '' : ((String(narration).match(/[A-Za-z]{5,}/g) || []).sort((a, b) => b.length - a.length)[0] || '');
   const pose = POSE_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (shotIndex % 2 ? 'point' : 'talk');
   // The number a line is about: an amount before a year (a year is a date, not a quantity to count up to).
   const numbers = (String(narration).match(/\b\d[\d,.]*%?/g) || []).map(raw => raw.replace(/[.,]+$/, '')), amount = numbers.find(raw => !YEAR.test(raw)), year = numbers.find(raw => YEAR.test(raw));
@@ -573,14 +590,20 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
   const elements = [];
   // Many people (employees, an army, investors) are a crowd behind the speaker.
   if (PEOPLE.test(lower)) elements.push({kind: 'crowd', count: 9, pose: /\b(army|armies|soldiers?|war)\b/.test(lower) ? 'fist' : 'stand', x: left ? 0.3 : 0.68, y: 0.84, width: 0.5});
-  if (engine !== 'motion' || cast.length) elements.push({kind: 'figure', ...(who ? {who} : {}), pose, expression: turn ? 'worried' : MOOD_EXPRESSION[pose] || 'neutral', x: left ? 0.72 : 0.27, y: 0.8, size: 'l', facing: left ? 'left' : 'right'});
+  // Night in the words: the sky turns to night behind everything (listed first, so it stays behind).
+  if (night) elements.unshift({kind: 'fx', effect: 'nightfall', x: 0.5, y: 0.5});
+  // The face is the emotion of the words (owner review 2026-10-21: a smile on "anger" and on "stranger").
+  if (engine !== 'motion' || cast.length) elements.push({kind: 'figure', ...(who ? {who} : {}), pose, expression: felt ? felt[0] : turn ? 'worried' : MOOD_EXPRESSION[pose] || 'neutral', x: left ? 0.72 : 0.27, y: 0.8, size: 'l', facing: left ? 'left' : 'right'});
   // The words come right after the speaker, so a drawing hand writes the number the line is about first.
   const words = clean(onScreenText, 40) || amount || year || '';
   if (words) elements.push({kind: 'text', text: words, x: 0.5, y: 0.15, size: !onScreenText && (amount || year) ? 'l' : 'm', style: onScreenText ? 'title' : amount ? 'counter' : year ? 'number' : 'title', accent: true});
+  else if (keyWord) elements.push({kind: 'text', text: keyWord.toUpperCase(), x: left ? 0.3 : 0.7, y: 0.3, size: 'l', style: 'keyword', animate: 'rise', at: keyWord, accent: true});
   const lift = elements.some(el => el.kind === 'crowd') ? 0.12 : 0;
   props.forEach((prop, k) => elements.push({kind: 'prop', prop, x: left ? 0.3 + k * 0.2 : 0.6 + k * 0.2, y: (k ? 0.56 : 0.42) - lift, size: k ? 'm' : 'l', accent: k === 0}));
   const first = elements.findIndex(el => el.kind === 'prop');
-  if (purpose === 'hook') elements.splice(first, 0, {kind: 'fx', effect: 'burst', on: first + 2});
+  // The hook's burst sits behind its first prop, or behind the key word when nothing is named.
+  const marked = first >= 0 ? first : elements.findIndex(el => el.kind === 'text');
+  if (purpose === 'hook' && marked >= 0) elements.splice(marked, 0, {kind: 'fx', effect: 'burst', on: marked + 2});
   // Every engine's drawn shots stand in a place the words name (0.37 documentary looks draw places at full strength).
   const set = setting?.set || SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (engine === 'motion' ? 'abstract' : 'none');
   return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : turn ? {mood: 'tense'} : {}), camera: purpose === 'hook' || turn ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
@@ -623,6 +646,13 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     '- {"kind": "arrow", "from": [x, y] or element number, "to": [x, y] or element number, "label"?, "dashed"?: true (a connector between related things)}   - {"kind": "bubble", "text": up to 48 chars, "on": figure element number, "thought"?: true, "x", "y"}',
     'BUILD EVERY SHOT LIKE A SCENE, not a slide: (1) a set that says where we are ("none" only for a clean punch-in beat); (2) characters acting the line with a pose, an expression and, when it fits, an emote or a held prop; (3) the props the line names; (4) the motion layer: one or two effects or kinetic words tied to words with "at" (burst behind a big claim, counter for a number, cross on a myth and check on the truth, speedlines for speed, shake or punch on a shock, spotlight on a secret); (5) beats: things arrive on their words, "then" changes a pose, expression or position mid-shot, "until" removes something; (6) camera and focus to steer the eye.',
     'SCRIPT MATCH: every shot shows exactly what its own words say, at the moment they are said: the right subject, the right action, the right emotion. Never show something before it is said or after the narration has moved on, and never cut to an unrelated picture or metaphor.',
+    // The owner's standard after reviewing a weak video line by line (2026-10-21).
+    'WHO IS ON SCREEN: decide for every line whether it shows the story or speaks to the viewer. A person the story names is drawn as that person - their era\'s clothes and headwear, in their own place, doing what the words say (an emperor writing by candlelight in his tent at night, shouting at his generals) - never a narrator standing in for them. A narrator or "you" character, if the video has one, appears only on lines that address the viewer ("you", "tonight", "by the end of this video") and looks clearly different. Only a character who is speaking the narrated words to the viewer uses a talking pose (talk, present), and the program moves that mouth only while words are spoken; story characters act (write, point, shout, walk, think) and talk only when the narration quotes their own words. Give every cast member a "role" that says which they are.',
+    'KEY WORDS ON SCREEN: the hook\'s promise ("by the end of this video ...") becomes a statement or title with "animate"; every turn and hook word ("stranger", "but", "the real reason", "secret") and the emotion a beat is about ("anger", "fear") become kinetic words on their own word; every number, year and duration ("170", "five minutes", "nineteen years") gets its own visual (counter, timeline, gauge, calendar pages flipping with a counter). At least one kinetic word or number in every two shots, never a whole shot of only a figure and a symbol.',
+    'HOLD: one picture stays at most about 3.5 seconds; something new arrives, changes or moves before then (a new beat with "at", a "then" change, a focus move or a new shot). Never repeat a shot\'s composition, set and props later in the video unless the story returns there on purpose.',
+    'LIVING CHARACTERS: characters turn their head and body toward what appears or who speaks ("then" with "facing" on its word), change pose on the words and react; their expression is the emotion of the line (anger: angry or furious with an anger emote; strange: suspicious or confused; a discovery: amazed; a calm practice: focused or relieved). Never a smile on a dark, angry or strange line.',
+    'TIME OF DAY: when the words say night or move from day to night (tonight, at night, every night, evening), show it: the night set or mood, or the effect "nightfall" (listed first, on its words: the sky darkens, the sun sets, the moon rises and stars twinkle), with a light of the era (a candle or a fire, a held prop).',
+    'ERA AND PLACE: objects come from the words and the era (writing in Rome is a notebook or a wax tablet and a stylus by a candle - never a lock, a clock, a lightbulb, a calendar or a question mark when the line names a concrete thing); armies and officials of the past wear their era\'s uniform and arms (crowd colors and headwear, armor, helmets, swords, shields); a place the narration names is drawn (a river when it names a river, the camp, the city).',
     'CONTINUITY: plan the world first. Each part of the story has one place that matches what the narration describes; shots stay in it while the narration stays there and change place only when the words move. Keep each character on the same side of the screen and facing the same way across neighbouring shots unless they move; keep introduced props while they are still discussed; return to an earlier place when the story returns to its topic. A new place or a new layout needs a reason in the words.',
     'VOICE: a sentence may carry the narrator voice "delivery" (emotion, energy 1-5, pace). Let the expressions of the characters, the mood, the camera and the beat speed follow it: excited lines get punchy pops and bright faces, sad lines slow pushes and sad faces, tense lines worried faces and a tense mood, a whisper a close, quiet frame.',
     'PACING: match the genre. Energetic explainers and listicles change the picture every 1.5-3 seconds (a new shot or a new beat) and use whip, zoom and pop openings at section changes; calm or serious topics hold longer with slow pushes. Never let a frame sit still: every shot has something that moves.',

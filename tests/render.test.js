@@ -266,3 +266,16 @@ test('crossfade and dip-to-black assemblies stay frame-exact against the narrati
     assert.ok(Math.abs(probe.durationSeconds - 10) < 0.05);
   }
 });
+
+// 2026-10-21: FFmpeg's dissolve draws new random noise at every size, so a master with a dissolve never matched its
+// preview there and could never be approved. Those frames are not compared; everything else still must match.
+test('the preview match skips random-noise transitions and still catches a real difference elsewhere', () => {
+  const R = require('../render');
+  const stats = Array.from({length: 90}, (_, k) => `n:${k + 1} All:${k >= 30 && k < 40 ? '0.49' : k >= 70 && k < 80 ? '0.40' : '0.99'}`).join('\n');
+  const both = R.previewMatch(stats, 30);
+  assert.equal(both.spans.length, 2);
+  const one = R.previewMatch(stats, 30, {exempt: [[0.95, 1.35]]});
+  assert.deepEqual(one.spans.map(span => span.start), [2.33], 'the dissolve at 1 s is skipped; the real difference at 2.3 s stays');
+  assert.equal(one.passed, false);
+  assert.match(one.detail, /frames of random-noise transitions not compared/);
+});
