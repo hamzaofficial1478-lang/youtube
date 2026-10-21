@@ -329,6 +329,11 @@ class YouTubePublicClient {
       views: count(item.statistics?.viewCount), likes: count(item.statistics?.likeCount), comments: count(item.statistics?.commentCount), durationSeconds: durationSeconds(item.contentDetails?.duration),
     }]));
   }
+  // R08: the channel behind each video link the owner pasted (one call for up to 50 links).
+  async videoChannels(ids) {
+    const data = await this.call('videos', {part: 'snippet', id: ids.join(','), maxResults: ids.length, fields: 'items(id,snippet(channelId,channelTitle))'});
+    return (Array.isArray(data?.items) ? data.items : []).filter(item => VIDEO_ID.test(item?.id || '') && CHANNEL_ID.test(item?.snippet?.channelId || '')).map(item => ({videoId: item.id, channelId: item.snippet.channelId, channelTitle: cleanText(item.snippet.channelTitle, 120)}));
+  }
   async channelStats(ids) {
     const data = await this.call('channels', {part: 'snippet,statistics', id: ids.join(','), maxResults: ids.length, fields: 'items(id,snippet(title,customUrl),statistics(subscriberCount,hiddenSubscriberCount,videoCount))'});
     return new Map((Array.isArray(data?.items) ? data.items : []).filter(item => CHANNEL_ID.test(item?.id || '')).map(item => [item.id, {

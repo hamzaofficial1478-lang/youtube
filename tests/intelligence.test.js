@@ -326,6 +326,11 @@ function evaluation(extra = {}) {
     familyDraft: {name: 'Money Before Money', audience: 'Curious adults who enjoy history and personal finance.', niche: 'Origins of money with modern lessons', countries: ['United States', 'Canada'], format: 'long-form'},
     confidence: {level: 'medium', rationale: 'Discovery covered two seeds and one keyword.'},
     uncertainties: ['NexLev revenue figures are estimates.'],
+    audience: {who: 'Curious adults who like money stories with a practical point.', wants: ['A clear origin story'], pains: ['Dry lectures'], staysFor: ['A modern habit at the end'], leavesWhen: ['Long intros']},
+    gaps: [{gap: 'Nobody ends with a habit viewers can use today.', refs: ['C1'], howWeFill: 'Every episode closes on one modern money habit.'}, {gap: 'Few use maps to show where money travelled.', refs: ['K1'], howWeFill: 'Animated trade-route maps.'}, {gap: 'Little about everyday people, mostly kings.', refs: ['IDEA'], howWeFill: 'Stories told through ordinary traders.'}],
+    howWeWin: 'Ancient money stories told through ordinary people, each ending with one habit to use today.',
+    competitorNotes: [{ref: 'C1', strength: 'Strong openings.', weakness: 'No practical takeaway.'}],
+    monetization: ['Budgeting app sponsors that fit a practical audience.', 'A printable money-history timeline.'],
     ...extra,
   };
 }
@@ -337,11 +342,13 @@ test('Niche Factory: owner ideas, NexLev discovery, rubric score in code, hard f
   const idea = niches.saveIdea({title: 'Origins of money', description: 'Story-led explainers about how money began and what it teaches today.', audience: 'Curious adults', countries: ['United States'], formats: ['long-form'], keywords: ['history of money'], seedChannels: [channelIds[0]], createdBy: 'Owner'});
   assert.throws(() => niches.queueDiscovery(idea.id, {ideaRevision: idea.revision, requestedBy: 'Owner'}), /NexLev/);
   const queued = niches.queueDiscovery(idea.id, {ideaRevision: idea.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev});
-  assert.deepEqual(queued.scope.plannedUnits, {nexlev: 6, youtube: 0});
+  assert.deepEqual(queued.scope.plannedUnits, {nexlev: 18, youtube: 0}, '2 per seed, 1 per keyword, 3 estimates and 12 recent-growth checks');
   const discovery = await niches.processNextDiscovery();
   assert.equal(discovery.status, 'completed');
   assert.equal(discovery.result.seeds[0].overview.niche, 'Economic history explainers');
-  assert.deepEqual(discovery.result.channels.map(item => item.channelId), [channelIds[2], channelIds[1]], 'channels found by several routes rank first');
+  assert.deepEqual(discovery.result.channels.map(item => item.channelId), [channelIds[2], channelIds[1], channelIds[0]], 'channels found by several routes rank first; the seed itself is a candidate');
+  assert.equal(discovery.result.rising.length, 3, 'every channel uploaded twice or more in the last 90 days');
+  assert.equal(discovery.result.channels[0].momentum.uploads, 6);
   assert.equal(discovery.result.analytics[0].estimatedMonthlyRevenue, 3400);
   assert.equal(discovery.result.analytics[0].label, 'NexLev estimate');
   assert.equal(discovery.result.keywords[0].videos[0].title, 'The first coins ever minted');
@@ -365,7 +372,7 @@ test('Niche Factory: owner ideas, NexLev discovery, rubric score in code, hard f
 });
 
 test('Niche evaluations: a failed hard filter blocks approval; duplicate or copied episode ideas are rejected', async t => {
-  const ideaOnly = {ratings: Object.fromEntries(Object.entries(evaluation().ratings).map(([key, value]) => [key, {...value, refs: ['IDEA']}])), recommendedCompetitors: []};
+  const ideaOnly = {ratings: Object.fromEntries(Object.entries(evaluation().ratings).map(([key, value]) => [key, {...value, refs: ['IDEA']}])), recommendedCompetitors: [], competitorNotes: [], gaps: evaluation().gaps.map(item => ({...item, refs: ['IDEA']}))};
   const failing = fakeNetwork({claudeContent: evaluation({...ideaOnly, hardFilters: {...evaluation().hardFilters, rights: {pass: false, note: 'Relies on copyrighted film clips.'}}})});
   const {niches, ids} = setup(t, failing);
   const idea = niches.saveIdea({title: 'Movie money moments', description: 'Explaining money scenes from famous films and shows.', formats: ['long-form'], keywords: ['movie money scenes'], createdBy: 'Owner'});

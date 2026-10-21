@@ -1,7 +1,7 @@
 {
-  "version": "0.49.0",
+  "version": "0.50.0",
   "updated": "2026-10-21",
-  "nextAction": "Building next by the owner's request of 2026-10-21: R08 niche intake (video links and screenshots read by Claude, about 10 competitors that grew in the last 90 days, go/no-go with what competitors miss and the viewers), then S03 retention writing skills. A live trend scan needs the owner's go-ahead (it spends YouTube quota).",
+  "nextAction": "Building next by the owner's request of 2026-10-21: S03 retention writing (skills from the owner's screenshots, a retention structure check on scripts). Live NexLev, YouTube and Claude runs need the owner's go-ahead.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -234,6 +234,13 @@
           "status": "testing",
           "evidence": "0.49.0 (2026-10-21): Trending topics: 1-30 keywords searched on YouTube for the most-viewed videos of the last 1-30 days (the owner's mindstory.py method, videos and channels matched by ID), units reserved first, the first refusal stops the scan, data purged after 30 days, filters (keyword, small channels under 3,000, length); worked-out numbers and Claude topic ideas (title under 60 characters, hook, promise, why click, what we add, cited trend videos, copy guard) only with the recorded YouTube derived-use approval; \"Start a draft\" prefills the draft form. Tested in tests/trends.test.js (stand-in YouTube and Claude) and in the browser on a throwaway workspace. npm test (326 tests, 326 passing after updating one state-keys assertion) passed.",
           "remaining": "A live scan with the owner's YouTube key (spends quota; needs the go-ahead). Topic ideas stay locked until the owner records YouTube's approval for derived use."
+        },
+        {
+          "id": "R08",
+          "title": "Niche intake (links, screenshots), rising competitors and the go/no-go",
+          "status": "testing",
+          "evidence": "0.50.0 (2026-10-21): niche ideas from video links (channel found with one YouTube call) and screenshots read by Claude (type checked, kept in the data folder, a click inside a token reservation; the page prefills the idea form); the top candidate channels measured over 90 days and up to 10 rising competitors (NexLev data); the go/no-go answer adds the viewers, 3-8 gaps competitors miss with how we fill them, how we win, competitor notes and ways to earn beyond AdSense, with evidence checks and the copy guard; approval prefills the family with the recommended (rising) competitors. Tested in tests/niche-intake.test.js and the updated tests/intelligence.test.js (stand-in providers) and in the browser on a throwaway workspace. npm test (334 tests, 334 passing) passed.",
+          "remaining": "Live runs with the owner's NexLev, YouTube and Claude connections (they spend quota and tokens; the owner's go-ahead is needed)."
         }
       ]
     },
@@ -584,5 +591,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Trending topics: the owner's keyword scanner built in (R07)"
+  "milestone": "Niche intake by link and screenshot, rising competitors and the go/no-go (R08)"
 }

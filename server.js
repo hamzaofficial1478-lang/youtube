@@ -47,7 +47,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // The Skills Engine attaches its runtime to the store so the prompt-building rooms can reach
   // the approved skill brief. Nothing is injected until a skill revision is approved by a human.
   const skills=new SkillsEngine(store,{root}).attach();
-  const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles,ai),nicheFactory=new NicheFactory(store,connectors,quota,styles,ai),trends=new TrendScanner(store,connectors,quota,ai);
+  const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles,ai),nicheFactory=new NicheFactory(store,connectors,quota,styles,ai,{shotDir:path.join(dataRoot,'niche-shots')}),trends=new TrendScanner(store,connectors,quota,ai);
   const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel,ai});
   const renderRoom=new RenderRoom(store,styles,sceneRoom,{dataRoot,ffmpeg,ffprobe});
   const editingRoom=new EditingRoom(store,styles,sceneRoom,renderRoom,{ffmpeg});
@@ -64,10 +64,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   let timer, ffmpegAvailable=null, ticks=0;
   const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
-  async function readBody(req) {
+  async function readBody(req,limit=262144) {
     if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))throw new InputError('Use application/json.',415);
     const chunks=[];let bytes=0;
-    for await(const chunk of req){bytes+=chunk.length;if(bytes>262144)throw new InputError('Request is too large. Maximum 256 KB.',413);chunks.push(chunk);}
+    for await(const chunk of req){bytes+=chunk.length;if(bytes>limit)throw new InputError(`Request is too large. Maximum ${Math.round(limit/1024)} KB.`,413);chunks.push(chunk);}
     let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new InputError('Request body is not valid JSON.');}
     if(!body || typeof body!=='object' || Array.isArray(body))throw new InputError('Send a JSON object.');return body;
   }
@@ -124,6 +124,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/skills/effect')return json(res,200,skills.effect(String(url.searchParams.get('skillId')||'')));
         const visualFile=pathname.match(/^\/api\/(visual-candidates|visual-assets)\/([a-f0-9-]+)\/(preview|thumb|file)$/);
         if(visualFile){const [,kind,id,part]=visualFile;if((kind==='visual-candidates')!==(part==='preview'))throw new InputError('Page not found.',404);const {file,mime}=kind==='visual-candidates'?sceneRoom.candidatePreview(id):sceneRoom.assetFile(id,part);let body;try{body=fs.readFileSync(file);}catch{throw new InputError('Media file is unavailable.',404);}res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store','Content-Length':body.length});return res.end(body);}
+        const nicheShot=pathname.match(/^\/api\/niche-reads\/([a-f0-9-]+)\/image$/);
+        if(nicheShot){const {file,mime}=nicheFactory.imageFile(nicheShot[1]),body=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime,'Content-Length':body.length,'Cache-Control':'no-store'});return res.end(body);}
         const trendScan=pathname.match(/^\/api\/trend-scans\/([a-f0-9-]+)$/);
         if(trendScan)return json(res,200,trends.publicScan(trends.scanRow(trendScan[1])));
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
@@ -133,7 +135,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(!['POST','PUT'].includes(req.method))throw new InputError('Method not supported.',405);
       const supplied=Buffer.from(String(req.headers['x-local-token']||''));const expected=Buffer.from(token);
       if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected))throw new InputError('Reload the app before saving.',403);
-      const body=await readBody(req);let result;
+      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:262144);let result;
       if(pathname==='/api/connectors'&&req.method==='POST')return json(res,200,connectors.save(body));
       const connectorRoute=pathname.match(/^\/api\/connectors\/([a-f0-9-]+)(?:\/(test|delete))?$/);
       if(connectorRoute){
@@ -153,6 +155,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       else {
         if(pathname==='/api/quota-settings'&&req.method==='POST')return json(res,200,quota.saveSettings(body));
         if(pathname==='/api/niche-settings'&&req.method==='POST')return json(res,200,nicheFactory.saveSettings(body));
+        if(pathname==='/api/niche-reads'&&req.method==='POST')return json(res,200,nicheFactory.queueRead(body));
+        const readRetry=pathname.match(/^\/api\/niche-reads\/([a-f0-9-]+)\/retry$/);
+        if(readRetry&&req.method==='POST')return json(res,200,nicheFactory.retryRead(readRetry[1],body));
         if(pathname==='/api/trend-settings'&&req.method==='POST')return json(res,200,trends.saveSettings(body));
         if(pathname==='/api/trend-scans'&&req.method==='POST')return json(res,200,trends.queueScan(body));
         const trendAction=pathname.match(/^\/api\/trend-(scans|topics)\/([a-f0-9-]+)\/(retry|topics)$/);
@@ -317,7 +322,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Script worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));styleStudies.processNext().catch(error=>console.error('Style study worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));trends.processNextScan().catch(error=>console.error('Trend scan worker:',error.message));trends.processNextTopics().catch(error=>console.error('Trend topic worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));frameScanner.processNext().catch(error=>console.error('Frame scan worker:',error.message));packagingRoom.processNext().catch(error=>console.error('Packaging worker:',error.message));localizationRoom.processNext().catch(error=>console.error('Localization worker:',error.message));localizationRoom.processNextNarration().catch(error=>console.error('Edition narration worker:',error.message));publishingRoom.processNext().catch(error=>console.error('Publishing worker:',error.message));voiceDirector.processNext().catch(error=>console.error('Voice direction worker:',error.message));soundtrack.processNextScore().catch(error=>console.error('Music score worker:',error.message));soundtrack.processNextAudio().catch(error=>console.error('Music and effects worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Script worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));styleStudies.processNext().catch(error=>console.error('Style study worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));nicheFactory.processNextRead().catch(error=>console.error('Screenshot read worker:',error.message));trends.processNextScan().catch(error=>console.error('Trend scan worker:',error.message));trends.processNextTopics().catch(error=>console.error('Trend topic worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));frameScanner.processNext().catch(error=>console.error('Frame scan worker:',error.message));packagingRoom.processNext().catch(error=>console.error('Packaging worker:',error.message));localizationRoom.processNext().catch(error=>console.error('Localization worker:',error.message));localizationRoom.processNextNarration().catch(error=>console.error('Edition narration worker:',error.message));publishingRoom.processNext().catch(error=>console.error('Publishing worker:',error.message));voiceDirector.processNext().catch(error=>console.error('Voice direction worker:',error.message));soundtrack.processNextScore().catch(error=>console.error('Music score worker:',error.message));soundtrack.processNextAudio().catch(error=>console.error('Music and effects worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
   server.on('close',()=>{clearInterval(timer);store.close();});
   return {server,store,dataRoot,styles,quota,competitorIntel,styleStudies,nicheFactory,trends,sceneRoom,renderRoom,editingRoom,frameScanner,packagingRoom,localizationRoom,publishingRoom,voiceDirector,soundtrack,connectors,ai,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }

@@ -24,7 +24,7 @@ function intelBusy() {
   const intel = state?.intelligence;
   if (!intel) return false;
   const active = item => ['queued', 'running'].includes(item.status);
-  return Object.values(intel.competitors.families).some(family => family.scans.some(active) || family.analyses.some(active)) || intel.niches.discoveries.some(active) || intel.niches.evaluations.some(active) || intel.trends.scans.some(active) || intel.trends.topics.some(active);
+  return Object.values(intel.competitors.families).some(family => family.scans.some(active) || family.analyses.some(active)) || intel.niches.discoveries.some(active) || intel.niches.evaluations.some(active) || intel.trends.scans.some(active) || intel.trends.topics.some(active) || intel.niches.reads.some(active);
 }
 function competitorLabel(item) { return item.kind === 'username' ? `/user/${item.value}` : item.value; }
 const competitorKeyOf = item => `${item.kind}:${item.value.toLowerCase()}`;
@@ -179,6 +179,39 @@ function guidanceCard(family, data) {
     ${current?.outdated ? `<p class="inline-warning">${esc(current.outdatedReason || 'The competitor list changed after this approval.')} Run a new scan and analysis.</p>` : ''}</section>`;
 }
 
+// Screenshots the owner attached, read by Claude (R08).
+function readsCard(niches) {
+  const rows = niches.reads.map(read => {
+    const result = read.result, retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(read.status) && read.attempts < 3 ? action('Retry deliberately', 'niche-read-retry', read.id, 'text-button') : '';
+    return `<div class="read-row"><a href="/api/niche-reads/${esc(read.id)}/image" target="_blank" rel="noopener"><img class="shot-thumb" src="/api/niche-reads/${esc(read.id)}/image" alt="Attached screenshot"></a><div>
+      <div>${intelStatus(read.status)} <small>${esc(date(read.createdAt))}${read.usage?.total ? ` · ${intelNumber(read.usage.total)} tokens` : ''}${read.error ? ` · ${esc(read.error)}` : ''}</small></div>
+      ${read.note ? `<p class="muted">${esc(read.note)}</p>` : ''}
+      ${result ? `<p><strong>${esc(result.niche.title)}</strong> · ${esc(result.seen.platform)} ${esc(result.seen.kind)}</p><p>${esc(result.seen.summary)}</p>
+        ${result.channels.length ? `<div class="chip-row">${result.channels.map(item => `<span class="chip ${item.handle ? 'green' : ''}">${esc(item.handle || item.name)}${item.subscribers ? ` · ${esc(item.subscribers)}` : ''}</span>`).join('')}</div>` : ''}
+        ${result.patterns.length ? `<span class="micro-label">What makes it work</span>${intelList([...result.patterns, ...result.whyItWorks])}` : ''}
+        ${result.questions.length ? `<span class="micro-label">Check before choosing</span>${intelList(result.questions)}` : ''}
+        ${action('Create niche idea from this', 'niche-from-read', read.id, 'secondary')}` : ''}${retry}</div></div>`;
+  }).join('');
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCREENSHOTS</span><h2>Read by Claude</h2></div>${action('Read a screenshot', 'niche-read', '', 'secondary')}</div>${rows || '<p class="muted">Attach a screenshot of a channel, a video, a search page or a post. Claude reads the channels, numbers and patterns it shows and drafts a niche idea for you to check.</p>'}</section>`;
+}
+const GO_LABEL = {strong: ['Go', 'green'], promising: ['Go with a small test', 'orange'], weak: ['No-go for now', 'gray'], do_not_produce: ['Do not produce', 'gray']};
+function risingTable(disc) {
+  if (!disc.rising?.length) return '';
+  return `<span class="micro-label">Rising competitors · grew in the last ${state.intelligence.niches.momentumDays} days (NexLev data)</span><div class="table-scroll"><table class="data-table"><thead><tr><th>Ref</th><th>Channel</th><th>Subscribers</th><th>New videos</th><th>Views on them</th><th>Median</th><th>Best recent video</th><th>Last upload</th></tr></thead><tbody>${disc.rising.map(ref => disc.channels.find(channel => channel.ref === ref)).filter(Boolean).map(channel => `<tr><td>${esc(channel.ref)}</td><td><a href="https://www.youtube.com/channel/${esc(channel.channelId)}" target="_blank" rel="noopener noreferrer">${esc(channel.title || channel.channelId)}</a></td><td>${intelNumber(channel.subscribers)}</td><td>${channel.momentum.uploads}${channel.momentum.lowerBound ? '+' : ''}</td><td>${intelNumber(channel.momentum.views)}${channel.momentum.lowerBound ? '+' : ''}</td><td>${intelNumber(channel.momentum.medianViews)}</td><td>${channel.momentum.best ? `<a href="https://www.youtube.com/watch?v=${esc(channel.momentum.best.videoId)}" target="_blank" rel="noopener noreferrer">${esc(channel.momentum.best.title || channel.momentum.best.videoId)}</a> · ${intelNumber(channel.momentum.best.views)}` : '—'}</td><td>${esc((channel.momentum.lastUpload || '').slice(0, 10))}</td></tr>`).join('')}</tbody></table></div><p class="hint">Channels with two or more uploads in the window, ranked by the views those uploads gained. "+" means every video NexLev listed is recent, so the real numbers are higher.</p>`;
+}
+function evaluationExtras(result, disc) {
+  if (!result.gaps) return '';
+  const channelName = ref => disc?.channels.find(channel => channel.ref === ref)?.title || ref;
+  const block = (label, items) => `<span class="micro-label">${label}</span>${intelList(items)}`;
+  return `<div class="bp-grid">
+      <div class="bp-section"><span class="micro-label">The viewers</span><p>${esc(result.audience.who)}</p>${block('What they want', result.audience.wants)}${block('Their pains', result.audience.pains)}${block('What keeps them watching', result.audience.staysFor)}${block('What makes them leave', result.audience.leavesWhen)}</div>
+      <div class="bp-section"><span class="micro-label">What competitors miss</span><ul class="intel-list">${result.gaps.map(item => `<li><strong>${esc(item.gap)}</strong> <small>${esc(item.refs.join(', '))}</small><br>${esc(item.howWeFill)}</li>`).join('')}</ul><span class="micro-label">How we win</span><p>${esc(result.howWeWin)}</p></div>
+    </div><div class="bp-grid">
+      <div class="bp-section"><span class="micro-label">Competitor notes</span>${result.competitorNotes.length ? `<ul class="intel-list">${result.competitorNotes.map(item => `<li><strong>${esc(channelName(item.ref))}</strong>: + ${esc(item.strength)} · − ${esc(item.weakness)}</li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
+      <div class="bp-section">${block('Ways to earn beyond AdSense', result.monetization)}</div>
+    </div>`;
+}
+
 // ---------------------------------------------------------------- Niche Factory view
 function nichesView() {
   const niches = state.intelligence.niches, ideas = niches.ideas;
@@ -190,34 +223,34 @@ function nichesView() {
     return `<article class="niche-card ${idea.id === selectedIdea ? 'selected' : ''} ${idea.status === 'archived' ? 'archived' : ''}">
       <div class="card-top"><span class="micro-label">${esc(idea.formats.join(' + '))}${idea.status === 'archived' ? ' · archived' : ''}</span>${evaluation?.score !== null && evaluation?.score !== undefined ? `<span class="score-pill ${esc(evaluation.decision)}">${evaluation.score}</span>` : ''}</div>
       <h3>${esc(idea.title)}</h3><p>${esc(idea.description.slice(0, 180))}</p>
-      <div class="chip-row">${idea.keywords.map(item => `<span class="chip">${esc(item)}</span>`).join('')}${idea.seedChannels.map(item => `<span class="chip green">${esc(competitorLabel(item))}</span>`).join('')}</div>
+      <div class="chip-row">${idea.keywords.map(item => `<span class="chip">${esc(item)}</span>`).join('')}${idea.seedChannels.map(item => `<span class="chip green">${esc(competitorLabel(item))}</span>`).join('')}${(idea.seedVideos || []).length ? `<span class="chip green">${idea.seedVideos.length} video link${idea.seedVideos.length === 1 ? '' : 's'}</span>` : ''}</div>
       <small>${discovery ? `Discovery: ${esc((INTEL_STATUS[discovery.status] || [discovery.status])[0])}` : 'No discovery yet'} · ${evaluation ? `Evaluation: ${esc((INTEL_STATUS[evaluation.status] || [evaluation.status])[0])}${evaluation.decision ? ` · ${esc(evaluation.decision.replaceAll('_', ' '))}` : ''}${evaluation.review ? ` · ${esc(evaluation.review.decision)}` : ''}` : 'not evaluated'}</small>
       <div class="card-actions">${action('Open', 'niche-open', idea.id, 'text-button')}${action('Edit', 'niche-edit', idea.id, 'text-button')}${action(idea.status === 'archived' ? 'Restore' : 'Archive', 'niche-archive', idea.id, 'text-button danger')}</div></article>`;
   }).join('');
   const idea = ideas.find(item => item.id === selectedIdea);
   const used = niches.tokens;
-  return heading('Niche Factory', 'Your own niche ideas plus NexLev discovery, scored with the blueprint rubric. Hard filters always win over the score, and you decide what becomes a family.', action('+ New niche idea', 'niche-new', '', 'primary'))
+  return heading('Niche Factory', 'Your niche ideas, from your own words, pasted links or screenshots. Discovery finds the competitors that grew in the last 3 months; Claude judges go or no-go, studies the viewers and finds what competitors miss. You decide what becomes a family.', action('Read a screenshot', 'niche-read', '', 'secondary') + action('+ New niche idea', 'niche-new', '', 'primary'))
     + `<div class="production-kpis"><div><span>Active ideas</span><strong>${active.length}</strong><small>${ideas.length - active.length} archived</small></div><div><span>NexLev this month</span><strong>${intelNumber(niches.quota.nexlev.used)}</strong><small>of ${intelNumber(niches.quota.nexlev.cap)} requests</small></div><div><span>Niche tokens ${esc(used.period)}</span><strong>${intelNumber(used.settled + used.reserved)}</strong><small>of ${intelNumber(used.limit)}</small></div><div><span>Shortlisted / approved</span><strong>${niches.evaluations.filter(item => ['shortlisted', 'approved'].includes(item.review?.decision)).length}</strong><small>${niches.evaluations.filter(item => item.review?.familyId).length} became families</small></div></div>`
     + `<div class="intel-grid"><div>${idea ? nicheDetail(idea, niches) : `<section class="production-card">${empty('Add your first niche idea.', 'Describe the idea, add 1-5 keywords and optional seed channels. Discovery uses NexLev; evaluation uses Claude.', action('+ New niche idea', 'niche-new', '', 'primary'))}</section>`}</div>
-      <div><section class="production-card"><div class="production-card-head"><div><span class="micro-label">YOUR IDEAS</span><h2>Niche ideas</h2></div>${action('Settings', 'niche-settings', '', 'secondary')}</div><div class="niche-list">${cards || '<p class="muted">No ideas yet.</p>'}</div></section>${dataCapsCard()}</div></div>`;
+      <div><section class="production-card"><div class="production-card-head"><div><span class="micro-label">YOUR IDEAS</span><h2>Niche ideas</h2></div>${action('Settings', 'niche-settings', '', 'secondary')}</div><div class="niche-list">${cards || '<p class="muted">No ideas yet.</p>'}</div></section>${readsCard(niches)}${dataCapsCard()}</div></div>`;
 }
 
 function nicheDetail(idea, niches) {
   const discovery = niches.discoveries.find(item => item.ideaId === idea.id), evaluation = niches.evaluations.find(item => item.ideaId === idea.id);
   const disc = discovery?.result && discovery.result.channels ? discovery.result : null;
   const discoveryBody = !discovery ? '<p class="muted">No discovery yet. It uses NexLev only when you start it.</p>' : `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(discovery.status) ? 'queued' : discovery.status === 'completed' ? 'completed' : ''}"></span><div><strong>${intelStatus(discovery.status)} ${esc(date(discovery.createdAt))}</strong><small>${discovery.result?.usage ? `${discovery.result.usage.nexlev} NexLev request(s)` : `Planned ${discovery.scope.plannedUnits.nexlev} NexLev request(s)`} · attempt ${discovery.attempts}/3${discovery.error ? ` · ${esc(discovery.error)}` : ''}</small></div>${['failed', 'interrupted', 'blocked_quota', 'stale'].includes(discovery.status) && discovery.attempts < 3 ? action('Retry deliberately', 'niche-discovery-retry', discovery.id, 'text-button') : ''}</div>
-    ${disc ? `${disc.seeds.map(seed => `<div class="bp-section"><span class="micro-label">${esc(seed.ref)} · niche overview of ${esc(competitorLabel(seed.input))}</span>${seed.overview ? `<dl class="style-facts">${Object.entries(seed.overview).map(([key, value]) => `<div><dt>${esc(key)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>` : `<p class="muted">${esc(seed.errors.join(' ') || 'No overview returned.')}</p>`}</div>`).join('')}
+    ${disc ? `${risingTable(disc)}${disc.seeds.map(seed => `<div class="bp-section"><span class="micro-label">${esc(seed.ref)} · niche overview of ${esc(seed.input.title || competitorLabel(seed.input))}${seed.input.fromVideo ? ' (from your video link)' : ''}</span>${seed.overview ? `<dl class="style-facts">${Object.entries(seed.overview).map(([key, value]) => `<div><dt>${esc(key)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>` : `<p class="muted">${esc(seed.errors.join(' ') || 'No overview returned.')}</p>`}</div>`).join('')}
       ${disc.channels.length ? `<table class="data-table"><thead><tr><th>Ref</th><th>Channel</th><th>Subscribers</th><th>Found via</th></tr></thead><tbody>${disc.channels.slice(0, 15).map(channel => `<tr><td>${esc(channel.ref)}</td><td><a href="https://www.youtube.com/channel/${esc(channel.channelId)}" target="_blank" rel="noopener noreferrer">${esc(channel.title || channel.channelId)}</a></td><td>${intelNumber(channel.subscribers)}</td><td>${esc(channel.sources.join(', '))}</td></tr>`).join('')}</tbody></table>` : ''}
       ${disc.keywords.map(item => `<div class="bp-section"><span class="micro-label">${esc(item.ref)} · "${esc(item.keyword)}"</span>${item.videos.length ? `<ul class="intel-list">${item.videos.slice(0, 6).map(video => `<li>${esc(video.title || video.videoId)} <small>${esc(video.channelTitle || '')} · ${intelNumber(video.views)} views</small></li>`).join('')}</ul>` : `<p class="muted">${esc(item.error || 'No results.')}</p>`}</div>`).join('')}
       ${disc.analytics.length ? `<table class="data-table"><thead><tr><th>Ref</th><th>Channel</th><th>Monthly views</th><th>Est. monthly revenue</th><th>RPM</th></tr></thead><tbody>${disc.analytics.map(item => `<tr><td>${esc(item.ref)}</td><td>${esc(item.channelRef)}</td><td>${intelNumber(item.monthlyViews)}</td><td>${item.estimatedMonthlyRevenue === null ? '—' : `$${intelNumber(item.estimatedMonthlyRevenue)}`}</td><td>${item.rpm ?? '—'}</td></tr>`).join('')}</tbody></table><p class="hint">Revenue and RPM are NexLev estimates for other people's channels — not facts and not a forecast for yours.</p>` : ''}` : ''}`;
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">NICHE IDEA · r${idea.revision}</span><h2>${esc(idea.title)}</h2></div><div class="row-end">${idea.status === 'active' ? action('Run discovery', 'niche-discover', idea.id, 'secondary') + action('Evaluate with Claude', 'niche-evaluate', idea.id, 'primary') : ''}</div></div>
       <p>${esc(idea.description)}</p><p class="muted">${esc([idea.audience, idea.countries.join(', ')].filter(Boolean).join(' · '))}</p>
       <h3 class="intel-subhead">Discovery</h3>${discoveryBody}
-      <h3 class="intel-subhead">Evaluation</h3>${evaluation ? evaluationView(evaluation, niches) : '<p class="muted">No evaluation yet. Claude scores the idea with the rubric; the program computes the score.</p>'}
+      <h3 class="intel-subhead">Evaluation</h3>${evaluation ? evaluationView(evaluation, niches, disc) : '<p class="muted">No evaluation yet. Claude scores the idea with the rubric; the program computes the score.</p>'}
     </section>`;
 }
 
-function evaluationView(evaluation, niches) {
+function evaluationView(evaluation, niches, disc = null) {
   const head = `<div class="blueprint-head"><div>${intelStatus(evaluation.status)} ${evaluation.review ? badge(`Review: ${evaluation.review.decision}`, evaluation.review.decision === 'approved' ? 'green' : 'gray') : ''} ${evaluation.usage?.total ? badge(`${intelNumber(evaluation.usage.total)} tokens`) : ''}</div><small>Attempt ${evaluation.attempts}/3${evaluation.error ? ` · ${esc(evaluation.error)}` : ''}</small></div>`;
   const retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(evaluation.status) && evaluation.attempts < 3 ? action('Retry deliberately', 'niche-evaluation-retry', evaluation.id, 'secondary') : '';
   if (!evaluation.result) return `${head}${evaluation.quality?.issues?.length ? `<div class="checks">${intelList(evaluation.quality.issues)}</div>` : ''}${retry}`;
@@ -230,13 +263,14 @@ function evaluationView(evaluation, niches) {
   const reviewActions = evaluation.status === 'completed' && !evaluation.review?.familyId ? `${evaluation.review?.decision !== 'approved' ? action('Review niche', 'niche-review', evaluation.id, 'primary') : ''}${evaluation.review?.decision === 'approved' ? action('Create family from niche', 'niche-family', evaluation.id, 'primary') : ''}` : '';
   return `${head}
     ${evaluation.quality && !evaluation.quality.passed ? `<div class="checks"><strong>Blocked:</strong>${intelList(evaluation.quality.issues)}</div>` : ''}
-    <div class="score-panel"><div class="score-dial ${esc(evaluation.decision)}"><b>${evaluation.score}</b><small>/100</small></div><div><strong class="decision-label">${esc(evaluation.decision.replaceAll('_', ' '))}</strong><p>${esc(result.positioning)}</p><small class="muted">The score is a decision aid computed by the program from the five ratings, not a probability. A failed hard filter always means "do not produce".</small></div></div>
+    <div class="score-panel"><div class="score-dial ${esc(evaluation.decision)}"><b>${evaluation.score}</b><small>/100</small></div><div><strong class="decision-label">${badge(...(GO_LABEL[evaluation.decision] || [evaluation.decision, 'gray']))} ${esc(evaluation.decision.replaceAll('_', ' '))}</strong><p>${esc(result.positioning)}</p><small class="muted">The score is a decision aid computed by the program from the five ratings, not a probability. A failed hard filter always means "do not produce".</small></div></div>
     <div class="qc-checks">${filters}</div>
     ${rubric}
     <div class="bp-grid">
       <div class="bp-section"><span class="micro-label">20 episode ideas</span><ol class="episode-list">${result.episodeIdeas.map(item => `<li>${esc(item)}</li>`).join('')}</ol></div>
       <div class="bp-section"><span class="micro-label">Reasons to reject</span>${intelList(result.reasonsToReject)}<span class="micro-label">Recommended competitors</span>${result.recommendedCompetitorChannels?.length ? `<ul class="intel-list">${result.recommendedCompetitorChannels.map(item => `<li><a href="https://www.youtube.com/channel/${esc(item.channelId)}" target="_blank" rel="noopener noreferrer">${esc(item.title || item.channelId)}</a></li>`).join('')}</ul>` : '<p class="muted">None.</p>'}<span class="micro-label">Suggested style</span><p>${esc((state.styles.profiles.find(item => item.key === result.recommendedStyleKey) || {}).name || result.recommendedStyleKey)}</p><span class="micro-label">Family draft</span><p>${esc(result.familyDraft.name)} · ${esc(result.familyDraft.format)} · ${esc(result.familyDraft.countries.join(', '))}</p></div>
     </div>
+    ${evaluationExtras(result, disc)}
     <p class="muted">${esc(result.summary)} · Confidence ${esc(result.confidence.level)}: ${esc(result.confidence.rationale)}</p>
     ${evaluation.review?.familyId ? `<div class="handoff-rule"><strong>Family created</strong><p>${esc(state.families.find(item => item.id === evaluation.review.familyId)?.name || 'Linked family')} was created from this niche.</p></div>` : ''}
     <div class="card-actions">${reviewActions}${retry}</div>`;
@@ -445,8 +479,10 @@ function intelAction(command, id, button) {
     return;
   }
   // Niche Factory
-  if (command === 'niche-new' || command === 'niche-edit') {
-    const idea = state.intelligence.niches.ideas.find(item => item.id === id) || {title: '', description: '', audience: '', countries: [], formats: ['long-form'], keywords: [], seedChannels: [], notes: ''};
+  if (command === 'niche-new' || command === 'niche-edit' || command === 'niche-from-read') {
+    const read = command === 'niche-from-read' ? state.intelligence.niches.reads.find(item => item.id === id) : null;
+    const fromRead = read && {title: read.result.niche.title, description: read.result.niche.description, audience: read.result.niche.audience, countries: [], formats: read.result.niche.formats, keywords: read.result.niche.keywords, seedChannels: read.result.channels.filter(item => item.handle).slice(0, 5).map(item => ({url: `https://www.youtube.com/${item.handle}`})), seedVideos: [], notes: `From a screenshot read on ${date(read.createdAt)}: ${read.result.seen.summary}`.slice(0, 2000)};
+    const idea = fromRead || state.intelligence.niches.ideas.find(item => item.id === id) || {title: '', description: '', audience: '', countries: [], formats: ['long-form'], keywords: [], seedChannels: [], seedVideos: [], notes: ''};
     return intelDialog('idea', idea.id ? 'Edit niche idea' : 'New niche idea', 'YOUR NICHE IDEA', `<div class="form-grid">
       <label class="full">Niche title<input name="title" required minlength="3" maxlength="120" value="${esc(idea.title)}" placeholder="e.g. Stone Age money"></label>
       <label class="full">Description<textarea name="description" required minlength="10" maxlength="2000" rows="3" placeholder="What the channel explains and why it is different">${esc(idea.description)}</textarea></label>
@@ -454,8 +490,19 @@ function intelAction(command, id, button) {
       <label>Target countries <span class="hint">Comma-separated</span><input name="countries" value="${esc(idea.countries.join(', '))}"></label>
       <div><span class="field-label">Formats</span><div class="check-grid"><label class="check-chip"><input type="checkbox" name="formats" value="long-form" ${idea.formats.includes('long-form') ? 'checked' : ''}> Long-form</label><label class="check-chip"><input type="checkbox" name="formats" value="shorts" ${idea.formats.includes('shorts') ? 'checked' : ''}> Shorts</label></div></div>
       <label class="full">Search keywords <span class="hint">Up to 5, comma-separated. The first 3 are searched in NexLev.</span><input name="keywords" value="${esc(idea.keywords.join(', '))}"></label>
-      <label class="full">Seed channels <span class="hint">Up to 5 channels that represent the niche: @handle, UC… ID or channel link (one per line).</span><textarea name="seedChannels" rows="2">${esc(idea.seedChannels.map(item => item.url).join('\n'))}</textarea></label>
+      <label class="full">Channel and video links <span class="hint">One per line: up to 5 channels (@handle, UC… ID or channel link) and up to 10 video links (youtube.com/watch, youtu.be or /shorts/). Discovery finds the channel behind each video (needs the YouTube connector).</span><textarea name="seedChannels" rows="3">${esc([...idea.seedChannels.map(item => item.url), ...(idea.seedVideos || []).map(item => item.url)].join('\n'))}</textarea></label>
       <label class="full">Notes<textarea name="notes" maxlength="2000" rows="2">${esc(idea.notes)}</textarea></label>${nameField()}</div>`, 'Save idea', {id: idea.id || null, revision: idea.revision || null});
+  }
+  if (command === 'niche-read') return intelDialog('niche-read', 'Read a screenshot', 'CLAUDE · WHAT THE PICTURE SHOWS', `<div class="form-grid">
+      <label class="full">Screenshot<input name="image" type="file" accept="image/png,image/jpeg,image/webp" required><span class="hint">PNG, JPEG or WebP under 4 MB: a channel page, a video, search results, a post or an analytics page. It is kept in this program's data folder.</span></label>
+      <label class="full">Your note <span class="hint">optional: what caught your eye</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
+      ${connectorSelect('claude', 'ai', 'Claude connection')}${nameField()}</div>
+      <p class="note">Claude reads the channels, numbers and patterns it can see and drafts a niche idea; nothing is saved as an idea until you check and save it. Reserves up to ${intelNumber(state.intelligence.niches.settings.readTokenLimit)} tokens from the Niche Factory monthly limit.</p>`, 'Read it');
+  if (command === 'niche-read-retry') {
+    const read = state.intelligence.niches.reads.find(item => item.id === id), unknown = read?.status === 'interrupted' || read?.usage?.status === 'unknown';
+    if (unknown && !confirm('The last attempt was interrupted, so tokens may already have been used. Deliberately retry?')) return;
+    button.disabled = true;
+    return api(`/api/niche-reads/${id}/retry`, {confirmInterrupted: unknown}).then(refresh).then(() => toast('Deliberately requeued.')).catch(error => toast(error.message, true)).finally(() => { button.disabled = false; });
   }
   if (command === 'niche-open') { selectedIdea = id; render(); document.querySelector('.intel-grid')?.scrollIntoView({block: 'start'}); return; }
   if (command === 'niche-archive') {
@@ -470,12 +517,14 @@ function intelAction(command, id, button) {
       <label>Tokens per evaluation<input name="evaluationTokenLimit" type="number" min="8000" max="80000" step="1000" required value="${settings.evaluationTokenLimit}"></label>
       <label>Similar-channel depth<select name="similarLevel"><option value="1" ${settings.similarLevel === 1 ? 'selected' : ''}>1 (direct)</option><option value="2" ${settings.similarLevel === 2 ? 'selected' : ''}>2 (wider)</option></select></label>
       <label>Results per keyword<input name="keywordResults" type="number" min="10" max="50" required value="${settings.keywordResults}"></label>
-      <label>Channels to estimate<input name="analyticsTopChannels" type="number" min="0" max="5" required value="${settings.analyticsTopChannels}"><span class="hint">1 NexLev request each.</span></label></div>`, 'Save settings', {revision: settings.revision});
+      <label>Channels to estimate<input name="analyticsTopChannels" type="number" min="0" max="5" required value="${settings.analyticsTopChannels}"><span class="hint">1 NexLev request each.</span></label>
+      <label>Channels checked for recent growth<input name="momentumChannels" type="number" min="0" max="30" required value="${settings.momentumChannels}"><span class="hint">1 NexLev request each; the 10 that grew most become the rising competitors.</span></label>
+      <label>Tokens per screenshot read<input name="readTokenLimit" type="number" min="6000" max="30000" step="1000" required value="${settings.readTokenLimit}"></label></div>`, 'Save settings', {revision: settings.revision});
   }
   if (command === 'niche-discover') {
     const idea = state.intelligence.niches.ideas.find(item => item.id === id), settings = state.intelligence.niches.settings;
-    const planned = idea.seedChannels.length * 2 + Math.min(3, idea.keywords.length) + settings.analyticsTopChannels + idea.seedChannels.filter(item => item.kind === 'username').length;
-    return intelDialog('discover', `Discover · ${idea.title}`, 'EXPLICIT NEXLEV REQUEST', `<div class="form-grid">${connectorSelect('nexlev', 'nexlev', 'NexLev connector', false)}${connectorSelect('youtube', 'youtube', 'YouTube (only to resolve @handles)', true)}</div><p class="note">Planned at most ${planned} NexLev request${planned === 1 ? '' : 's'}: niche overview and similar channels per seed, one search per keyword, and analytics estimates for the top channels.</p><div class="form-grid">${nameField()}</div>`, 'Run discovery', {ideaId: idea.id, ideaRevision: idea.revision});
+    const videos = (idea.seedVideos || []).length, planned = Math.min(5, idea.seedChannels.length + videos) * 2 + Math.min(3, idea.keywords.length) + settings.analyticsTopChannels + settings.momentumChannels + idea.seedChannels.filter(item => item.kind === 'username').length;
+    return intelDialog('discover', `Discover · ${idea.title}`, 'EXPLICIT NEXLEV REQUEST', `<div class="form-grid">${connectorSelect('nexlev', 'nexlev', 'NexLev connector', false)}${connectorSelect('youtube', 'youtube', 'YouTube (for @handles and video links)', true)}</div><p class="note">Planned at most ${planned} NexLev request${planned === 1 ? '' : 's'}: niche overview and similar channels per seed, one search per keyword, analytics estimates for the top channels, and the latest videos of ${settings.momentumChannels} channels to see who grew in the last ${state.intelligence.niches.momentumDays} days${videos ? `, plus 1 YouTube unit to find the channels behind your ${videos} video link${videos === 1 ? '' : 's'}` : ''}.</p><div class="form-grid">${nameField()}</div>`, 'Run discovery', {ideaId: idea.id, ideaRevision: idea.revision});
   }
   if (command === 'niche-evaluate') {
     const idea = state.intelligence.niches.ideas.find(item => item.id === id), discovery = state.intelligence.niches.discoveries.find(item => item.ideaId === id && ['completed', 'partial'].includes(item.status) && item.ideaRevision === idea.revision);
@@ -522,13 +571,20 @@ document.getElementById('intel-form').addEventListener('submit', event => {
     if (kind === 'style-draft') { const result = await api(`/api/competitor-analyses/${data.id}/style-draft`, {createdBy: value('person')}); message = `Style draft "${result.revision.spec.name}" created in the Style Library.${result.skipped.length ? ` ${result.skipped.length} adjustment(s) were skipped by validation.` : ''}`; return result; }
     if (kind === 'idea') {
       const list = (name, separator) => value(name).split(separator).map(item => item.trim()).filter(Boolean);
-      const body = {title: value('title'), description: value('description'), audience: value('audience'), countries: list('countries', ','), formats: [...form.querySelectorAll('input[name="formats"]:checked')].map(input => input.value), keywords: list('keywords', ','), seedChannels: list('seedChannels', /[\s,]+/), notes: value('notes'), createdBy: value('person')};
+      const links = list('seedChannels', /[\s,]+/), isVideo = link => /youtu\.be\/|youtube\.com\/(?:watch|shorts\/|live\/)/i.test(link);
+      const body = {title: value('title'), description: value('description'), audience: value('audience'), countries: list('countries', ','), formats: [...form.querySelectorAll('input[name="formats"]:checked')].map(input => input.value), keywords: list('keywords', ','), seedChannels: links.filter(link => !isVideo(link)), seedVideos: links.filter(isVideo), notes: value('notes'), createdBy: value('person')};
       const idea = data.id ? await api(`/api/niche-ideas/${data.id}`, {...body, revision: data.revision}, 'PUT') : await api('/api/niche-ideas', body);
       selectedIdea = idea.id; return idea;
     }
-    if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels')});
+    if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels'), momentumChannels: number('momentumChannels'), readTokenLimit: number('readTokenLimit')});
     if (kind === 'discover') return api(`/api/niche-ideas/${data.ideaId}/discoveries`, {ideaRevision: data.ideaRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
     if (kind === 'evaluate') return api(`/api/niche-ideas/${data.ideaId}/evaluations`, {ideaRevision: data.ideaRevision, discoveryId: data.discoveryId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
+    if (kind === 'niche-read') {
+      const file = form.elements.image.files[0];
+      if (!file || file.size > 4 * 1024 * 1024) throw new Error('Choose a PNG, JPEG or WebP screenshot under 4 MB.');
+      const image = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = () => reject(new Error('The screenshot could not be read.')); reader.readAsDataURL(file); });
+      return api('/api/niche-reads', {image, note: value('note'), connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
+    }
     if (kind === 'trend-scan') { const scan = await api('/api/trend-scans', {keywords: value('keywords').split(/[\n,]+/).map(item => item.trim()).filter(Boolean), days: number('days'), perKeyword: number('perKeyword'), duration: value('duration'), connector: connectorPayload(form, 'youtube'), requestedBy: value('person')}); trendSelected = scan.id; trendFilter = {keyword: '', maxSubs: '', format: 'all'}; return scan; }
     if (kind === 'trend-settings') return api('/api/trend-settings', {revision: data.revision, topicTokenLimit: number('topicTokenLimit'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
     if (kind === 'trend-topics') return api(`/api/trend-scans/${data.scanId}/topics`, {familyId: value('familyId'), count: number('count'), connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
