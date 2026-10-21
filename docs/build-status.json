@@ -1,7 +1,7 @@
 {
-  "version": "0.51.0",
+  "version": "0.51.1",
   "updated": "2026-10-21",
-  "nextAction": "Owner: approve the \"Retention craft\" pack in Skills \u2192 Packs (and the other packs you want), then try a live trend scan, a screenshot read and a niche go/no-go with your connections (they spend YouTube quota, NexLev requests and Claude tokens). Next build phase in the plan: 06 (authorized analytics, backup/restore, scale).",
+  "nextAction": "Owner: start the program, follow \"Make your first video\" on the Overview: add the ElevenLabs key in Connections, run and pin the render check (Room 05), create the family, approve and assign a style, approve the skill packs you want, then write the first script. Live ElevenLabs is untested until then.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -598,5 +598,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Retention writing: skills from the owner's screenshots and a \"Will viewers stay?\" check (S03)"
+  "milestone": "All rooms together: one video from script to approved master; first-video checklist"
 }

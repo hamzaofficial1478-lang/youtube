@@ -148,6 +148,31 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Implementation log
 
+### 2026-10-21 - All rooms together: one video from script to approved master, and a first-video checklist (0.51.1)
+
+- **Owner question:** is the program ready for real video creation, is anything missing or blocking, and can we start?
+- **The owner's workspace** (read from a copy, never the original):
+  - last opened with 0.38; no families yet;
+  - only the Claude subscription is connected and tested;
+  - no ElevenLabs, stock-footage, NexLev or YouTube keys;
+  - no style approved, no render build pinned, 0 of 436 skills approved.
+  - Today's version opens a copy of it without errors, in about half a second.
+- **All rooms together** (throwaway workspace; the owner's decision of 2026-10-04: test all rooms together once built):
+  - one 63-second video went from an approved script all the way to an approved 1080p master in about 6 minutes;
+  - the narration was Windows' built-in voice, standing in for ElevenLabs;
+  - the free Stickman plan had 9 scenes and 19 shots, drawn by Edge in 127 s;
+  - the preview took 45 s to render, Room 08 approved it, the package came from the script, and the master took 3 minutes;
+  - the master is 1920x1080 H.264 with AAC sound, and every master check passed.
+  - Nothing blocked. The only flag was the preview's audio true peak at 0.05 dBTP, because the narration had not been levelled in Room 07 (on purpose, edits keep the original sound until the owner chooses settings).
+- **Fixed:** the Overview's "Your first production loop" still showed the four steps of version 0.1, and a note said voice, rendering and publishing were upcoming.
+  - It is now **"Make your first video"**, read from the workspace:
+    - setup once: connect Claude and ElevenLabs, check and pin the render tools, create a family, approve and assign a style, approve skills;
+    - then the most advanced video's own steps: script, narration, visuals, edit and sound (Room 07), preview verdict, package, master.
+  - Each step has a "Go there" link to its room.
+  - The note now says what is true: every call starts from a click, inside limits, with named approvals.
+- **Checked:** browser check of the card on a workspace like the owner's (next step: Connect ElevenLabs; the link opened Connections) and on the finished workspace (every video step ticked; a room link opened Room 08; no overflow at 469 px); tests/control-room.test.js 29/29; npm run check. The full suite last ran at 0.51.0 (335/335); only public/app.js changed since.
+- **Not tested:** live ElevenLabs narration and music (needs the owner's key; the first real narration is its first live run).
+
 ### 2026-10-21 - Retention writing: skills from the owner's screenshots and a "Will viewers stay?" check (0.51.0)
 
 - **Owner request:** use the attached screenshots to make hooks and scripts stronger, understand what viewers love to watch and keep them watching.

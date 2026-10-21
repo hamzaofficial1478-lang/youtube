@@ -46,10 +46,35 @@ function overview(){
   return heading('A little structure. A lot of possibility.','One workspace for your ideas, channel families and next production steps.',action('+ Create a family','new-family','','primary'))+stats()+
   `<div class="overview-grid"><div><section class="panel"><div class="panel-header"><h2>Your channel portfolio</h2>${badge(`${families.reduce((count,family)=>count+family.channels.length,0)} chosen language slots`)}</div>${families.length?`<div class="panel-body">${families.slice(0,4).map(f=>`<div class="step"><span class="step-number">${esc(f.name.charAt(0).toUpperCase())}</span><div><h3>${esc(f.name)} ${badge(`Tier ${f.tier}`)}</h3><p>${esc(f.countries.join(' · '))} · ${f.cadence} originals / week · ${f.channels.map(channel=>esc(channel.locale)).join(', ')}</p>${action('Open drafts →','family-drafts',f.id,'text-button')}</div></div>`).join('')}</div>`:empty('Start with one strong channel family.','Define an audience, a primary content language, and any optional additional channel languages.',action('+ Create your first family','new-family','','primary'))}</section>
   <section class="panel"><div class="panel-header"><h2>Recent workspace activity</h2>${badge('Saved locally')}</div><div class="panel-body">${state.events.length?`<ul class="activity">${state.events.slice(0,5).map(e=>`<li>${esc(e.message)}<time>${esc(date(e.created_at))}</time></li>`).join('')}</ul>`:`<p class="muted">Your saved changes and completed planning jobs will appear here.</p>`}</div></section></div>
-  <div><section class="panel"><div class="panel-header"><h2>Your first production loop</h2><span class="stage-label">START HERE</span></div><div class="panel-body">${[
-    ['Define the audience','Choose a market profile, languages, format and budget.',families.length>0],['Write an original, sourced draft','Record an angle, hook, primary-language script and evidence.',state.contents.length>0],['Review the primary script','Approve the exact version before moving forward.',state.contents.some(c=>c.state==='approved')],['Prepare a storyboard','Create an editable planning export for six scenes.',state.contents.some(c=>c.scenes.length)]
-  ].map(([label,description,done],i)=>`<div class="step ${done||i===0?'current':''}"><span class="step-number">${done?'✓':String(i+1).padStart(2,'0')}</span><div><h3>${label}</h3><p>${description}</p></div></div>`).join('')}</div></section>
-  <div class="notice"><span class="notice-icon">◈</span><div><strong>Research and script reasoning are review-gated.</strong><p>Saved evidence can produce immutable daily briefs, and Claude can propose quality-checked candidates in each family’s primary locale. Voice, optional localization, rendering and publishing remain upcoming.</p><a class="button text-button" href="#progress">View the build roadmap →</a></div></div></div></div>`;
+  <div>${firstVideoCard()}
+  <div class="notice"><span class="notice-icon">◈</span><div><strong>Every step waits for your decision.</strong><p>Claude, ElevenLabs, YouTube and NexLev are only asked when you click, inside the limits you set, and never retried by themselves. Each approval is recorded with your name; changing an approved piece sends the later steps back for a new look.</p><a class="button text-button" href="#progress">View the build roadmap →</a></div></div></div></div>`;
+}
+// The real order of a first video (2026-10-21: one video was taken through every room in one run). Setup once,
+// then per video; the most advanced video is followed. Each step reads the workspace and links to its room.
+function firstVideoCard(){
+  const tested=provider=>state.connectors.some(item=>(Array.isArray(provider)?provider:[provider]).includes(item.provider)&&(item.hasKey||item.provider==='claude-code')&&item.test?.status==='passed');
+  const families=activeFamilies(),familyIds=new Set(families.map(f=>f.id));
+  const progress=c=>{const scene=state.scenes.contents.find(x=>x.contentId===c.id),edit=state.editing.contents.find(x=>x.contentId===c.id)?.edit,render=state.renders.contents.find(x=>x.contentId===c.id),pkg=state.packaging.contents.find(x=>x.contentId===c.id);
+    return [c.state==='approved',state.voiceHandoffs.some(h=>h.contentId===c.id&&h.ready),!!scene?.approvals.some(a=>a.status==='approved'),!!edit?.timeline?.audio,!!render?.renders.some(r=>r.current&&r.review?.decision==='passed'),!!pkg?.latest?.approval?.current,!!render?.masters.some(m=>m.current&&m.master?.approval)];};
+  const videos=state.contents.filter(c=>familyIds.has(c.familyId)).map(c=>({c,done:progress(c)})).sort((a,b)=>b.done.filter(Boolean).length-a.done.filter(Boolean).length);
+  const video=videos[0],done=video?.done||[],fam=video?.c.familyId||families[0]?.id||'';
+  const steps=[
+    ['Connect Claude','Writes scripts, plans scenes and checks work, on your subscription.',tested(['claude','claude-code']),'connections'],
+    ['Connect ElevenLabs','The narrator\'s voice, music and sound effects (paid per use, inside your monthly limits).',tested('elevenlabs'),'connections'],
+    ['Check and pin the render tools','Room 05: run the FFmpeg readiness check, then pin that build. Free, on this PC.',!!(state.renders.readiness?.passed&&state.renders.pin&&state.renders.pinMatchesLatest),'production:editing'],
+    ['Create a channel family','The niche, audience, language, format and budget (or create it from an approved niche).',families.length>0,'families'],
+    ['Approve and assign a style','Room 03: approve one editing style and assign it to the family. Drawn styles need no stock keys.',state.styles.assignments.some(a=>a.status==='active'&&familyIds.has(a.familyId)),'production:style'],
+    ['Approve the skills you want','Skills → Packs: approved skills guide Claude (for example "Retention craft"). Recommended, not required.',state.skills.counts.approved>0,'skills'],
+    ['Write and approve the script','Content studio: a draft (Claude can write it), checked by "Will viewers stay?", then approved.',!!done[0],'studio'],
+    ['Approve the narration','Room 02: a voice profile, a paid audition, listen, approve.',!!done[1],'production:voice'],
+    ['Plan scenes and approve the visuals','Room 04: Claude\'s scene plan (or the free one), drawings or footage, approve the board.',!!done[2],'production:scene'],
+    ['Draft the edit and level the sound','Room 05 drafts the edit; Room 07 levels the narration (recommended: without it the loudness check flags peaks) and adds music or effects if you want.',!!(done[3]||done[4]),'production:editing'],
+    ['Render and approve the preview','Room 05 renders a preview; Room 08 is where you watch it and give the verdict.',!!done[4],'production:qc'],
+    ['Approve the title and thumbnail','Room 09: package drafted from the script, checked, approved.',!!done[5],'production:packaging'],
+    ['Render and approve the final master','Room 10: the 1080p video, checked against the preview.',!!done[6],'production:render'],
+  ];
+  const next=steps.findIndex(step=>!step[2]);
+  return `<section class="panel"><div class="panel-header"><h2>Make your first video</h2><span class="stage-label">${next<0?'DONE':'START HERE'}</span></div><div class="panel-body">${video?`<p class="hint">Following: ${esc(video.c.title)}</p>`:''}${steps.map(([label,description,ok,where],i)=>`<div class="step ${i===next?'current':''}"><span class="step-number">${ok?'✓':String(i+1).padStart(2,'0')}</span><div><h3>${label}</h3><p>${description}</p>${i===next?action('Go there →','goto',`${where}|${fam}`,'text-button'):''}</div></div>`).join('')}${next<0?'<p class="hint">The final master is approved. Room 11 uploads it once your Google setup is done (docs/PUBLISHING.md).</p>':''}</div></section>`;
 }
 function localPeriod(family){const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:family.timezone,year:'numeric',month:'2-digit'}).formatToParts(new Date()).map(part=>[part.type,part.value]));return `${parts.year}-${parts.month}`;}
 function tokenSummary(familyId){const family=state.families.find(item=>item.id===familyId),period=family?localPeriod(family):'',rows=state.usage.filter(item=>item.familyId===familyId&&item.period===period),settled=rows.filter(item=>item.status==='settled').reduce((sum,item)=>sum+(item.totalTokens||0),0),reserved=rows.filter(item=>item.status!=='settled'&&item.status!=='released').reduce((sum,item)=>sum+Math.max(item.reservedTokens||0,item.totalTokens||0),0);return {limit:family?.tokenBudget?.monthlyLimit||0,settled,reserved,period};}
@@ -190,6 +215,7 @@ document.addEventListener('submit',event=>{
 });
 document.addEventListener('click',async event=>{
   const room=event.target.closest('[data-production-room]');if(room){productionRoom=room.dataset.productionRoom;render();return;}
+  const go=event.target.closest('[data-action="goto"]');if(go){const [where,familyId]=go.dataset.id.split('|'),[view,roomId]=where.split(':');if(roomId){productionRoom=roomId;if(familyId)productionFamily=familyId;}location.hash=view;render();return;}
   const close=event.target.closest('[data-close]');if(close){document.getElementById(close.dataset.close).close();return;}
   const remove=event.target.closest('[data-remove-source]');if(remove){remove.closest('.source-field').remove();return;}
   const button=event.target.closest('[data-action]');if(!button)return;
