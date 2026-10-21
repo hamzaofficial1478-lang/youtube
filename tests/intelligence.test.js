@@ -393,7 +393,7 @@ test('HTTP routes for intelligence require the local token and expose state', as
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.deepEqual(Object.keys(state.intelligence), ['competitors', 'niches']);
+  assert.deepEqual(Object.keys(state.intelligence), ['competitors', 'niches', 'trends']);
   assert.ok(state.connectorProviders.nexlev);
   assert.equal((await fetch(`${base}/intelligence.js`)).status, 200);
   const send = (url, body, token = state.token) => fetch(base + url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Local-Token': token}, body: JSON.stringify(body)});

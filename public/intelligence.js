@@ -24,7 +24,7 @@ function intelBusy() {
   const intel = state?.intelligence;
   if (!intel) return false;
   const active = item => ['queued', 'running'].includes(item.status);
-  return Object.values(intel.competitors.families).some(family => family.scans.some(active) || family.analyses.some(active)) || intel.niches.discoveries.some(active) || intel.niches.evaluations.some(active);
+  return Object.values(intel.competitors.families).some(family => family.scans.some(active) || family.analyses.some(active)) || intel.niches.discoveries.some(active) || intel.niches.evaluations.some(active) || intel.trends.scans.some(active) || intel.trends.topics.some(active);
 }
 function competitorLabel(item) { return item.kind === 'username' ? `/user/${item.value}` : item.value; }
 const competitorKeyOf = item => `${item.kind}:${item.value.toLowerCase()}`;
@@ -242,6 +242,59 @@ function evaluationView(evaluation, niches) {
     <div class="card-actions">${reviewActions}${retry}</div>`;
 }
 
+// ---------------------------------------------------------------- Trending topics view (R07)
+let trendSelected = '', trendCache = {}, trendFilter = {keyword: '', maxSubs: '', format: 'all'};
+const DAY_MS = 86400000;
+function trendScanFull(scans) {
+  const chosen = scans.find(item => item.id === trendSelected) || scans[0];
+  if (!chosen) return null;
+  if (chosen.result?.videos || chosen.result?.purged || !chosen.result) return chosen;
+  if (trendCache[chosen.id]) return trendCache[chosen.id];
+  api(`/api/trend-scans/${chosen.id}`, undefined, 'GET').then(scan => { trendCache[scan.id] = scan; render(); }).catch(error => toast(error.message, true));
+  return chosen;
+}
+function trendsView() {
+  const trends = state.intelligence.trends, scans = trends.scans, quota = trends.quota.youtube, scan = trendScanFull(scans);
+  const history = scans.map(item => `<div class="history-row ${scan && item.id === scan.id ? 'selected' : ''}"><span class="job-dot ${['queued', 'running'].includes(item.status) ? 'queued' : item.status === 'completed' ? 'completed' : ''}"></span><div><strong>${intelStatus(item.status)} ${esc(date(item.createdAt))} · last ${item.scope.days} day${item.scope.days === 1 ? '' : 's'}</strong><small>${esc(item.scope.keywords.slice(0, 6).join(', '))}${item.scope.keywords.length > 6 ? ` +${item.scope.keywords.length - 6}` : ''} · ${item.result?.usage ? `${intelNumber(item.result.usage.youtube)} units` : `up to ${intelNumber(item.scope.plannedUnits.youtube)} units`}${item.purgedAt ? ' · YouTube data deleted after 30 days' : ''}${item.error ? ` · ${esc(item.error)}` : ''}</small></div><div class="row-end">${action('Open', 'trend-open', item.id, 'text-button')}${action('Scan again', 'trend-again', item.id, 'text-button')}${['failed', 'partial', 'interrupted', 'blocked_quota', 'stale'].includes(item.status) && item.attempts < 3 ? action('Retry deliberately', 'trend-scan-retry', item.id, 'text-button') : ''}</div></div>`).join('');
+  return heading('Trending topics', 'The most-viewed YouTube videos of the last days for your keywords: what is working right now in your niches and for your competitors. YouTube\'s numbers are shown as YouTube gives them and deleted after 30 days.', action('Settings', 'trend-settings', '', 'secondary') + action('+ New scan', 'trend-new', '', 'primary'))
+    + `<div class="production-kpis"><div><span>YouTube units today</span><strong>${intelNumber(quota.used)}</strong><small>of ${intelNumber(quota.cap)} · each keyword costs 100</small></div><div><span>Scans</span><strong>${scans.length}</strong><small>kept 30 days</small></div><div><span>Topic ideas</span><strong>${trends.topics.filter(item => item.status === 'completed').length}</strong><small>Claude, per family</small></div><div><span>YouTube derived use</span><strong>${trends.derivedApproved ? 'Recorded' : 'Not recorded'}</strong><small>${trends.derivedApproved ? 'scores and topic ideas on' : 'display only'}</small></div></div>`
+    + `${scan ? trendScanCard(scan, trends) : `<section class="production-card">${empty('Run your first trend scan.', 'Paste your niche keywords (up to 30), choose 7 or 30 days, and the program lists the most-viewed videos of that time for each keyword.', action('+ New scan', 'trend-new', '', 'primary'))}</section>`}
+      <div class="intel-grid"><section class="production-card"><div class="production-card-head"><div><span class="micro-label">HISTORY</span><h2>Scans</h2></div></div>${history || '<p class="muted">No scans yet.</p>'}</section><div>${dataCapsCard()}</div></div>`;
+}
+function trendScanCard(scan, trends) {
+  const result = scan.result;
+  const head = `<div class="production-card-head"><div><span class="micro-label">TREND SCAN · ${esc(date(scan.createdAt))}</span><h2>${esc(scan.scope.keywords.length)} keyword${scan.scope.keywords.length === 1 ? '' : 's'} · last ${scan.scope.days} day${scan.scope.days === 1 ? '' : 's'}</h2></div><div class="row-end">${result?.videos?.length && !scan.purgedAt ? action('Topic ideas with Claude', 'trend-topics', scan.id, trends.derivedApproved ? 'primary' : 'secondary') : ''}</div></div>`;
+  if (!result || !result.videos) return `<section class="production-card">${head}<p class="muted">${scan.purgedAt ? 'YouTube data about other channels is kept for 30 days; this scan\'s videos were deleted. The keywords stay so you can scan again.' : ['queued', 'running'].includes(scan.status) ? 'Searching YouTube…' : esc(scan.error || 'No videos.')}</p>${result?.keywords ? `<div class="chip-row">${result.keywords.map(item => `<span class="chip">${esc(item.keyword)}</span>`).join('')}</div>` : ''}</section>`;
+  const keywordName = new Map(result.keywords.map(item => [item.ref, item.keyword])), maxSubs = Number(trendFilter.maxSubs) || null, derived = trends.derivedApproved;
+  const rows = result.videos.filter(video => (!trendFilter.keyword || video.keywords.includes(trendFilter.keyword))
+    && (!maxSubs || (result.channels[video.channelId]?.subscribers ?? Infinity) < maxSubs)
+    && (trendFilter.format === 'all' || (trendFilter.format === 'shorts') === (Number.isFinite(video.durationSeconds) && video.durationSeconds <= 180)));
+  const age = video => Math.max(1, (Date.parse(result.retrievedAt) - Date.parse(video.publishedAt)) / DAY_MS);
+  const table = `<div class="table-scroll"><table class="data-table trend-table"><thead><tr><th>#</th><th>Video</th><th>Channel</th><th>Published</th><th>Views</th>${derived ? '<th>Views a day</th><th>Views per subscriber</th>' : ''}<th>Likes</th><th>Comments</th><th>Subscribers</th><th>Length</th><th>Keyword</th></tr></thead><tbody>${rows.map(video => {
+    const channel = result.channels[video.channelId] || {};
+    return `<tr><td>${esc(video.ref)}</td><td><a href="https://www.youtube.com/watch?v=${esc(video.videoId)}" target="_blank" rel="noopener noreferrer">${esc(video.title || video.videoId)}</a></td><td><a href="https://www.youtube.com/channel/${esc(video.channelId)}" target="_blank" rel="noopener noreferrer">${esc(channel.title || video.channelTitle || video.channelId)}</a></td><td>${esc((video.publishedAt || '').slice(0, 10))}</td><td>${intelNumber(video.views)}</td>${derived ? `<td>${video.views === null ? '—' : intelNumber(Math.round(video.views / age(video)))}</td><td>${video.views === null || !channel.subscribers ? '—' : (video.views / channel.subscribers).toFixed(1)}</td>` : ''}<td>${intelNumber(video.likes)}</td><td>${intelNumber(video.comments)}</td><td>${channel.subscribers === null || channel.subscribers === undefined ? 'hidden' : intelNumber(channel.subscribers)}</td><td>${intelDuration(video.durationSeconds)}</td><td>${esc(video.keywords.map(ref => keywordName.get(ref)).join(', '))}</td></tr>`;
+  }).join('')}</tbody></table></div>`;
+  const filters = `<div class="trend-filters"><label>Keyword<select id="trend-keyword"><option value="">All keywords</option>${result.keywords.map(item => `<option value="${esc(item.ref)}" ${trendFilter.keyword === item.ref ? 'selected' : ''}>${esc(item.keyword)} (${item.count})</option>`).join('')}</select></label><label>Channels under (subscribers)<input id="trend-maxsubs" type="number" min="0" step="100" placeholder="Any size" value="${esc(trendFilter.maxSubs)}"></label><label>Length<select id="trend-format"><option value="all" ${trendFilter.format === 'all' ? 'selected' : ''}>All</option><option value="long" ${trendFilter.format === 'long' ? 'selected' : ''}>Longer than 3 minutes</option><option value="shorts" ${trendFilter.format === 'shorts' ? 'selected' : ''}>3 minutes or less</option></select></label>${action(maxSubs === 3000 ? 'All channel sizes' : 'Small channels only (under 3,000)', 'trend-small', '', 'text-button')}</div>`;
+  const errors = result.errors?.length ? `<div class="checks">${intelList(result.errors)}</div>` : '';
+  const topics = trends.topics.filter(item => item.scanId === scan.id);
+  return `<section class="production-card">${head}
+    <p class="hint">${rows.length} of ${result.videos.length} videos · retrieved ${esc(date(result.retrievedAt))} · YouTube data deleted on ${esc((scan.expiresAt || '').slice(0, 10))}. ${derived ? 'Views a day and views per subscriber are worked out by this program from YouTube\'s numbers.' : 'A video with many views on a small channel means the topic is in demand. Scores and Claude topic ideas need YouTube\'s approval for derived use (Settings).'}</p>
+    ${errors}${filters}${table}
+    <h3 class="intel-subhead">Topic ideas</h3>${topics.length ? topics.map(trendTopicsView).join('') : `<p class="muted">${trends.derivedApproved ? 'Ask Claude to turn this scan into topic ideas for one of your families.' : 'Locked: YouTube data about other channels is display-only until you record YouTube\'s approval for derived use in Settings. Read the list yourself and start drafts from what you see.'}</p>`}
+  </section>`;
+}
+function trendTopicsView(job) {
+  const family = state.families.find(item => item.id === job.familyId);
+  const head = `<div class="blueprint-head"><div>${intelStatus(job.status)} <strong>${esc(family?.name || 'Family')}</strong> ${job.usage?.total ? badge(`${intelNumber(job.usage.total)} tokens`) : ''}</div><small>${esc(date(job.createdAt))} · attempt ${job.attempts}/3${job.error ? ` · ${esc(job.error)}` : ''}</small></div>`;
+  const retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'trend-topics-retry', job.id, 'text-button') : '';
+  if (!job.result) return `<div class="bp-section">${head}${retry}</div>`;
+  const ref = refs => refs.map(item => `<span class="chip" title="${esc(job.refIndex[item]?.title || '')}">${esc(item)}</span>`).join('');
+  return `<div class="bp-section">${head}<p>${esc(job.result.summary)}</p>
+    <div class="chip-row">${job.result.themes.map(theme => `<span class="chip green" title="${esc(theme.why)}">${esc(theme.name)}</span>`).join('')}</div>
+    <div class="topic-grid">${job.result.topics.map((topic, index) => `<article class="topic-card"><span class="micro-label">${esc(topic.format)} · confidence ${esc(topic.confidence)}</span><h4>${esc(topic.title)}</h4><p><strong>Hook:</strong> ${esc(topic.hook)}</p><p><strong>Promise:</strong> ${esc(topic.promise)}</p><p><strong>Why they click:</strong> ${esc(topic.whyClick)}</p><p><strong>What we add:</strong> ${esc(topic.angle)}</p><div class="chip-row">${ref(topic.refs)}</div>${family && !family.archived ? action('Start a draft', 'trend-draft', `${job.id}:${index}`, 'text-button') : ''}</article>`).join('')}</div>
+    ${job.result.avoid.length ? `<span class="micro-label">Avoid</span>${intelList(job.result.avoid)}` : ''}</div>`;
+}
+
 // ---------------------------------------------------------------- one dialog for every intelligence action
 function intelDialog(kind, title, kicker, body, submitLabel, data = {}) {
   const form = document.getElementById('intel-form');
@@ -346,13 +399,50 @@ function intelAction(command, id, button) {
     }, 60);
     return;
   }
-  if (command === 'intel-scan-retry' || command === 'intel-analysis-retry' || command === 'niche-discovery-retry' || command === 'niche-evaluation-retry') {
-    const urls = {'intel-scan-retry': `/api/competitor-scans/${id}/retry`, 'intel-analysis-retry': `/api/competitor-analyses/${id}/retry`, 'niche-discovery-retry': `/api/niche-discoveries/${id}/retry`, 'niche-evaluation-retry': `/api/niche-evaluations/${id}/retry`};
-    const find = [...Object.values(state.intelligence.competitors.families).flatMap(item => [...item.scans, ...item.analyses]), ...state.intelligence.niches.discoveries, ...state.intelligence.niches.evaluations].find(item => item.id === id);
+  if (command === 'intel-scan-retry' || command === 'intel-analysis-retry' || command === 'niche-discovery-retry' || command === 'niche-evaluation-retry' || command === 'trend-scan-retry' || command === 'trend-topics-retry') {
+    const urls = {'intel-scan-retry': `/api/competitor-scans/${id}/retry`, 'intel-analysis-retry': `/api/competitor-analyses/${id}/retry`, 'niche-discovery-retry': `/api/niche-discoveries/${id}/retry`, 'niche-evaluation-retry': `/api/niche-evaluations/${id}/retry`, 'trend-scan-retry': `/api/trend-scans/${id}/retry`, 'trend-topics-retry': `/api/trend-topics/${id}/retry`};
+    const find = [...Object.values(state.intelligence.competitors.families).flatMap(item => [...item.scans, ...item.analyses]), ...state.intelligence.niches.discoveries, ...state.intelligence.niches.evaluations, ...state.intelligence.trends.scans, ...state.intelligence.trends.topics].find(item => item.id === id);
     const unknown = find?.status === 'interrupted' || find?.usage?.status === 'unknown' || Object.values(find?.usage || {}).some(item => item?.status === 'unknown');
     if (unknown && !confirm('The last attempt was interrupted, so provider usage may already have been charged. Deliberately retry?')) return;
     button.disabled = true;
     return api(urls[command], {confirmInterrupted: unknown}).then(refresh).then(() => toast('Deliberately requeued.')).catch(error => toast(error.message, true)).finally(() => { button.disabled = false; });
+  }
+  // Trending topics
+  if (command === 'trend-open') { trendSelected = id; trendFilter = {keyword: '', maxSubs: '', format: 'all'}; render(); return; }
+  if (command === 'trend-small') { trendFilter.maxSubs = Number(trendFilter.maxSubs) === 3000 ? '' : '3000'; render(); return; }
+  if (command === 'trend-new' || command === 'trend-again') {
+    const scope = state.intelligence.trends.scans.find(item => item.id === id)?.scope || {keywords: [], days: 7, perKeyword: 10, duration: 'any'}, quota = state.intelligence.trends.quota.youtube;
+    return intelDialog('trend-scan', command === 'trend-again' ? 'Scan these keywords again' : 'New trend scan', 'EXPLICIT YOUTUBE REQUEST', `<div class="form-grid">
+      <label class="full">Keywords <span class="hint">1-30, one per line (or separated by commas). Each keyword costs 100 YouTube units.</span><textarea name="keywords" rows="6" required>${esc(scope.keywords.join('\n'))}</textarea></label>
+      <label>Look back<select name="days">${[1, 3, 7, 14, 30].map(days => `<option value="${days}" ${scope.days === days ? 'selected' : ''}>Last ${days} day${days === 1 ? '' : 's'}</option>`).join('')}</select></label>
+      <label>Videos per keyword<input name="perKeyword" type="number" min="5" max="25" required value="${scope.perKeyword}"></label>
+      <label>Video length<select name="duration">${[['any', 'Any length'], ['long', 'Long (over 20 minutes)'], ['medium', 'Medium (4-20 minutes)'], ['short', 'Short (under 4 minutes)']].map(([value, label]) => `<option value="${value}" ${scope.duration === value ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
+      ${connectorSelect('youtube', 'youtube', 'YouTube connector')}${nameField()}</div>
+      <p class="note">Used today: ${intelNumber(quota.used)} of ${intelNumber(quota.cap)} YouTube units. A scan of 30 keywords needs about 3,000 units; raise the daily cap in Research data caps if needed (Google's default allowance is 10,000 a day). No automatic retries.</p>`, 'Run scan');
+  }
+  if (command === 'trend-settings') {
+    const settings = state.intelligence.trends.settings, derived = settings.youtubeDerivedUse || {};
+    return intelDialog('trend-settings', 'Trending topics settings', 'GLOBAL', `<div class="form-grid"><label>Tokens per topic answer<input name="topicTokenLimit" type="number" min="8000" max="60000" step="1000" required value="${settings.topicTokenLimit}"><span class="hint">Reserved from the chosen family's monthly token limit.</span></label></div>
+      <fieldset class="editor-section full"><legend>YouTube derived-data approval</legend><p class="hint">YouTube data about other channels is shown but never scored or sent to Claude until YouTube has approved your Google project for derived use. Only tick this when you have that approval.</p>
+        <label class="checkbox-label"><input type="checkbox" name="derivedApproved" ${derived.approved ? 'checked' : ''}>YouTube approved this project for derived use of its data</label>
+        <div class="form-grid"><label>Approval date<input name="derivedOn" type="date" value="${esc(derived.approvedOn || '')}"></label><label>Approval reference<input name="derivedReference" maxlength="300" value="${esc(derived.reference || '')}"></label>${nameField('Confirmed by', 'derivedBy')}</div></fieldset>`, 'Save settings', {revision: settings.revision});
+  }
+  if (command === 'trend-topics') {
+    if (!state.intelligence.trends.derivedApproved) return toast('Locked: record YouTube\'s approval for derived use in Settings first. Until then the list is for reading only.', true);
+    const families = state.families.filter(item => !item.archived);
+    if (!families.length) return toast('Create a channel family first.', true);
+    return intelDialog('trend-topics', 'Topic ideas from this scan', 'CLAUDE · ORIGINAL TOPICS', `<div class="form-grid"><label>For family<select name="familyId">${families.map(item => `<option value="${esc(item.id)}">${esc(item.name)}</option>`).join('')}</select></label><label>Topic ideas<input name="count" type="number" min="5" max="20" required value="12"></label>${connectorSelect('claude', 'ai', 'Claude connection')}${nameField()}</div>
+      <p class="note">Claude reads the 60 most-viewed videos of this scan and writes topic ideas in the family's language: a title under 60 characters, the opening hook, the promise, why viewers would click it and what we add. Reserves up to ${intelNumber(state.intelligence.trends.settings.topicTokenLimit)} tokens from the family's monthly limit. Copied wording is blocked.</p>`, 'Ask Claude', {scanId: id});
+  }
+  if (command === 'trend-draft') {
+    const [jobId, index] = id.split(':'), job = state.intelligence.trends.topics.find(item => item.id === jobId), topic = job.result.topics[Number(index)];
+    contentDialog();
+    const form = document.getElementById('content-form');
+    form.elements.familyId.value = job.familyId;
+    form.elements.title.value = topic.title; form.elements.hook.value = topic.hook;
+    form.elements.angle.value = `${topic.promise}\nWhat we add: ${topic.angle}\nWhy viewers click: ${topic.whyClick}`;
+    toast('Draft form prefilled from the topic idea. Check it, then save.');
+    return;
   }
   // Niche Factory
   if (command === 'niche-new' || command === 'niche-edit') {
@@ -439,11 +529,18 @@ document.getElementById('intel-form').addEventListener('submit', event => {
     if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels')});
     if (kind === 'discover') return api(`/api/niche-ideas/${data.ideaId}/discoveries`, {ideaRevision: data.ideaRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
     if (kind === 'evaluate') return api(`/api/niche-ideas/${data.ideaId}/evaluations`, {ideaRevision: data.ideaRevision, discoveryId: data.discoveryId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
+    if (kind === 'trend-scan') { const scan = await api('/api/trend-scans', {keywords: value('keywords').split(/[\n,]+/).map(item => item.trim()).filter(Boolean), days: number('days'), perKeyword: number('perKeyword'), duration: value('duration'), connector: connectorPayload(form, 'youtube'), requestedBy: value('person')}); trendSelected = scan.id; trendFilter = {keyword: '', maxSubs: '', format: 'all'}; return scan; }
+    if (kind === 'trend-settings') return api('/api/trend-settings', {revision: data.revision, topicTokenLimit: number('topicTokenLimit'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
+    if (kind === 'trend-topics') return api(`/api/trend-scans/${data.scanId}/topics`, {familyId: value('familyId'), count: number('count'), connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
     if (kind === 'niche-review') return api(`/api/niche-evaluations/${data.id}/review`, {decision: value('decision'), reviewer: value('person'), notes: value('notes'), confirmations: {evidenceReviewed: checked('evidenceReviewed'), estimatesUnderstood: checked('estimatesUnderstood')}});
     throw new Error('Unknown form.');
   }, () => message);
 });
-document.addEventListener('change', event => { if (event.target.id === 'competitor-family') { competitorFamily = event.target.value; selectedAnalysis = ''; render(); } });
+document.addEventListener('change', event => {
+  if (event.target.id === 'competitor-family') { competitorFamily = event.target.value; selectedAnalysis = ''; render(); }
+  const filter = {'trend-keyword': 'keyword', 'trend-maxsubs': 'maxSubs', 'trend-format': 'format'}[event.target.id];
+  if (filter) { trendFilter[filter] = event.target.value; render(); }
+});
 document.addEventListener('click', event => {
   const tab = event.target.closest('[data-select-analysis]');
   if (tab) { selectedAnalysis = tab.dataset.selectAnalysis; render(); return; }

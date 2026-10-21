@@ -1,7 +1,7 @@
 {
-  "version": "0.48.0",
+  "version": "0.49.0",
   "updated": "2026-10-21",
-  "nextAction": "Owner: to start the real pilot, set up the Google OAuth client (docs/PUBLISHING.md), connect a test channel, then publish approved videos by hand in review mode; after 10 clean published videos and one recovery drill, Room 11 offers unattended publishing for that family. Next build phase in the plan: 06 (authorized analytics, backup/restore, scale), or the parked script and competitor work.",
+  "nextAction": "Building next by the owner's request of 2026-10-21: R08 niche intake (video links and screenshots read by Claude, about 10 competitors that grew in the last 90 days, go/no-go with what competitors miss and the viewers), then S03 retention writing skills. A live trend scan needs the owner's go-ahead (it spends YouTube quota).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -227,6 +227,13 @@
           "title": "Niche Factory",
           "status": "done",
           "evidence": "Version 0.8 (2026-10-04): Niche Factory with revisioned owner ideas (keywords, seed channels), explicit NexLev discovery (niche overview, similar channels, keyword search, labelled analytics estimates), Hermes rubric evaluation with evidence refs and 20 distinct episode ideas, score computed in code (25/25/20/15/15), hard filters forcing do-not-produce, 6-word title copy guard, separate monthly token budget, shortlist/reject/approve review and family creation from an approved niche. Fake-provider tests and browser flows passed; live NexLev MCP (OAuth) not used, REST API only; live verification pending owner keys."
+        },
+        {
+          "id": "R07",
+          "title": "Trending topics",
+          "status": "testing",
+          "evidence": "0.49.0 (2026-10-21): Trending topics: 1-30 keywords searched on YouTube for the most-viewed videos of the last 1-30 days (the owner's mindstory.py method, videos and channels matched by ID), units reserved first, the first refusal stops the scan, data purged after 30 days, filters (keyword, small channels under 3,000, length); worked-out numbers and Claude topic ideas (title under 60 characters, hook, promise, why click, what we add, cited trend videos, copy guard) only with the recorded YouTube derived-use approval; \"Start a draft\" prefills the draft form. Tested in tests/trends.test.js (stand-in YouTube and Claude) and in the browser on a throwaway workspace. npm test (326 tests, 326 passing after updating one state-keys assertion) passed.",
+          "remaining": "A live scan with the owner's YouTube key (spends quota; needs the go-ahead). Topic ideas stay locked until the owner records YouTube's approval for derived use."
         }
       ]
     },
@@ -577,5 +584,5 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
   ],
-  "milestone": "Room 11: rules-based unattended publishing behind the pilot gate (Y03)"
+  "milestone": "Trending topics: the owner's keyword scanner built in (R07)"
 }

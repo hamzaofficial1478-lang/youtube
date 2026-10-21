@@ -257,10 +257,11 @@ class YouTubePublicClient {
     this.fetch = fetchImpl;
     this.units = 0;
   }
-  async call(resource, params) {
+  // cost: YouTube's quota price of the call (search.list is 100 units, the list calls used here 1).
+  async call(resource, params, cost = 1) {
     const url = new URL(`/youtube/v3/${resource}`, YOUTUBE_ORIGIN);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, String(value));
-    this.units++;
+    this.units += cost;
     let response;
     try {
       response = await this.fetch(url.toString(), {headers: {'x-goog-api-key': this.key, Accept: 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(15000)});
@@ -310,6 +311,30 @@ class YouTubePublicClient {
       likes: typeof item.statistics?.likeCount === 'string' ? item.statistics.likeCount : null,
       comments: typeof item.statistics?.commentCount === 'string' ? item.statistics.commentCount : null,
     }));
+  }
+  // R07: the most-viewed videos for one keyword since a date (YouTube's own order).
+  async search(query, {publishedAfter, maxResults, videoDuration = 'any'}) {
+    const params = {part: 'snippet', q: query, type: 'video', order: 'viewCount', publishedAfter, maxResults, fields: 'items(id/videoId,snippet(publishedAt,channelId,channelTitle,title))'};
+    if (videoDuration !== 'any') params.videoDuration = videoDuration;
+    const data = await this.call('search', params, 100);
+    return (Array.isArray(data?.items) ? data.items : []).filter(item => VIDEO_ID.test(item?.id?.videoId || '') && CHANNEL_ID.test(item?.snippet?.channelId || '')).map(item => ({
+      videoId: item.id.videoId, title: cleanText(item.snippet.title, 200), channelId: item.snippet.channelId,
+      channelTitle: cleanText(item.snippet.channelTitle, 120), publishedAt: isoDate(item.snippet.publishedAt),
+    }));
+  }
+  // Up to 50 IDs per call; matched by ID, never by position.
+  async videoStats(ids) {
+    const data = await this.call('videos', {part: 'statistics,contentDetails', id: ids.join(','), maxResults: ids.length, fields: 'items(id,statistics(viewCount,likeCount,commentCount),contentDetails/duration)'});
+    return new Map((Array.isArray(data?.items) ? data.items : []).filter(item => VIDEO_ID.test(item?.id || '')).map(item => [item.id, {
+      views: count(item.statistics?.viewCount), likes: count(item.statistics?.likeCount), comments: count(item.statistics?.commentCount), durationSeconds: durationSeconds(item.contentDetails?.duration),
+    }]));
+  }
+  async channelStats(ids) {
+    const data = await this.call('channels', {part: 'snippet,statistics', id: ids.join(','), maxResults: ids.length, fields: 'items(id,snippet(title,customUrl),statistics(subscriberCount,hiddenSubscriberCount,videoCount))'});
+    return new Map((Array.isArray(data?.items) ? data.items : []).filter(item => CHANNEL_ID.test(item?.id || '')).map(item => [item.id, {
+      title: cleanText(item.snippet?.title, 120), handle: cleanText(item.snippet?.customUrl, 120),
+      subscribers: item.statistics?.hiddenSubscriberCount ? null : count(item.statistics?.subscriberCount), videos: count(item.statistics?.videoCount),
+    }]));
   }
 }
 
