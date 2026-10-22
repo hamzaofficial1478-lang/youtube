@@ -77,3 +77,20 @@ Live check (2026-10-15, our own 0.29 preview as the reference): 37 s, 7,757 toke
 - No video downloading or audio analysis. Frames are studied only from files you point to (style studies); scans still take editing and voice evidence from your observations and transcripts.
 - NexLev MCP (OAuth) is not used; the REST API with a key in a Windows-protected connector slot is.
 - Live verification against the real NexLev, YouTube and Hermes services still needs your keys. All automated and browser checks used fake providers.
+
+## Competitor watch (0.57)
+
+Owner request 2026-10-22: the saved competitor channels are scanned again on a schedule, their hit videos found and
+their keywords sent to Trending topics. Per family, "Turn on the watch" (Competitors page): every day, 3 days, week,
+2 weeks or month; the YouTube and/or NexLev connections to use; optionally a Claude connection that explains each new
+scan (the normal competitor analysis, its own token reservation, a blueprint the owner still reviews).
+
+- `watchTick` runs every half hour from the program's timer: one scan per family at a time, only when the newest scan
+  is older than the setting, through the normal queue and data caps (`created_by` "Competitor watch"), never retried by
+  itself; a failed start (a connection changed, a cap) is shown on the card and tried again after a day.
+- **Hit videos** (`hitKeywords`): videos at two times or more their channel's usual views (NexLev data; YouTube data only
+  with the owner's recorded derived-use approval). Their recurring words and two-word phrases become keywords, shown on
+  the watch card and on Trending topics ("From your competitor watch") with a "Scan these keywords" button that fills
+  a trend scan (the scan itself still waits for the owner's click: it spends 100 YouTube units per keyword).
+- The owner's notes about what they like in each channel stay where they were: each competitor's observations and the
+  blend picks ("Keep from this channel").

@@ -211,6 +211,7 @@ class RenderRoom {
         narration: {approvalId: inputs.voice.approvalId, relativePath: inputs.voice.artifact.relativePath, sha256: inputs.voice.artifact.sha256, durationSeconds: inputs.voice.analysis.durationSeconds},
         style: {revisionId: revision.id, revision: revision.revision, name: inputs.spec.name, specHash: revision.spec_hash, spec: inputs.spec},
         ffmpeg: {version: pin.version, sha256: pin.ffmpegSha256, pinId: pin.id}, rendererVersion: R.RENDERER_VERSION, format: inputs.family.format, shots, edit,
+        ...(input.resolution === undefined || input.resolution === 360 ? {} : (() => { requireValue(input.resolution === 720, 'A preview renders at 360p or 720p.'); return {resolution: 720}; })()),
       };
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'proxy','queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, inputs.visual.approvalId, JSON.stringify(scope), by, at, at);
@@ -358,7 +359,7 @@ class RenderRoom {
     const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
     // P11: a master renders at the master preset and keeps its verified parts until it finishes or is cancelled.
     // L03: a language edition renders and resumes like a master (it has no preview of its own to match).
-    const preset = R.PRESETS[job.preset === 'edition' ? 'master' : job.preset] || R.PRESETS.proxy, master = job.preset === 'master' || job.preset === 'edition';
+    const preset = job.preset === 'proxy' && scope.resolution === 720 ? R.PRESETS.proxy720 : R.PRESETS[job.preset === 'edition' ? 'master' : job.preset] || R.PRESETS.proxy, master = job.preset === 'master' || job.preset === 'edition';
     let keepWork = false;
     // Runs a part, or reuses it when a master already finished it (same command, same checksum).
     const part = async (key, file, command, make) => {

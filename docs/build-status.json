@@ -1,5 +1,5 @@
 {
-  "version": "0.56.0",
+  "version": "0.57.0",
   "updated": "2026-10-22",
   "nextAction": "Owner: start the program and look at the Backups page (a first automatic backup runs a few minutes after start; an external drive folder is safer). Try the timeline editor in Room 05 and the AI team on Connections. Then follow \"Make your first video\" on the Overview.",
   "repositories": [
@@ -241,6 +241,20 @@
           "status": "testing",
           "evidence": "0.50.0 (2026-10-21): niche ideas from video links (channel found with one YouTube call) and screenshots read by Claude (type checked, kept in the data folder, a click inside a token reservation; the page prefills the idea form); the top candidate channels measured over 90 days and up to 10 rising competitors (NexLev data); the go/no-go answer adds the viewers, 3-8 gaps competitors miss with how we fill them, how we win, competitor notes and ways to earn beyond AdSense, with evidence checks and the copy guard; approval prefills the family with the recommended (rising) competitors. Tested in tests/niche-intake.test.js and the updated tests/intelligence.test.js (stand-in providers) and in the browser on a throwaway workspace. npm test (334 tests, 334 passing) passed.",
           "remaining": "Live runs with the owner's NexLev, YouTube and Claude connections (they spend quota and tokens; the owner's go-ahead is needed)."
+        },
+        {
+          "id": "R09",
+          "title": "Reddit topic scans through the owner's Reddit app, with Claude topic ideas that never retell a post",
+          "status": "testing",
+          "evidence": "0.57.0 (2026-10-22): tests/reddit.test.js (sign-in, top-post search, adult posts dropped, subreddit checks, the connection test, a scan with its hourly allowance, topic ideas without YouTube approval, the 30-day purge). Reddit is reachable from the owner's PC; anonymous reading is refused, so the owner's app is required.",
+          "remaining": "The owner creates a Reddit script app and runs a live scan."
+        },
+        {
+          "id": "R05d",
+          "title": "Competitor watch: scheduled rescans, hit videos at 2x their channel median, keywords to Trending topics",
+          "status": "testing",
+          "evidence": "0.57.0 (2026-10-22): tests/competitor-watch.test.js (keywords only from hit videos, YouTube data only with approval, the schedule, waiting while a scan runs, a failed start waiting a day, switching off).",
+          "remaining": "A live watch needs a YouTube or NexLev connection on the owner's PC."
         }
       ]
     },
@@ -468,7 +482,7 @@
           "id": "P06y",
           "title": "Visual rules per look: pictures, places and objects made in the engine and style, one style key per video, an art director's check",
           "status": "testing",
-          "evidence": "0.56.0 (2026-10-22): visual-dna.js rules for every look; planner VISUAL RULES lines; paint and illustrator prompts by the rules; style key attached to later paintings; art director check with one repaint (tests in ai-team.test.js and scene.test.js). Live: the owner's rejected camp painted again under the classic Stickman rules as a flat cartoon, passed by the art director and drawn with a stick figure on top.",
+          "evidence": "0.56.0 (2026-10-22): visual-dna.js rules for every look; planner VISUAL RULES lines; paint and illustrator prompts by the rules; style key attached to later paintings; art director check with one repaint (tests in ai-team.test.js and scene.test.js). Live: the owner's rejected camp painted again under the classic Stickman rules as a flat cartoon, passed by the art director and drawn with a stick figure on top. 0.57.0: Wikimedia Commons as the licensed archive source (live search from the owner's PC through api.wikimedia.org: public-domain maps and paintings of the port of Mocha and a Viennese coffeehouse found), a footage look painted by ChatGPT, the REAL WORLD rule, 720p previews; tests in tests/wikimedia.test.js.",
           "remaining": "A full live plan with painted pictures for a real family; photo-real AI pictures for footage documentaries through ChatGPT; licensed web image sources after the owner decides."
         },
         {
@@ -629,7 +643,8 @@
     "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits.",
     "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies.",
     "2026-10-22: Phase 06 starts with A02 (backups and restore) because nothing is published yet for A01 analytics to measure.",
-    "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it."
+    "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it.",
+    "2026-10-22: Real images come from licensed sources only (stock libraries, Wikimedia Commons public domain/CC0/CC BY with credits, AI); never unlicensed images from websites, social media or YouTube. Reddit is read through the owner's own app, as topic signals only."
   ],
-  "milestone": "Pictures that belong to their look: visual rules, style key, art director"
+  "milestone": "Licensed web images, Reddit topics, competitor watch, and a documentary test of every look"
 }

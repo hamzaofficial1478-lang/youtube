@@ -147,7 +147,7 @@ function editAction(command, id, button) {
   if (command === 'tl-undo') { if (button) button.disabled = true; return api(`/api/edit-revisions/${id}/undo`, {editedBy: renderPerson() || 'Owner'}).then(refresh).then(() => toast('Last change undone.')).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }
   if (command === 'tl-render') {
     const criticals = edit.critique.counts.critical;
-    return editDialog('render', 'Render this edit', 'LOCAL RENDER · NO COST', `<p class="hint">Renders edit r${edit.revision} at proxy resolution with your pinned FFmpeg: ${tl.clips.length} clips with their own holds and camera moves, ${edit.critique.stats.softTransitions} soft transitions, ${edit.critique.stats.graphicsAccepted} graphics and a fade-out ending. Then it runs the technical QC.</p>${criticals ? `<p class="inline-warning">The critic still has ${criticals} critical finding${criticals === 1 ? '' : 's'}. You can render to look at it, but the style-proof verdict will ask you to accept ${criticals === 1 ? 'it' : 'them'}.</p>` : ''}<div class="form-grid">${renderNameField()}</div>`, 'Render edit', {contentId: content.contentId, visualApprovalId: content.inputs.visualApprovalId, editRevisionId: edit.id});
+    return editDialog('render', 'Render this edit', 'LOCAL RENDER · NO COST', `<p class="hint">Renders edit r${edit.revision} at proxy resolution with your pinned FFmpeg: ${tl.clips.length} clips with their own holds and camera moves, ${edit.critique.stats.softTransitions} soft transitions, ${edit.critique.stats.graphicsAccepted} graphics and a fade-out ending. Then it runs the technical QC.</p>${criticals ? `<p class="inline-warning">The critic still has ${criticals} critical finding${criticals === 1 ? '' : 's'}. You can render to look at it, but the style-proof verdict will ask you to accept ${criticals === 1 ? 'it' : 'them'}.</p>` : ''}<div class="form-grid">${renderNameField()}<label>Preview size<select name="resolution"><option value="360">360p (fast)</option><option value="720">720p (sharper, slower)</option></select></label></div>`, 'Render edit', {contentId: content.contentId, visualApprovalId: content.inputs.visualApprovalId, editRevisionId: edit.id});
   }
   if (command === 'tl-clip') {
     const index = tl.clips.findIndex(item => item.id === id), clip = tl.clips[index];
@@ -198,7 +198,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
   let message = null;
   saveForm(form, async () => {
     if (kind === 'generate') { const edit = await api(`/api/content/${data.contentId}/edits`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = `Edit r${edit.revision} drafted: ${edit.critique.counts.critical} critical, ${edit.critique.counts.suggestion} suggestions.`; return; }
-    if (kind === 'render') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId, editRevisionId: data.editRevisionId}); message = 'Edit render queued.'; return; }
+    if (kind === 'render') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId, editRevisionId: data.editRevisionId, resolution: Number(value('resolution') || 360)}); message = 'Edit render queued.'; return; }
     const {edit} = editContext();
     if (!edit || edit.id !== data.revisionId) throw new Error('The edit changed while this form was open. Close it and try again.');
     const tl = edit.timeline, ops = [];

@@ -15,7 +15,7 @@ const PIXABAY_ORIGIN = 'https://pixabay.com';
 const OPENAI_ORIGIN = 'https://api.openai.com';
 const REGISTRY_VERSION = '2026-10-04.1';
 // Media is only downloaded from the providers' own CDNs (Pexels videos may be served through Vimeo's CDN).
-const MEDIA_HOSTS = ['pexels.com', 'vimeocdn.com', 'vimeo.com', 'pixabay.com'];
+const MEDIA_HOSTS = ['pexels.com', 'vimeocdn.com', 'vimeo.com', 'pixabay.com', 'upload.wikimedia.org'];
 const MB = 1024 * 1024;
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -87,11 +87,18 @@ CAPABILITIES['drawn-scene'] = {
   cost: {unit: 'shot', paid: false, note: 'Drawn locally in Microsoft Edge or Google Chrome; free.'},
   notes: ['Each shot is drawn from its sketch in the scene plan: figures, props, labels, arrows and bubbles, drawn on stroke by stroke.'],
 };
-const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image'], 'generated-graphics': ['drawn-scene']};
+CAPABILITIES['wikimedia-image'] = {
+  id: 'wikimedia-image', version: REGISTRY_VERSION, provider: 'wikimedia', source: 'archival-public-domain', kind: 'search', name: 'Wikimedia Commons images', mediaType: 'image',
+  settings: {perPage: {min: 3, max: 30, default: 12}, licences: 'Public domain, CC0 and CC BY only', minimumWidth: 800},
+  mediaRoles: [], output: {mime: ['image/jpeg', 'image/png'], maxBytes: 60 * MB, rendition: 'original file'},
+  rights: {name: 'Per file: public domain, CC0 or CC BY (recorded at download)', url: 'https://commons.wikimedia.org/wiki/Commons:Licensing', commercialUse: true, attribution: 'Required for CC BY files; kept with the asset', restrictions: ['Share-alike, non-commercial and no-derivatives files are never offered', 'People shown may have personality rights; check the file page']},
+  synthetic: false, cost: {unit: 'request', paid: false, note: 'Free; no key.'},
+  notes: ['Archive photos, public-domain paintings, maps and historical documents for documentaries.', 'Each file\'s licence and credit line are kept with the asset and go into the description.'],
+};
+const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image'], 'generated-graphics': ['drawn-scene'], 'archival-public-domain': ['wikimedia-image']};
 const NOT_EXECUTABLE = {
   'ai-video': 'No AI video adapter is enabled yet.',
   'maps-and-diagrams': 'Maps and diagrams will be produced by the renderer in a later room.',
-  'archival-public-domain': 'No public-domain archive adapter is enabled yet.',
 };
 const capability = id => { requireValue(Object.hasOwn(CAPABILITIES, id), 'Unknown visual capability.'); return structuredClone(CAPABILITIES[id]); };
 const executableSources = sources => sources.filter(source => Object.hasOwn(SOURCE_CAPABILITIES, source));
@@ -187,6 +194,74 @@ class PexelsClient {
   }
 }
 
+// ---------------------------------------------------------------- Wikimedia Commons (0.57)
+// Owner request 2026-10-22: real images from the web the way history and documentary channels find them, without
+// copyright risk. Wikimedia Commons holds public-domain paintings, maps, archive photos and freely licensed images. Only
+// files that allow commercial use and changes are offered: public domain, CC0 and CC BY (credit required, kept with the
+// asset and written into the description). Share-alike, non-commercial, no-derivatives and GFDL-only files, and files
+// whose licence cannot be read, are left out. No key. The owner's network resets commons.wikimedia.org, so the program
+// uses Wikimedia's API gateway (api.wikimedia.org: search, page source with the licence templates, file details) and
+// downloads from upload.wikimedia.org, always with a descriptive User-Agent as Wikimedia asks.
+const WIKIMEDIA_API = 'https://api.wikimedia.org/core/v1/commons';
+const WIKIMEDIA_AGENT = 'YouTubeControlRoom/0.57 (local single-user program; https://github.com/hamzaofficial1478-lang/youtube)';
+const LICENCES = {
+  pd: {name: 'Public domain', url: 'https://creativecommons.org/publicdomain/mark/1.0/', commercialUse: true, attribution: 'Not required (credit is good practice)', restrictions: ['Public domain where it was published; check the file page for other rights (for example of people shown)']},
+  cc0: {name: 'CC0 1.0', url: 'https://creativecommons.org/publicdomain/zero/1.0/', commercialUse: true, attribution: 'Not required (credit is good practice)', restrictions: ['Check the file page for other rights (for example of people shown)']},
+};
+// The licence of a Commons file from its page source: {{PD-...}}, {{CC-zero}}, {{cc-by-4.0}} or {{self|cc-by-4.0|...}}.
+// A file offered under several licences may be used under any one of them, so one permissive licence is enough.
+function wikitextLicense(source) {
+  const names = [...String(source || '').matchAll(/\{\{\s*([^{}|]+?)\s*(\|[^{}]*)?\}\}/g)].flatMap(([, name, params = '']) => {
+    const key = name.trim().toLowerCase();
+    return key === 'self' ? params.split('|').map(item => item.trim().toLowerCase()).filter(item => item && !item.includes('=')) : [key];
+  });
+  if (names.some(name => /^(cc-zero|cc0)/.test(name))) return {...LICENCES.cc0, code: 'cc0'};
+  if (names.some(name => /^pd-|^pd$|^public domain/.test(name))) return {...LICENCES.pd, code: 'pd'};
+  const by = names.find(name => /^cc-by-\d+(\.\d+)?$/.test(name));
+  if (by) { const version = by.slice(6); return {name: `CC BY ${version}`, code: by, url: `https://creativecommons.org/licenses/by/${version}/`, commercialUse: true, attribution: 'Required: credit the author and licence in the description', restrictions: ['Credit the author, link the licence and say if it was changed']}; }
+  return null;
+}
+// The author named on the file page ({{Information|Author=...}} or an artwork's artist), without wiki markup.
+function wikitextAuthor(source) {
+  const raw = String(source || '').match(/^\s*\|\s*(?:author|artist|photographer)\s*=\s*(.+)$/im)?.[1] || '';
+  const plain = raw.replace(/\[\[(?:[^|\]]*\|)?([^\]]*)\]\]/g, '$1').replace(/\[https?:\/\/\S+\s+([^\]]+)\]/g, '$1').replace(/\{\{\s*(?:creator|user)\s*:\s*([^}|]+)[^}]*\}\}/gi, '$1').replace(/\{\{[^}]*\}\}/g, ' ').replace(/<[^>]*>/g, ' ').replace(/'{2,3}/g, '');
+  return cleanText(plain, 120) || 'Unknown author';
+}
+// A standard-width thumbnail on the same media host (Wikimedia serves only standard widths).
+function commonsThumb(url, width = 500) {
+  const match = /^https:\/\/upload\.wikimedia\.org\/wikipedia\/commons\/([0-9a-f])\/([0-9a-f]{2})\/([^/?#]+)$/.exec(String(url || '').split('?')[0]);
+  return match ? `https://upload.wikimedia.org/wikipedia/commons/thumb/${match[1]}/${match[2]}/${match[3]}/${width}px-${match[3]}` : null;
+}
+class WikimediaClient {
+  constructor(_key, fetchImpl = fetch) { this.fetch = fetchImpl; this.requests = 0; }
+  async get(path) {
+    this.requests += 1;
+    const response = await call(this.fetch, `${WIKIMEDIA_API}${path}`, {headers: {'User-Agent': WIKIMEDIA_AGENT, 'Api-User-Agent': WIKIMEDIA_AGENT}}, 'Wikimedia Commons');
+    if (!response.ok) throw await failure(response, 'Wikimedia Commons');
+    return readJson(response, 'Wikimedia Commons');
+  }
+  // One search, then each file's page source (its licence) and details, until perPage usable files are found.
+  async search({capabilityId = 'wikimedia-image', query, perPage = 12}) {
+    requireValue(capabilityId === 'wikimedia-image', 'Unknown Wikimedia capability.');
+    const found = await this.get(`/search/page?q=${encodeURIComponent(`${query} filetype:bitmap`)}&limit=${Math.min(50, perPage * 2)}`);
+    requireValue(Array.isArray(found?.pages), 'Wikimedia Commons returned an unexpected search response.', 502);
+    const candidates = [];
+    for (const page of found.pages.filter(item => typeof item?.key === 'string' && /^File:.+\.(jpe?g|png)$/i.test(item.key))) {
+      if (candidates.length >= perPage) break;
+      const key = encodeURIComponent(page.key);
+      const source = await this.get(`/page/${key}`), license = wikitextLicense(source?.source);
+      if (!license) continue;
+      const file = await this.get(`/file/${key}`), original = file?.original;
+      const downloadUrl = mediaUrl(String(original?.url || '').split('?')[0]), previewUrl = mediaUrl(commonsThumb(original?.url));
+      if (!downloadUrl || !previewUrl || positive(original.width) < 800) continue;
+      const title = cleanText(page.key.replace(/^File:/, '').replace(/\.[a-z0-9]+$/i, '').replace(/_/g, ' '), 300), author = wikitextAuthor(source.source);
+      candidates.push({externalId: String(page.id), mediaType: 'image', title, author, authorUrl: null, pageUrl: `https://commons.wikimedia.org/wiki/${encodeURI(page.key)}`, width: positive(original.width), height: positive(original.height), durationSeconds: null, previewUrl, downloadUrl,
+        license, attribution: `${title} by ${author}, ${license.name}, via Wikimedia Commons`});
+    }
+    return {candidates, rateLimit: {limit: null, remaining: null, reset: null}};
+  }
+}
+
 // ---------------------------------------------------------------- Pixabay
 const PIXABAY_LANGS = new Set(['cs', 'da', 'de', 'en', 'es', 'fr', 'id', 'it', 'hu', 'nl', 'no', 'pl', 'pt', 'ro', 'sk', 'fi', 'sv', 'tr', 'vi', 'th', 'bg', 'ru', 'el', 'ja', 'ko', 'zh']);
 function pixabayUser(item) { return item.user && item.user_id ? pageUrl(`https://pixabay.com/users/${encodeURIComponent(String(item.user))}-${encodeURIComponent(String(item.user_id))}/`) : null; }
@@ -272,7 +347,7 @@ async function downloadTo(fetchImpl, url, file, {maxBytes, accept, label = 'Medi
   requireValue(safe, `${label}: the source address is not an allowed provider media address.`, 502);
   let response;
   try {
-    response = await fetchImpl(safe, {redirect: 'follow', signal: AbortSignal.timeout(timeout)});
+    response = await fetchImpl(safe, {redirect: 'follow', signal: AbortSignal.timeout(timeout), ...(/\.wikimedia\.org$/.test(new URL(safe).hostname) ? {headers: {'User-Agent': WIKIMEDIA_AGENT}} : {})});
   } catch {
     throw new InputError(`${label} failed or timed out.`, 502);
   }
@@ -360,7 +435,7 @@ async function makeThumbnail(input, output, {ffmpeg = 'ffmpeg', video = false, a
   return output;
 }
 
-module.exports = {
+module.exports = {WikimediaClient, wikitextLicense, wikitextAuthor, commonsThumb, 
   PEXELS_ORIGIN, PIXABAY_ORIGIN, OPENAI_ORIGIN, REGISTRY_VERSION, CAPABILITIES, SOURCE_CAPABILITIES, NOT_EXECUTABLE, OPENAI_IMAGE_MODELS, ORIENTATION, MEDIA_HOSTS,
   capability, executableSources, validImageModel, mediaUrl, sniffMime, EXTENSION,
   PexelsClient, PixabayClient, OpenAIImageClient, pexelsPhoto, pexelsVideo, pixabayPhoto, pixabayVideo,

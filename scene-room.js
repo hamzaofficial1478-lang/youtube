@@ -14,6 +14,8 @@ const Il = require('./illustrate');
 const Dna = require('./visual-dna');
 // One painted picture on the ChatGPT plan: about 11k uncached tokens in a live test (2026-10-22), reserved with room.
 const PAINT_TOKENS = 30000;
+// The libraries the program searches (0.57: Wikimedia Commons for archive and public-domain images).
+const STOCK_NAMES = {pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia Commons'};
 // The visual rules a plan follows: the style's look, every look of the engine for a mix, the footage look of a
 // documentary beside its designed shots.
 function dnaKeys(style) {
@@ -251,7 +253,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
   const drawn = out.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: spokenBy.get(shot.label), notes: shot.notes})));
   const mended = mend ? [...Sk.mend(drawn, castOut), ...Sk.worldMend(drawn, world)] : [];
   warnings.push(...Sk.continuity(drawn, castOut), ...Sk.worldNotes(drawn, world));
-  for (const shot of drawn) if (shot.sketch?.elements?.some(item => item.kind === 'picture' && !item.art)) warnings.push(`${shot.label}: its picture is not drawn yet, so the shot shows only the rest of its drawing.`);
+  for (const shot of drawn) if (shot.sketch?.elements?.some(item => item.kind === 'picture' && !item.art && !item.image)) warnings.push(`${shot.label}: its picture is not drawn yet, so the shot shows only the rest of its drawing.`);
   // How the engines take turns across the video (P06i), measured for free; long videos get plain notes.
   const mix = D.measureMix(out, {primary, seconds: narrationSeconds});
   warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
@@ -327,7 +329,7 @@ function planMessages(input) {
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
     SCENE_CRAFT,
-    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade})] : []),
+    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
     ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
@@ -356,7 +358,7 @@ function reviewMessages(input) {
     'Fix what fails by returning a full replacement drawing for that shot (the same vocabulary; keep the cast ids, add new characters in "cast" only if the story needs them). Leave good shots alone. You may move a cue to other words inside its own scene.',
     '(6) WORD COLOUR - every word reads at a glance and looks designed: its colour suits its role and stands out from what lies behind it (a pale word on a bright sky or place, or a dark word on a dark backdrop, fails; give the key word or number the accent or a strong warm colour with text "color"). (5) WORLD - the shot obeys the story\'s world (input "world": its era and rules) and plain physics: people stand on ground or floors and are under water only when diving, ships float on the surface, things keep their size and era, and what the words name is shown (use the kit, input "kit", for what the vocabulary lacks).',
     // The owner's line-by-line review of a weak video (2026-10-21), as checks on every shot.
-    '(7) OWNER STANDARD - fix every shot that fails one of these: a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
+    '(7) OWNER STANDARD - fix every shot that fails one of these: something that breaks physics or nature without a reason in the words (floating things, wrong sizes, water or light that cannot be, an animal or person moving in a way they cannot); a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
     E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix', boards: input.board === 'mix', designs: input.design === 'mix'}),
@@ -638,8 +640,8 @@ class SceneRoom {
     requireValue(sentences.length >= 1, 'The script has no sentences to plan.');
     // A new plan uses only the sources the program can fetch now (live 0.25 run: Claude planned stock footage on a
     // PC without a stock key): stock needs a tested Pexels or Pixabay connection, AI images a tested OpenAI one.
-    const ready = provider => !this.connectors || this.connectors.list().some(item => item.provider === provider && item.hasKey && item.test?.status === 'passed');
-    const usable = inputs.sources.filter(source => (source.startsWith('stock-') ? ready('pexels') || ready('pixabay') : source === 'ai-image' ? ready('openai') : true));
+    const ready = provider => !this.connectors || this.connectors.list().some(item => item.provider === provider && (item.hasKey || provider === 'wikimedia') && item.test?.status === 'passed');
+    const usable = inputs.sources.filter(source => (source.startsWith('stock-') ? ready('pexels') || ready('pixabay') : source === 'ai-image' ? ready('openai') : source === 'archival-public-domain' ? ready('wikimedia') : true));
     // The Cinematic engine draws nothing, so it has no free fallback: it needs footage it can fetch.
     requireValue(usable.length || inputs.engine !== 'cinema', 'The Cinematic engine uses real footage: connect a free Pexels or Pixabay key (or an OpenAI image key) in Connectors and test it first.', 409);
     const sources = usable.length ? usable : inputs.sources, primarySource = sources.includes(inputs.primarySource) ? inputs.primarySource : sources[0];
@@ -1452,7 +1454,7 @@ class SceneRoom {
     const createdBy = person(input.requestedBy);
     const capabilityId = input.capabilityId;
     const provider = VS.capability(capabilityId).provider;
-    const connector = connectorReference(this.connectors, input.connector, provider, provider === 'pexels' ? 'Pexels' : 'Pixabay', true);
+    const connector = connectorReference(this.connectors, input.connector, provider, STOCK_NAMES[provider] || provider, true);
     return this.store.transaction(() => {
       const ctx = this.shotContext(input.manifestId, input.shotId);
       requireValue(!this.activeJob(ctx.content.id, ctx.shot.id, 'search'), 'A search for this shot is already queued.', 409);
@@ -1467,28 +1469,31 @@ class SceneRoom {
     const refs = {
       pexels: input.connectors?.pexels ? connectorReference(this.connectors, input.connectors.pexels, 'pexels', 'Pexels', true) : null,
       pixabay: input.connectors?.pixabay ? connectorReference(this.connectors, input.connectors.pixabay, 'pixabay', 'Pixabay', true) : null,
+      wikimedia: input.connectors?.wikimedia ? connectorReference(this.connectors, input.connectors.wikimedia, 'wikimedia', 'Wikimedia Commons', true) : null,
     };
-    requireValue(refs.pexels || refs.pixabay, 'Choose at least one tested stock connector.');
+    requireValue(refs.pexels || refs.pixabay || refs.wikimedia, 'Choose at least one tested stock or archive connector.');
     return this.store.transaction(() => {
       const mctx = this.manifestContext(manifestId), row = mctx.row, settings = this.settings(row.family_id);
-      const payload = mctx.payload, planned = {pexels: 0, pixabay: 0}, jobs = [];
+      const payload = mctx.payload, planned = {pexels: 0, pixabay: 0, wikimedia: 0}, jobs = [];
       const provider = settings.stockOrder.find(item => refs[item]);
       for (const scene of payload.scenes) {
         for (const shot of scene.shots) {
-          if (!shot.source.startsWith('stock-')) continue;
+          const archive = shot.source === 'archival-public-domain';
+          if (!shot.source.startsWith('stock-') && !(archive && refs.wikimedia)) continue;
+          if (!archive && !provider) continue;
           if (this.db.prepare('SELECT 1 FROM visual_selections WHERE content_id=? AND shot_id=?').get(row.content_id, shot.id)) continue;
           if (this.db.prepare('SELECT 1 FROM visual_candidates WHERE content_id=? AND shot_id=? AND purged_at IS NULL AND expires_at>?').get(row.content_id, shot.id, now())) continue;
           if (this.activeJob(row.content_id, shot.id, 'search')) continue;
-          jobs.push({shot, capabilityId: `${provider}-${shot.source === 'stock-video' ? 'video' : 'photo'}`});
-          planned[provider] += 1;
+          jobs.push({shot, provider: archive ? 'wikimedia' : provider, capabilityId: archive ? 'wikimedia-image' : `${provider}-${shot.source === 'stock-video' ? 'video' : 'photo'}`});
+          planned[archive ? 'wikimedia' : provider] += 1;
         }
       }
       requireValue(jobs.length, 'Every stock shot already has a selection, fresh results or a queued search.', 409);
       const summary = this.quota.summary();
-      for (const [name, count] of Object.entries(planned)) if (count) requireValue(summary[name].used + count <= summary[name].cap, `${jobs.length} searches would pass the ${name === 'pexels' ? 'Pexels' : 'Pixabay'} cap of ${summary[name].cap} requests this hour (${summary[name].used} used). Search fewer shots or raise the cap.`, 409);
+      for (const [name, count] of Object.entries(planned)) if (count) requireValue(summary[name].used + count <= summary[name].cap, `${jobs.length} searches would pass the ${STOCK_NAMES[name]} cap of ${summary[name].cap} requests this hour (${summary[name].used} used). Search fewer shots or raise the cap.`, 409);
       const ids = jobs.map(job => {
         const ctx = this.shotIn(mctx, job.shot.id);
-        return this.insertJob({ctx, kind: 'search', capabilityId: job.capabilityId, scope: this.searchScope(ctx, job.capabilityId, job.shot.query, refs[provider]), createdBy});
+        return this.insertJob({ctx, kind: 'search', capabilityId: job.capabilityId, scope: this.searchScope(ctx, job.capabilityId, job.shot.query, refs[job.provider]), createdBy});
       });
       this.store.event(`Queued ${ids.length} stock searches for plan ${manifestId}`);
       return {queued: ids.length};
@@ -1627,8 +1632,9 @@ class SceneRoom {
         const cached = this.db.prepare('SELECT * FROM visual_search_cache WHERE cache_key=? AND expires_at>?').get(scope.cacheKey, at);
         if (cached) { this.db.prepare("UPDATE visual_jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?").run(at, row.id); return {...row, scope, ctx, cached}; }
         if (!connectorCurrent(this.connectors, scope.connector, scope.capability.provider)) return stale('The stock connector changed or is no longer tested. Nothing was sent.');
-        const reservation = this.quota.reserve(row.id, {[scope.capability.provider]: 1});
-        if (!reservation.ok) { this.db.prepare("UPDATE visual_jobs SET status='blocked_quota', error=?, updated_at=? WHERE id=?").run(`The ${scope.capability.provider === 'pexels' ? 'Pexels' : 'Pixabay'} hourly cap (${reservation.cap}) is used up. Retry after the hour changes.`, at, row.id); return null; }
+        // A Wikimedia search reads each file's page and details too: up to 1 + 2 requests per result.
+        const reservation = this.quota.reserve(row.id, {[scope.capability.provider]: scope.capability.provider === 'wikimedia' ? 1 + 4 * scope.perPage : 1});
+        if (!reservation.ok) { this.db.prepare("UPDATE visual_jobs SET status='blocked_quota', error=?, updated_at=? WHERE id=?").run(`The ${STOCK_NAMES[scope.capability.provider] || scope.capability.provider} hourly cap (${reservation.cap}) is used up. Retry after the hour changes.`, at, row.id); return null; }
       }
       if (row.kind === 'generate') {
         if (!connectorCurrent(this.connectors, scope.connector, 'openai')) return stale('The OpenAI connector changed or is no longer tested. Nothing was sent.');
@@ -1661,30 +1667,31 @@ class SceneRoom {
   }
   async runSearch(job) {
     const scope = job.scope, provider = scope.capability.provider;
-    let candidates, fromCache = false, started = false;
+    let candidates, fromCache = false, started = false, client = null;
     try {
       if (job.cached) {
         candidates = JSON.parse(job.cached.candidates);
         fromCache = true;
       } else {
-        const key = this.connectors.key(scope.connector.id);
-        const Client = provider === 'pexels' ? VS.PexelsClient : VS.PixabayClient;
+        const key = provider === 'wikimedia' ? null : this.connectors.key(scope.connector.id);
+        const Client = {pexels: VS.PexelsClient, pixabay: VS.PixabayClient, wikimedia: VS.WikimediaClient}[provider];
         await this.throttle(provider);
         started = true;
-        const found = await new Client(key, this.connectors.fetch).search({capabilityId: job.capability_id, query: scope.query, format: scope.format, perPage: scope.perPage, locale: scope.locale});
+        client = new Client(key, this.connectors.fetch);
+        const found = await client.search({capabilityId: job.capability_id, query: scope.query, format: scope.format, perPage: scope.perPage, locale: scope.locale});
         candidates = found.candidates;
       }
     } catch (error) {
       this.store.transaction(() => {
         this.db.prepare("UPDATE visual_jobs SET status='failed', error=?, updated_at=? WHERE id=?").run(error instanceof InputError ? error.message : 'The stock search failed.', now(), job.id);
-        if (started) this.quota.settle(job.id, {[provider]: 1}); else this.quota.release(job.id);
+        if (started) this.quota.settle(job.id, {[provider]: client?.requests || 1}); else this.quota.release(job.id);
       });
       return null;
     }
     const at = now(), expires = fromCache ? job.cached.expires_at : new Date(Date.now() + DAY).toISOString();
     const ids = this.store.transaction(() => {
       if (!fromCache) {
-        this.quota.settle(job.id, {[provider]: 1});
+        this.quota.settle(job.id, {[provider]: client?.requests || 1});
         this.db.prepare('INSERT INTO visual_search_cache(cache_key,capability_id,candidates,created_at,expires_at) VALUES(?,?,?,?,?) ON CONFLICT(cache_key) DO UPDATE SET candidates=excluded.candidates,created_at=excluded.created_at,expires_at=excluded.expires_at').run(scope.cacheKey, job.capability_id, JSON.stringify(candidates), at, expires);
       }
       return candidates.map((candidate, index) => {
@@ -1728,7 +1735,7 @@ class SceneRoom {
       const probe = await this.evidence(file, download.mime);
       const thumb = await this.thumbnail(file, assetId, probe);
       const rights = {
-        basis: 'stock-license', license: cap.rights, provider: cap.provider, externalId: data.externalId, title: data.title, author: data.author, authorUrl: data.authorUrl, pageUrl: data.pageUrl,
+        basis: data.license ? 'open-licence' : 'stock-license', license: data.license || cap.rights, provider: cap.provider, externalId: data.externalId, title: data.title, author: data.author, authorUrl: data.authorUrl, pageUrl: data.pageUrl, ...(data.attribution ? {attribution: data.attribution} : {}),
         retrievedAt: now(), synthetic: false, disclosure: 'none', note: 'License terms captured at download time. Check the source page for model or property releases when people or brands are visible.',
       };
       saved = this.store.transaction(() => {

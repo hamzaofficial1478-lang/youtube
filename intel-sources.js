@@ -345,7 +345,7 @@ class YouTubePublicClient {
 
 // ---------------------------------------------------------------- quota ledger
 // YouTube's videos.insert calls have their own daily bucket (100 a day by default), apart from the 10,000 shared units.
-const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, youtubeDailyUploadCap: 100, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000};
+const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, youtubeDailyUploadCap: 100, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000, wikimediaHourlyRequestCap: 480, redditHourlyRequestCap: 300};
 // Stock libraries publish per-hour (Pexels 200/hour) and per-minute (Pixabay 100/60 s) limits; caps are counted per UTC hour.
 function hourPeriod(at = new Date()) { return at.toISOString().slice(0, 13); }
 function nexlevPeriod(at = new Date()) { return at.toISOString().slice(0, 7); }
@@ -379,7 +379,7 @@ class QuotaLedger {
     return this.store.transaction(() => {
       const current = this.settings();
       requireValue(input.revision === current.revision, 'Quota settings changed in another tab. Reload before saving.', 409);
-      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube, pexelsHourlyRequestCap: pexels, pixabayHourlyRequestCap: pixabay};
+      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube, pexelsHourlyRequestCap: pexels, pixabayHourlyRequestCap: pixabay, wikimediaHourlyRequestCap: stored.wikimediaHourlyRequestCap, redditHourlyRequestCap: stored.redditHourlyRequestCap};
       this.db.prepare("INSERT INTO quota_settings(id,revision,payload,updated_at) VALUES('global',?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at").run(current.revision + 1, JSON.stringify(payload), now());
       this.store.event(`Updated data caps: NexLev ${nexlev} requests/month, YouTube ${youtube} units/day, Pexels ${pexels} and Pixabay ${pixabay} requests/hour`);
       return this.settings();
@@ -387,7 +387,7 @@ class QuotaLedger {
   }
   periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : provider.startsWith('youtube') ? youtubePeriod() : hourPeriod(); }
   capFor(provider) {
-    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', 'youtube-upload': 'youtubeDailyUploadCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap'}[provider];
+    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', 'youtube-upload': 'youtubeDailyUploadCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap', wikimedia: 'wikimediaHourlyRequestCap', reddit: 'redditHourlyRequestCap'}[provider];
     requireValue(key, `Unknown data provider ${provider}.`, 500);
     return settings[key];
   }
@@ -422,6 +422,8 @@ class QuotaLedger {
       settings,
       pexels: {period: hour, used: this.committed('pexels', hour), cap: settings.pexelsHourlyRequestCap, unit: 'requests this hour (UTC)'},
       pixabay: {period: hour, used: this.committed('pixabay', hour), cap: settings.pixabayHourlyRequestCap, unit: 'requests this hour (UTC)'},
+      wikimedia: {period: hour, used: this.committed('wikimedia', hour), cap: settings.wikimediaHourlyRequestCap, unit: 'requests this hour (UTC)'},
+      reddit: {period: hour, used: this.committed('reddit', hour), cap: settings.redditHourlyRequestCap, unit: 'requests this hour (UTC)'},
       nexlev: {period: nexlev, used: this.committed('nexlev', nexlev), cap: settings.nexlevMonthlyRequestCap, unit: 'requests this month (UTC)'},
       youtube: {period: youtube, used: this.committed('youtube', youtube), cap: settings.youtubeDailyUnitCap, unit: 'units today (Pacific time)'},
       youtubeUploads: {period: youtube, used: this.committed('youtube-upload', youtube), cap: settings.youtubeDailyUploadCap, unit: 'uploads today (Pacific time)'},
@@ -439,7 +441,7 @@ function connectorCurrent(connectors, reference, provider) {
     const row = connectors.row(reference.id), slot = JSON.parse(row.payload);
     // provider 'ai' means either Claude connection; the subscription one (claude-code) has no stored key.
     const matches = provider === 'ai' ? ['claude', 'claude-code', 'chatgpt'].includes(slot.provider) : slot.provider === provider;
-    return matches && slot.revision === reference.revision && (!!row.secret || ['claude-code', 'chatgpt'].includes(slot.provider)) && slot.test?.status === 'passed';
+    return matches && slot.revision === reference.revision && (!!row.secret || ['claude-code', 'chatgpt', 'wikimedia'].includes(slot.provider)) && slot.test?.status === 'passed';
   } catch {
     return false;
   }

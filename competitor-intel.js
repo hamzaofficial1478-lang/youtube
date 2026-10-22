@@ -171,6 +171,30 @@ function analysisMessages(input) {
 }
 
 // ---------------------------------------------------------------- room
+// The keywords of a scan's hit videos (0.57): videos at two times their channel's median or more (NexLev data, or
+// YouTube data when the owner recorded YouTube's derived-use approval), their titles reduced to the phrases that recur.
+// Pure; used by the competitor watch to feed Trending topics.
+const STOP = new Set('a an and are as at be but by for from has have how i in into is it its me my no not of on or our so than that the their them then there these they this to up was we what when where which who why will with you your vs ever just more most new one only out over really get got about after before can do does did this these those very'.split(' '));
+function hitKeywords(channels, {youtubeApproved = false, limit = 15} = {}) {
+  const hits = [];
+  for (const channel of channels || []) {
+    const pool = [...(channel.nexlev?.outliers || []), ...(channel.nexlev?.videos || []), ...(youtubeApproved ? channel.youtube?.videos || [] : [])];
+    const videos = [...new Map(pool.filter(video => video?.title).map(video => [video.videoId, video])).values()];
+    const baseline = (channel.nexlev?.videos?.length ? channel.nexlev.videos : youtubeApproved ? channel.youtube?.videos || [] : []);
+    const multiples = outlierMultiples(videos, {baseline});
+    videos.forEach((video, index) => { const multiple = multiples.videos[index]?.multiple; if ((multiple !== null && multiple >= 2) || (video.outlierScore || 0) >= 2) hits.push({title: video.title, channel: channel.ref, multiple: multiple ?? video.outlierScore}); });
+  }
+  const counts = new Map();
+  for (const hit of hits) {
+    const terms = String(hit.title).toLowerCase().replace(/[^\p{L}\p{N}\s'-]/gu, ' ').split(/\s+/).filter(word => word.length > 2 && !STOP.has(word) && !/^\d+$/.test(word));
+    const phrases = new Set([...terms.slice(1).map((word, k) => `${terms[k]} ${word}`), ...terms]);
+    for (const phrase of phrases) { const entry = counts.get(phrase) || {phrase, hits: 0, channels: new Set()}; entry.hits++; entry.channels.add(hit.channel); counts.set(phrase, entry); }
+  }
+  const keywords = [...counts.values()].filter(item => item.hits >= 2 || item.phrase.includes(' ')).sort((a, b) => b.hits - a.hits || b.channels.size - a.channels.size || b.phrase.length - a.phrase.length)
+    .filter((item, k, all) => !all.slice(0, k).some(other => other.phrase.includes(item.phrase) && other.hits >= item.hits)).slice(0, limit).map(item => ({keyword: item.phrase, hits: item.hits, channels: item.channels.size}));
+  return {hits: hits.sort((a, b) => b.multiple - a.multiple).slice(0, 20), keywords};
+}
+
 class CompetitorIntelligence {
   constructor(store, connectors, quota, styles, ai = new Ai(connectors)) {
     this.ai = ai;
@@ -189,6 +213,7 @@ class CompetitorIntelligence {
 
   migrate() {
     this.db.exec(`
+      CREATE TABLE IF NOT EXISTS competitor_watch(family_id TEXT PRIMARY KEY REFERENCES families(id), revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS competitor_settings(family_id TEXT PRIMARY KEY REFERENCES families(id), revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS competitor_notes(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), competitor_key TEXT NOT NULL, revision INTEGER NOT NULL, payload TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(family_id,competitor_key,revision));
       CREATE TABLE IF NOT EXISTS competitor_scans(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), family_revision INTEGER NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, result TEXT, youtube_expires_at TEXT, youtube_purged_at TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -494,6 +519,71 @@ class CompetitorIntelligence {
     } finally {
       this.scanBusy = false;
     }
+  }
+
+  // ------------------------------------------------------------ competitor watch (0.57)
+  // Owner request 2026-10-22: the saved competitor channels are scanned again on a schedule, their hit videos are found
+  // and their keywords go to Trending topics. The owner's named setting is the explicit action: scans start from the
+  // program's timer only while the watch is on, through the connections chosen in it, inside the data caps, one scan per
+  // family at a time, never retried by themselves (a failed start waits a day). Optionally Claude explains each new
+  // scan (the normal analysis, its own token reservation, a blueprint the owner still reviews).
+  watch(familyId) {
+    const row = this.db.prepare('SELECT * FROM competitor_watch WHERE family_id=?').get(familyId);
+    return row ? {...JSON.parse(row.payload), revision: row.revision, updatedAt: row.updated_at} : {enabled: false, everyDays: 7, youtube: null, nexlev: null, claude: null, revision: 0};
+  }
+  saveWatch(familyId, input) {
+    object(input);
+    const setBy = person(input.setBy, 'Your name'), enabled = input.enabled === true;
+    const everyDays = integer(input.everyDays ?? 7, 1, 30, 'Days between scans');
+    const youtube = connectorReference(this.connectors, input.youtubeConnector, 'youtube', 'YouTube public research', false);
+    const nexlev = connectorReference(this.connectors, input.nexlevConnector, 'nexlev', 'NexLev research API', false);
+    const claude = connectorReference(this.connectors, input.claudeConnector, 'ai', 'Claude', false);
+    if (enabled) requireValue(youtube || nexlev, 'Choose at least one tested data connection for the watch: YouTube public research and/or NexLev.');
+    return this.store.transaction(() => {
+      const family = this.store.family(familyId), current = this.watch(familyId);
+      requireValue(input.revision === current.revision, 'The competitor watch changed in another tab. Reload before saving.', 409);
+      if (enabled) requireValue(family.competitors.length >= 1, 'Add competitor channels to this family first.', 409);
+      const payload = {enabled, everyDays, youtube, nexlev, claude, setBy, lastQueuedAt: current.lastQueuedAt || null, lastAttemptAt: null, lastNote: null};
+      this.db.prepare('INSERT INTO competitor_watch(family_id,revision,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(family_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at').run(familyId, current.revision + 1, JSON.stringify(payload), now());
+      this.store.event(`Competitor watch for ${family.name}: ${enabled ? `every ${everyDays} day${everyDays === 1 ? '' : 's'}${claude ? ', Claude explains each scan' : ''}` : 'off'} (set by ${setBy})`);
+      return this.watch(familyId);
+    });
+  }
+  // The hit videos and keywords of the family's newest scan with data.
+  watchKeywords(familyId) {
+    const row = this.db.prepare("SELECT * FROM competitor_scans WHERE family_id=? AND status IN ('completed','partial') AND result IS NOT NULL ORDER BY created_at DESC LIMIT 1").get(familyId);
+    if (!row) return null;
+    const result = JSON.parse(row.result);
+    return {scanId: row.id, at: result.retrievedAt, ...hitKeywords(result.channels, {youtubeApproved: result.youtubeDerivedUse === true})};
+  }
+  // Called by the program's timer. Returns what it did, for the log and the tests.
+  watchTick(at = new Date()) {
+    const done = [], keep = (familyId, change) => { const row = this.db.prepare('SELECT * FROM competitor_watch WHERE family_id=?').get(familyId); this.db.prepare('UPDATE competitor_watch SET payload=?, updated_at=? WHERE family_id=?').run(JSON.stringify({...JSON.parse(row.payload), ...change}), at.toISOString(), familyId); };
+    for (const row of this.db.prepare('SELECT family_id FROM competitor_watch').all()) {
+      const familyId = row.family_id, watch = this.watch(familyId);
+      if (!watch.enabled) continue;
+      let family;
+      try { family = this.store.family(familyId); } catch { continue; }
+      if (family.archived || !family.competitors.length) continue;
+      // Claude's explanation of the newest watch scan, once.
+      if (watch.claude) {
+        const scan = this.db.prepare("SELECT id FROM competitor_scans WHERE family_id=? AND created_by='Competitor watch' AND status IN ('completed','partial') ORDER BY created_at DESC LIMIT 1").get(familyId);
+        if (scan && !this.db.prepare('SELECT 1 FROM competitor_analyses WHERE scan_id=?').get(scan.id)) {
+          try { this.queueAnalysis(familyId, {requestedBy: 'Competitor watch', familyRevision: family.revision, connector: watch.claude, scanId: scan.id}); done.push({familyId, analysis: scan.id}); }
+          catch (error) { keep(familyId, {lastNote: `Claude's explanation could not start: ${error.message}`}); }
+        }
+      }
+      if (this.db.prepare("SELECT 1 FROM competitor_scans WHERE family_id=? AND status IN ('queued','running')").get(familyId)) continue;
+      const last = this.db.prepare("SELECT created_at FROM competitor_scans WHERE family_id=? AND status IN ('completed','partial') ORDER BY created_at DESC LIMIT 1").get(familyId);
+      if (last && at - new Date(last.created_at) < watch.everyDays * DAY) continue;
+      if (watch.lastAttemptAt && at - new Date(watch.lastAttemptAt) < DAY) continue;
+      try {
+        const scan = this.queueScan(familyId, {requestedBy: 'Competitor watch', familyRevision: family.revision, youtubeConnector: watch.youtube, nexlevConnector: watch.nexlev});
+        keep(familyId, {lastQueuedAt: at.toISOString(), lastAttemptAt: null, lastNote: null});
+        done.push({familyId, scan: scan.id});
+      } catch (error) { keep(familyId, {lastAttemptAt: at.toISOString(), lastNote: `The scheduled scan could not start: ${error.message}`}); }
+    }
+    return done;
   }
 
   // ------------------------------------------------------------ analysis (Claude)
@@ -827,6 +917,7 @@ class CompetitorIntelligence {
         }),
         current: (() => { const current = this.currentBlueprint(family.id); return current ? {id: current.id, outdated: current.outdated, outdatedReason: current.outdatedReason} : null; })(),
         picks: this.picks(family.id),
+        watch: {...this.watch(family.id), keywords: this.watchKeywords(family.id)},
         packagingBrief: this.packagingBrief(family.id),
         guidanceActive: !!this.scriptGuidance(family.id),
         voiceDirection: this.voiceDirection(family.id),
@@ -835,4 +926,4 @@ class CompetitorIntelligence {
   }
 }
 
-module.exports = {CompetitorIntelligence, validateBlueprint, analysisMessages, ADJUSTABLE, VOICE_PACE, YOUTUBE_RETENTION_DAYS, TRAITS};
+module.exports = {CompetitorIntelligence, hitKeywords, validateBlueprint, analysisMessages, ADJUSTABLE, VOICE_PACE, YOUTUBE_RETENTION_DAYS, TRAITS};

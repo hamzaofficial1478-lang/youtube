@@ -595,3 +595,14 @@ the Claude plan, about 3,300 tokens): the same Roman camp, painted under the cla
 with bold outlines that matches the stick figure; the art director passed it. Not built: footage-look AI photos for
 montage shots through ChatGPT (montage `ai-image` still needs an OpenAI key); images taken from websites, social media
 or YouTube (they need licences; see the owner question in BUILD-PROGRESS.md).
+
+### 29b. Footage painted by ChatGPT, the real-world rule and 720p previews (0.57)
+
+- Without a stock connection, a documentary drawn shot may use the footage look (`"design": "footage"`): its place is a
+  photo-real picture with `"backdrop": true` painted by ChatGPT under the footage rules (an editorial documentary
+  photograph), with the motion layer over it. The planner is offered it in the Documentary mix when ChatGPT paints.
+- REAL WORLD (owner standard 2026-10-22): every scene obeys physics and nature inside its own look (things rest on
+  something, true sizes, water, smoke, fire and daylight behave, people and animals move as they really move, every
+  picture shows exactly what the words say). It is a planner line and a review check.
+- Previews can render at 720p (`R.PRESETS.proxy720`, render scope `resolution: 720`, "Preview size" in the render
+  dialog); masters stay 1080p and compare against a preview of any size.

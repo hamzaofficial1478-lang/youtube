@@ -47,7 +47,7 @@ const sceneTokenSplit = job => {
   if (t) return ` (read ${t.read.toLocaleString()} · thought about ${t.thinking.toLocaleString()} · answered about ${t.answer.toLocaleString()})`;
   return Number.isSafeInteger(job.usage?.prompt) && Number.isSafeInteger(job.usage?.completion) ? ` (read ${job.usage.prompt.toLocaleString()} · wrote ${job.usage.completion.toLocaleString()}, thinking and answer together)` : '';
 };
-const SCENE_PROVIDER = {pexels: 'Pexels', pixabay: 'Pixabay', openai: 'OpenAI'};
+const SCENE_PROVIDER = {pexels: 'Pexels', pixabay: 'Pixabay', openai: 'OpenAI', wikimedia: 'Wikimedia Commons'};
 const sceneProvider = value => SCENE_PROVIDER[value] || value;
 const sceneClock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const sceneSeconds = seconds => `${Number(seconds).toFixed(1)} s`;
@@ -157,7 +157,7 @@ function sceneSketchSummary(sketch, cast = []) {
 }
 function sceneBatchCard(content, manifest, family) {
   const settings = state.scenes.settings[family.id], shots = sceneShots(manifest);
-  const stockEmpty = shots.filter(shot => shot.source.startsWith('stock-') && !content.selections[shot.id]).length;
+  const stockEmpty = shots.filter(shot => (shot.source.startsWith('stock-') || shot.source === 'archival-public-domain') && !content.selections[shot.id]).length;
   const aiEmpty = shots.filter(shot => shot.source === 'ai-image' && !content.selections[shot.id]).length;
   const drawn = shots.filter(shot => shot.source === 'generated-graphics').length, drawnEmpty = shots.filter(shot => shot.source === 'generated-graphics' && !content.selections[shot.id]).length;
   const withResults = shots.filter(shot => !content.selections[shot.id] && content.candidateCounts[shot.id]).length;
@@ -278,8 +278,8 @@ function sceneAction(command, id, button) {
       ${Object.entries(state.scenes.notExecutable).filter(([source]) => spec?.visuals.sources.includes(source)).map(([source, reason]) => `<p class="hint">${esc(styleLabel(source))}: ${esc(reason)}</p>`).join('')}${nameAndNote}`, 'Save as new revision', {manifestId: manifest.id, op: 'update-shot', shotId: id});
   }
   if (command === 'scene-search-all') {
-    const pexels = intelConnectors('pexels'), pixabay = intelConnectors('pixabay');
-    return sceneDialog('search-all', 'Search stock for every empty shot', 'FREE API · HOURLY CAPS', `<div class="form-grid"><label>Pexels connector<select name="pexels">${sceneConnectorOptions('pexels', true)}</select></label><label>Pixabay connector<select name="pixabay">${sceneConnectorOptions('pixabay', true)}</select></label>${scenePersonField()}</div>${!pexels.length && !pixabay.length ? '<p class="inline-warning">Add and test a Pexels or Pixabay connector in Connections first.</p>' : ''}<p class="hint">One request per shot, counted against your hourly caps. Identical searches within 24 hours reuse cached results.</p>`, 'Search', {manifestId: id});
+    const pexels = intelConnectors('pexels'), pixabay = intelConnectors('pixabay'), wikimedia = intelConnectors('wikimedia');
+    return sceneDialog('search-all', 'Search stock for every empty shot', 'FREE API · HOURLY CAPS', `<div class="form-grid"><label>Pexels connector<select name="pexels">${sceneConnectorOptions('pexels', true)}</select></label><label>Pixabay connector<select name="pixabay">${sceneConnectorOptions('pixabay', true)}</select></label><label>Archive images (Wikimedia Commons)<select name="wikimedia">${sceneConnectorOptions('wikimedia', true)}</select></label>${scenePersonField()}</div>${!pexels.length && !pixabay.length && !wikimedia.length ? '<p class="inline-warning">Add and test a Pexels, Pixabay or Wikimedia Commons connector in Connections first.</p>' : ''}<p class="hint">Archive shots search Wikimedia Commons: public domain, CC0 and CC BY files only, each with its licence and credit line kept for the description.</p><p class="hint">One request per shot, counted against your hourly caps. Identical searches within 24 hours reuse cached results.</p>`, 'Search', {manifestId: id});
   }
   if (command === 'scene-draw-all') { if (button) button.disabled = true; return api(`/api/scene-manifests/${id}/draw-all`, {requestedBy: scenePerson() || 'Owner'}).then(result => { toast(`${result.queued} scene${result.queued === 1 ? '' : 's'} queued for drawing.`); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }
   if (command === 'scene-pick-top') return sceneDialog('pick-top', 'Use the top result for every empty shot', 'DOWNLOAD WITH LICENSE EVIDENCE', `<p class="hint">Downloads the first result of each shot's latest search. You can change any shot before approving the board.</p><div class="form-grid">${scenePersonField()}</div>`, 'Download', {manifestId: id});
@@ -339,7 +339,7 @@ document.getElementById('scene-form').addEventListener('submit', event => {
       message = created.issues.length ? `Saved revision ${created.revision} with ${created.issues.length} issue(s) to fix before approval.` : `Saved revision ${created.revision}.`;
       return;
     }
-    if (kind === 'search-all') { const result = await api(`/api/scene-manifests/${data.manifestId}/search-all`, {requestedBy: person, connectors: {pexels: sceneConnectorRef(value('pexels')), pixabay: sceneConnectorRef(value('pixabay'))}}); message = `${result.queued} searches queued.`; return; }
+    if (kind === 'search-all') { const result = await api(`/api/scene-manifests/${data.manifestId}/search-all`, {requestedBy: person, connectors: {pexels: sceneConnectorRef(value('pexels')), pixabay: sceneConnectorRef(value('pixabay')), wikimedia: sceneConnectorRef(value('wikimedia'))}}); message = `${result.queued} searches queued.`; return; }
     if (kind === 'pick-top') { const result = await api(`/api/scene-manifests/${data.manifestId}/pick-top`, {requestedBy: person}); message = `${result.queued} downloads queued.`; return; }
     if (kind === 'generate-all') { const result = await api(`/api/scene-manifests/${data.manifestId}/generate-all`, {requestedBy: person, connector: sceneConnectorRef(value('connector')), quality: value('quality'), costConfirmed: checked('costConfirmed')}); message = `${result.queued} images queued (about ${money(result.estimatedCents)}).`; return; }
     if (kind === 'approve') {

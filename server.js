@@ -225,6 +225,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const retentionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/retention$/);
         if(retentionRoute&&req.method==='POST')return json(res,200,editingRoom.retention(retentionRoute[1],body));
         if(pathname==='/api/craft/check'&&req.method==='POST'){const locale=typeof body.locale==='string'?body.locale.slice(0,35):'en',field=(value,max)=>typeof value==='string'?value.slice(0,max):'';return json(res,200,{hook:craft.scoreHook(field(body.hook,1000),{locale}),packaging:craft.lintPackaging({title:field(body.title,300),thumbnailText:field(body.thumbnailText,200),locale})});}
+        const watchRoute=pathname.match(/^\/api\/competitor-watch\/([a-f0-9-]+)$/);
+        if(watchRoute&&req.method==='POST')return json(res,200,competitorIntel.saveWatch(watchRoute[1],body));
         if(pathname==='/api/backups'&&req.method==='POST'){requireBackups();return json(res,200,await backups.create({by:body.requestedBy}));}
         if(pathname==='/api/backups/settings'&&req.method==='POST'){requireBackups();return json(res,200,backups.saveSettings(body));}
         if(pathname==='/api/backups/restore/cancel'&&req.method==='POST'){requireBackups();return json(res,200,backups.cancelRestore());}
@@ -347,7 +349,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // backup is older than the setting and no render is running.
   let backupTimer=null,backupFirst=null;const backupTick=()=>backups?.autoTick().catch(error=>console.error(`${new Date().toISOString()} Automatic backup failed:`,error.message));
   server.on('listening',()=>{if(worker&&backups){backupFirst=setTimeout(backupTick,3*60*1000);backupTimer=setInterval(backupTick,15*60*1000);}});
-  server.on('close',()=>{clearInterval(timer);clearTimeout(backupFirst);clearInterval(backupTimer);store.close();});
+  // The competitor watch (0.57): checked every half hour; the scans themselves run on the normal worker.
+  let watchTimer=null;server.on('listening',()=>{if(worker)watchTimer=setInterval(()=>{try{const done=competitorIntel.watchTick();if(done.length)console.log(`${new Date().toISOString()} Competitor watch:`,JSON.stringify(done));}catch(error){console.error('Competitor watch:',error.message);}},30*60*1000);});
+  server.on('close',()=>{clearInterval(timer);clearTimeout(backupFirst);clearInterval(backupTimer);clearInterval(watchTimer);store.close();});
   return {server,store,dataRoot,backups,styles,quota,competitorIntel,styleStudies,nicheFactory,trends,sceneRoom,renderRoom,editingRoom,frameScanner,packagingRoom,localizationRoom,publishingRoom,voiceDirector,soundtrack,connectors,ai,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){

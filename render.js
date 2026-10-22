@@ -23,6 +23,8 @@ REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox', 'norm
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
   proxy: {name: 'proxy', label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
+  // A sharper preview the owner can choose (0.57): the same preview, at 720p.
+  proxy720: {name: 'proxy', label: 'Preview 720p', 'long-form': {width: 1280, height: 720}, shorts: {width: 720, height: 1280}, crf: 22, x264: 'veryfast', audioKbps: 160, maxFps: 30},
   // P11: the final master at YouTube's recommended upload settings (H.264 High, closed GOP of half the frame rate,
   // two B-frames, 4:2:0, BT.709, AAC-LC 48 kHz stereo at 384 kb/s, moov atom first), at the style's own frame rate.
   master: {name: 'master', label: 'Final master 1080p', 'long-form': {width: 1920, height: 1080}, shorts: {width: 1080, height: 1920}, crf: 17, x264: 'slow', audioKbps: 384, maxFps: 60, profile: 'high', halfSecondGop: true, stereo: true},

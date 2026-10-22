@@ -72,3 +72,24 @@ Monthly AI image budget (USD), OpenAI image model, default quality, image format
 - No reference-image (image-to-image) generation; no character consistency across AI images.
 - Video previews are thumbnails only; full playback arrives with the Editing Room.
 - Live verification with real Pexels, Pixabay and OpenAI keys is still pending. All automated and browser checks used fake providers and real FFmpeg/ffprobe on generated test media.
+
+## Wikimedia Commons: licensed real images (0.57)
+
+Owner question 2026-10-22: "from where do others find the sources of the content?" History and documentary channels
+use public-domain paintings, maps, archive photos and freely licensed images. The style source
+`archival-public-domain` is now executable through Wikimedia Commons (capability `wikimedia-image`, connection
+"Wikimedia Commons", no key):
+
+- Only files that allow commercial use and changes are offered: public domain, CC0 and CC BY (`wikitextLicense` reads the
+  licence templates of each file page; share-alike, non-commercial, no-derivatives, GFDL-only and unreadable licences
+  are left out). Files under 800 px wide are left out.
+- The owner's network resets `commons.wikimedia.org`, so searches use Wikimedia's API gateway
+  (`api.wikimedia.org/core/v1/commons`: search, page source, file details) and downloads come from
+  `upload.wikimedia.org`, always with a descriptive User-Agent. A search makes up to 1 + 2 requests per result; the
+  `wikimedia` hourly allowance (default 480) counts every one.
+- Each downloaded file keeps its licence, author, page and credit line (`rights.attribution`); the package description's
+  visual credits print it with the licence link, which CC BY requires.
+- Room 04 "Search all" has an "Archive images (Wikimedia Commons)" choice; the planner may plan archive shots once the
+  connection passes its test.
+- Not used: images from websites, social media or YouTube without a licence (copyright claims and strikes), Openverse
+  (its search did not answer from this PC).

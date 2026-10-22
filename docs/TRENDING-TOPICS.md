@@ -85,3 +85,24 @@ Browser check on a throwaway workspace (stand-in YouTube and Claude):
 - the results table was moved to full width.
 
 **Not tested:** a live YouTube search with the owner's key (it spends real quota; the owner's go-ahead is needed).
+
+## Reddit scans (0.57)
+
+Owner request 2026-10-22: Reddit is where people share stories and ask questions; the program reads it for topic
+signals. `reddit.js` signs in as the owner's own Reddit app (application-only OAuth, client credentials) and reads top
+posts; only `www.reddit.com/api/v1/access_token` and `oauth.reddit.com` are called, redirects are refused, adult posts
+are dropped, and the User-Agent names the owner's Reddit account as Reddit asks.
+
+- **Scan** ("+ Reddit scan" on Trending topics): 1-30 keywords, optional subreddits (up to 10), the last day, week, month
+  or year, 5-25 posts per keyword. One sign-in and one search per keyword, reserved first in the `reddit` hourly
+  allowance (default 300 requests), the first failed search stops the scan, never retried by itself. Posts are kept
+  30 days, then deleted like YouTube data.
+- **Topic ideas**: the same Claude topic ideas as a YouTube scan, with a Reddit prompt: posts are signals of demand,
+  never content; Claude never retells one post's story, never copies its words and never names its author (the copy
+  guard checks against the post titles). No YouTube approval is involved.
+- **Setup (owner, once):** sign in at reddit.com, open https://www.reddit.com/prefs/apps, "create another app", choose
+  **script**, any name (for example "control-room"), redirect URI `http://localhost:8080` (not used), create. In
+  Connections add "Reddit (your Reddit app)": the app ID is the short code under the app name, the secret is "secret",
+  and your Reddit username. The test signs in and runs one search; nothing is posted.
+- Reddit's Data API terms allow free access for personal and non-commercial use; using Reddit data for a commercial
+  channel may need Reddit's agreement. The program uses posts only as topic signals.

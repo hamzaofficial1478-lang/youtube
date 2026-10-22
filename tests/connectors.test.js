@@ -71,7 +71,8 @@ test('tests lock only their slot and never allow delete or replacement in flight
 
 test('planned adapters keep setup slots but reject keys and do not claim a live test',async t=>{
   let calls=0;const slots=setup(t,async()=>{calls++;return Response.json({});});
-  for(const provider of ['mcp','reddit']){
+  // Reddit became a real connection in 0.57 (tests/reddit.test.js); MCP is still a setup record.
+  for(const provider of ['mcp']){
     assert.throws(()=>slots.save({...base,provider,name:provider}));
     const c=slots.save({...base,provider,name:provider,key:''});
     const result=await slots.test(c.id,1);assert.equal(result.connector.test.status,'not_implemented');

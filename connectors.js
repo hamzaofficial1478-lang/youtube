@@ -11,6 +11,8 @@ const PROVIDERS = {
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   // Owner request 2026-10-22: Fish Audio as a second narration provider (https://fish.audio, API key from its dashboard).
   'fish-audio': {name: 'Fish Audio', test: 'Reads your API credit balance; no generation', ready: true},
+  // 0.57: free-licence and public-domain images (no key).
+  wikimedia: {name: 'Wikimedia Commons (free-licence and public-domain images)', test: 'One image search; nothing downloaded', ready: true, keyless: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
   claude: {name: 'Claude API key', test: 'Reads the chosen models\' details with the key; no generation', ready: true, ai: true},
   // Owner request 2026-10-22: the ChatGPT plan through the Codex app's own sign-in (no API key).
@@ -21,7 +23,8 @@ const PROVIDERS = {
   pexels: {name: 'Pexels stock library', test: 'One photo search for "nature" (uses 1 Pexels request); nothing is downloaded', ready: true},
   pixabay: {name: 'Pixabay stock library', test: 'One photo search for "nature" (uses 1 Pixabay request); nothing is downloaded', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
-  reddit: {name: 'Reddit', test: 'OAuth adapter not implemented; setup record only', ready: false}
+  // 0.57: the owner's own Reddit app (reddit.com/prefs/apps, type "script"): app ID, secret and the owner's username.
+  reddit: {name: 'Reddit (your Reddit app)', test: 'Signs in as your Reddit app and runs one search; nothing is posted', ready: true, reddit: true}
 };
 function text(value, label, max, min=0) {
   if(typeof value!=='string'||value.trim().length<min||value.length>max||/[\x00-\x1f\x7f]/.test(value))throw new InputError(`Enter a valid ${label} (${min}–${max} characters).`);
@@ -72,6 +75,12 @@ class ConnectorSlots {
     if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key)));
     const next={name,provider,notes,revision:old?JSON.parse(old.payload).revision+1:1,test:null,updatedAt:new Date().toISOString()};
     // Y01: a Google OAuth client of type "Desktop app"; its ID is not a secret, its secret is kept like a key.
+    if(PROVIDERS[provider].reddit){
+      const oldPayload=old?JSON.parse(old.payload):{},clientId=input.clientId??oldPayload.clientId,username=input.username??oldPayload.username;
+      if(typeof clientId!=='string'||!/^[A-Za-z0-9_-]{10,40}$/.test(clientId))throw new InputError('Enter the Reddit app ID (the short code under the app name on reddit.com/prefs/apps).');
+      if(typeof username!=='string'||!/^[A-Za-z0-9_-]{3,20}$/.test(username))throw new InputError('Enter your Reddit username (Reddit asks every app to name its owner).');
+      next.clientId=clientId;next.username=username;
+    }
     if(PROVIDERS[provider].oauth){const clientId=input.clientId??(old?JSON.parse(old.payload).clientId:undefined);if(typeof clientId!=='string'||!/^\d{6,30}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(clientId))throw new InputError('Enter the OAuth client ID from Google Cloud (it ends in .apps.googleusercontent.com).');next.clientId=clientId;}
     // The two Claude models a connection uses: main (scripts, editing, visuals, niches) and support (the rest).
     // A ChatGPT connection names one GPT model (empty: the Codex app's own default).
@@ -115,6 +124,14 @@ class ConnectorSlots {
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
         if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
         result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
+      }else if(slot.provider==='reddit'){
+        const {RedditClient}=require('./reddit');
+        const found=await new RedditClient({clientId:slot.clientId,secret:key,username:slot.username},this.fetch).search('history',{days:7,limit:3});
+        result={access:'reddit_read',message:`Reddit accepted your app and returned ${found.length} post(s) (2 requests). Nothing was posted.`};
+      }else if(slot.provider==='wikimedia'){
+        const {WikimediaClient}=require('./visual-sources');
+        const found=await new WikimediaClient(null,this.fetch).search({query:'old map',perPage:3});
+        result={access:'archive_search',message:`Wikimedia Commons answered with ${found.candidates.length} usable image(s) (public domain, CC0 or CC BY). Nothing was downloaded.`};
       }else if(slot.provider==='pexels'||slot.provider==='pixabay'){
         const {PexelsClient,PixabayClient}=require('./visual-sources');
         const client=slot.provider==='pexels'?new PexelsClient(key,this.fetch):new PixabayClient(key,this.fetch);
