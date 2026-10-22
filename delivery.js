@@ -44,7 +44,7 @@ function validate(raw, sentences, {lenient = false, warn = () => {}} = {}) {
 }
 
 // How much text one provider request may carry (Eleven v3 takes 5,000 characters; tags count).
-const requestLimit = (provider, model) => (provider === 'openai' ? 4000 : /^eleven_v3/.test(String(model)) ? 4500 : 9000);
+const requestLimit = (provider, model) => (provider === 'openai' ? 4000 : provider === 'fish-audio' ? 3000 : /^eleven_v3/.test(String(model)) ? 4500 : 9000);
 const supportsTags = (provider, model) => provider === 'elevenlabs' && /^eleven_v(3|4)/.test(String(model));
 // Stress a word the way v3/v4 voices read it (capitals); other voices get the word unchanged.
 function emphasize(text, words) {

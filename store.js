@@ -141,7 +141,7 @@ function researchEvidenceInput(input,defaults={}) {
 function voiceProfileInput(input) {
   object(input);
   const boundedNumber=(value,min,max,label)=>{requireValue(Number.isFinite(value)&&value>=min&&value<=max,`${label} must be between ${min} and ${max}.`);return value;};
-  const provider=choice(input.provider,['openai','elevenlabs'],'voice provider');
+  const provider=choice(input.provider,['openai','elevenlabs','fish-audio'],'voice provider');
   const providerId=(value,label)=>{const result=text(value,label,1,128);requireValue(/^[A-Za-z0-9_.:-]+$/.test(result),`${label} contains unsupported characters.`);return result;};
   requireValue(input.consentConfirmed===true,'Confirm voice consent and authority before saving this profile.');
   requireValue(input.commercialUseConfirmed===true,'Confirm commercial-use rights before saving this profile.');
@@ -150,6 +150,7 @@ function voiceProfileInput(input) {
   requireValue(new Set(entries.map(entry=>entry.term.toLocaleLowerCase())).size===entries.length,'Each pronunciation term may appear once.');
   const pace=boundedNumber(input.pace,.25,4,'Pace');
   if(provider==='elevenlabs')requireValue(pace>=.7&&pace<=1.2,'ElevenLabs pace must be between 0.7 and 1.2.');
+  if(provider==='fish-audio')requireValue(pace>=.5&&pace<=2,'Fish Audio pace must be between 0.5 and 2.');
   return {
     name:text(input.name,'Voice profile name',2,80),connectorId:text(input.connectorId,'Connector ID',1,80),connectorRevision:integer(input.connectorRevision,1,1000000,'Connector revision'),provider,
     model:providerId(input.model,'Voice model'),voiceId:providerId(input.voiceId,'Voice ID'),voiceVersion:text(input.voiceVersion||'provider-current','Voice version',1,120),
@@ -282,6 +283,22 @@ class Store {
         for(const row of this.db.prepare('SELECT id,payload FROM content WHERE family_id=?').all(family.id)){const content=JSON.parse(row.payload),existing=new Map((content.editions||[]).map(edition=>[edition.locale||edition.language,edition]));content.editions=family.channels.map((channel,index)=>{const prior=existing.get(channel.locale)||existing.get(channel.language);return {language:channel.language,locale:channel.locale,state:prior?.state||(content.scenes?.length?(index===0?'script_ready':'awaiting_translation'):'not_started')};});content.updatedAt=now();this.db.prepare('UPDATE content SET payload=? WHERE id=?').run(JSON.stringify(content),row.id);}
       }
       this.event(`${old?'Updated':'Created'} channel family: ${family.name}`);return family;
+    });
+  }
+  // Owner request 2026-10-22: a family can be deleted for good after its name is typed, but only while nothing was
+  // made for it yet (every table that names a family is counted). A family with scripts, voices, plans or videos is
+  // archived instead, so finished work and its history are never destroyed by one click.
+  familyWork(id) {
+    const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(row=>row.name);
+    return tables.filter(name=>this.db.prepare(`PRAGMA table_info("${name}")`).all().some(column=>column.name==='family_id')).map(name=>({table:name,count:this.db.prepare(`SELECT COUNT(*) AS n FROM "${name}" WHERE family_id=?`).get(id).n})).filter(item=>item.count);
+  }
+  deleteFamily(id, input) {
+    object(input);return this.transaction(()=>{
+      const f=this.family(id);this.version(f,input.revision);
+      requireValue(typeof input.confirmName==='string'&&input.confirmName.trim()===f.name,'Type the family\'s name exactly to delete it.');
+      const work=this.familyWork(id);
+      requireValue(!work.length,`${f.name} already has work (${work.map(item=>`${item.count} ${item.table.replace(/_/g,' ')}`).join(', ')}), so it cannot be deleted: archive it instead. Archived families keep their videos and history and leave the portfolio.`,409);
+      this.db.prepare('DELETE FROM families WHERE id=?').run(id);this.event(`Deleted family: ${f.name}`);return {deleted:true,name:f.name};
     });
   }
   archiveFamily(id, input) {

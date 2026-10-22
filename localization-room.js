@@ -339,7 +339,7 @@ class LocalizationRoom {
     try {
       fs.mkdirSync(work, {recursive: true});
       await V.checkTool(this.ffmpeg, 'FFmpeg'); await V.checkTool(this.ffprobe, 'ffprobe');
-      const Client = s.provider === 'openai' ? V.OpenAISpeechClient : V.ElevenLabsSpeechClient, client = new Client(this.connectors.key(s.connectorId), this.connectors.fetch);
+      const Client = V.SPEECH_CLIENTS[s.provider] || V.ElevenLabsSpeechClient, client = new Client(this.connectors.key(s.connectorId), this.connectors.fetch);
       const {parts, partWords, requestIds} = await V.speak({client, requests: V.chunkText(s.script, s.provider).map(chunk => ({text: chunk})), scope: s, work, isCurrent: () => this.narrationCurrent(job, s), onRequest: () => { started = true; }});
       const dir = path.join(this.voiceDir, s.familyId, s.contentId);
       fs.mkdirSync(dir, {recursive: true});

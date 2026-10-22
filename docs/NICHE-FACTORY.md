@@ -129,3 +129,11 @@ and those channels join the seeds (5 at most). Seed channels are now competitor 
 - NexLev MCP (OAuth) is not used; the REST API with a key in a Windows-protected connector slot is.
 - No automatic or scheduled niche discovery: every discovery and evaluation is started by you.
 - Live verification against the real NexLev, YouTube and Claude services still needs your keys. All automated and browser checks used fake providers.
+
+## Languages, country tiers, ages and the chance to spread (0.56)
+
+Owner request 2026-10-22: the go/no-go also explains in which languages the niche would do best, which country tiers,
+which ages and how likely its videos are to spread. Evaluations are `promptVersion` 3: `markets` (1-6 languages,
+strength low/medium/high, why), `countryTiers` (1-3 groups: tier 1 high ad rates, 2, 3; countries; why), `ages`
+(core range, another range, why) and `viral` (chance low/medium/high, why, what makes it spread, what holds it back).
+They are Claude's estimates from the supplied data and are shown as estimates on the result.

@@ -11,8 +11,23 @@ const {InputError} = require('./store');
 const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
 const Sk = require('./sketch');
 const Il = require('./illustrate');
+const Dna = require('./visual-dna');
 // One painted picture on the ChatGPT plan: about 11k uncached tokens in a live test (2026-10-22), reserved with room.
 const PAINT_TOKENS = 30000;
+// The visual rules a plan follows: the style's look, every look of the engine for a mix, the footage look of a
+// documentary beside its designed shots.
+function dnaKeys(style) {
+  const engine = style.engine || 'stickman', all = (list, field) => list.map(value => Dna.key({engine, [field]: value}));
+  if (engine === 'stickman') return style.look === 'mix' ? all(Sk.STICK_LOOKS, 'look') : [Dna.key({engine, look: style.look})];
+  if (engine === 'handdrawn') return style.board === 'mix' ? all(Sk.BOARDS, 'board') : [Dna.key({engine, board: style.board})];
+  if (engine === 'montage' || engine === 'motion') {
+    const designs = style.design === 'mix' ? Sk.DESIGNS : style.design && style.design !== 'footage' ? [style.design] : [];
+    return [...(engine === 'montage' && (!style.design || ['footage', 'mix'].includes(style.design)) ? ['documentary/footage'] : []), ...designs.map(design => Dna.key({engine: 'motion', design}))];
+  }
+  return [Dna.key({engine})];
+}
+// The art director's look at one painting: the image (about 1,600 tokens), the rules and a short JSON answer.
+const CHECK_TOKENS = 12000;
 const T = require('./transitions');
 const At = require('./atelier');
 const E = require('./engines');
@@ -318,6 +333,8 @@ function planMessages(input) {
     ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
     ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
       : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
+    // The look's visual rules (visual-dna.js): every place, object and picture is planned in this look.
+    ...Dna.plannerLines(dnaKeys(input.style)),
     ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, painted: input.style.painted === true, looks: input.style.look === 'mix', boards: input.style.board === 'mix', designs: input.style.design === 'mix', engines: input.style.drawEngines}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
@@ -902,6 +919,11 @@ class SceneRoom {
     if (!fs.existsSync(keep)) fs.renameSync(file, keep); else fs.rmSync(file, {force: true});
     return sha;
   }
+  artFile(sha) {
+    const dir = path.join(this.dataRoot, 'generated-art'), name = ['png', 'jpg', 'webp'].map(ext => `${sha}.${ext}`).find(file => fs.existsSync(path.join(dir, file)));
+    requireValue(name, 'A painted picture is missing from the data folder.', 409);
+    return path.join(dir, name);
+  }
   // The painted pictures a drawing needs, checked by their SHA-256, as data the drawing page can show.
   artImages(sketch) {
     const out = {}, dir = path.join(this.dataRoot, 'generated-art');
@@ -939,6 +961,15 @@ class SceneRoom {
       return true;
     });
     const settle = (key, usage, status) => this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, reserved_tokens=CASE WHEN ?=\'released\' THEN 0 ELSE reserved_tokens END, updated_at=? WHERE job_id=?').run(status, usage?.promptTokens ?? null, usage?.completionTokens ?? null, usage?.totalTokens ?? null, status, now(), key);
+    // The video's style key: its first painting that passed, attached to every later painting so the video keeps one style.
+    let styleKey = (() => { const row = this.db.prepare("SELECT art FROM plan_pictures WHERE job_id=? AND key='paint:style-key'").get(job.id); return row ? JSON.parse(row.art).image : null; })();
+    const artDirector = async (sha, rules, item, label, attempt) => {
+      const key = `${job.id}:picture:${label}:${job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
+      if (!reserve(key, CHECK_TOKENS)) return {fits: true, problems: [], unchecked: 'the family\'s monthly token limit could not reserve the check'};
+      const messages = Dna.checkMessages({rules, describe: item.describe, backdrop: item.backdrop === true, image: {mediaType: file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp', data: fs.readFileSync(file).toString('base64')}});
+      try { const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens: 4000, onStart}); settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown'); report.tokens += reply.usage?.totalTokens || 0; return Dna.readCheck(reply.content); }
+      catch (error) { settle(key, null, 'unknown'); return {fits: true, problems: [], unchecked: error instanceof AiError || error instanceof InputError ? error.message : 'no answer'}; }
+    };
     const drop = ({si, hi, ei}, why) => {
       const label = shotLabel(si, hi), sketch = plan.scenes[si].shots[hi].sketch;
       sketch.elements.splice(ei, 1, ...[]);
@@ -960,23 +991,35 @@ class SceneRoom {
       const team = this.ai.team?.();
       if (team?.painted) {
         const paintKey = `paint:${pictureKey}:${item.backdrop ? 'b' : 'p'}`, kept = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, paintKey);
-        let image = kept ? JSON.parse(kept.art).image : null, why = null;
+        let image = kept ? JSON.parse(kept.art).image : null, why = null, problems = [];
         if (kept) notes.push(`${label}: its painted picture was kept from an earlier attempt of this plan.`);
-        if (!image) {
-          const key = `${job.id}:picture:${label}:${job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}`;
-          if (!reserve(key, PAINT_TOKENS)) why = 'the family\'s monthly token limit could not reserve it';
-          else {
-            const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
-            fs.mkdirSync(path.dirname(incoming), {recursive: true});
-            let settled = false;
-            try {
-              const made = await this.ai.image({connectorId: team.pictures.id, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts'}), outFile: incoming, onStart});
-              settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
-              report.tokens += made.usage?.totalTokens || 0;
-              image = this.keepArt(incoming);
+        // The look's visual rules (visual-dna.js) decide the medium; the shot's film look prints it afterwards.
+        const rules = Dna.of({engine, look, board, design}), film = [shot.sketch.film, spec.drawing?.film].find(value => E.FILMS[value]) || null;
+        for (let attempt = 1; attempt <= 2 && !image; attempt++) {
+          const key = `${job.id}:picture:${label}:${job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}${attempt > 1 ? `-${attempt}` : ''}`;
+          if (!reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
+          const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
+          fs.mkdirSync(path.dirname(incoming), {recursive: true});
+          let settled = false;
+          try {
+            const made = await this.ai.image({connectorId: team.pictures.id, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems}), outFile: incoming, references: styleKey ? [this.artFile(styleKey)] : [], onStart});
+            settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
+            report.tokens += made.usage?.totalTokens || 0;
+            const candidate = this.keepArt(incoming);
+            // The art director (the plan's own AI) looks at it before it is used; a picture in the wrong medium is painted
+            // once more with what was wrong, and a second miss leaves the shot to the drawing.
+            const verdict = await artDirector(candidate, rules, item, label, attempt);
+            if (verdict.fits) {
+              image = candidate;
               this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, paintKey, JSON.stringify({image}), now());
-            } catch (error) { if (!settled) settle(key, null, 'unknown'); why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer'; fs.rmSync(incoming, {force: true}); }
-          }
+              if (!styleKey) { styleKey = image; this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, 'paint:style-key', JSON.stringify({image}), now()); }
+              if (verdict.unchecked) notes.push(`${label}: its painting could not be checked by the art director (${verdict.unchecked}); look at it in Room 04.`);
+            } else {
+              problems = verdict.problems.length ? verdict.problems : ['it does not match the look'];
+              why = `the art director rejected it twice: ${problems.join('; ')}`;
+              notes.push(`${label}: painting ${attempt} did not match the ${rules.name} look (${problems.join('; ')})${attempt < 2 ? '; it was painted again' : ''}.`);
+            }
+          } catch (error) { if (!settled) settle(key, null, 'unknown'); why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer'; fs.rmSync(incoming, {force: true}); break; }
         }
         if (image) { plan.scenes[si].shots[hi].sketch.elements[target.ei].image = image; report.drawn++; report.painted = (report.painted || 0) + 1; continue; }
         notes.push(`${label}: ChatGPT could not paint it (${why}); it is drawn instead.`);

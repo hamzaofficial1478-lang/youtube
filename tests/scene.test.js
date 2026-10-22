@@ -330,10 +330,21 @@ test('pictures (paid): Claude spends the video\'s picture budget, the illustrato
   assert.doesNotMatch(planMessages(input)[0].content, /PICTURES \(paid\)|"kind": "picture"/);
 });
 
-test('painted pictures (0.53): with ChatGPT on the team it paints backdrops and pictures, kept by checksum; a failed painting falls back to the drawing or drops the backdrop', async t => {
+test('painted pictures (0.53, 0.56): ChatGPT paints in the look\'s visual rules with one style key, the art director checks each, kept by checksum; a failed painting falls back or is left out', async t => {
   const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
   const art = {viewBox: [600, 400], paths: [{d: 'M100 300 L500 300 L500 360 L100 360 Z', fill: '#C9A77C', stroke: '#1E1E1E', width: 4}, {d: 'M200 120 L400 120 L380 300 L220 300 Z', fill: '#FFFFFF', stroke: '#1E1E1E', width: 4}, {d: 'M210 160 L390 160 L384 220 L216 220 Z', fill: '#E5484D', stroke: '#1E1E1E', width: 3}, {d: 'M250 100 C230 70 270 50 250 20', fill: 'none', stroke: '#8A96A3', width: 5}, {d: 'M225 230 L245 230 L240 290 L226 288 Z', fill: '#E6E6E6'}, {d: 'M400 160 C470 160 470 260 390 260', fill: 'none', stroke: '#1E1E1E', width: 10}]};
+  const checked = [];
   const network = fakeNetwork({claudePlan: input => {
+    // The art director: an image and the look's rules. Market of scene 17 fails once, the coin of scene 9 always.
+    if (Array.isArray(input.raw)) {
+      const text = input.raw.find(block => block.type === 'text').text, what = text.match(/THE PICTURE SHOULD SHOW: (.*)/)[1];
+      assert.ok(input.raw.some(block => block.type === 'image' && block.source.data.length > 10), 'the art director sees the picture');
+      assert.match(text, /VISUAL RULES: Medium \(ILLUSTRATION, Hand-drawn · colour cartoon\)/);
+      checked.push(what);
+      if (/^Market at dawn with boats and stalls, scene 17$/.test(what) && checked.filter(item => item === what).length === 1) return {fits: false, problems: ['It looks like a photograph, not a board drawing.']};
+      if (/^Coin of clay with a seal, scene 9$/.test(what)) return {fits: false, problems: ['It is a 3D render.']};
+      return {fits: true, problems: []};
+    }
     if (input.raw?.startsWith('PICTURE: ')) return art;
     if (input.scenes) return {report: 'Nothing to change.', changes: []};
     const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
@@ -345,10 +356,12 @@ test('painted pictures (0.53): with ChatGPT on the team it paints backdrops and 
   room.saveSettings(family.id, {...room.settings(family.id), picturesPerMinute: 20, revision: room.settings(family.id).revision});
   const painted = [];
   room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}});
-  room.ai.image = async ({prompt, outFile, onStart}) => {
+  const references = [];
+  room.ai.image = async ({prompt, outFile, references: attached = [], onStart}) => {
     onStart();
     painted.push(prompt);
-    if (/background painting for an animated YouTube explainer: Market at dawn with boats and stalls, scene 9/.test(prompt)) throw new Error('lost');
+    references.push(attached);
+    if (/background illustration for an animated YouTube video: Market at dawn with boats and stalls, scene 9\b/.test(prompt)) throw new Error('lost');
     if (/: Broken/.test(prompt)) { fs.writeFileSync(outFile, 'not an image'); return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}}; }
     fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(60, 140))]));
     return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}};
@@ -362,11 +375,23 @@ test('painted pictures (0.53): with ChatGPT on the team it paints backdrops and 
   const manifest = latestManifest(room, content.id), pictures = shots(manifest).flatMap(shot => shot.sketch.elements.filter(item => item.kind === 'picture'));
   const backdrops = pictures.filter(item => item.backdrop), cards = pictures.filter(item => !item.backdrop);
   assert.ok(backdrops.length && backdrops.every(item => /^[a-f0-9]{64}$/.test(item.image) && !item.art), 'backdrops are painted, never traced');
-  assert.ok(painted.filter(item => /background painting/.test(item)).every(item => /no people[\s\S]*no text/.test(item)));
+  assert.ok(painted.filter(item => /background illustration/.test(item)).every(item => /no people[\s\S]*no text[\s\S]*Hand-drawn · colour cartoon[\s\S]*Never: full painted backgrounds/.test(item)), 'every painting follows the look\'s visual rules');
+  // One style key: the first painting that passed travels with every later one.
+  assert.deepEqual(references[0], []);
+  assert.ok(references.slice(1).every(list => list.length === 1 && fs.existsSync(list[0])), 'later paintings carry the style key');
+  assert.ok(painted.slice(1).every(prompt => /style reference: match its medium/.test(prompt)));
+  // The art director: a miss is painted again with what was wrong; a second miss is left to the drawing.
+  const market = painted.filter(prompt => /Market at dawn with boats and stalls, scene 17\b/.test(prompt));
+  assert.equal(market.length, 2);
+  assert.match(market[1], /rejected by the art director: It looks like a photograph, not a board drawing\. Fix that\./);
+  assert.ok(backdrops.some(item => /scene 17$/.test(item.describe)), 'the second painting passed and is used');
+  const coin = cards.find(item => /^Coin of clay with a seal, scene 9$/.test(item.describe));
+  assert.ok(coin.art && !coin.image, 'twice rejected: Claude draws it instead');
+  assert.ok(manifest.plan.pictures.notes.some(item => /did not match the Hand-drawn · colour cartoon look \(It is a 3D render\.\)/.test(item)));
   const broken = cards.find(item => /^Broken/.test(item.describe));
   assert.ok(broken.art && !broken.image, 'a painting that is no image file is drawn by Claude instead');
-  assert.ok(cards.filter(item => item !== broken).every(item => item.image && !item.art), 'the other pictures are painted cards');
-  assert.equal(backdrops.some(item => /scene 9/.test(item.describe)), false, 'a backdrop ChatGPT could not paint is left out (never traced as a line drawing)');
+  assert.ok(cards.filter(item => item !== broken && item !== coin).every(item => item.image && !item.art), 'the other pictures are painted cards');
+  assert.equal(backdrops.some(item => /scene 9\b/.test(item.describe)), false, 'a backdrop ChatGPT could not paint is left out (never traced as a line drawing)');
   assert.ok(manifest.plan.pictures.notes.some(item => /ChatGPT could not paint it/.test(item)));
   for (const item of pictures.filter(el => el.image)) {
     const file = path.join(dataRoot, 'generated-art', `${item.image}.png`);

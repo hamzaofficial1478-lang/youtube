@@ -9,7 +9,7 @@ const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {ScriptWriter}=require('./writer');
 const {ResearchReasoning}=require('./research');
-const {Ai,ClaudeCode,MODELS,DEFAULT_MODELS,TASK_ROLE}=require('./ai');
+const {Ai,ClaudeCode,MODELS,DEFAULT_MODELS,MODEL_GROUPS,MODEL_WEIGHT,TASK_ROLE}=require('./ai');
 const {VoiceRuntime}=require('./voice');
 const {StyleLibrary}=require('./style');
 const {QuotaLedger}=require('./intel-sources');
@@ -18,6 +18,7 @@ const {StyleStudies}=require('./style-study');
 const {NicheFactory}=require('./niche-factory');
 const {TrendScanner}=require('./trends');
 const {Backups}=require('./backup');
+const VisualDna=require('./visual-dna');
 // The GPT models the owner's ChatGPT plan offers, as the Codex app last listed them (a hint for the connection form).
 function gptModels(){try{const cache=JSON.parse(fs.readFileSync(path.join(process.env.CODEX_HOME||path.join(require('node:os').homedir(),'.codex'),'models_cache.json'),'utf8'));return (cache.models||[]).filter(item=>item&&item.visibility!=='hide'&&typeof item.slug==='string').map(item=>item.slug).slice(0,20);}catch{return [];}}
 const {SceneRoom}=require('./scene-room');
@@ -94,7 +95,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
         if(pathname==='/api/health')return json(res,200,{app:'youtube-control-room',version:APP_VERSION,mode:'local-control-room-with-reviewed-skills-engine'});
-        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),claudeReady=connectorState.some(item=>['claude','claude-code','chatgpt'].includes(item.provider)&&(item.hasKey||['claude-code','chatgpt'].includes(item.provider))&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,backups:backups?.state()||null,ai:{team:ai.team(),gptModels:gptModels(),claudeCodeFound:!!ai.claudeCode.command,codexFound:!!ai.codex.command,models:MODELS,defaults:DEFAULT_MODELS,taskRoles:TASK_ROLE},youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),editing:editingRoom.state(),frameScans:frameScanner.state(),styleStudies:styleStudies.state(),packaging:packagingRoom.state(),localization:localizationRoom.state(),publishing:publishingRoom.state(),voiceDirection:voiceDirector.state(),soundtrack:soundtrack.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state(),trends:trends.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
+        if(pathname==='/api/state'){const skillState=skills.state(),connectorState=connectors.list(),claudeReady=connectorState.some(item=>['claude','claude-code','chatgpt'].includes(item.provider)&&(item.hasKey||['claude-code','chatgpt'].includes(item.provider))&&!item.busy&&item.test?.status==='passed'),voiceReady=ffmpegAvailable===true&&connectorState.some(item=>['openai','elevenlabs','fish-audio'].includes(item.provider)&&item.hasKey&&!item.busy&&item.test?.status==='passed');return json(res,200,{...store.state(),app:{version:APP_VERSION},token,connectors:connectorState,connectorProviders:PROVIDERS,backups:backups?.state()||null,visualRules:VisualDna.summary(),ai:{team:ai.team(),modelGroups:Object.keys(MODEL_GROUPS),modelWeight:MODEL_WEIGHT,gptModels:gptModels(),claudeCodeFound:!!ai.claudeCode.command,codexFound:!!ai.codex.command,models:MODELS,defaults:DEFAULT_MODELS,taskRoles:TASK_ROLE},youtubeResearch:research.status(),styles:styles.state(),scenes:sceneRoom.state(),renders:renderRoom.state(),editing:editingRoom.state(),frameScans:frameScanner.state(),styleStudies:styleStudies.state(),packaging:packagingRoom.state(),localization:localizationRoom.state(),publishing:publishingRoom.state(),voiceDirection:voiceDirector.state(),soundtrack:soundtrack.state(),skills:skillState,intelligence:{competitors:competitorIntel.state(),niches:nicheFactory.state(),trends:trends.state()},build:JSON.parse(fs.readFileSync(path.join(root,'docs/build-status.json'),'utf8')),
           capabilities:{skills:skillState.counts.approved>0?'approved_skills_injected':'drafts_only_not_injected',research:claudeReady?'review_only_saved_evidence':'saved_evidence_only',text:claudeReady?'bounded_claude_candidates':'not_connected',translation:'not_implemented',voice:voiceReady?'bounded_primary_locale_auditions':'not_connected',youtube:'not_connected',agentReach:'reference_only',ffmpeg:ffmpegAvailable===null?'checking':ffmpegAvailable?'executable_detected':'not_found'}});}
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
@@ -325,11 +326,12 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(researchBrief&&req.method==='POST')return json(res,200,researchReasoning.queue(researchBrief[1],body));
         const retry=pathname.match(/^\/api\/script-jobs\/([a-f0-9-]+)\/retry$/);
         if(retry&&req.method==='POST')return json(res,200,reasoning.retry(retry[1],body));
-        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|review|storyboard|ai-script))?$/);
+        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|delete|review|storyboard|ai-script))?$/);
         if(!match)throw new InputError('Action not found.',404);
         const [,kind,id,action]=match;
         if(kind==='families' && !action && req.method==='PUT')result=store.saveFamily(body,id);
         else if(kind==='families' && action==='archive' && req.method==='POST')result=store.archiveFamily(id,body);
+        else if(kind==='families' && action==='delete' && req.method==='POST')result=store.deleteFamily(id,body);
         else if(kind==='content' && !action && req.method==='PUT')result=store.saveContent(body,id);
         else if(kind==='content' && action==='review' && req.method==='POST')result=store.reviewContent(id,body);
         else if(kind==='content' && action==='storyboard' && req.method==='POST')result=store.queueStoryboard(id,body);

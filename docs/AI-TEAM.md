@@ -79,6 +79,17 @@ When ChatGPT has the pictures, every paid picture of a drawn shot is painted ins
 
 OpenAI image generation through an API key stays the montage `ai-image` source.
 
+## 4b. Pictures in the look, models per job (0.56)
+
+- Painted pictures follow the visual rules of the shot's look (DRAWN-SCENES.md section 29): a Stickman video gets flat
+  cartoon places, a footage documentary gets photographs. The first painting that passes is the video's style key and
+  is attached to every later painting; the plan's AI checks each painting against the rules before it is used and a
+  miss is painted once more.
+- The AI team card chooses a Claude model per kind of job (writing, planning and checks, editing, pictures, voice
+  direction, packaging, language editions, research): `ai_roles.models`, `MODEL_GROUPS`, `MODEL_WEIGHT` (best quality /
+  fewer tokens / fewest tokens). A job without a choice uses its connection's main or support model; ChatGPT jobs use
+  the GPT model of their connection.
+
 ## 5. Tests
 
 `tests/ai-team.test.js` (fake Codex in `tests/fake-codex.js`: isolation flags, no stray key, usage, errors, image copy;

@@ -331,6 +331,10 @@ function evaluation(extra = {}) {
     howWeWin: 'Ancient money stories told through ordinary people, each ending with one habit to use today.',
     competitorNotes: [{ref: 'C1', strength: 'Strong openings.', weakness: 'No practical takeaway.'}],
     monetization: ['Budgeting app sponsors that fit a practical audience.', 'A printable money-history timeline.'],
+    markets: [{language: 'English', strength: 'high', why: 'The largest audience for this topic and strong advertisers.'}, {language: 'Spanish', strength: 'medium', why: 'Fewer channels cover it, a growing audience.'}],
+    countryTiers: [{tier: 1, countries: ['United States', 'United Kingdom'], why: 'High ad rates and a curious adult audience.'}],
+    ages: {core: '25-44', also: '45-54', why: 'Adults with jobs and money questions watch practical history.'},
+    viral: {chance: 'medium', why: 'Surprising origins travel well, but the topic is calm.', triggers: ['A surprising first line'], risks: ['A slow opening']},
     ...extra,
   };
 }

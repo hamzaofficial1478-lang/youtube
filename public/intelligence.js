@@ -210,6 +210,7 @@ function evaluationExtras(result, disc) {
     </div><div class="bp-grid">
       <div class="bp-section"><span class="micro-label">Competitor notes</span>${result.competitorNotes.length ? `<ul class="intel-list">${result.competitorNotes.map(item => `<li><strong>${esc(channelName(item.ref))}</strong>: + ${esc(item.strength)} · − ${esc(item.weakness)}</li>`).join('')}</ul>` : '<p class="muted">None.</p>'}</div>
       <div class="bp-section">${block('Ways to earn beyond AdSense', result.monetization)}</div>
+      ${result.markets ? `<div class="bp-section"><span class="micro-label">Where it can do best · Claude's estimate</span><ul class="intel-list">${result.markets.map(item => `<li><strong>${esc(item.language)}</strong> ${badge(item.strength, item.strength === 'high' ? 'green' : item.strength === 'medium' ? 'orange' : 'gray')} ${esc(item.why)}</li>`).join('')}</ul><ul class="intel-list">${result.countryTiers.map(item => `<li><strong>Tier ${item.tier}</strong>: ${esc(item.countries.join(', '))}. ${esc(item.why)}</li>`).join('')}</ul><p><strong>Ages:</strong> ${esc(result.ages.core)}${result.ages.also && result.ages.also !== 'none' ? `, also ${esc(result.ages.also)}` : ''}. ${esc(result.ages.why)}</p><p><strong>Chance to spread:</strong> ${badge(result.viral.chance, result.viral.chance === 'high' ? 'green' : result.viral.chance === 'medium' ? 'orange' : 'gray')} ${esc(result.viral.why)}</p>${block('What makes it spread', result.viral.triggers)}${block('What holds it back', result.viral.risks)}</div>` : ''}
     </div>`;
 }
 

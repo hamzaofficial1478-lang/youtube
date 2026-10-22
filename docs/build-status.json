@@ -1,5 +1,5 @@
 {
-  "version": "0.55.0",
+  "version": "0.56.0",
   "updated": "2026-10-22",
   "nextAction": "Owner: start the program and look at the Backups page (a first automatic backup runs a few minutes after start; an external drive folder is safer). Try the timeline editor in Room 05 and the AI team on Connections. Then follow \"Make your first video\" on the Overview.",
   "repositories": [
@@ -465,6 +465,13 @@
           "remaining": "A live typed command on the owner's plan; a full render of an edit with changed drawings on the owner's real video; dragging clip edges on the timeline (holds change through the clip dialog today)."
         },
         {
+          "id": "P06y",
+          "title": "Visual rules per look: pictures, places and objects made in the engine and style, one style key per video, an art director's check",
+          "status": "testing",
+          "evidence": "0.56.0 (2026-10-22): visual-dna.js rules for every look; planner VISUAL RULES lines; paint and illustrator prompts by the rules; style key attached to later paintings; art director check with one repaint (tests in ai-team.test.js and scene.test.js). Live: the owner's rejected camp painted again under the classic Stickman rules as a flat cartoon, passed by the art director and drawn with a stick figure on top.",
+          "remaining": "A full live plan with painted pictures for a real family; photo-real AI pictures for footage documentaries through ChatGPT; licensed web image sources after the owner decides."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -621,7 +628,8 @@
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links.",
     "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits.",
     "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies.",
-    "2026-10-22: Phase 06 starts with A02 (backups and restore) because nothing is published yet for A01 analytics to measure."
+    "2026-10-22: Phase 06 starts with A02 (backups and restore) because nothing is published yet for A01 analytics to measure.",
+    "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it."
   ],
-  "milestone": "Phase 06 begins: backups and restore (A02)"
+  "milestone": "Pictures that belong to their look: visual rules, style key, art director"
 }

@@ -29,3 +29,13 @@ Validation: the current automated suite covers actual Windows encryption, slot i
 Next in Phase 02: verify a real restricted research key, implement per-channel OAuth state/PKCE and refresh/revocation, then collect recent public videos and source evidence for competitor analysis. Slots are a completed substep; the whole Accounts and research phase remains in progress.
 
 References checked 2026-09-09: [YouTube channels.list](https://developers.google.com/youtube/v3/docs/channels/list), [OpenAI models.list](https://developers.openai.com/api/reference/resources/models/methods/list), [ElevenLabs voice list](https://elevenlabs.io/docs/api-reference/voices/search).
+
+## Fish Audio (0.56)
+
+Owner request 2026-10-22: a second narration provider beside ElevenLabs. Connector `fish-audio` (API key from
+fish.audio, kept like every key). Its test reads the API credit balance (`GET https://api.fish.audio/wallet/self/api-credit`);
+nothing is generated. Voice profiles may use it (provider `fish-audio`, model `s1`, `s2-pro` or `s2.1-pro`, the voice
+model's ID from fish.audio as the voice ID, pace 0.5-2). Speech: `POST https://api.fish.audio/v1/tts` with the model in
+its `model` header, `reference_id`, MP3 128 kb/s and the pace as `prosody.speed`; parts of at most 3,000 characters;
+the same real-audio checks as every narration. Fish Audio returns no word timing, so captions use the estimate. Music
+and sound effects still need ElevenLabs. Not verified live (needs the owner's key).

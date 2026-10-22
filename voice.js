@@ -9,7 +9,7 @@ const Delivery=require('./delivery');
 
 const execFileAsync=promisify(execFile);
 const MAX_AUDIO_BYTES=25*1024*1024;
-const PROVIDER_LIMITS={openai:4000,elevenlabs:9000};
+const PROVIDER_LIMITS={openai:4000,elevenlabs:9000,'fish-audio':3000};
 function boundedText(value,label,max,min=1){if(typeof value!=='string'||value.trim().length<min||value.length>max||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))throw new InputError(`Enter a valid ${label} (${min}–${max} characters).`);return value.trim();}
 function safeId(value,label){return boundedText(value,label,128).replace(/[A-Za-z0-9_.:-]/g,'').length===0?value.trim():(()=>{throw new InputError(`Enter a valid ${label}.`);})();}
 async function responseAudio(response){
@@ -45,6 +45,19 @@ class ElevenLabsSpeechClient{
     return {audio,extension:'mp3',mime:'audio/mpeg',requestId:response.headers.get('request-id')||response.headers.get('x-request-id')||null,words:spokenWords(reply.alignment||reply.normalized_alignment)};
   }
 }
+// Fish Audio (owner request 2026-10-22): POST /v1/tts with the voice model's ID as reference_id and the model in its
+// own header (s1, s2-pro, s2.1-pro ...). Plain text in, MP3 out; no word timing, so captions use the estimate.
+class FishAudioSpeechClient{
+  constructor(key,fetchImpl=fetch){this.key=key;this.fetch=fetchImpl;}
+  async synthesize(input){
+    const text=boundedText(input.text,'speech text',10000),model=safeId(input.model,'Fish Audio model'),voiceId=safeId(input.voiceId,'Fish Audio voice');
+    const speed=Number(input.speed??1);if(!Number.isFinite(speed)||speed<.5||speed>2)throw new InputError('Fish Audio speed must be between 0.5 and 2.');
+    const body={text,reference_id:voiceId,format:'mp3',mp3_bitrate:128,normalize:true,latency:'normal',prosody:{speed,volume:0}};
+    let response;try{if(input.onRequest)input.onRequest();response=await this.fetch('https://api.fish.audio/v1/tts',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json',model},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(300000)});}catch{throw new InputError('Fish Audio speech request failed or timed out after it started. Its billing outcome may be unknown.',502);}
+    const audio=await responseAudio(response);return {audio,extension:'mp3',mime:'audio/mpeg',requestId:response.headers.get('x-request-id')||null};
+  }
+}
+const SPEECH_CLIENTS={openai:OpenAISpeechClient,elevenlabs:ElevenLabsSpeechClient,'fish-audio':FishAudioSpeechClient};
 // Character timing to spoken words: a word runs from its first to its last letter; delivery tags ([excited])
 // and spaces are not words. Returns null when the timing is missing or malformed.
 function spokenWords(alignment){
@@ -129,11 +142,11 @@ class VoiceRuntime{
   async processNext(){
     if(this.running)return null;const job=this.store.claimVoiceAudition();if(!job)return null;this.running=true;let requestStarted=false,final=null;const work=path.join(this.artifactDir,'.working',job.id);
     try{
-      fs.mkdirSync(work,{recursive:true});await this.preflight();const scope=job.scope,key=this.connectors.key(scope.connectorId),Client=scope.provider==='openai'?OpenAISpeechClient:ElevenLabsSpeechClient,client=new Client(key,this.connectors.fetch),text=applyLexicon(scope.script,scope.lexicon.entries),requests=scope.direction?Delivery.segments({script:scope.script,sentences:scope.direction.sentences,direction:scope.direction,provider:scope.provider,model:scope.model,base:{stability:scope.delivery.stability,style:scope.delivery.style,instructions:scope.providerInstructions},limit:Delivery.requestLimit(scope.provider,scope.model)}).map(item=>({...item,text:applyLexicon(item.text,scope.lexicon.entries)})):chunkText(text,scope.provider).map(chunk=>({text:chunk}));
+      fs.mkdirSync(work,{recursive:true});await this.preflight();const scope=job.scope,key=this.connectors.key(scope.connectorId),Client=SPEECH_CLIENTS[scope.provider]||ElevenLabsSpeechClient,client=new Client(key,this.connectors.fetch),text=applyLexicon(scope.script,scope.lexicon.entries),requests=scope.direction?Delivery.segments({script:scope.script,sentences:scope.direction.sentences,direction:scope.direction,provider:scope.provider,model:scope.model,base:{stability:scope.delivery.stability,style:scope.delivery.style,instructions:scope.providerInstructions},limit:Delivery.requestLimit(scope.provider,scope.model)}).map(item=>({...item,text:applyLexicon(item.text,scope.lexicon.entries)})):chunkText(text,scope.provider).map(chunk=>({text:chunk}));
       const {parts,partWords,requestIds}=await speak({client,requests,scope,work,isCurrent:()=>this.store.voiceScopeCurrent(job,scope),onRequest:()=>{requestStarted=true;}});
       const familyDir=path.join(this.artifactDir,scope.familyId,scope.contentId);final=path.join(familyDir,`${job.id}.wav`);fs.mkdirSync(familyDir,{recursive:true});const {analysis,bytes}=await joinNarration({parts,partWords,final,scope,ffmpeg:this.ffmpeg,ffprobe:this.ffprobe}),artifact={relativePath:path.relative(path.dirname(this.artifactDir),final).replaceAll('\\','/'),sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length,mime:'audio/wav'};
       const saved=this.store.completeVoiceAudition(job.id,{artifact,analysis,provider:{requestIds,model:scope.model,voiceId:scope.voiceId,voiceVersion:scope.voiceVersion},settledCharacters:scope.characterCount});final=null;return saved;
     }catch(error){if(final)fs.rmSync(final,{force:true});this.store.failVoiceAudition(job.id,error instanceof InputError?error.message:'Voice generation failed. Review the local logs before retrying.',{usageUnknown:requestStarted});return null;}finally{fs.rmSync(work,{recursive:true,force:true});this.running=false;}
   }
 }
-module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,VoiceRuntime};
+module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,FishAudioSpeechClient,SPEECH_CLIENTS,VoiceRuntime};

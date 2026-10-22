@@ -20,6 +20,12 @@ const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-
 // Opus 4.8 does the rest.
 const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', localization: 'main', research: 'support', competitors: 'support', frames: 'main', illustrate: 'main'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
+// Owner request 2026-10-22: choose the Claude model per kind of job, since stronger models use more tokens. A job group
+// without a choice uses its connection's main or support model.
+const MODEL_GROUPS = Object.freeze({writing: ['script'], planning: ['scenes', 'review', 'frames'], editing: ['editing'], pictures: ['illustrate'], voice: ['voice'], packaging: ['packaging'], languages: ['localization'], research: ['research', 'niche', 'competitors']});
+const groupOf = task => Object.keys(MODEL_GROUPS).find(group => MODEL_GROUPS[group].includes(task));
+// How heavy each model is, in plain words (the plan's usage limits or the bill depend on it).
+const MODEL_WEIGHT = Object.freeze({'claude-opus-5-5': 'best quality, uses the most tokens', 'claude-opus-4-8': 'strong, uses fewer tokens', 'claude-sonnet-5-5': 'fast, uses the fewest tokens'});
 // A frame's design is already settled by the plan (blueprint, beats, motions); writing it needs less deliberation
 // (live 0.25 run: about 10k thinking tokens per frame at high). A picture's subject is settled by the plan too
 // (owner question 2026-10-17; the same picture: high 26k tokens, medium 13k with nearly the same detail, low 4k and plain).
@@ -235,9 +241,11 @@ class CodexCli {
   }
   // One picture from ChatGPT's image generation, copied to outFile. Codex keeps it under its own home, in a folder
   // named after the request's thread.
-  async image({prompt, outFile, model, onStart}) {
+  // references: image files attached to the request (the video's style key), so every picture shares one style.
+  async image({prompt, outFile, model, references = [], onStart}) {
     const text = `Generate exactly one image with your image generation tool. ${prompt}\nDo not run commands, read or write files, or ask questions. When the image is made, reply with only the word DONE.`;
-    const reply = await this.run({text, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart});
+    const images = references.map(file => ({media_type: /\.png$/i.test(file) ? 'image/png' : 'image/jpeg', data: fs.readFileSync(file).toString('base64')}));
+    const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart});
     const folder = reply.thread ? path.join(codexHome(this.home), 'generated_images', reply.thread) : null;
     let made = [];
     try { made = fs.readdirSync(folder).filter(name => /\.(png|jpe?g|webp)$/i.test(name)).map(name => path.join(folder, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs); } catch { /* none */ }
@@ -274,7 +282,8 @@ class Ai {
     if (!role) throw new AiError(`Unknown AI task ${task}.`, 500);
     // A ChatGPT connection uses its chosen GPT model (or Codex's own default) for every task.
     if (slot.provider === 'chatgpt') return {role, model: slot.models?.main || null, effort: TASK_EFFORT[task] || EFFORT[role]};
-    return {role, model: slot.models?.[role] || DEFAULT_MODELS[role], effort: TASK_EFFORT[task] || EFFORT[role]};
+    const chosen = this.connectors?.aiRoles?.().models?.[groupOf(task)];
+    return {role, model: MODELS[chosen] ? chosen : slot.models?.[role] || DEFAULT_MODELS[role], effort: TASK_EFFORT[task] || EFFORT[role]};
   }
   // messages: [{role, content}]; returns {content, usage, model, provider}.
   async complete({connectorId, task, messages, maxTokens, onStart}) {
@@ -287,10 +296,10 @@ class Ai {
     return {...result, provider: slot.provider, role};
   }
   // A painted picture from ChatGPT's image generation (ChatGPT connections only).
-  async image({connectorId, prompt, outFile, onStart}) {
+  async image({connectorId, prompt, outFile, references = [], onStart}) {
     const {slot} = this.slot(connectorId);
     if (slot.provider !== 'chatgpt') throw new AiError('Painted pictures need a ChatGPT connection.', 400);
-    return this.lane('gpt:image', () => this.codex.image({prompt, outFile, model: slot.models?.main || null, onStart}));
+    return this.lane('gpt:image', () => this.codex.image({prompt, outFile, model: slot.models?.main || null, references, onStart}));
   }
   // The AI team (owner request 2026-10-22): the tested Claude and ChatGPT connections and the roles the owner set.
   // Pictures go to ChatGPT when it is connected (it paints); scripts are written together when both are.
@@ -328,4 +337,4 @@ class Ai {
   }
 }
 
-module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, AI_PROVIDERS, MODELS, DEFAULT_MODELS, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};
+module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};

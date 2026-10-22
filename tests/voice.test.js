@@ -7,6 +7,7 @@ const path=require('node:path');
 const {execFileSync}=require('node:child_process');
 const {createHash}=require('node:crypto');
 const {Store}=require('../store');
+const {ConnectorSlots:FishSlots}=require('../connectors');
 const {VoiceRuntime,analyzeAudio,OpenAISpeechClient,ElevenLabsSpeechClient}=require('../voice');
 
 const hook='This familiar workflow hides a surprising cost today.';
@@ -170,4 +171,28 @@ test('narration pace is measured in words per minute and labelled fast, slow or 
   assert.equal(pace('one two three four five six seven eight nine ten', 3).label, 'fast');
   assert.equal(pace('one two three four five six seven eight nine ten', 6).label, 'slow');
   assert.equal(pace('', 3), null);
+});
+
+test('Fish Audio (owner request 2026-10-22): the key test reads the credit, speech is one plain request per part with the voice model and speed',async t=>{
+  const {FishAudioSpeechClient,SPEECH_CLIENTS}=require('../voice');
+  const calls=[],audio=Buffer.alloc(4096,7);
+  const fetchImpl=async(url,init={})=>{calls.push({url:String(url),init});if(String(url)==='https://api.fish.audio/wallet/self/api-credit')return new Response(JSON.stringify({_id:'w',user_id:'u',credit:'12.5'}),{status:200,headers:{'content-type':'application/json'}});if(String(url)==='https://api.fish.audio/v1/tts')return new Response(audio,{status:200,headers:{'content-type':'audio/mpeg','x-request-id':'fish_req_1'}});throw new Error(`Unexpected ${url}`);};
+  const result=await new FishAudioSpeechClient('fish-key-0123456789',fetchImpl).synthesize({text:'Stone age people walked for days.',model:'s2.1-pro',voiceId:'7f92f8afb8ec43bf81429cc1c9199cb1',speed:1.1});
+  assert.deepEqual([result.extension,result.mime,result.requestId,result.audio.length],['mp3','audio/mpeg','fish_req_1',4096]);
+  const [call]=calls,body=JSON.parse(call.init.body);
+  assert.equal(call.init.headers.Authorization,'Bearer fish-key-0123456789');
+  assert.equal(call.init.headers.model,'s2.1-pro');
+  assert.equal(call.init.redirect,'error');
+  assert.deepEqual([body.text,body.reference_id,body.format,body.prosody.speed],['Stone age people walked for days.','7f92f8afb8ec43bf81429cc1c9199cb1','mp3',1.1]);
+  await assert.rejects(new FishAudioSpeechClient('k',fetchImpl).synthesize({text:'x',model:'s1',voiceId:'v',speed:3}),/between 0.5 and 2/);
+  await assert.rejects(new FishAudioSpeechClient('k',async()=>new Response('{}',{status:402})).synthesize({text:'x',model:'s1',voiceId:'v'}),/HTTP 402/);
+  assert.equal(SPEECH_CLIENTS['fish-audio'],FishAudioSpeechClient);
+  // The connection test reads the credit only.
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const slots=new FishSlots(store,{transform:(op,input)=>Buffer.from([...input].reverse())},fetchImpl);
+  const slot=slots.save({name:'Fish narration',provider:'fish-audio',key:'fish-key-0123456789'});
+  const tested=await slots.test(slot.id,slot.revision);
+  assert.equal(tested.connector.test.status,'passed');
+  assert.match(tested.result.message,/API credit 12\.50\)\. Nothing was generated/);
+  assert.equal(calls.filter(call=>call.url.endsWith('/v1/tts')).length,1,'the test generated nothing');
 });

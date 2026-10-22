@@ -2,13 +2,15 @@
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
 const {YouTubeResearch, responseJson} = require('./youtube');
-const {MODELS, DEFAULT_MODELS, AiError} = require('./ai');
+const {MODELS, DEFAULT_MODELS, MODEL_GROUPS, AiError} = require('./ai');
 
 const PROVIDERS = {
   youtube: {name: 'YouTube public research', test: 'Public channel lookup', ready: true},
   'youtube-oauth': {name: 'YouTube channel access (Google OAuth client)', test: 'Checks the client ID and secret are saved; Google checks them when you connect a channel in Room 11', ready: true, oauth: true},
   openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
+  // Owner request 2026-10-22: Fish Audio as a second narration provider (https://fish.audio, API key from its dashboard).
+  'fish-audio': {name: 'Fish Audio', test: 'Reads your API credit balance; no generation', ready: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
   claude: {name: 'Claude API key', test: 'Reads the chosen models\' details with the key; no generation', ready: true, ai: true},
   // Owner request 2026-10-22: the ChatGPT plan through the Codex app's own sign-in (no API key).
@@ -35,9 +37,13 @@ class ConnectorSlots {
     if(!input||typeof input!=='object')throw new InputError('Send the AI team settings.');
     const pick=(value,allowed,label)=>{if(!allowed.includes(value))throw new InputError(`Choose ${label}: ${allowed.join(' or ')}.`);return value;};
     const payload={pictures:pick(input.pictures,['chatgpt','claude'],'who paints pictures'),scripts:pick(input.scripts,['together','alone'],'how scripts are written'),scriptWriter:pick(input.scriptWriter,['claude','chatgpt'],'who writes the script')};
+    // The Claude model per kind of job ('' = the connection's own choice).
+    const models=input.models??{};
+    if(typeof models!=='object'||Array.isArray(models)||Object.keys(models).some(key=>!Object.hasOwn(MODEL_GROUPS,key)))throw new InputError('Choose models only for the listed kinds of job.');
+    payload.models=Object.fromEntries(Object.entries(models).filter(([,value])=>value).map(([key,value])=>{if(!Object.hasOwn(MODELS,value))throw new InputError('Choose a supported Claude model for each kind of job.');return [key,value];}));
     const current=this.aiRoles();if(input.revision!==current.revision)throw new InputError('The AI team changed in another tab. Reload first.',409);
     this.db.prepare("INSERT INTO ai_roles(id,revision,payload,updated_at) VALUES('global',?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at").run(current.revision+1,JSON.stringify(payload),new Date().toISOString());
-    this.store.event(`AI team: pictures by ${payload.pictures === 'chatgpt' ? 'ChatGPT' : 'Claude'}, scripts ${payload.scripts === 'together' ? `written together (${payload.scriptWriter === 'claude' ? 'Claude' : 'ChatGPT'} writes, the other reviews)` : 'by one AI'}`);
+    this.store.event(`AI team: pictures by ${payload.pictures === 'chatgpt' ? 'ChatGPT' : 'Claude'}, scripts ${payload.scripts === 'together' ? `written together (${payload.scriptWriter === 'claude' ? 'Claude' : 'ChatGPT'} writes, the other reviews)` : 'by one AI'}${Object.keys(payload.models).length ? `, models chosen for ${Object.keys(payload.models).join(', ')}` : ''}`);
     return this.aiRoles();
   }
   row(id){const row=this.db.prepare('SELECT * FROM connectors WHERE id=?').get(id);if(!row)throw new InputError('Connector not found.',404);return row;}
@@ -114,6 +120,13 @@ class ConnectorSlots {
         const client=slot.provider==='pexels'?new PexelsClient(key,this.fetch):new PixabayClient(key,this.fetch);
         const found=await client.search({capabilityId:`${slot.provider}-photo`,query:'nature',perPage:3});
         result={access:'stock_search',message:`${PROVIDERS[slot.provider].name} accepted the API key and returned ${found.candidates.length} photo result(s) (1 request used). Nothing was downloaded.`};
+      }else if(slot.provider==='fish-audio'){
+        let response;
+        try{response=await this.fetch('https://api.fish.audio/wallet/self/api-credit',{headers:{Authorization:`Bearer ${key}`},redirect:'error',signal:AbortSignal.timeout(10000)});}
+        catch{throw new InputError('Provider connection failed or timed out. Check your network and retry.',502);}
+        if(!response.ok){await response.body?.cancel();throw new InputError(`Fish Audio returned HTTP ${response.status}. Check the API key on fish.audio.`,502);}
+        const data=await responseJson(response),credit=Number(data?.credit);
+        result={access:'voice_account',message:`Fish Audio accepted the key${Number.isFinite(credit)?` (API credit ${credit.toFixed(2)})`:''}. Nothing was generated.`};
       }else{
         const url=slot.provider==='openai'?'https://api.openai.com/v1/models':'https://api.elevenlabs.io/v2/voices?page_size=1';
         const headers=slot.provider==='openai'?{Authorization:`Bearer ${key}`}:{'xi-api-key':key};

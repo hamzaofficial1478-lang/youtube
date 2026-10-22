@@ -46,6 +46,18 @@ function styleRendererBadge(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter];
   return badge(`${renderer.name} · ${renderer.firstProof ? 'first proof target' : 'not built'} (${renderer.milestone})`, renderer.firstProof ? 'orange' : 'gray');
 }
+// The visual rules of the style's look(s) (visual-dna.js, 0.56): what kind of pictures, places, objects, people and
+// motion it uses, and what never belongs in it. Every painter, illustrator and the planner follow them.
+function styleVisualRules(spec) {
+  const adapter = spec.renderer.adapter, rules = state.visualRules || [], find = key => rules.find(item => item.key === key), d = spec.drawing || {};
+  const keys = adapter === 'ffmpeg-sketch' ? (d.look === 'mix' ? rules.filter(item => item.key.startsWith('stickman/')).map(item => item.key) : [`stickman/${d.look || 'classic'}`])
+    : adapter === 'canvas-frames' ? (d.board === 'mix' ? rules.filter(item => item.key.startsWith('handdrawn/')).map(item => item.key) : [`handdrawn/${d.board || 'cartoon'}`])
+    : ['ffmpeg-montage', 'motion-graphics'].includes(adapter) ? (d.design === 'mix' ? rules.filter(item => item.key.startsWith('documentary/')).map(item => item.key) : [`documentary/${d.design || 'footage'}`])
+    : adapter === 'cinematic-hybrid' ? ['cinema/footage'] : adapter === 'atelier' ? ['atelier/designed'] : [];
+  const shown = keys.map(find).filter(Boolean);
+  if (!shown.length) return '';
+  return `<details class="scene-history visual-rules"><summary>Visual rules of this look (${shown.length})</summary>${shown.map(item => `<div class="visual-rule"><strong>${esc(item.name)}</strong> ${badge(item.pictures === 'photo' ? 'Real photos' : item.pictures === 'cutout' ? 'Photo cut-outs' : 'Drawn in this look', item.pictures === 'drawn' ? 'green' : 'orange')}<dl class="style-facts"><div><dt>Pictures</dt><dd>${esc(item.medium)}</dd></div><div><dt>Places</dt><dd>${esc(item.places)}</dd></div><div><dt>Objects</dt><dd>${esc(item.objects)}</dd></div><div><dt>People</dt><dd>${esc(item.people)}</dd></div><div><dt>Motion</dt><dd>${esc(item.motion)}</dd></div><div><dt>Never</dt><dd>${esc(item.never)}</dd></div></dl></div>`).join('')}<p class="hint">The scene planner plans with these rules, every picture is painted or drawn by them, and Claude checks each painted picture against them before it is used.</p></details>`;
+}
 // What the style's engine can do, and for stick figures the look and the hand this style uses.
 function styleFeatures(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
@@ -55,7 +67,7 @@ function styleFeatures(spec) {
   // A font this PC does not have is drawn in a look-alike (0.41): say so, so the owner is never surprised.
   const lacking = [spec.typography.headingFont, spec.typography.bodyFont].filter((name, k, all) => all.indexOf(name) === k && state.styles.missingFonts?.[name]);
   const fonts = lacking.length ? `<p class="inline-warning">${lacking.map(name => `${esc(name)} is not installed on this PC, so ${esc(state.styles.missingFonts[name])} is used`).join('; ')}. Install the font or choose another.</p>` : '';
-  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + film + grade + fonts;
+  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + film + grade + fonts + styleVisualRules(spec);
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
 function transitionList(spec) {

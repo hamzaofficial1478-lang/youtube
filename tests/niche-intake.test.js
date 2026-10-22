@@ -133,6 +133,10 @@ test('the go/no-go answer studies the viewers, what rising competitors miss and 
     howWeWin: 'Practice over quotes: every video ends with one habit shown in a real day.',
     competitorNotes: [{ref: refs.rising, strength: 'Posts twice a week.', weakness: 'Quote lists only.'}],
     monetization: ['Journal sponsors fit this audience.', 'A printed 30-day stoic habit workbook.'],
+    markets: [{language: 'English', strength: 'high', why: 'The largest audience for this topic and strong advertisers.'}, {language: 'Spanish', strength: 'medium', why: 'Fewer channels cover it, a growing audience.'}],
+    countryTiers: [{tier: 1, countries: ['United States', 'United Kingdom'], why: 'High ad rates and a curious adult audience.'}],
+    ages: {core: '25-44', also: '45-54', why: 'Adults with jobs and money questions watch practical history.'},
+    viral: {chance: 'medium', why: 'Surprising origins travel well, but the topic is calm.', triggers: ['A surprising first line'], risks: ['A slow opening']},
     ...refs.extra,
   });
   let current = null;
@@ -149,6 +153,9 @@ test('the go/no-go answer studies the viewers, what rising competitors miss and 
   assert.equal(done.decision, 'strong');
   assert.equal(done.result.gaps.length, 3);
   assert.match(done.result.howWeWin, /Practice over quotes/);
+  // Version 3 (2026-10-22): languages, country tiers, ages and the chance to spread, as Claude's estimates.
+  assert.deepEqual([done.result.markets[0].language, done.result.countryTiers[0].tier, done.result.ages.core, done.result.viral.chance], ['English', 1, '25-44', 'medium']);
+  assert.match(JSON.stringify(asked), /markets: 1-6 languages this niche would do best in/);
   assert.match(JSON.stringify(asked), /rising lists the discovered channels/);
   assert.match(JSON.stringify(asked), /viewsOnThoseVideos/);
   // A gap citing a channel that was never discovered, or a note about one, is refused.

@@ -565,3 +565,33 @@ with the fixes below. Each result was checked against the owner's 16 points.
 - A master whose edit has a **dissolve** transition could never be approved: FFmpeg's dissolve draws new random noise at every size, so those frames never match the preview, and "matches the approved preview" cannot be accepted away. `R.previewMatch` now skips frames of dissolve transitions (`exempt`, the join's window ± 0.1 s) and still checks everything else. The real 1080p master of this test then matched: 0.979 on average, lowest 0.934, 43 dissolve frames skipped.
 - An unexpected render error now names its cause and goes to the program's error log, instead of only "The render failed.".
 - An interrupted master resumed from its kept parts after the program stopped.
+
+## 29. Visual rules per look: pictures that belong to their engine and style (0.56.0)
+
+Owner review 2026-10-22: a painted Roman camp behind a stick figure looked real while the figure is a cartoon, "that
+combo will never resonate". Every image, place, background and object has to be made in the engine's and style's own
+look; real photos belong to the footage documentary (Vox, MagnatesMedia), not to a stickman cartoon.
+
+- **`visual-dna.js`** holds the visual rules of every look: the five Stickman looks, the five whiteboard looks, the
+  Documentary looks (footage, cartoon, painted, vector, infographic, kinetic, collage, data), the atelier and the
+  Cinematic engine. Each says what kind of pictures it uses (drawn in the look, real photos, or photo cut-outs), how
+  its places, objects and people are made, how its scenes move and what never belongs in it (for the classic Stickman
+  look: flat 2D cartoon with outlines as thick as the figures' limbs, a stage-like set, no photographic detail, no
+  realistic light, no 3D, no painterly texture).
+- **The planner** receives the rules of the style's look (every look for a mix; the footage look beside the designed
+  looks for a documentary) as VISUAL RULES lines, so places and pictures are described in that look from the start.
+- **Painted pictures** (`Il.paintPrompt`) carry the rules, the film look the frame is printed in afterwards, and the
+  video's **style key**: the first painting that passes is attached to every later painting of the plan, so one video
+  keeps one style (`plan_pictures` key `paint:style-key`; Codex receives it as an attached image).
+- **The art director**: each painting is shown to the plan's AI (Claude) with the rules before it is used
+  (`Dna.checkMessages`, its own reservation `CHECK_TOKENS` 12,000, answer `{fits, problems}`). A painting in the
+  wrong medium is painted once more with what was wrong; a second miss leaves a picture card to Claude's drawing and
+  leaves a backdrop out. A check that cannot run keeps the painting with a note to look at it in Room 04.
+- **Claude's own vector pictures** (`Il.messages`) carry the same rules.
+- **The Style Library** shows the rules of each style's look ("Visual rules of this look").
+
+Live check (2026-10-22, one picture on the owner's ChatGPT plan, about 15,000 tokens, and one art-director answer on
+the Claude plan, about 3,300 tokens): the same Roman camp, painted under the classic Stickman rules, is a flat cartoon
+with bold outlines that matches the stick figure; the art director passed it. Not built: footage-look AI photos for
+montage shots through ChatGPT (montage `ai-image` still needs an OpenAI key); images taken from websites, social media
+or YouTube (they need licences; see the owner question in BUILD-PROGRESS.md).
