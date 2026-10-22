@@ -144,12 +144,24 @@ Publish the right approved version to the right channel without duplicates.
 Use actual owner evidence and measured capacity to reach 10-15 families.
 
 - [ ] **A01 Authorized analytics and experiments** (planned) - Verify supported owner reports, measurement windows and approved derived-data use; show unavailable values honestly.
-- [ ] **A02 Backup/restore and production reliability** (planned) - Add supported backup UI/automation; test restore, external job leases, retry ceilings, disk pressure and provider failures.
+- [ ] **A02 Backup/restore and production reliability** (testing) - 0.55.0 (2026-10-22): backup.js with tests/backup.test.js (4 tests): consistent database snapshots and work files stored once by SHA-256, changed-only copies, damage found by the check, a restore done at the next start with the replaced database and files set aside and newer files kept, a changed backup refused at start without touching anything, a full drive refused, automatic backups waiting for renders and pruned to the setting, settings checks, the whole program over HTTP, renders refused below 2 GB free. Browser check on a scratch workspace (58 files backed up and checked, restore confirmation). Existing reliability: no automatic provider retries, interrupted jobs marked at start, render and upload recovery.
 - [ ] **A03 Sustained scale and growth validation** (planned) - Measure 14-day reliability, quota, render capacity, cost and language review load; validate each channel over its own 90-100 day period.
 
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-22 - Phase 06 begins: backups and restore (A02, 0.55.0)
+
+- **Why now:** the plan's next phase is 06. A01 (analytics) needs published videos, and nothing is published yet; A02 protects the owner's work before real production starts.
+- **Built** (docs/BACKUPS.md):
+  - backups of the database (a consistent SQLite snapshot) and every work file, stored once by SHA-256;
+  - automatic backups (every 24 h when no render runs, the newest 14 kept), a backup folder of the owner's choice;
+  - a check of any backup, and a restore that happens at the next start with everything it replaces set aside;
+  - free-space guards: renders refused below 2 GB, an Overview warning below 5 GB or with no backup for two days;
+  - the Backups page.
+- **Tested:** tests/backup.test.js (4 tests: dedup and changed-only copies, damage found by the check, restore at start with files set aside and newer files kept, a changed backup refused at start, a full drive, automatic backups and pruning, settings, the full program over HTTP, the render guard). Browser check on a scratch workspace: a backup of 58 files, its check, the restore confirmation.
+- **Not tested:** a backup to an external drive on the owner's PC; a restore of the owner's real data (it has not been needed).
 
 ### 2026-10-22 - The timeline editor (0.54.0)
 

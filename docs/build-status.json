@@ -1,7 +1,7 @@
 {
-  "version": "0.54.0",
+  "version": "0.55.0",
   "updated": "2026-10-22",
-  "nextAction": "Owner: start the program, follow \"Make your first video\" on the Overview: add the ElevenLabs key in Connections, run and pin the render check (Room 05), create the family, approve and assign a style, approve the skill packs you want, then write the first script. Live ElevenLabs is untested until then.",
+  "nextAction": "Owner: start the program and look at the Backups page (a first automatic backup runs a few minutes after start; an external drive folder is safer). Try the timeline editor in Room 05 and the AI team on Connections. Then follow \"Make your first video\" on the Overview.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -588,8 +588,9 @@
         {
           "id": "A02",
           "title": "Backup/restore and production reliability",
-          "status": "planned",
-          "remaining": "Add supported backup UI/automation; test restore, external job leases, retry ceilings, disk pressure and provider failures."
+          "status": "testing",
+          "remaining": "A backup to an external drive and a real restore drill on the owner's PC; cloud copies are not built.",
+          "evidence": "0.55.0 (2026-10-22): backup.js with tests/backup.test.js (4 tests): consistent database snapshots and work files stored once by SHA-256, changed-only copies, damage found by the check, a restore done at the next start with the replaced database and files set aside and newer files kept, a changed backup refused at start without touching anything, a full drive refused, automatic backups waiting for renders and pruned to the setting, settings checks, the whole program over HTTP, renders refused below 2 GB free. Browser check on a scratch workspace (58 files backed up and checked, restore confirmation). Existing reliability: no automatic provider retries, interrupted jobs marked at start, render and upload recovery."
         },
         {
           "id": "A03",
@@ -619,7 +620,8 @@
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links.",
     "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits.",
-    "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies."
+    "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies.",
+    "2026-10-22: Phase 06 starts with A02 (backups and restore) because nothing is published yet for A01 analytics to measure."
   ],
-  "milestone": "The timeline editor: every track, every drawn element editable, frame previews, typed commands"
+  "milestone": "Phase 06 begins: backups and restore (A02)"
 }

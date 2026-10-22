@@ -21,6 +21,8 @@ const E = require('./engines');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
+// A02 disk pressure: a render is refused before it starts when the drive with the work has less than this free.
+const MIN_FREE_BYTES = 2 * 1024 ** 3;
 // Checks that prove a master is sound and is what was approved; the owner can never accept these away (P11).
 const MASTER_BLOCKING = ['full decode', 'audio/video alignment', 'duration', 'frame', 'narration audio', 'delivery format', 'matches the approved preview'];
 
@@ -171,9 +173,16 @@ class RenderRoom {
       ...(row.preset === 'master' ? {master: {sourceRenderId: scope.source.renderId, sourceReviewer: scope.source.reviewer, partsKept: this.stagesOf(row.id), ...this.masterStatus(row), approval: this.masterApproval(row)}} : {}),
       result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, hookUrl: result.hook ? `/api/renders/${row.id}/hook` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
   }
+  // free(dir): free bytes of a drive (fs.statfs); tests pass their own.
+  diskCheck() {
+    let free = null;
+    try { const info = (this.free || (dir => fs.statfsSync(dir)))(this.dataRoot); free = typeof info === 'number' ? info : info.bavail * info.bsize; } catch { /* unknown: allowed */ }
+    requireValue(free === null || free >= MIN_FREE_BYTES, `The drive with your work has only ${Math.floor(free / 1024 ** 2)} MB free; a render needs at least 2 GB. Free some space (Backups shows where your backups are kept) and try again.`, 507);
+  }
   queueRender(contentId, input) {
     object(input);
     const by = person(input.requestedBy);
+    this.diskCheck();
     return this.store.transaction(() => {
       const content = this.store.content(contentId), inputs = this.inputs(content);
       requireValue(inputs.ready, inputs.blockers[0], 409);
@@ -232,6 +241,7 @@ class RenderRoom {
     return {id: approval.id, approvedBy: approval.approved_by, notes: approval.notes, at: approval.created_at, packageApprovalId: approval.package_approval_id, current: !reason, staleReason: reason};
   }
   queueMaster(sourceId, input) {
+    this.diskCheck();
     object(input);
     const by = person(input.requestedBy);
     return this.store.transaction(() => {

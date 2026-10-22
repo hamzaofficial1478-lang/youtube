@@ -458,6 +458,7 @@ class LocalizationRoom {
       narration: {approvalId: narration.approvalId, relativePath: result.artifact.relativePath, sha256: result.artifact.sha256, durationSeconds: result.analysis.durationSeconds},
       edit: {...scope.edit, timeline, drawings: L.editionDrawings(scope.edit.drawings, payload), graphicsAss: B.graphicsAss(timeline, F.withFonts(scope.style.spec)) || null, soundtrack: L.editionSoundtrack(scope.edit.soundtrack, scope.edit.timeline, sync)},
       edition: {locale, language: L.language(locale), masterId: master.id, editionRevisionId: edition.id, editionRevision: edition.revision, narrationId: nrow.id, narrationApprovalId: narration.approvalId, thumbnail, package: payload.package, sync: {method: sync.method, counts: sync.counts, maxDrift: sync.maxDrift}}};
+    this.renders.diskCheck();
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM render_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'A render for this script is already queued or running.', 409);
       const id = randomUUID(), at = now();
