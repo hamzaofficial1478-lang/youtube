@@ -1088,6 +1088,111 @@ test('documentary partners: drawn documentary shots are drawn again at render ti
   assert.equal(JSON.parse(fs.readFileSync(path.join(dataRoot, sfxResult.manifest.relativePath), 'utf8')).audio.mix.sfx.length, placed.length);
 });
 
+// ---------------------------------------------------------------- 0.54 full control in the Editing Room
+// A board with two drawn shots (stickman drawings inside the documentary) and stock stills for the rest.
+async function drawnBoard({dataRoot, store, scenes, content}) {
+  let {manifest} = scenes.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  const targets = manifest.plan.scenes.slice(1, 3).map(scene => scene.shots[0]);
+  for (const [k, shot] of targets.entries()) {
+    manifest = scenes.editManifest(manifest.id, {op: 'update-shot', shotId: shot.id, source: 'generated-graphics', createdBy: 'Owner', expectedRevision: manifest.revision,
+      sketch: {engine: 'motion', design: 'data', set: 'none', elements: [{kind: 'prop', prop: k ? 'pie-chart' : 'map', x: 0.5, y: 0.45, size: 'xl'}, {kind: 'text', text: k ? '1 in 4' : 'Trade routes', style: k ? 'counter' : 'title', x: 0.5, y: 0.15}]}});
+  }
+  scenes.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', confirmations: {coverageReviewed: true, directionReviewed: true}});
+  scenes.queueDrawAll(manifest.id, {requestedBy: 'Owner'});
+  for (let k = 0; k < 2; k++) assert.equal((await scenes.processNextVisual())?.status, 'completed');
+  const media = path.join(dataRoot, 'fixture-media');
+  fs.mkdirSync(media, {recursive: true});
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1080x1920', '-frames:v', '1', '-y', path.join(media, 'still.jpg')]);
+  for (const shot of manifest.plan.scenes.flatMap(scene => scene.shots).filter(item => item.source !== 'generated-graphics')) {
+    const id = randomUUID(), relative = `visual-assets/${content.familyId}/${content.id}/${id}.jpg`, file = path.join(dataRoot, relative);
+    fs.mkdirSync(path.dirname(file), {recursive: true}); fs.copyFileSync(path.join(media, 'still.jpg'), file);
+    const bytes = fs.readFileSync(file), probe = await VS.probeMedia(file);
+    store.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,NULL,?,?,?,?,?,?,?)')
+      .run(id, content.familyId, content.id, shot.id, 'stock', JSON.stringify(VS.capability('pexels-photo')), 'fixture', 'image', relative, sha(bytes), bytes.length, 'image/jpeg', JSON.stringify(probe), JSON.stringify({basis: 'stock-license', license: VS.CAPABILITIES['pexels-photo'].rights, synthetic: false, disclosure: 'none'}), 'Owner', new Date().toISOString());
+    scenes.select({manifestId: manifest.id, shotId: shot.id, assetId: id, selectedBy: 'Owner'});
+  }
+  const approval = await scenes.approveVisuals(manifest.id, {approvedBy: 'Owner', confirmations: {rightsReviewed: true, sequenceReviewed: true, warningsAccepted: true}});
+  return {approval, targets};
+}
+
+test('full control (0.54): every drawn shot is shown and changed inside the edit, any moment previews as a frame, typed commands become checked operations', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, scenes, store, content, renders} = env;
+  const {approval, targets} = await drawnBoard(env);
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the full-control test.'});
+  const drawnClip = edit.timeline.clips.find(clip => clip.shotId === targets[0].id), stockClip = edit.timeline.clips.find(clip => !targets.some(shot => shot.id === clip.shotId));
+  // The inspector's view: each drawn shot's drawing, when its elements arrive and the vocabulary.
+  const view = editing.drawings(edit.id);
+  assert.deepEqual(Object.keys(view.clips).sort(), edit.timeline.clips.filter(clip => targets.some(shot => shot.id === clip.shotId)).map(clip => clip.id).sort());
+  assert.equal(view.clips[drawnClip.id].sketch.elements[1].text, 'Trade routes');
+  assert.equal(view.clips[drawnClip.id].edited, false);
+  assert.equal(view.clips[drawnClip.id].times.length, 2);
+  assert.ok(view.vocab.animate.includes('slam') && view.vocab.effect.length > 20 && view.vocab.kinds.includes('text'));
+  // The owner changes the title's animation and colour: strict checks, a new revision, the render draws the change.
+  const changed = structuredClone(view.clips[drawnClip.id].sketch);
+  changed.elements[1] = {...changed.elements[1], animate: 'slam', color: 'red'};
+  assert.throws(() => editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-drawing', clipId: drawnClip.id, sketch: {...changed, elements: [{...changed.elements[1], animate: 'wobble-zoom'}]}}]}), /drawing: .*animate/i, 'owner edits are checked strictly');
+  assert.throws(() => editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-drawing', clipId: stockClip.id, sketch: changed}]}), /only drawn shots have a drawing/);
+  const r2 = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-drawing', clipId: drawnClip.id, sketch: changed}]});
+  assert.equal(r2.revision, 2);
+  assert.equal(r2.timeline.drawings[drawnClip.id].elements[1].animate, 'slam');
+  assert.equal(editing.drawings(r2.id).clips[drawnClip.id].edited, true);
+  const scope = editing.renderScope(r2.id, store.content(content.id));
+  assert.deepEqual(scope.drawings[drawnClip.id].sketch.elements[1].color, 'red', 'the render draws the changed drawing');
+  assert.equal(editing.drawings(edit.id).clips[drawnClip.id].sketch.elements[1].color, undefined, 'the earlier revision keeps the board\'s drawing');
+  // A frame at any moment: drawn exactly like the render, an unsaved drawing too; stock stills from their file.
+  const isPng = base64 => Buffer.from(base64, 'base64').subarray(1, 4).toString('latin1') === 'PNG';
+  const saved = await editing.frame(r2.id, {clipId: drawnClip.id, at: 1.2});
+  assert.ok(isPng(saved.png));
+  const unsaved = await editing.frame(r2.id, {clipId: drawnClip.id, at: 1.2, sketch: {...changed, set: 'office'}});
+  assert.ok(isPng(unsaved.png) && unsaved.png !== saved.png, 'an unsaved change is previewed before it is saved');
+  await assert.rejects(editing.frame(r2.id, {clipId: drawnClip.id, at: 999}), /Pick a moment inside/);
+  assert.ok(isPng((await editing.frame(r2.id, {clipId: stockClip.id, at: 0.5})).png));
+  // Back to the board's drawing, once.
+  const r3 = editing.applyOps(r2.id, {editedBy: 'Owner', ops: [{type: 'set-drawing', clipId: drawnClip.id, sketch: null}]});
+  assert.equal(r3.timeline.drawings, undefined);
+  assert.throws(() => editing.applyOps(r3.id, {editedBy: 'Owner', ops: [{type: 'set-drawing', clipId: drawnClip.id, sketch: null}]}), /already shows the drawing from the approved board/);
+  // A typed command: Claude proposes, the program checks each step, nothing changes until the owner applies.
+  const asked = [];
+  scenes.ai = {team: () => ({claude: {id: 'claude-1', provider: 'claude-code'}, chatgpt: null}), complete: async ({connectorId, task, messages, maxTokens}) => {
+    asked.push({connectorId, task, messages, maxTokens});
+    return {content: JSON.stringify({explain: 'A slam on the title and a harder cut.', ops: [
+      {type: 'set-element', clipId: drawnClip.id, element: 1, changes: {animate: 'slam', color: 'gold'}},
+      {type: 'set-element', clipId: drawnClip.id, element: 1, changes: {size: 'xl'}},
+      {type: 'set-transition', clipId: edit.timeline.clips[0].id, transition: 'cut'},
+      {type: 'set-hold', clipId: edit.timeline.clips[0].id, seconds: -3},
+      {type: 'add-element', clipId: stockClip.id, element: {kind: 'text', text: 'No'}},
+      {type: 'teleport'},
+    ]}), usage: {promptTokens: 900, completionTokens: 300, totalTokens: 1200}, model: 'claude-opus-5-5', provider: 'claude-code'};
+  }};
+  const proposal = await editing.command(r3.id, {requestedBy: 'Owner', text: 'Make the Trade routes title slam in gold and bigger, and cut hard after the first shot.', clipId: drawnClip.id});
+  assert.equal(asked.length, 1);
+  assert.deepEqual([asked[0].connectorId, asked[0].task], ['claude-1', 'editing'], 'the edit is Claude\'s (Opus 5.5) when Claude is on the team');
+  assert.match(asked[0].messages[1].content, /INSTRUCTION FROM THE OWNER: Make the Trade routes title slam/);
+  assert.match(asked[0].messages[1].content, /DRAWINGS: \{"[^"]+":\{"words"/);
+  assert.match(asked[0].messages[0].content, /DRAWING GUIDE:/);
+  assert.deepEqual(proposal.steps.map(step => step.ok), [true, true, true, false, false, false]);
+  assert.match(proposal.steps[0].summary, /element 2 \(text "Trade routes"\): animate → slam, color → gold/);
+  assert.match(proposal.steps[3].error, /half a second|length/);
+  assert.match(proposal.steps[4].error, /has no drawing to change/);
+  assert.equal(proposal.ops.filter(op => op.type === 'set-drawing').length, 1, 'two changes of one drawing are applied once, in their final form');
+  assert.deepEqual(proposal.ops.find(op => op.type === 'set-drawing').sketch.elements[1].size, 'xl');
+  assert.equal(editing.latestRow(r3.timelineId).id, r3.id, 'nothing changed yet');
+  const usage = store.db.prepare("SELECT status, total_tokens FROM intelligence_usage WHERE kind='edit_command'").all().map(row => ({...row}));
+  assert.deepEqual(usage, [{status: 'settled', total_tokens: 1200}]);
+  const r4 = editing.applyOps(r3.id, {editedBy: 'Owner', ops: proposal.ops, note: 'Command: slam the title'});
+  assert.equal(r4.timeline.drawings[drawnClip.id].elements[1].color, 'gold');
+  // An answer that is not operations changes nothing, and its tokens still count.
+  scenes.ai.complete = async () => ({content: 'Sure! I made it better.', usage: {promptTokens: 10, completionTokens: 5, totalTokens: 15}, model: 'claude-opus-5-5', provider: 'claude-code'});
+  await assert.rejects(editing.command(r4.id, {requestedBy: 'Owner', text: 'Make it better'}), /did not answer with edit operations/);
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM intelligence_usage WHERE kind='edit_command' AND status='settled'").get().n, 2);
+  await assert.rejects(editing.command(r3.id, {requestedBy: 'Owner', text: 'Anything'}), /newer revision/);
+  scenes.ai = {team: () => ({claude: null, chatgpt: null})};
+  await assert.rejects(editing.command(r4.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
+});
+
 // ---------------------------------------------------------------- P08c music and sound effects
 const {SoundtrackRoom} = require('../soundtrack');
 // A soundtrack room with a tested Claude and ElevenLabs connection; the fake ElevenLabs returns real MP3s

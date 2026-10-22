@@ -664,6 +664,9 @@ function validateTimeline(timeline) {
     if (!TRANSITIONS.includes(join.type)) problems.push(`Join ${index + 1} uses an unknown transition.`);
     else if (join.type !== 'cut' && (join.frames < 2 || join.frames > Math.floor(Math.min(timeline.clips[index].frames, timeline.clips[index + 1].frames) / 2))) problems.push(`Join ${index + 1} is too long for its neighbouring clips.`);
   });
+  for (const clipId of Object.keys(timeline.drawings || {})) {
+    if (!timeline.clips.some(clip => clip.id === clipId)) problems.push(`A changed drawing belongs to no clip of this edit (${clipId}).`);
+  }
   for (const graphic of timeline.graphics) {
     if (!GRAPHIC_TEMPLATES.includes(graphic.template)) problems.push(`Graphic ${graphic.id} uses an unknown template.`);
     if (graphic.start < 0 || graphic.frames < 1 || graphic.start + graphic.frames > timeline.totalFrames) problems.push(`Graphic ${graphic.id} falls outside the video.`);
@@ -806,7 +809,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio', 'set-drawing']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -839,7 +842,9 @@ function autoFix(source, spec, {limit = 60} = {}) {
   return {timeline, fixed};
 }
 
-function applyOp(source, op, {spec} = {}) {
+// checkDrawing(sketch, clip): the room's check that the clip is a drawn shot and, for a drawing (not null), its strict
+// check against the board's cast, kit and engines; it returns the checked drawing that is kept.
+function applyOp(source, op, {spec, checkDrawing = null} = {}) {
   if (!op || typeof op !== 'object' || !OP_TYPES.includes(op.type)) throw opError(`Choose one of: ${OP_TYPES.join(', ')}.`);
   const timeline = structuredClone(source), fps = timeline.fps, receipt = {type: op.type, changed: []};
   const clipFrames = value => { if (!Number.isFinite(value)) throw opError('Give the length in seconds.'); return Math.round(value * fps); };
@@ -954,6 +959,24 @@ function applyOp(source, op, {spec} = {}) {
     if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
     try { Cap.editCaption(timeline.captions, op); } catch (error) { throw opError(error.message); }
     receipt.changed.push(op.groupId);
+  } else if (op.type === 'set-drawing') {
+    // 0.54: the owner changes a drawn shot inside the edit (every element, its words, animations, effects, camera,
+    // set, mood). The changed drawing belongs to this edit revision; null goes back to the approved board's drawing.
+    const clip = timeline.clips[findClip(timeline, op.clipId)];
+    if (!checkDrawing) throw opError('Drawings can only be changed in the Editing Room.');
+    if (op.sketch !== null && (!op.sketch || typeof op.sketch !== 'object' || Array.isArray(op.sketch))) throw opError('Send the drawing as an object.');
+    let sketch;
+    try { sketch = checkDrawing(op.sketch, clip); } catch (error) { throw opError(`${clip.label}${op.sketch === null ? '' : ' drawing'}: ${error.message}`); }
+    if (op.sketch === null) {
+      if (!timeline.drawings?.[clip.id]) throw opError(`${clip.label} already shows the drawing from the approved board.`);
+      delete timeline.drawings[clip.id];
+      if (!Object.keys(timeline.drawings).length) delete timeline.drawings;
+      delete clip.drawingReason;
+    } else {
+      timeline.drawings = {...(timeline.drawings || {}), [clip.id]: sketch};
+      clip.drawingReason = 'Drawing changed in the edit.';
+    }
+    receipt.changed.push(clip.id);
   }
   validateTimeline(timeline);
   return {timeline, receipt};

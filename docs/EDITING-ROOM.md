@@ -205,3 +205,47 @@ accept it before approving). Source idea: bradautomates/claude-video (`research/
 ## Fixes the brain makes itself (0.23.1)
 
 Owner review 2026-10-09: suggestions the program can fix should already be in the video, listed so the owner can look. When the brain drafts an edit, `B.autoFix` applies every critic finding that carries an operation it may apply by itself: the hook opening on a still (reorder), a static still past the frozen limit (camera move), a stock clip window across a hidden cut (in-point), captions switched off, two neighbouring stills with the same camera move (another move the style allows), a graphic too short to read (lengthened up to the next graphic), too many or too varied soft transitions (the least meaningful becomes a cut: inside a scene first, then a section break that is not a turn) and a long unchanged stretch (accepting a graphic the brain proposed there, from the script's own data). It applies one fix at a time and checks again, tries each fix once, and writes "Changed by the editing brain: ..." into the reason of what it changed. The list is kept with the edit (`autoFixes`) and shown in the Editing Room and Room 08. Findings that need new visuals, a new narration or the owner's taste stay listed with their advice. Owner edits are never changed by the brain.
+
+## The timeline editor: full control (0.54)
+
+Owner request 2026-10-22: the Editing Room works like an editing program; everything the edit applies is shown and
+can be changed by hand or by typing what to change.
+
+**Tracks.** One timeline with a ruler and zoom (1-16x, scrolls sideways): scenes, picture (drawn shots, stills,
+footage, designed frames; a drawing changed in this edit is orange), transitions (cuts and soft transitions with their
+length), drawing beats (one dot per drawn element at the moment it arrives on the narrator's words), graphics,
+captions and audio (narration, music, sound effects). Clicking an item selects it and moves the playhead there; the
+newest render of the edit plays in step with the playhead.
+
+**Inspector.** For any clip: why it is there, its hold, camera move or source window, and the transition after it
+(changed through the clip dialog). For a drawn shot: every field of the drawing, as lists where the drawing vocabulary
+has one: the shot's set, mood, camera, opening transition, film look, texture and look/board/design; and every
+element (kind, words, style, text animation, entrance, effect, pose, expression, prop, colour, position, size, "at",
+"until", "then", nested fields as JSON), with move up/down, remove, add (text, figure, prop, effect, arrow, bubble) and
+the whole drawing as JSON. Changes are an unsaved draft until "Save drawing", which makes one new revision; "Preview
+at the playhead" draws the draft exactly as the render will. Graphics and captions open their own editors.
+
+**The edit's own drawings.** `set-drawing` (editing-brain `applyOp` with the room's `checkDrawing`) keeps a changed
+drawing in the revision (`timeline.drawings[clipId]`), checked strictly against the board's cast, kit, engines and
+film looks; `null` goes back to the board's drawing. Footage, stills and designed frames are refused. The render, the
+sound effects placed on drawn moments and the language editions all use the edit's drawing.
+
+**Frame preview.** `POST /api/edit-revisions/:id/frame` draws one frame of a drawn shot in the local browser
+(an unsaved drawing too, checked first), or reads the source frame of footage or a still with the pinned FFmpeg (the
+camera move, grade, captions and graphics are added at render). One preview at a time.
+
+**Typed commands.** `POST /api/edit-revisions/:id/command`: the owner writes what to change, for the selected clip
+or the whole edit. The team's Claude connection (Opus 5.5, task `editing`) answers, or ChatGPT when it is the only AI.
+The request carries the operations, the style's allowed transitions and moves, the drawing guide, the edit as data and
+the drawings of the selected clip and its neighbours (or as many as fit, 90 KB). It is reserved against the family's
+monthly tokens first (`intelligence_usage` kind `edit_command`, 24,000 answer tokens), never retried by itself, and a
+reservation left by a stop is marked unknown at the next start. The answer may use the edit operations and drawing
+operations (`set-element`, `add-element`, `remove-element`, `set-shot`, `reset-drawing`); each is applied in order to a
+copy and checked (drawings leniently, with named repairs), and the owner sees every step with a tick or the reason it
+is not possible. Nothing changes until the owner presses Apply, which saves the checked operations as one revision
+through the normal checks (a drawing changed twice is saved once, in its final form).
+
+Tests: `tests/editing.test.js` "full control (0.54)" (strict owner checks, the render scope, frame previews of saved,
+unsaved and stock shots, reset, a command answered by a stand-in AI with good and impossible steps, usage, apply, a
+non-answer, a stale revision and no AI). Browser check on a scratch workspace: tracks, beats, the synced render, the
+inspector, an unsaved change previewed and saved, a proposal shown with Apply.

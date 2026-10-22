@@ -137,7 +137,7 @@ class MotionRenderer {
     return {frames, sha256: hash.digest('hex'), pattern: `f%05d.${format === 'jpeg' ? 'jpg' : 'png'}`};
   }
   // One frame as PNG bytes, for checks.
-  async frame({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, t}) {
+  async frame({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, t, images = {}}) {
     if (!this.injected) {
       if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
@@ -145,6 +145,7 @@ class MotionRenderer {
       this.injected = true;
     }
     fonts = {heading: F.resolve(fonts?.heading), body: F.resolve(fonts?.body), hand: F.resolve(fonts?.hand || 'Segoe Print')};
+    await this.evaluate(`window.DIMG = {}; Promise.all(Object.entries(${JSON.stringify(images || {})}).map(([key, src]) => new Promise(done => { const image = new Image(); image.onload = done; image.onerror = done; image.src = src; window.DIMG[key] = image; }))).then(() => true)`);
     await this.evaluate(`MOTION.setup(${JSON.stringify({template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration})})`);
     const url = await this.evaluate(`MOTION.renderFrame(${t}) && document.getElementById('stage').toDataURL('image/png')`);
     return Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');

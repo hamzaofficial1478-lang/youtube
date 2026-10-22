@@ -1,5 +1,5 @@
 {
-  "version": "0.53.0",
+  "version": "0.54.0",
   "updated": "2026-10-22",
   "nextAction": "Owner: start the program, follow \"Make your first video\" on the Overview: add the ElevenLabs key in Connections, run and pin the render check (Room 05), create the family, approve and assign a style, approve the skill packs you want, then write the first script. Live ElevenLabs is untested until then.",
   "repositories": [
@@ -458,6 +458,13 @@
           "remaining": "Judged on a Windows test voice; the first real ElevenLabs video will show lip sync and caption timing on measured words. Rivers on maps are not built."
         },
         {
+          "id": "P06x",
+          "title": "Timeline editor: every track shown, every drawn element editable, frame previews, typed commands turned into checked changes",
+          "status": "testing",
+          "evidence": "0.54.0 (2026-10-22): tests/editing.test.js \"full control (0.54)\" (strict owner drawing checks, the render scope using the edit's drawing, frame previews of saved, unsaved and stock shots, reset to the board, a typed command answered by a stand-in AI with good and impossible steps, usage settled, apply, a non-answer, a stale revision, no AI); browser check on a scratch workspace with full-size screenshots (tracks, 46 drawing beats, the synced render, the inspector, an unsaved animation and colour change previewed and saved as r2, a proposal with Apply).",
+          "remaining": "A live typed command on the owner's plan; a full render of an edit with changed drawings on the owner's real video; dragging clip edges on the timeline (holds change through the clip dialog today)."
+        },
+        {
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
@@ -611,7 +618,8 @@
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file.",
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
     "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links.",
-    "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits."
+    "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits.",
+    "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies."
   ],
-  "milestone": "AI team: ChatGPT subscription beside Claude, scripts written together, painted pictures"
+  "milestone": "The timeline editor: every track, every drawn element editable, frame previews, typed commands"
 }

@@ -132,6 +132,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(trendScan)return json(res,200,trends.publicScan(trends.scanRow(trendScan[1])));
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
         if(exported){const data=store.exportContent(exported[1]);res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}
+        const editDrawings=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/drawings$/);
+        if(editDrawings)return json(res,200,editingRoom.drawings(editDrawings[1]));
         throw new InputError('Page not found.',404);
       }
       if(!['POST','PUT'].includes(req.method))throw new InputError('Method not supported.',405);
@@ -217,6 +219,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const retentionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/retention$/);
         if(retentionRoute&&req.method==='POST')return json(res,200,editingRoom.retention(retentionRoute[1],body));
         if(pathname==='/api/craft/check'&&req.method==='POST'){const locale=typeof body.locale==='string'?body.locale.slice(0,35):'en',field=(value,max)=>typeof value==='string'?value.slice(0,max):'';return json(res,200,{hook:craft.scoreHook(field(body.hook,1000),{locale}),packaging:craft.lintPackaging({title:field(body.title,300),thumbnailText:field(body.thumbnailText,200),locale})});}
+        const editTool=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(frame|command)$/);
+        if(editTool&&editTool[2]==='frame'&&req.method==='POST')return json(res,200,await editingRoom.frame(editTool[1],body));
+        if(editTool&&editTool[2]==='command'&&req.method==='POST')return json(res,200,await editingRoom.command(editTool[1],body));
         const editAction=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(ops|undo)$/);
         if(editAction&&req.method==='POST')return json(res,200,editAction[2]==='ops'?editingRoom.applyOps(editAction[1],body):editingRoom.undo(editAction[1],body));
         const renderQueue=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/renders$/);
