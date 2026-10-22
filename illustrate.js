@@ -105,4 +105,33 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
   ];
 }
 
-module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, DESIGN_NOTES, outlined, validateArt, messages};
+// Painted pictures (owner request 2026-10-22: pictures and scene drawing on the ChatGPT plan). The prompt for one image
+// from ChatGPT's image generation, in the shot's engine and look. A backdrop is the place only (the program draws the
+// characters, words and effects on top); a picture is one subject. Original work: no text, logos or real people.
+const PAINT_STYLE = Object.freeze({
+  classic: 'flat 2D cartoon with clean bold outlines, flat bright colours and simple shapes',
+  whiteboard: 'black marker line art with light colour washes on white, like a whiteboard animation',
+  storybook: 'soft storybook watercolour illustration with gentle outlines',
+  doodle: 'playful crayon doodle illustration with thick wobbly lines',
+  illustrated: 'ink line illustration with coloured-pencil shading',
+  vector: 'flat vector illustration without outlines, clean geometric shapes and soft gradients',
+  infographic: 'clean flat infographic illustration with thin outlines',
+  kinetic: 'bold flat poster illustration with strong shapes',
+  collage: 'paper-cut collage illustration with textured cut-outs',
+  data: 'clean flat illustration in a modern data-explainer style',
+  cartoon: 'history-cartoon illustration with confident outlines and warm painted colours',
+  painted: 'rich painterly digital painting with golden-hour light, like a painted storybook scene',
+  footage: 'cinematic realistic illustration with natural light',
+});
+function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic', board = 'cartoon', design = null, palette = null, world = null, backdrop = false, aspect = 1.5, vertical = false}) {
+  const key = engine === 'motion' ? design || 'vector' : engine === 'handdrawn' ? 'whiteboard' : look === 'chronicle' ? 'cartoon' : look;
+  const style = PAINT_STYLE[key] || PAINT_STYLE.classic;
+  const place = world ? ` The story happens in ${world.place || 'its place'}${world.era ? ` (${world.era} era)` : ''}: everything belongs to that time and place.` : '';
+  const colours = palette ? ` Colours that sit well with this palette: background ${palette.background}, ink ${palette.ink}, accent ${palette.accent}.` : '';
+  const said = words ? ` The narrator says here: "${String(words).slice(0, 300)}".` : '';
+  return backdrop
+    ? `A ${vertical ? 'tall 9:16 portrait' : 'wide 16:9 landscape'} background painting for an animated YouTube explainer: ${describe}.${said}${place} Paint the place only: no people, no characters, no animals in the foreground, no text, letters, numbers, signs or logos, no watermark. Keep the lower middle third simple and uncluttered, where drawn characters will stand. Style: ${style}.${colours} Original artwork.`
+    : `An illustration for an animated YouTube explainer: ${describe}.${said}${place} One clear subject, centred, on a simple plain background; no text, letters, numbers or logos, no watermark, no real person's likeness. Aspect about ${Math.round(aspect * 10) / 10}:1. Style: ${style}.${colours} Original artwork.`;
+}
+
+module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, DESIGN_NOTES, PAINT_STYLE, outlined, validateArt, messages, paintPrompt};

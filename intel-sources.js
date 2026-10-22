@@ -438,8 +438,8 @@ function connectorCurrent(connectors, reference, provider) {
   try {
     const row = connectors.row(reference.id), slot = JSON.parse(row.payload);
     // provider 'ai' means either Claude connection; the subscription one (claude-code) has no stored key.
-    const matches = provider === 'ai' ? ['claude', 'claude-code'].includes(slot.provider) : slot.provider === provider;
-    return matches && slot.revision === reference.revision && (!!row.secret || slot.provider === 'claude-code') && slot.test?.status === 'passed';
+    const matches = provider === 'ai' ? ['claude', 'claude-code', 'chatgpt'].includes(slot.provider) : slot.provider === provider;
+    return matches && slot.revision === reference.revision && (!!row.secret || ['claude-code', 'chatgpt'].includes(slot.provider)) && slot.test?.status === 'passed';
   } catch {
     return false;
   }

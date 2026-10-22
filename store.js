@@ -369,7 +369,7 @@ class Store {
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:jobLimit,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
       const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
@@ -396,7 +396,7 @@ class Store {
       const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:jobLimit,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
       if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
@@ -420,7 +420,7 @@ class Store {
   aiConnectorCurrent(scope) {
     const row=this.db.prepare('SELECT payload,secret FROM connectors WHERE id=?').get(scope.connectorId);if(!row)return false;
     const connector=JSON.parse(row.payload);
-    return ['claude','claude-code'].includes(connector.provider)&&(!!row.secret||connector.provider==='claude-code')&&connector.revision===scope.connectorRevision&&connector.test?.status==='passed';
+    return ['claude','claude-code','chatgpt'].includes(connector.provider)&&(!!row.secret||['claude-code','chatgpt'].includes(connector.provider))&&connector.revision===scope.connectorRevision&&connector.test?.status==='passed';
   }
   claimScriptJob() {
     return this.transaction(()=>{

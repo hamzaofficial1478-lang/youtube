@@ -64,7 +64,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/25';
+const VERSION = 'drawn-scene/26';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -298,11 +298,14 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
     if (item.kind === 'picture') {
       const describe = clean(item.describe ?? item.prompt, Il.LIMITS.describe);
       if (!describe || describe.length < 10) { if (!lenient) fail(`${label} needs "describe": what the picture shows (10-${Il.LIMITS.describe} characters).`); warn(`${label}: a picture without a description was left out.`); return; }
-      if (elements.filter(el => el.kind === 'picture').length >= MAX_PICTURES) { if (!lenient) fail(`A shot holds at most ${MAX_PICTURES} picture.`); warn(`${label}: a shot holds one picture; the extra one was left out.`); return; }
+      // A painted backdrop is the place, not a subject: a shot may hold one backdrop beside its one picture.
+      if (elements.filter(el => el.kind === 'picture' && !el.backdrop === (item.backdrop !== true)).length >= MAX_PICTURES) { if (!lenient) fail(`A shot holds at most ${MAX_PICTURES} picture${item.backdrop === true ? ' backdrop' : ''}.`); warn(`${label}: a shot holds one picture${item.backdrop === true ? ' backdrop' : ''}; the extra one was left out.`); return; }
       // The drawing itself comes from the illustrator (or a stored plan) and is checked again every time.
       let art;
       if (item.art !== undefined) { const checked = Il.validateArt(item.art, {outlines: false}); art = checked.art; if (!art) { if (!lenient) fail(`${label} picture: ${checked.issues[0]}`); warn(`${label}: its picture did not pass its checks (${checked.issues[0]}), so it will be drawn again.`); } }
-      elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...base});
+      // A painted picture (ChatGPT, 2026-10-22) is a checked image file named by its SHA-256; a backdrop fills the frame behind the scene.
+      const image = typeof item.image === 'string' && /^[a-f0-9]{64}$/.test(item.image) ? item.image : null;
+      elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...(image ? {image} : {}), ...(item.backdrop === true ? {backdrop: true} : {}), ...base});
       return;
     }
     // 0.39 evidence and measuring tools: the words and numbers are the narration's own.
@@ -612,7 +615,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman', {pictures = false, looks = false, boards = false, designs = false, engines: allowed = null} = {}) {
+function promptGuide(primary = 'stickman', {pictures = false, painted = false, looks = false, boards = false, designs = false, engines: allowed = null} = {}) {
   const engines = allowed?.length ? allowed : E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
@@ -632,6 +635,7 @@ function promptGuide(primary = 'stickman', {pictures = false, looks = false, boa
     `- {"kind": "prop", "prop": ${list(PROPS)}, "x", "y": centre, "size": s|m|l|xl, "motion": ${list(PROP_MOTIONS)} (auto = its own life: the sun turns, coins spin, fire flickers, clocks tick), "label"?, "accent"?, "face"?: true (a cute face on the object)}`,
     `- {"kind": "text", "text": up to 48 chars, "style": ${list(TEXT_STYLES)} (counter counts up to the number in the text; stamp slams; highlight sweeps a marker; pop pops word by word; chapter is a full-frame card that opens a chapter or a level, e.g. "Level 2: The Shot Caller"; sticky is a sticky note, tag a price tag on a string, callout an arrow-shaped tag - for figures, costs and short facts; keyword is one big hand-lettered word in a top corner that names the beat; versus is a divider down the frame for comparing two things, its text in the middle circle, e.g. "VS"; the prop head is a head in profile to put a thought or a scene inside), "x", "y", "size", "color"?: ${list(WORD_COLORS)} (see WORD COLOUR), "accent"?}`,
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan, impact, lightning, explosion, fire, dust, spiral, crack), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
+    ...(painted ? ['PAINTED PICTURES: ChatGPT paints the pictures of this video (real images, not line drawings). A picture may be a backdrop: "backdrop": true makes it the painted place behind the whole shot (describe the place only: no people, no words; the program draws the characters, words and effects on top). Give the story\'s important places a painted backdrop, list it first in the shot\'s elements and keep its shots in that place; other pictures are one subject on a card.'] : []),
     ...(pictures ? [`- {"kind": "picture", "describe": what the picture shows (10-${Il.LIMITS.describe} characters: the subject, what happens, the place, the feeling; no words in it), "x"?: centre 0.15-0.85, "y"?: centre 0.2-0.75, "size"?: s|m|l|xl (l), "at"?} - a detailed illustration drawn for this shot by an illustrator and traced by the hand (PAID: see PICTURES; at most ${MAX_PICTURES} per shot). Other elements (labels, arrows, words, effects, characters) may sit around it.`] : []),
     `- {"kind": "chart", "type": ${list(CHART_TYPES)}, "values": 1-${MAX_SERIES} numbers, "labels"?: one short label per value, "title"?: what it shows, "unit"?: e.g. "$", "%", "M", "highlight"?: the index of the value that matters, "x"?, "y"?, "size"?, "at"?} - builds on its words (bars grow, a line draws, a pie sweeps, stars fill: rating is one value 0-5; units is a unit chart of identical marks with the part lit: values [part, whole], e.g. [1, 100] for "the top 1%", "icon": "person" for people). Use only numbers the narration says; never invent data.`,
     `- {"kind": "timeline", "events": 2-${MAX_EVENTS} [{"label": up to 18 chars, "when"?: a year or date}], "now"?: the index of the current event, "y"?, "at"?} - a bar with a medallion for each event, drawn left to right.`,

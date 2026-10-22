@@ -330,6 +330,61 @@ test('pictures (paid): Claude spends the video\'s picture budget, the illustrato
   assert.doesNotMatch(planMessages(input)[0].content, /PICTURES \(paid\)|"kind": "picture"/);
 });
 
+test('painted pictures (0.53): with ChatGPT on the team it paints backdrops and pictures, kept by checksum; a failed painting falls back to the drawing or drops the backdrop', async t => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const art = {viewBox: [600, 400], paths: [{d: 'M100 300 L500 300 L500 360 L100 360 Z', fill: '#C9A77C', stroke: '#1E1E1E', width: 4}, {d: 'M200 120 L400 120 L380 300 L220 300 Z', fill: '#FFFFFF', stroke: '#1E1E1E', width: 4}, {d: 'M210 160 L390 160 L384 220 L216 220 Z', fill: '#E5484D', stroke: '#1E1E1E', width: 3}, {d: 'M250 100 C230 70 270 50 250 20', fill: 'none', stroke: '#8A96A3', width: 5}, {d: 'M225 230 L245 230 L240 290 L226 288 Z', fill: '#E6E6E6'}, {d: 'M400 160 C470 160 470 260 390 260', fill: 'none', stroke: '#1E1E1E', width: 10}]};
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw?.startsWith('PICTURE: ')) return art;
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A painted place.',
+      sketch: {engine: 'handdrawn', elements: [{kind: 'picture', describe: `${start === 1 ? 'Harbour' : 'Market'} at dawn with boats and stalls, scene ${start}`, backdrop: true}, {kind: 'picture', describe: `${start === 1 ? 'Broken' : 'Coin'} of clay with a seal, scene ${start}`, size: 'm'}, {kind: 'text', style: 'keyword', text: `Part ${start}`}]}}]});
+    return {summary: 'Painted places.', cast: [], scenes};
+  }});
+  const {room, content, ids, store, dataRoot, narrate, family} = setup(t, network, {styleKey: 'hand-drawn-canvas', withVoice: false, storyMap: false});
+  room.saveSettings(family.id, {...room.settings(family.id), picturesPerMinute: 20, revision: room.settings(family.id).revision});
+  const painted = [];
+  room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}});
+  room.ai.image = async ({prompt, outFile, onStart}) => {
+    onStart();
+    painted.push(prompt);
+    if (/background painting for an animated YouTube explainer: Market at dawn with boats and stalls, scene 9/.test(prompt)) throw new Error('lost');
+    if (/: Broken/.test(prompt)) { fs.writeFileSync(outFile, 'not an image'); return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}}; }
+    fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(60, 140))]));
+    return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}};
+  };
+  narrate(40);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed', JSON.stringify(room.publicPlanJob(room.planJobRow(queued.job.id))));
+  const plans = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
+  assert.ok(plans.every(text => /PAINTED PICTURES: ChatGPT paints/.test(text)), 'the planner knows the pictures are painted');
+  const manifest = latestManifest(room, content.id), pictures = shots(manifest).flatMap(shot => shot.sketch.elements.filter(item => item.kind === 'picture'));
+  const backdrops = pictures.filter(item => item.backdrop), cards = pictures.filter(item => !item.backdrop);
+  assert.ok(backdrops.length && backdrops.every(item => /^[a-f0-9]{64}$/.test(item.image) && !item.art), 'backdrops are painted, never traced');
+  assert.ok(painted.filter(item => /background painting/.test(item)).every(item => /no people[\s\S]*no text/.test(item)));
+  const broken = cards.find(item => /^Broken/.test(item.describe));
+  assert.ok(broken.art && !broken.image, 'a painting that is no image file is drawn by Claude instead');
+  assert.ok(cards.filter(item => item !== broken).every(item => item.image && !item.art), 'the other pictures are painted cards');
+  assert.equal(backdrops.some(item => /scene 9/.test(item.describe)), false, 'a backdrop ChatGPT could not paint is left out (never traced as a line drawing)');
+  assert.ok(manifest.plan.pictures.notes.some(item => /ChatGPT could not paint it/.test(item)));
+  for (const item of pictures.filter(el => el.image)) {
+    const file = path.join(dataRoot, 'generated-art', `${item.image}.png`);
+    assert.equal(createHash('sha256').update(fs.readFileSync(file)).digest('hex'), item.image, 'kept by its SHA-256 in the data folder');
+  }
+  assert.deepEqual(fs.readdirSync(path.join(dataRoot, 'generated-art')).filter(name => name.startsWith('.incoming')), [], 'no half-made files are left');
+  const shot = shots(manifest).find(item => item.sketch.elements.some(el => el.image));
+  const images = room.artImages(shot.sketch);
+  assert.ok(Object.values(images).every(url => url.startsWith('data:image/png;base64,')));
+  // A changed file is never drawn.
+  const name = shot.sketch.elements.find(el => el.image).image;
+  fs.appendFileSync(path.join(dataRoot, 'generated-art', `${name}.png`), 'x');
+  assert.throws(() => room.artImages(shot.sketch), /missing or changed/);
+  assert.ok(manifest.plan.pictures.painted >= backdrops.length);
+  const rows = store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='picture'").all();
+  assert.ok(rows.length && rows.every(row => row.status === 'settled' || row.status === 'unknown'), 'every painting is reserved and settled or marked unknown');
+});
+
 test('a plan stopped mid-way marks its picture and frame reservations unknown too, never left reserved', t => {
   const {room, store, content, family} = setup(t);
   const at = new Date().toISOString();
@@ -514,7 +569,7 @@ test('a long summary, direction or note from Claude is trimmed at a word and an 
   const {room, content, ids} = setup(t, network);
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();
-  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed', JSON.stringify(room.publicPlanJob(room.planJobRow(queued.job.id))));
   const {plan} = latestManifest(room, content.id);
   assert.ok(plan.summary.length <= 600 && plan.summary.endsWith('on…'), plan.summary.slice(-20));
   assert.ok(plan.scenes.every(scene => scene.direction.length <= 600 && scene.shots.every(shot => shot.notes.length <= 500 && !('sentenceStart' in shot))));

@@ -13,7 +13,8 @@ const INTEL_STATUS = {
 };
 function intelStatus(status) { const [label, color] = INTEL_STATUS[status] || [status, 'gray']; return badge(label, color); }
 // provider 'ai' means either Claude connection; the subscription one has no stored key.
-function intelConnectors(provider) { return state.connectors.filter(item => (provider === 'ai' ? ['claude', 'claude-code'].includes(item.provider) : item.provider === provider) && (item.hasKey || item.provider === 'claude-code') && !item.busy && item.test?.status === 'passed'); }
+// provider 'ai' means any AI connection, Claude first (it plans, edits and reviews), then ChatGPT (2026-10-22).
+function intelConnectors(provider) { return state.connectors.filter(item => (provider === 'ai' ? AI_PROVIDERS.includes(item.provider) : item.provider === provider) && (item.hasKey || KEYLESS.includes(item.provider)) && !item.busy && item.test?.status === 'passed').sort((a, b) => (provider === 'ai' ? aiOrder(a) - aiOrder(b) : 0)); }
 function intelNumber(value) { return value === null || value === undefined ? '—' : Number(value).toLocaleString('en-US'); }
 function intelDuration(seconds) { if (!Number.isFinite(seconds)) return '—'; const m = Math.floor(seconds / 60), s = Math.round(seconds % 60); return m ? `${m}m ${String(s).padStart(2, '0')}s` : `${s}s`; }
 // Spend meters warn near the cap; rating meters (warnHigh=false) never do.

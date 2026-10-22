@@ -1,6 +1,6 @@
 {
-  "version": "0.52.0",
-  "updated": "2026-10-21",
+  "version": "0.53.0",
+  "updated": "2026-10-22",
   "nextAction": "Owner: start the program, follow \"Make your first video\" on the Overview: add the ElevenLabs key in Connections, run and pin the render check (Room 05), create the family, approve and assign a style, approve the skill packs you want, then write the first script. Live ElevenLabs is untested until then.",
   "repositories": [
     {
@@ -471,6 +471,13 @@
           "remaining": "The skills are drafts until the owner approves them; their effect on real Claude scripts is not measured yet."
         },
         {
+          "id": "S04",
+          "title": "AI team: ChatGPT subscription beside Claude (Codex app), scripts written together, painted pictures",
+          "status": "testing",
+          "evidence": "0.53.0 (2026-10-22): live on the owner's PC: Codex found in the Store package, signed in with ChatGPT, one text answer and one painted picture (1672x941, about 11k uncached tokens); a drawn shot rendered on the painted backdrop. Tests: tests/ai-team.test.js with a fake Codex (isolation, usage, errors, image copy, team roles, script duo with partner and revision failures, paint prompts) and the painted-plan test in tests/scene.test.js, which found two bugs (a plan with pictures crashing at the end, a backdrop and a picture of one shot sharing a reservation). Browser check of the setup dialog and the AI team card on a scratch workspace; the card's save button was broken and fixed.",
+          "remaining": "A live script written together and a live painted plan on the owner's real family; the owner's review of painted versus traced pictures."
+        },
+        {
           "id": "P07",
           "title": "Captions & Localization Room",
           "status": "testing",
@@ -603,7 +610,8 @@
     "2026-10-04: Room 04 visuals come from Pexels and Pixabay (free APIs, hourly caps, 24-hour cached searches) and OpenAI images (owner-priced monthly budget). AI video, generated graphics and maps wait for their own adapters.",
     "2026-10-04: Renders use only an owner-pinned FFmpeg/ffprobe build (checked by SHA-256 before each render) and bit-exact encoder settings, so the same approved inputs give the same proxy file.",
     "2026-10-19: The remaining editing engine is the Cinematic engine (style cinematic-hybrid): real footage only, cut with film grammar, one colour grade for the whole video (or Claude chooses), film grain and cinema bars. It draws nothing and needs a footage connection; AI video stays unbuilt.",
-    "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links."
+    "2026-10-19: Words on screen carry colours chosen for their role (never a pale ghost by default); hand-made looks use natural-media textures; fonts are checked against what the PC has. Remotion is read for ideas only (company licence above 3 people); competitor videos are not downloaded from links.",
+    "2026-10-22: The owner's ChatGPT subscription joins Claude through the Codex app (no OpenAI API key). One AI alone does everything; with both, ChatGPT paints pictures, the two write scripts together and Claude Opus 5.5 plans and edits."
   ],
-  "milestone": "Owner review of a test video: scene-building standard, lip sync, nightfall, narrator vs story"
+  "milestone": "AI team: ChatGPT subscription beside Claude, scripts written together, painted pictures"
 }

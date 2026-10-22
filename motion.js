@@ -110,7 +110,7 @@ class MotionRenderer {
   }
   // Renders one graphic to numbered lossless PNG frames (f00000.png ...; `format: 'jpeg'` exists for quick
   // previews only). Returns the frame count, the frame pattern and a hash of all frames.
-  async render({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}}) {
+  async render({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}, images = {}}) {
     if (!this.injected) {
       if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
@@ -120,6 +120,8 @@ class MotionRenderer {
     // The faces this PC really has (fonts.js): a missing style font is drawn in its chosen look-alike, never an accident.
     fonts = {heading: F.resolve(fonts?.heading), body: F.resolve(fonts?.body), hand: F.resolve(fonts?.hand || 'Segoe Print')};
     const params = {template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration};
+    // Painted pictures (ChatGPT, 2026-10-22) arrive as checked data and are decoded before the layout needs their size.
+    await this.evaluate(`window.DIMG = {}; Promise.all(Object.entries(${JSON.stringify(images || {})}).map(([key, src]) => new Promise(done => { const image = new Image(); image.onload = done; image.onerror = done; image.src = src; window.DIMG[key] = image; }))).then(() => true)`);
     await this.evaluate(`MOTION.setup(${JSON.stringify(params)})`);
     // Wait for the named fonts (system fonts resolve immediately; a missing one falls back).
     await this.evaluate(`Promise.all([${JSON.stringify(fonts.heading)}, ${JSON.stringify(fonts.body)}, ${JSON.stringify(fonts.hand)}].map(name => document.fonts.load('40px "' + name + '"'))).then(() => true)`);

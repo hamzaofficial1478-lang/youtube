@@ -268,18 +268,19 @@
   </dialog>
   <dialog id="setup-dialog" aria-labelledby="setup-heading">
     <form id="setup-form">
-      <div class="dialog-heading"><div><p class="eyebrow">BEFORE YOU START</p><h2 id="setup-heading">Set up Claude for the program</h2></div></div>
-      <p class="hint">Claude writes the scripts and makes the editing, visual and niche decisions. Choose how the program reaches Claude and which two models do the work. Both models can run at the same time.</p>
-      <fieldset class="setup-choice"><legend>How should the program use Claude?</legend>
+      <div class="dialog-heading"><div><p class="eyebrow">BEFORE YOU START</p><h2 id="setup-heading">Connect the AI for the program</h2></div></div>
+      <p class="hint">The AI writes the scripts and makes the editing, visual and niche decisions. Connect Claude, ChatGPT or both: one alone does everything; with both, ChatGPT paints the pictures, the two write scripts together and Claude plans and edits. Add the second one later in Connections.</p>
+      <fieldset class="setup-choice"><legend>Which AI should the program use first?</legend>
         <label class="radio-card"><input type="radio" name="mode" value="claude-code" checked><span><strong>My Claude subscription</strong><small>Uses the Claude Code app already logged in on this PC. No per-token bill; your plan's usage limits apply. For your own personal use only. <b data-claude-code-status></b></small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="chatgpt"><span><strong>My ChatGPT subscription</strong><small>Uses the Codex app signed in with your ChatGPT account on this PC. No per-token bill; your plan's usage limits apply. For your own personal use only. <b data-codex-status></b></small></span></label>
         <label class="radio-card"><input type="radio" name="mode" value="claude"><span><strong>A Claude API key</strong><small>Pay per token through your Claude Console account. The key is protected for your Windows account and never shown again.</small></span></label>
       </fieldset>
       <div class="form-grid">
         <label class="full" data-setup-key hidden>Claude API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="sk-ant-..."></label>
-        <label>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
-        <label>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
+        <label data-setup-model>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
+        <label data-setup-model>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
       </div>
-      <p class="note" data-setup-result aria-live="polite">Saving creates the connection and runs its test: the API key reads the two models' details (no generation); the subscription asks Claude one tiny question.</p>
+      <p class="note" data-setup-result aria-live="polite">Saving creates the connection and runs its test: the API key reads the two models' details (no generation); a subscription asks its AI one tiny question.</p>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-setup-skip>Skip for now</button><button type="submit" class="button primary">Save and test</button></div>
     </form>
@@ -295,6 +296,7 @@
         <label class="full" data-key-field>API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Leave blank to keep the saved key"></label>
         <label data-model-field>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
         <label data-model-field>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
+        <label data-gpt-field>GPT model <span class="hint">Leave empty for the Codex app's own default</span><input name="gptModel" list="gpt-models" maxlength="48" placeholder="Codex default" spellcheck="false"><datalist id="gpt-models"></datalist></label>
         <label class="checkbox-label full"><input name="clearKey" type="checkbox"><span>Remove the saved key from this slot</span></label>
         <label class="full">Setup notes<input name="notes" maxlength="1000" placeholder="Purpose or planned setup. Do not put secrets here."></label>
       </div>

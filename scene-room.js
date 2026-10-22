@@ -11,6 +11,8 @@ const {InputError} = require('./store');
 const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
 const Sk = require('./sketch');
 const Il = require('./illustrate');
+// One painted picture on the ChatGPT plan: about 11k uncached tokens in a live test (2026-10-22), reserved with room.
+const PAINT_TOKENS = 30000;
 const T = require('./transitions');
 const At = require('./atelier');
 const E = require('./engines');
@@ -316,7 +318,7 @@ function planMessages(input) {
     ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
     ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
       : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
-    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, looks: input.style.look === 'mix', boards: input.style.board === 'mix', designs: input.style.design === 'mix', engines: input.style.drawEngines}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
+    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, painted: input.style.painted === true, looks: input.style.look === 'mix', boards: input.style.board === 'mix', designs: input.style.design === 'mix', engines: input.style.drawEngines}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
   ].join('\n');
@@ -642,7 +644,7 @@ class SceneRoom {
     const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id) || null;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {})} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {})} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
       // The narrator's performance (voice direction), when the approved narration was directed: faces, moods
@@ -792,6 +794,8 @@ class SceneRoom {
       ({plan: merged, pictures} = await this.illustrate(job, merged, () => { started = true; }));
       return this.completePlan(job.id, merged, sumUsage(spent), null, review, compose, story || (map?.unusable ? {unusable: true} : null), pictures);
     } catch (error) {
+      // An unexpected failure is logged with its cause, so it can be found (the page only says it failed).
+      if (!(error instanceof AiError || error instanceof InputError)) console.error('Scene planning failed:', error);
       this.store.transaction(() => {
         const at = now();
         this.db.prepare("UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(started ? 'interrupted' : 'failed', error instanceof AiError || error instanceof InputError ? error.message : 'Claude scene planning failed.', at, job.id);
@@ -890,6 +894,26 @@ class SceneRoom {
   // tokens on its own and checked (path data and colours only). A picture that fails its checks is asked for again
   // once with the findings; one that still fails, or is past the video's picture budget, leaves the shot to the
   // program's free drawing. The plan is never lost for a picture.
+  // A painted image kept by its SHA-256 in the data folder (never the repository); only real PNG, JPEG or WebP files.
+  keepArt(file) {
+    const bytes = fs.readFileSync(file), png = bytes[0] === 0x89 && bytes.toString('latin1', 1, 4) === 'PNG', jpeg = bytes[0] === 0xff && bytes[1] === 0xd8, webp = bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP';
+    if (!png && !jpeg && !webp) { fs.rmSync(file, {force: true}); throw new InputError('The painted picture is not an image file.', 502); }
+    const sha = createHash('sha256').update(bytes).digest('hex'), keep = path.join(this.dataRoot, 'generated-art', `${sha}.${png ? 'png' : jpeg ? 'jpg' : 'webp'}`);
+    if (!fs.existsSync(keep)) fs.renameSync(file, keep); else fs.rmSync(file, {force: true});
+    return sha;
+  }
+  // The painted pictures a drawing needs, checked by their SHA-256, as data the drawing page can show.
+  artImages(sketch) {
+    const out = {}, dir = path.join(this.dataRoot, 'generated-art');
+    for (const el of sketch?.elements || []) {
+      if (el.kind !== 'picture' || !el.image || out[el.image]) continue;
+      const name = ['png', 'jpg', 'webp'].map(ext => `${el.image}.${ext}`).find(file => fs.existsSync(path.join(dir, file)));
+      const bytes = name ? fs.readFileSync(path.join(dir, name)) : null;
+      requireValue(bytes && createHash('sha256').update(bytes).digest('hex') === el.image, 'A painted picture of this drawing is missing or changed.', 409);
+      out[el.image] = `data:image/${name.endsWith('png') ? 'png' : name.endsWith('jpg') ? 'jpeg' : 'webp'};base64,${bytes.toString('base64')}`;
+    }
+    return out;
+  }
   async illustrate(job, merged, onStart, {only = null} = {}) {
     const scope = job.scope.illustrate;
     if (!scope) return {plan: merged, pictures: null};
@@ -931,6 +955,33 @@ class SceneRoom {
       const pictureKey = hash({label, describe: item.describe, engine, board, look, ...(design ? {design} : {}), aspect}), stored = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pictureKey);
       let findings = [], art = stored ? JSON.parse(stored.art) : null;
       if (stored) notes.push(`${label}: its picture was kept from an earlier attempt of this plan (no new tokens).`);
+      // ChatGPT paints it when the AI team gives it the pictures (owner request 2026-10-22): a real image instead of a
+      // line drawing, kept like the drawings so a retry never pays twice. If it cannot, Claude draws it as before.
+      const team = this.ai.team?.();
+      if (team?.painted) {
+        const paintKey = `paint:${pictureKey}:${item.backdrop ? 'b' : 'p'}`, kept = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, paintKey);
+        let image = kept ? JSON.parse(kept.art).image : null, why = null;
+        if (kept) notes.push(`${label}: its painted picture was kept from an earlier attempt of this plan.`);
+        if (!image) {
+          const key = `${job.id}:picture:${label}:${job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}`;
+          if (!reserve(key, PAINT_TOKENS)) why = 'the family\'s monthly token limit could not reserve it';
+          else {
+            const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
+            fs.mkdirSync(path.dirname(incoming), {recursive: true});
+            let settled = false;
+            try {
+              const made = await this.ai.image({connectorId: team.pictures.id, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts'}), outFile: incoming, onStart});
+              settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
+              report.tokens += made.usage?.totalTokens || 0;
+              image = this.keepArt(incoming);
+              this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, paintKey, JSON.stringify({image}), now());
+            } catch (error) { if (!settled) settle(key, null, 'unknown'); why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer'; fs.rmSync(incoming, {force: true}); }
+          }
+        }
+        if (image) { plan.scenes[si].shots[hi].sketch.elements[target.ei].image = image; report.drawn++; report.painted = (report.painted || 0) + 1; continue; }
+        notes.push(`${label}: ChatGPT could not paint it (${why}); it is drawn instead.`);
+        if (item.backdrop) { drop(target, 'its painted backdrop was not made'); continue; }
+      }
       for (let attempt = 1; attempt <= 2 && !art; attempt++) {
         const key = `${job.id}:picture:${label}:${job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
@@ -1706,7 +1757,7 @@ class SceneRoom {
         try {
           await renderer.start();
           // An atelier shot (P06h) is its designed composition, seeked frame by frame at preview size.
-          return scope.composition ? await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, outDir: work}) : await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
+          return scope.composition ? await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, outDir: work}) : await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, images: this.artImages(scope.sketch), palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
           fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, drawing: spec.drawing || null,
           vertical: ctx.family.format === 'shorts', width: preview.width, height: preview.height, fps, duration, outDir: work});
         } finally { await renderer.close(); }

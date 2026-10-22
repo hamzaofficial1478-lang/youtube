@@ -50,7 +50,9 @@
   // The hand traces a picture's outlines in 2.2-4.2 s (more shapes take longer), but never more than 45% of the time
   // the picture is on screen, so the finished picture holds for most of it (demo review 2026-10-16: colour arrived
   // just before the cut, and a picture cued on a later word only finished as the shot ended).
-  const pictureSeconds = (el, ts = 0) => (el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
+  // A painted picture (ChatGPT, 2026-10-22) is decoded on the page before drawing (window.DIMG, by its SHA-256).
+  const painted = el => (el?.image && window.DIMG?.[el.image]?.naturalWidth ? window.DIMG[el.image] : null);
+  const pictureSeconds = (el, ts = 0) => (painted(el) ? (el.backdrop ? 0.4 : 1.1) : el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
     // A map (0.36) at size xl is the whole frame; smaller maps are panels like charts.
     if (el.kind === 'map' && (el.size || 'xl') === 'xl') return {box: [0, 0, K.W, K.H], center: [K.W / 2, K.H / 2], r: K.H / 2, w: K.W, h: K.H};
@@ -76,8 +78,9 @@
       const pt = ref => (Array.isArray(ref) ? [ref[0] * K.W, ref[1] * K.H] : [K.W / 2, K.H / 2]), a = pt(el.from), b = pt(el.to), pad = 60 * K.u;
       return {box: [Math.min(a[0], b[0]) - pad, Math.min(a[1], b[1]) - pad, Math.max(a[0], b[0]) + pad, Math.max(a[1], b[1]) + pad], center: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], r: Math.hypot(b[0] - a[0], b[1] - a[1]) / 2};
     }
+    if (el.kind === 'picture' && el.backdrop && painted(el)) return {box: [K.W / 2, K.H / 2, K.W / 2, K.H / 2], center: [K.W / 2, K.H / 2], r: 0, w: K.W, h: K.H};
     if (el.kind === 'picture') {
-      const [vw, vh] = el.art?.viewBox || [3, 2], maxH = 0.72 * K.H;
+      const image = painted(el), [vw, vh] = image ? [image.naturalWidth, image.naturalHeight] : el.art?.viewBox || [3, 2], maxH = 0.72 * K.H;
       let w = PICTURE_W[el.size || 'l'] * K.W, h = w * vh / vw;
       if (h > maxH) { w *= maxH / h; h = maxH; }
       const x = Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, el.x * K.W)), y = Math.min(0.86 * K.H - h / 2, Math.max(0.06 * K.H + h / 2, el.y * K.H));
@@ -1136,7 +1139,29 @@
   // The hand traces every outline in the illustrator's order (later shapes cover earlier lines, as on paper), then the
   // colour washes in. Each whiteboard look shows it its own way: black marker keeps it line art, pencil is grey and
   // pale, dry-erase colours the big shapes in with marker strokes.
+  // A painted backdrop fills the frame behind the whole shot, a little larger than the frame so camera moves never
+  // show an edge, and fades in only when it opens a place; a painted picture is a card that wipes in (hand-made
+  // looks) or lands (motion design).
+  function drawPainted(el, i, local, enter) {
+    const image = painted(el), {ctx, u, W, H} = K;
+    if (el.backdrop) {
+      const s = Math.max(W / image.naturalWidth, H / image.naturalHeight) * 1.06, w = image.naturalWidth * s, h = image.naturalHeight * s;
+      ctx.save(); if (enter === 'draw' || enter === 'fade') ctx.globalAlpha *= ease.inOutSine(clamp01(local / 0.4)); ctx.drawImage(image, (W - w) / 2, (H - h) / 2, w, h); ctx.restore();
+      return;
+    }
+    const est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, w = x1 - x0, h = y1 - y0, q = ease.inOutSine(clamp01(local / pictureSeconds(el, LAYOUT.el[i].ts))), pad = 7 * u;
+    ctx.save();
+    if (['flat', 'info'].includes(K.FIN)) { const z = 0.88 + 0.12 * ease.outBack(q); ctx.globalAlpha *= clamp01(q * 1.6); ctx.translate(est.center[0], est.center[1]); ctx.scale(z, z); ctx.translate(-est.center[0], -est.center[1]); }
+    else { ctx.beginPath(); ctx.rect(x0 - 30 * u, y0 - 30 * u, (w + 60 * u) * q, h + 60 * u); ctx.clip(); }
+    ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 20 * u; ctx.shadowOffsetY = 7 * u;
+    ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 16 * u); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.beginPath(); ctx.roundRect(x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad, 11 * u); ctx.clip();
+    ctx.drawImage(image, x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad);
+    ctx.restore();
+  }
   function drawPicture(el, i, local, enter) {
+    if (painted(el)) return drawPainted(el, i, local, enter);
     const g = pictureGeom(el, i);
     if (!g) return;
     // Each engine shows a picture its own way (0.34): the whiteboard looks, the stickman looks, motion design.
@@ -1878,12 +1903,14 @@
     // Backdrop effects (a burst, a glow, speed lines, rings) sit behind everything else, so they never hide a word.
     ctx.save(); applyCamera(ctx, cam, 1);
     if (LAYOUT.stage !== null) drawStage(t);
+    const backdrop = el => el.kind === 'picture' && el.backdrop && painted(el);
+    D.elements.forEach((el, i) => { if (backdrop(el)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (el.kind === 'fx' && BACKDROP_FX.has(el.effect)) drawElement(el, i, t); });
     // A loupe magnifies what is already drawn, so it comes last.
     // Words sit above the mood's light and colour (live plan 2026-10-19: hope rays and a dark grade washed keywords
     // out); a poster or words on the back layer stay part of the picture.
     const above = el => el.kind === 'text' && el.style !== 'poster' && el.layer !== 'back' && !!D.mood && D.mood !== 'none';
-    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect)) && el.kind !== 'loupe' && !above(el)) drawElement(el, i, t); });
+    D.elements.forEach((el, i) => { if (!(el.kind === 'fx' && BACKDROP_FX.has(el.effect)) && !backdrop(el) && el.kind !== 'loupe' && !above(el)) drawElement(el, i, t); });
     D.elements.forEach((el, i) => { if (el.kind === 'loupe') drawElement(el, i, t); });
     ctx.restore();
     K.mood(D.mood, t);

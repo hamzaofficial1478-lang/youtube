@@ -11,6 +11,8 @@ const PROVIDERS = {
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
   claude: {name: 'Claude API key', test: 'Reads the chosen models\' details with the key; no generation', ready: true, ai: true},
+  // Owner request 2026-10-22: the ChatGPT plan through the Codex app's own sign-in (no API key).
+  chatgpt: {name: 'ChatGPT subscription (Codex app on this PC)', test: 'Asks Codex one tiny question on your ChatGPT plan', ready: true, keyless: true, ai: true, gpt: true},
   // Owner decision 2026-10-06: Claude replaced Hermes. Old Hermes slots stay visible so they can be deleted.
   hermes: {name: 'Hermes (removed; use Claude)', test: 'Hermes was removed from the program on 2026-10-06. Delete this slot.', ready: false, retired: true},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
@@ -26,7 +28,18 @@ function text(value, label, max, min=0) {
 function secret(value){if(typeof value!=='string'||!/^\S{16,512}$/.test(value)||/[^\x21-\x7e]/.test(value))throw new InputError('Enter an API key with 16–512 printable characters and no spaces.');return value;}
 
 class ConnectorSlots {
-  constructor(store, protector, fetchImpl=fetch){this.store=store;this.db=store.db;this.protector=protector;this.fetch=fetchImpl;this.busy=new Set();}
+  constructor(store, protector, fetchImpl=fetch){this.store=store;this.db=store.db;this.protector=protector;this.fetch=fetchImpl;this.busy=new Set();this.db.exec('CREATE TABLE IF NOT EXISTS ai_roles(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)');}
+  // The AI team (owner request 2026-10-22): who paints pictures, and whether scripts are written by both AIs together.
+  aiRoles(){const row=this.db.prepare("SELECT * FROM ai_roles WHERE id='global'").get();return {pictures:'chatgpt',scripts:'together',scriptWriter:'claude',...(row?JSON.parse(row.payload):{}),revision:row?.revision||0};}
+  saveAiRoles(input){
+    if(!input||typeof input!=='object')throw new InputError('Send the AI team settings.');
+    const pick=(value,allowed,label)=>{if(!allowed.includes(value))throw new InputError(`Choose ${label}: ${allowed.join(' or ')}.`);return value;};
+    const payload={pictures:pick(input.pictures,['chatgpt','claude'],'who paints pictures'),scripts:pick(input.scripts,['together','alone'],'how scripts are written'),scriptWriter:pick(input.scriptWriter,['claude','chatgpt'],'who writes the script')};
+    const current=this.aiRoles();if(input.revision!==current.revision)throw new InputError('The AI team changed in another tab. Reload first.',409);
+    this.db.prepare("INSERT INTO ai_roles(id,revision,payload,updated_at) VALUES('global',?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at").run(current.revision+1,JSON.stringify(payload),new Date().toISOString());
+    this.store.event(`AI team: pictures by ${payload.pictures === 'chatgpt' ? 'ChatGPT' : 'Claude'}, scripts ${payload.scripts === 'together' ? `written together (${payload.scriptWriter === 'claude' ? 'Claude' : 'ChatGPT'} writes, the other reviews)` : 'by one AI'}`);
+    return this.aiRoles();
+  }
   row(id){const row=this.db.prepare('SELECT * FROM connectors WHERE id=?').get(id);if(!row)throw new InputError('Connector not found.',404);return row;}
   public(row){return {...JSON.parse(row.payload),id:row.id,hasKey:!!row.secret,busy:this.busy.has(row.id)};}
   list(){return this.db.prepare('SELECT * FROM connectors ORDER BY rowid').all().map(row=>this.public(row));}
@@ -38,7 +51,7 @@ class ConnectorSlots {
     const provider=input.provider;
     if(!Object.hasOwn(PROVIDERS,provider))throw new InputError('Choose a supported connector type.');
     if(PROVIDERS[provider].retired&&!old)throw new InputError('Hermes was removed from the program. Add a Claude connection instead.');
-    if(PROVIDERS[provider].keyless&&input.key)throw new InputError('The Claude subscription connection uses the Claude Code login on this PC; it takes no API key.');
+    if(PROVIDERS[provider].keyless&&input.key)throw new InputError('A subscription connection uses the sign-in of its app on this PC (Claude Code or Codex); it takes no API key.');
     if(old&&JSON.parse(old.payload).provider!==provider)throw new InputError('Create a new slot to change provider. Keys cannot be moved between providers.');
     const name=text(input.name,'connector name',80,2), notes=text(input.notes||'','setup notes',1000);
     if(input.clearKey!==undefined&&typeof input.clearKey!=='boolean')throw new InputError('Invalid clear-key choice.');
@@ -55,7 +68,12 @@ class ConnectorSlots {
     // Y01: a Google OAuth client of type "Desktop app"; its ID is not a secret, its secret is kept like a key.
     if(PROVIDERS[provider].oauth){const clientId=input.clientId??(old?JSON.parse(old.payload).clientId:undefined);if(typeof clientId!=='string'||!/^\d{6,30}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(clientId))throw new InputError('Enter the OAuth client ID from Google Cloud (it ends in .apps.googleusercontent.com).');next.clientId=clientId;}
     // The two Claude models a connection uses: main (scripts, editing, visuals, niches) and support (the rest).
-    if(PROVIDERS[provider].ai){
+    // A ChatGPT connection names one GPT model (empty: the Codex app's own default).
+    if(PROVIDERS[provider].gpt){
+      const model=input.models?.main??(old?JSON.parse(old.payload).models?.main:undefined)??'';
+      if(typeof model!=='string'||(model&&!/^[a-z0-9][a-z0-9.\-]{1,47}$/.test(model)))throw new InputError('Enter a GPT model name such as gpt-6.1-sol, or leave it empty for the Codex default.');
+      next.models={main:model};
+    }else if(PROVIDERS[provider].ai){
       const pick=(value,role)=>{const model=value??(old?JSON.parse(old.payload).models?.[role]:undefined)??DEFAULT_MODELS[role];if(!Object.hasOwn(MODELS,model))throw new InputError(`Choose a supported Claude model for the ${role} role.`);return model;};
       next.models={main:pick(input.models?.main,'main'),support:pick(input.models?.support,'support')};
     }

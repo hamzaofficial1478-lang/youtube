@@ -58,4 +58,18 @@ function fakeClaudeCode(t) {
   return {command: process.execPath, prefix: [path.join(__dirname, 'fake-claude-code.js')], reply, calls};
 }
 
-module.exports = {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, claudeFetch, promptOf, fakeClaudeCode};
+// A fake Codex app (the ChatGPT subscription): node runs fake-codex.js with its own throwaway Codex home.
+function fakeCodex(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fake-codex-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  const replyFile = path.join(dir, 'reply.json'), logFile = path.join(dir, 'calls.jsonl'), home = path.join(dir, 'home');
+  fs.mkdirSync(home);
+  const reply = (answer, extra = {}) => fs.writeFileSync(replyFile, JSON.stringify({answer: typeof answer === 'string' ? answer : JSON.stringify(answer), ...extra}));
+  process.env.FAKE_CODEX_REPLY = replyFile;
+  process.env.FAKE_CODEX_LOG = logFile;
+  t.after(() => { delete process.env.FAKE_CODEX_REPLY; delete process.env.FAKE_CODEX_LOG; });
+  const calls = () => (fs.existsSync(logFile) ? fs.readFileSync(logFile, 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : []);
+  return {command: process.execPath, prefix: [path.join(__dirname, 'fake-codex.js')], home, reply, calls};
+}
+
+module.exports = {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, claudeFetch, promptOf, fakeClaudeCode, fakeCodex};
