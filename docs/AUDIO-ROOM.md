@@ -114,6 +114,36 @@ charges for every track and effect, while free libraries hold thousands. Checked
 - **Credits**: a library track with a credit line (YouTube Audio Library "attribution required", CC BY) adds a
   **Music:** block to the package description.
 
+### Freesound and Jamendo (0.61.0)
+
+Owner request 2026-10-23: use the Freesound and Jamendo APIs for free licensed sounds and music.
+
+- **Connections** (Connections page):
+  - **Freesound**: sound effects, plus music and loops; an API key from freesound.org/apiv2/apply.
+  - **Jamendo**: instrumental music; a client ID from devportal.jamendo.com, 8 characters.
+  - The test runs one search; nothing is downloaded.
+- **The platforms' API terms.** These are separate from the licences of the sounds:
+  - Jamendo: "The API may be used freely for non-commercial uses ... For any other type of use including but not
+    limited to commercial uses please contact our sales team at licensing@jamendo.com".
+  - Freesound: commercial use of its API is "negotiated on a case by case basis".
+  - So each connection records the owner's confirmation that the platform allows their use. A connection without it
+    cannot search.
+- **Only licences a monetized video may use** (`sound-online.js` `licenceOf`):
+  - CC0, and CC BY with its credit line.
+  - Out: NonCommercial (a monetized channel); ShareAlike and NoDerivatives (music synced to a moving image is an
+    adaptation under CC 4.0); Sampling+.
+  - Freesound is asked for CC0 and CC BY only. Jamendo answers are checked by their licence link; Jamendo tracks whose
+    artist does not allow downloads are shown but cannot be added.
+- **Find free sounds online** (Sound library page):
+  - A search is one request inside the platform's hourly allowance (Freesound 60, Jamendo 60 by default).
+  - Previews play through the program, only for results of the owner's own search.
+  - **Add** downloads the sound into the library with its licence, author, page and credit line. Downloads come only
+    from the platform's own servers; each redirect is checked.
+  - CC BY credits reach the package description by themselves.
+- **Fill empty slots from Freesound** (Room 07 effects card): a background job asks Freesound once per empty effect slot
+  (best rated short CC0 or CC BY sound) and adds the first one, tagged with its slot. Progress shows on the Sound library
+  page; nothing is retried by itself.
+
 Note on Pixabay music: some Pixabay tracks are also registered with YouTube's Content ID by their artists. A claim on
 such a track is usually released by showing the Pixabay licence; the YouTube Audio Library avoids claims.
 

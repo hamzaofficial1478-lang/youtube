@@ -24,13 +24,18 @@ const PROVIDERS = {
   pixabay: {name: 'Pixabay stock library', test: 'One photo search for "nature" (uses 1 Pixabay request); nothing is downloaded', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
   // 0.57: the owner's own Reddit app (reddit.com/prefs/apps, type "script"): app ID, secret and the owner's username.
-  reddit: {name: 'Reddit (your Reddit app)', test: 'Signs in as your Reddit app and runs one search; nothing is posted', ready: true, reddit: true}
+  reddit: {name: 'Reddit (your Reddit app)', test: 'Signs in as your Reddit app and runs one search; nothing is posted', ready: true, reddit: true},
+  // 0.61 (owner request 2026-10-23): free sound effects and music. Their API terms reserve commercial use, so each
+  // connection records the owner's confirmation that the platform allows their use.
+  freesound: {name: 'Freesound (sound effects, CC0 and CC BY)', test: 'One sound search (1 request); nothing downloaded', ready: true, terms: true, keyLabel: 'Freesound API key'},
+  jamendo: {name: 'Jamendo (music, CC BY)', test: 'One track search (1 request); nothing downloaded', ready: true, terms: true, keyLabel: 'Jamendo client ID', keyMin: 8}
 };
 function text(value, label, max, min=0) {
   if(typeof value!=='string'||value.trim().length<min||value.length>max||/[\x00-\x1f\x7f]/.test(value))throw new InputError(`Enter a valid ${label} (${min}–${max} characters).`);
   return value.trim();
 }
-function secret(value){if(typeof value!=='string'||!/^\S{16,512}$/.test(value)||/[^\x21-\x7e]/.test(value))throw new InputError('Enter an API key with 16–512 printable characters and no spaces.');return value;}
+// A Jamendo client ID is 8 characters (keyMin); every other key at least 16.
+function secret(value,min=16){if(typeof value!=='string'||value.length<min||!/^\S{1,512}$/.test(value)||/[^\x21-\x7e]/.test(value))throw new InputError(`Enter an API key with ${min}–512 printable characters and no spaces.`);return value;}
 
 class ConnectorSlots {
   constructor(store, protector, fetchImpl=fetch){this.store=store;this.db=store.db;this.protector=protector;this.fetch=fetchImpl;this.busy=new Set();this.db.exec('CREATE TABLE IF NOT EXISTS ai_roles(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL)');}
@@ -72,7 +77,7 @@ class ConnectorSlots {
     if(!old&&this.list().length>=60)throw new InputError('Maximum 60 connector slots.');
     let encrypted=old?.secret||null;
     if(input.clearKey)encrypted=null;
-    if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key)));
+    if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key,PROVIDERS[provider].keyMin)));
     const next={name,provider,notes,revision:old?JSON.parse(old.payload).revision+1:1,test:null,updatedAt:new Date().toISOString()};
     // Y01: a Google OAuth client of type "Desktop app"; its ID is not a secret, its secret is kept like a key.
     if(PROVIDERS[provider].reddit){
@@ -80,6 +85,11 @@ class ConnectorSlots {
       if(typeof clientId!=='string'||!/^[A-Za-z0-9_-]{10,40}$/.test(clientId))throw new InputError('Enter the Reddit app ID (the short code under the app name on reddit.com/prefs/apps).');
       if(typeof username!=='string'||!/^[A-Za-z0-9_-]{3,20}$/.test(username))throw new InputError('Enter your Reddit username (Reddit asks every app to name its owner).');
       next.clientId=clientId;next.username=username;
+    }
+    if(PROVIDERS[provider].terms){
+      const confirmed=input.termsConfirmed??(old?!!JSON.parse(old.payload).termsConfirmed:false);
+      if(confirmed!==true)throw new InputError(`Confirm that ${provider==='jamendo'?'Jamendo':'Freesound'} allows your use of its API (its free API is for non-commercial use; a monetized channel needs the platform\'s OK).`);
+      next.termsConfirmed=old&&JSON.parse(old.payload).termsConfirmed&&input.termsConfirmed===undefined?JSON.parse(old.payload).termsConfirmed:{at:new Date().toISOString()};
     }
     if(PROVIDERS[provider].oauth){const clientId=input.clientId??(old?JSON.parse(old.payload).clientId:undefined);if(typeof clientId!=='string'||!/^\d{6,30}-[a-z0-9]{8,64}\.apps\.googleusercontent\.com$/.test(clientId))throw new InputError('Enter the OAuth client ID from Google Cloud (it ends in .apps.googleusercontent.com).');next.clientId=clientId;}
     // The two Claude models a connection uses: main (scripts, editing, visuals, niches) and support (the rest).
@@ -97,7 +107,7 @@ class ConnectorSlots {
     return this.public(this.row(recordId));
   }
   remove(id,revision){this.idle(id);this.checkRevision(this.row(id),revision);this.db.prepare('DELETE FROM connectors WHERE id=?').run(id);return {removed:true};}
-  key(id){const row=this.row(id);if(!row.secret)throw new InputError('Edit this connector and add its API key first.',409);return secret(this.protector.transform('unprotect',Buffer.from(row.secret)).toString('utf8'));}
+  key(id){const row=this.row(id);if(!row.secret)throw new InputError('Edit this connector and add its API key first.',409);return secret(this.protector.transform('unprotect',Buffer.from(row.secret)).toString('utf8'),PROVIDERS[JSON.parse(row.payload).provider]?.keyMin);}
   async test(id,revision,channel='@GoogleDevelopers'){
     this.idle(id);const row=this.row(id);this.checkRevision(row,revision);const slot=JSON.parse(row.payload);
     if(!PROVIDERS[slot.provider].ready){
@@ -128,6 +138,10 @@ class ConnectorSlots {
         const {RedditClient}=require('./reddit');
         const found=await new RedditClient({clientId:slot.clientId,secret:key,username:slot.username},this.fetch).search('history',{days:7,limit:3});
         result={access:'reddit_read',message:`Reddit accepted your app and returned ${found.length} post(s) (2 requests). Nothing was posted.`};
+      }else if(slot.provider==='freesound'||slot.provider==='jamendo'){
+        const {FreesoundClient,JamendoClient}=require('./sound-online');
+        const found=slot.provider==='freesound'?await new FreesoundClient(key,this.fetch).search('whoosh',{limit:5}):await new JamendoClient(key,this.fetch).search('piano',{limit:20});
+        result={access:'sound_search',message:`${slot.provider==='freesound'?'Freesound':'Jamendo'} answered with ${found.length} result(s), ${found.filter(item=>item.licence.ok).length} under CC0 or CC BY (1 request). Nothing was downloaded.`};
       }else if(slot.provider==='wikimedia'){
         const {WikimediaClient}=require('./visual-sources');
         const found=await new WikimediaClient(null,this.fetch).search({query:'old map',perPage:3});

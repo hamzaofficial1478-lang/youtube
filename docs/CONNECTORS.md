@@ -39,3 +39,11 @@ model's ID from fish.audio as the voice ID, pace 0.5-2). Speech: `POST https://a
 its `model` header, `reference_id`, MP3 128 kb/s and the pace as `prosody.speed`; parts of at most 3,000 characters;
 the same real-audio checks as every narration. Fish Audio returns no word timing, so captions use the estimate. Music
 and sound effects still need ElevenLabs. Not verified live (needs the owner's key).
+
+## Freesound and Jamendo (0.61)
+
+Free sound effects (Freesound, API key) and music (Jamendo, 8-character client ID), used by the Sound library
+(AUDIO-ROOM.md "Freesound and Jamendo"). Both platforms keep their free API for non-commercial use. Each connection
+needs the owner's confirmation that the platform allows their use, kept with the slot (`termsConfirmed`). The test runs
+one search and downloads nothing. The Freesound key travels in the Authorization header only. The Jamendo client ID is
+a request parameter, as its API requires.

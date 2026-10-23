@@ -26,6 +26,9 @@ const SOURCES = Object.freeze({
   'youtube-audio-library': {label: 'YouTube Audio Library', licence: 'YouTube Audio Library: free for your YouTube videos; tracks marked "attribution required" need their credit line in the description.'},
   own: {label: 'My own or bought', licence: 'Made or licensed by the owner for commercial use.'},
   other: {label: 'Another free library', licence: null},
+  // 0.61: downloaded by hand from these sites (licence written per import) or added from their APIs (licence per sound).
+  freesound: {label: 'Freesound', licence: null},
+  jamendo: {label: 'Jamendo', licence: null},
 });
 // Words in file and folder names that say nothing about the sound.
 const NOISE = new Set('mp3 wav ogg m4a flac aac opus pixabay audio music sound sounds effect effects sfx free royalty the and for with from new final mix version edit original copy track song songs full download downloads users user library youtube studio'.split(' '));
@@ -69,6 +72,7 @@ class SoundLibrary {
       CREATE INDEX IF NOT EXISTS sounds_kind ON sounds(kind, enabled);
       CREATE TABLE IF NOT EXISTS sound_imports(id TEXT PRIMARY KEY, folder TEXT NOT NULL, status TEXT NOT NULL, scope TEXT NOT NULL, progress TEXT NOT NULL, error TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
     `);
+    if (!this.db.prepare('PRAGMA table_info(sounds)').all().some(column => column.name === 'page_url')) this.db.exec('ALTER TABLE sounds ADD COLUMN page_url TEXT');
     this.db.prepare("UPDATE sound_imports SET status='interrupted', error='The program stopped during this import. Continue it to import the rest; the files already imported are kept.', updated_at=? WHERE status='running'").run(now());
   }
   tools() { const pin = this.renders?.pinCheck?.(); return pin?.ok ? {ffmpeg: pin.paths.ffmpeg, ffprobe: pin.paths.ffprobe} : {ffmpeg: this.ffmpeg, ffprobe: this.ffprobe}; }
@@ -82,7 +86,7 @@ class SoundLibrary {
     const inside = path.relative(path.resolve(this.dataRoot), path.resolve(folder));
     requireValue(inside.startsWith('..') || path.isAbsolute(inside), 'Choose a folder outside the program\'s data folder.');
     requireValue(Object.hasOwn(SOURCES, input.source), `Choose where the sounds come from: ${Object.values(SOURCES).map(item => item.label).join(', ')}.`);
-    const licence = input.source === 'other' ? clean(input.licence, 300) : SOURCES[input.source].licence;
+    const licence = SOURCES[input.source].licence || clean(input.licence, 300);
     requireValue(licence && licence.length >= 10, 'Write the licence of these sounds (at least 10 characters), for example "CC0, no attribution".');
     requireValue(input.licenceConfirmed === true, 'Confirm that you downloaded these sounds yourself and that their licence allows them in monetized YouTube videos.');
     const kind = ['auto', 'music', 'sfx'].includes(input.kind) ? input.kind : 'auto', total = listAudio(folder).length;
@@ -110,32 +114,16 @@ class SoundLibrary {
   publicImport(row) { const scope = JSON.parse(row.scope); return {id: row.id, folder: row.folder, status: row.status, source: scope.source, sourceLabel: SOURCES[scope.source]?.label, kind: scope.kind, progress: JSON.parse(row.progress), error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at}; }
   async processNextImport() {
     if (this.busy) return null;
-    const row = this.store.transaction(() => { const next = this.db.prepare("SELECT * FROM sound_imports WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get(); if (next) this.db.prepare("UPDATE sound_imports SET status='running', updated_at=? WHERE id=?").run(now(), next.id); return next; });
+    const row = this.store.transaction(() => { const next = this.db.prepare("SELECT * FROM sound_imports WHERE status='queued' AND folder NOT LIKE 'online:%' ORDER BY created_at, rowid LIMIT 1").get(); if (next) this.db.prepare("UPDATE sound_imports SET status='running', updated_at=? WHERE id=?").run(now(), next.id); return next; });
     if (!row) return null;
     this.busy = true;
-    const scope = JSON.parse(row.scope), tools = this.tools(), files = listAudio(row.folder), progress = {total: files.length, done: 0, added: 0, already: 0, failed: 0, problems: []};
+    const scope = JSON.parse(row.scope), files = listAudio(row.folder), progress = {total: files.length, done: 0, added: 0, already: 0, failed: 0, problems: []};
     const save = () => this.db.prepare('UPDATE sound_imports SET progress=?, updated_at=? WHERE id=?').run(JSON.stringify(progress), now(), row.id);
     try {
       for (const file of files) {
         try {
-          const stat = fs.statSync(file);
-          requireValue(stat.size <= MAX_BYTES, 'larger than 60 MB');
-          requireValue(stat.size >= 512, 'too small to be audio');
-          const sha = await sha256File(file);
-          if (this.db.prepare('SELECT 1 FROM sounds WHERE id=?').get(sha)) progress.already++;
-          else {
-            const measured = await this.analyze(file, {ffmpeg: tools.ffmpeg, ffprobe: tools.ffprobe});
-            requireValue(measured.durationSeconds >= 0.1, 'no playable audio');
-            requireValue(Number.isFinite(measured.maxVolumeDb) && measured.maxVolumeDb > -60, 'silent');
-            const ext = path.extname(file).toLowerCase(), relative = `sound-library/${sha.slice(0, 2)}/${sha}${ext}`, target = path.join(this.dataRoot, relative);
-            fs.mkdirSync(path.dirname(target), {recursive: true});
-            if (!fs.existsSync(target)) fs.copyFileSync(file, target);
-            if (await sha256File(target) !== sha) { fs.rmSync(target, {force: true}); throw new InputError('the copy did not match the file'); }
-            const at = now();
-            this.db.prepare('INSERT INTO sounds(id,kind,title,tags,seconds,loudness_lufs,peak_db,relative_path,size_bytes,source,licence,attribution,enabled,import_id,original_name,added_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?)')
-              .run(sha, kindOf(file, row.folder, measured.durationSeconds, scope.kind), titleFrom(file), JSON.stringify(tagsFrom(file, row.folder)), Math.round(measured.durationSeconds * 1000) / 1000, finite(measured.integratedLoudnessLufs), finite(measured.maxVolumeDb), relative, stat.size, scope.source, scope.licence, scope.attribution, row.id, path.basename(file).slice(0, 200), row.created_by, at, at);
-            progress.added++;
-          }
+          const stored = await this.storeFile(file, {root: row.folder, rule: scope.kind, source: scope.source, licence: scope.licence, attribution: scope.attribution, importId: row.id, by: row.created_by});
+          if (stored.added) progress.added++; else progress.already++;
         } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${path.basename(file)}: ${clean(error.message, 140)}`); }
         progress.done++;
         save();
@@ -151,9 +139,30 @@ class SoundLibrary {
     } finally { this.busy = false; }
   }
 
+  // One file into the library (a file of an import or one added from Freesound or Jamendo): checked, measured once,
+  // stored once by its checksum with its source, licence, credit line and page.
+  async storeFile(file, {root = null, rule = 'auto', kind = null, title = null, tags = null, source, licence, attribution = null, pageUrl = null, importId = null, originalName = null, by}) {
+    const stat = fs.statSync(file);
+    requireValue(stat.size <= MAX_BYTES, 'larger than 60 MB');
+    requireValue(stat.size >= 512, 'too small to be audio');
+    const sha = await sha256File(file);
+    if (this.db.prepare('SELECT 1 FROM sounds WHERE id=?').get(sha)) return {id: sha, added: false};
+    const tools = this.tools(), measured = await this.analyze(file, {ffmpeg: tools.ffmpeg, ffprobe: tools.ffprobe});
+    requireValue(measured.durationSeconds >= 0.1, 'no playable audio');
+    requireValue(Number.isFinite(measured.maxVolumeDb) && measured.maxVolumeDb > -60, 'silent');
+    const ext = path.extname(file).toLowerCase() || '.mp3', relative = `sound-library/${sha.slice(0, 2)}/${sha}${ext}`, target = path.join(this.dataRoot, relative);
+    fs.mkdirSync(path.dirname(target), {recursive: true});
+    if (!fs.existsSync(target)) fs.copyFileSync(file, target);
+    if (await sha256File(target) !== sha) { fs.rmSync(target, {force: true}); throw new InputError('the copy did not match the file'); }
+    const at = now(), seconds = Math.round(measured.durationSeconds * 1000) / 1000;
+    this.db.prepare('INSERT INTO sounds(id,kind,title,tags,seconds,loudness_lufs,peak_db,relative_path,size_bytes,source,licence,attribution,enabled,import_id,original_name,added_by,created_at,updated_at,page_url) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,1,?,?,?,?,?,?)')
+      .run(sha, kind || kindOf(file, root, seconds, rule), clean(title, 120) || titleFrom(file), JSON.stringify(tags || tagsFrom(file, root)), seconds, finite(measured.integratedLoudnessLufs), finite(measured.maxVolumeDb), relative, stat.size, source, licence, attribution, importId, (originalName || path.basename(file)).slice(0, 200), by, at, at, pageUrl);
+    return {id: sha, added: true};
+  }
+
   // ------------------------------------------------------------ the library
   row(id) { const row = this.db.prepare('SELECT * FROM sounds WHERE id=?').get(id); requireValue(row, 'That sound is not in the library.', 404); return row; }
-  publicSound(row) { return {id: row.id, kind: row.kind, title: row.title, tags: JSON.parse(row.tags), seconds: row.seconds, loudnessLufs: row.loudness_lufs, peakDb: row.peak_db, source: row.source, sourceLabel: SOURCES[row.source]?.label || row.source, licence: row.licence, attribution: row.attribution, enabled: !!row.enabled, originalName: row.original_name, createdAt: row.created_at, url: `/api/sounds/${row.id}/audio`}; }
+  publicSound(row) { return {id: row.id, kind: row.kind, title: row.title, tags: JSON.parse(row.tags), seconds: row.seconds, loudnessLufs: row.loudness_lufs, peakDb: row.peak_db, source: row.source, sourceLabel: SOURCES[row.source]?.label || row.source, licence: row.licence, attribution: row.attribution, pageUrl: row.page_url || null, enabled: !!row.enabled, originalName: row.original_name, createdAt: row.created_at, url: `/api/sounds/${row.id}/audio`}; }
   // The enabled sounds of one kind, as the score and the effect picker use them.
   tracks(kind) { return this.db.prepare('SELECT * FROM sounds WHERE kind=? AND enabled=1 ORDER BY id').all(kind).map(row => this.publicSound(row)); }
   list({kind = '', q = '', limit = 200, offset = 0} = {}) {
