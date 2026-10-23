@@ -148,11 +148,36 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 - [ ] **A01 Authorized analytics and experiments** (planned) - Verify supported owner reports, measurement windows and approved derived-data use; show unavailable values honestly.
 - [ ] **A02 Backup/restore and production reliability** (testing) - 0.55.0 (2026-10-22): backup.js with tests/backup.test.js (4 tests): consistent database snapshots and work files stored once by SHA-256, changed-only copies, damage found by the check, a restore done at the next start with the replaced database and files set aside and newer files kept, a changed backup refused at start without touching anything, a full drive refused, automatic backups waiting for renders and pruned to the setting, settings checks, the whole program over HTTP, renders refused below 2 GB free. Browser check on a scratch workspace (58 files backed up and checked, restore confirmation). Existing reliability: no automatic provider retries, interrupted jobs marked at start, render and upload recovery.
-- [ ] **A03 Sustained scale and growth validation** (planned) - Measure 14-day reliability, quota, render capacity, cost and language review load; validate each channel over its own 90-100 day period.
+- [ ] **A03 Sustained scale and growth validation** (testing) - 0.59.0 (2026-10-23): operations.js and the Operations page (docs/OPERATIONS.md); tests/operations.test.js (window, outcomes, latest problems, render capacity by preset, tokens with unknown charges apart, paid cents and data units per family, language review load, channel days since the first public video, the report served on the real tables). Run on the 0.57 documentary workspace: 19 jobs finished well, 3 ChatGPT paintings with unknown charges, 720p at about 12.5 minutes of video per hour of rendering.
 
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-23 - The operations report (A03, 0.59.0)
+
+- **Plan step:** Phase 06 A03, "measure 14-day reliability, quota, render capacity, cost and language review load;
+  validate each channel over its own 90-100 day period". A01 (analytics) waits for published videos.
+- **Built:** `operations.js` and the Operations page (OPERATIONS.md). It is read-only and covers:
+  - reliability per kind of work, and the latest problems;
+  - render capacity on this PC;
+  - tokens, paid cents and data units, also per family;
+  - today's limits;
+  - language review load;
+  - each channel's days since its first public video.
+- **Measured on the 0.57 documentary workspace:**
+  - 19 jobs finished well and none failed, but 3 ChatGPT paintings never came back (charge unknown, up to 90,000 tokens
+    reserved);
+  - the 720p preview rendered at about 12.5 minutes of video per hour of rendering (334 s for 69 s);
+  - 124,240 tokens and $0.31 of narration.
+- **Tested:**
+  - tests/operations.test.js (window, outcomes, problems, capacity, usage, unknown charges, languages, channel
+    validation; the program serving the report on its real tables);
+  - browser check of the Operations page on the end-to-end workspace;
+  - npm run check passed; npm test 362 of 362.
+- **Not done:**
+  - real 14-day numbers need the program in daily use;
+  - channel validation starts with the first public video.
 
 ### 2026-10-23 - Fixes from the documentary test (0.58.0)
 
