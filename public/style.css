@@ -156,3 +156,4 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .visual-rule{border:1px solid #e3e8df;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff}.visual-rule .style-facts{margin-top:6px}
 .watch-family{border-top:1px solid #e3e8df;padding:8px 0}.watch-family:first-of-type{border-top:0}
 .ops .style-facts div{grid-template-columns:170px minmax(0,1fr)}.ops .card-actions{margin:0 0 14px}.ops .stats{margin-bottom:12px}.ops .panel{margin-bottom:18px}
+.st-sfx small{display:block;margin-bottom:4px}

@@ -31,6 +31,7 @@ const {LocalizationRoom}=require('./localization-room');
 const {PublishingRoom}=require('./publishing-room');
 const {VoiceDirector}=require('./voice-direction');
 const {SoundtrackRoom}=require('./soundtrack');
+const {SoundLibrary}=require('./sound-library');
 const {SkillsEngine}=require('./skills');
 const craft=require('./craft');
 const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
@@ -67,7 +68,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const localizationRoom=new LocalizationRoom(store,renderRoom,packagingRoom,connectors,ai,{dataRoot,ffmpeg,ffprobe});renderRoom.localization=localizationRoom;
   const publishingRoom=new PublishingRoom(store,connectors,{renders:renderRoom,packaging:packagingRoom,localization:localizationRoom,quota});
   const voiceDirector=new VoiceDirector(store,connectors,{ai,competitorIntel,styles});
-  const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe});
+  // The sound library (0.60): music and effects the owner downloaded (Pixabay, YouTube Audio Library), imported and measured once.
+  const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
+  const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;
@@ -103,6 +106,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/progress'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/BUILD-PROGRESS.md')));}
         if(pathname==='/api/production-plan'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'docs/PRODUCTION-ROOM.md')));}
         if(pathname==='/api/templates/stickman'){res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8'});return res.end(fs.readFileSync(path.join(root,'vendor/stickman-video-director/skills__directing-stickman-videos__references__storyboard-template.md')));}
+        if(pathname==='/api/sounds')return json(res,200,soundLibrary.list({kind:url.searchParams.get('kind')||'',q:url.searchParams.get('q')||'',limit:url.searchParams.get('limit'),offset:url.searchParams.get('offset')}));
+        const soundFile=pathname.match(/^\/api\/sounds\/([a-f0-9]{64})\/audio$/);
+        if(soundFile){const {file,size,mime}=soundLibrary.file(soundFile[1]);res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
         const audioAsset=pathname.match(/^\/api\/audio-assets\/([a-f0-9-]+)\/audio$/);
         if(audioAsset){const {file,size,mime}=soundtrack.assetFile(audioAsset[1]);res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
         const voiceAudio=pathname.match(/^\/api\/voice-auditions\/([a-f0-9-]+)\/audio$/);
@@ -307,6 +313,13 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(scoreRetry&&req.method==='POST')return json(res,200,soundtrack.retryScore(scoreRetry[1],body));
         const scoreAction=pathname.match(/^\/api\/scores\/([a-f0-9-]+)\/(edit|generate)$/);
         if(scoreAction&&req.method==='POST')return json(res,200,scoreAction[2]==='edit'?soundtrack.editScore(scoreAction[1],body):soundtrack.queueMusic(scoreAction[1],body));
+        if(pathname==='/api/sounds/import'&&req.method==='POST')return json(res,200,soundLibrary.queueImport(body));
+        const soundImport=pathname.match(/^\/api\/sound-imports\/([a-f0-9-]+)\/continue$/);
+        if(soundImport&&req.method==='POST')return json(res,200,soundLibrary.continueImport(soundImport[1]));
+        const soundEdit=pathname.match(/^\/api\/sounds\/([a-f0-9]{64})$/);
+        if(soundEdit&&req.method==='POST')return json(res,200,soundLibrary.update(soundEdit[1],body));
+        const sfxPick=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/sfx-pick$/);
+        if(sfxPick&&req.method==='POST')return json(res,200,soundtrack.chooseEffect(sfxPick[1],body));
         const sfxLibrary=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/sfx-library$/);
         if(sfxLibrary&&req.method==='POST')return json(res,200,soundtrack.queueLibrary(sfxLibrary[1],body));
         const audioRetry=pathname.match(/^\/api\/audio-jobs\/([a-f0-9-]+)\/retry$/);
@@ -347,7 +360,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     }catch(error){if(!(error instanceof InputError))console.error('Request failed:',error.message);json(res,error.status||500,{error:error.status?error.message:'Something went wrong. Your last saved work is retained.'});}
   });
   server.requestTimeout=15000;server.headersTimeout=10000;
-  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Script worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));styleStudies.processNext().catch(error=>console.error('Style study worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));nicheFactory.processNextRead().catch(error=>console.error('Screenshot read worker:',error.message));trends.processNextScan().catch(error=>console.error('Trend scan worker:',error.message));trends.processNextTopics().catch(error=>console.error('Trend topic worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));frameScanner.processNext().catch(error=>console.error('Frame scan worker:',error.message));packagingRoom.processNext().catch(error=>console.error('Packaging worker:',error.message));localizationRoom.processNext().catch(error=>console.error('Localization worker:',error.message));localizationRoom.processNextNarration().catch(error=>console.error('Edition narration worker:',error.message));publishingRoom.processNext().catch(error=>console.error('Publishing worker:',error.message));voiceDirector.processNext().catch(error=>console.error('Voice direction worker:',error.message));soundtrack.processNextScore().catch(error=>console.error('Music score worker:',error.message));soundtrack.processNextAudio().catch(error=>console.error('Music and effects worker:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
+  server.on('listening',()=>{if(worker)timer=setInterval(()=>{try{store.processNextJob();reasoning.processNext().catch(error=>console.error('Script worker:',error.message));researchReasoning.processNext().catch(error=>console.error('Research worker:',error.message));voiceRuntime.processNext().catch(error=>console.error('Voice worker:',error.message));competitorIntel.processNextScan().catch(error=>console.error('Competitor scan worker:',error.message));styleStudies.processNext().catch(error=>console.error('Style study worker:',error.message));competitorIntel.processNextAnalysis().catch(error=>console.error('Competitor analysis worker:',error.message));nicheFactory.processNextDiscovery().catch(error=>console.error('Niche discovery worker:',error.message));nicheFactory.processNextEvaluation().catch(error=>console.error('Niche evaluation worker:',error.message));nicheFactory.processNextRead().catch(error=>console.error('Screenshot read worker:',error.message));trends.processNextScan().catch(error=>console.error('Trend scan worker:',error.message));trends.processNextTopics().catch(error=>console.error('Trend topic worker:',error.message));sceneRoom.processNextPlan().catch(error=>console.error('Scene planner worker:',error.message));sceneRoom.processNextVisual().catch(error=>console.error('Visual worker:',error.message));renderRoom.processNext().catch(error=>console.error('Render worker:',error.message));frameScanner.processNext().catch(error=>console.error('Frame scan worker:',error.message));packagingRoom.processNext().catch(error=>console.error('Packaging worker:',error.message));localizationRoom.processNext().catch(error=>console.error('Localization worker:',error.message));localizationRoom.processNextNarration().catch(error=>console.error('Edition narration worker:',error.message));publishingRoom.processNext().catch(error=>console.error('Publishing worker:',error.message));voiceDirector.processNext().catch(error=>console.error('Voice direction worker:',error.message));soundtrack.processNextScore().catch(error=>console.error('Music score worker:',error.message));soundtrack.processNextAudio().catch(error=>console.error('Music and effects worker:',error.message));soundLibrary.processNextImport().catch(error=>console.error('Sound import:',error.message));if(++ticks%1200===0){competitorIntel.purgeExpiredYouTubeData();sceneRoom.purgeExpired();}}catch(error){console.error('Planning worker:',error.message);}},500);});
   // Automatic backups (A02): checked a few minutes after start, then every quarter hour; one runs when the newest
   // backup is older than the setting and no render is running.
   let backupTimer=null,backupFirst=null;const backupTick=()=>backups?.autoTick().catch(error=>console.error(`${new Date().toISOString()} Automatic backup failed:`,error.message));
@@ -355,7 +368,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // The competitor watch (0.57): checked every half hour; the scans themselves run on the normal worker.
   let watchTimer=null;server.on('listening',()=>{if(worker)watchTimer=setInterval(()=>{try{const done=competitorIntel.watchTick();if(done.length)console.log(`${new Date().toISOString()} Competitor watch:`,JSON.stringify(done));}catch(error){console.error('Competitor watch:',error.message);}},30*60*1000);});
   server.on('close',()=>{clearInterval(timer);clearTimeout(backupFirst);clearInterval(backupTimer);clearInterval(watchTimer);store.close();});
-  return {server,store,dataRoot,backups,styles,quota,competitorIntel,styleStudies,nicheFactory,trends,sceneRoom,renderRoom,editingRoom,frameScanner,packagingRoom,localizationRoom,publishingRoom,voiceDirector,soundtrack,connectors,ai,reasoning,researchReasoning,voiceRuntime,voiceReady};
+  return {server,store,dataRoot,backups,soundLibrary,styles,quota,competitorIntel,styleStudies,nicheFactory,trends,sceneRoom,renderRoom,editingRoom,frameScanner,packagingRoom,localizationRoom,publishingRoom,voiceDirector,soundtrack,connectors,ai,reasoning,researchReasoning,voiceRuntime,voiceReady};
 }
 if(require.main===module){
   const port=Number(process.env.PORT||3456);

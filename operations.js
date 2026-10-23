@@ -12,7 +12,7 @@ const WORK = [
   ['trend_scans', 'Trend scans'], ['trend_topics', 'Topic ideas'], ['niche_discoveries', 'Niche discovery'], ['niche_evaluations', 'Niche go/no-go'], ['niche_reads', 'Screenshot reads'],
   ['style_studies', 'Style studies'], ['voice_direction_jobs', 'Voice direction'], ['voice_jobs', 'Narrations'], ['scene_plan_jobs', 'Scene plans'],
   ['visual_jobs', 'Pictures, footage and drawings'], ['score_jobs', 'Music scores'], ['audio_jobs', 'Music and sound effects'], ['render_jobs', 'Renders'],
-  ['frame_scans', 'Frame scans'], ['package_jobs', 'Packages'], ['edition_jobs', 'Language adaptations'], ['edition_narrations', 'Language narrations'], ['publications', 'Uploads'],
+  ['sound_imports', 'Sound library imports'], ['frame_scans', 'Frame scans'], ['package_jobs', 'Packages'], ['edition_jobs', 'Language adaptations'], ['edition_narrations', 'Language narrations'], ['publications', 'Uploads'],
   // Each answer asked of Claude or ChatGPT inside a room (plans, pictures, reviews, research): one that never came back is a problem.
   ['intelligence_usage', 'AI answers inside rooms'],
 ];

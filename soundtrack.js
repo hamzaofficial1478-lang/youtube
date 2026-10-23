@@ -5,6 +5,9 @@
 // first and never retried by itself. Scores are immutable revisions tied to one approved narration; generated
 // files are immutable, checksummed and measured (loudness, peak) so the mix can set their levels. The render
 // mixes them under the voice (music.js); the Room 08 listening review stays the approval.
+// 0.60 (owner decision 2026-10-23): music and effects come from the owner's sound library (sound-library.js) by
+// default: the score picks a library track for every cue and the effect slots are filled from it, at no cost.
+// ElevenLabs generation stays available only for a family whose source is switched to it.
 const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
@@ -26,7 +29,8 @@ const person = (value, label = 'Your name') => { requireValue(typeof value === '
 const number = (value, min, max, label) => { requireValue(typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max, `${label} must be a number from ${min} to ${max}.`); return value; };
 const MAX_AUDIO_BYTES = 60 * 1024 * 1024;
 const MUSIC_MODELS = Object.freeze(['music_v1', 'music_v2', 'music_v2_5']);
-const SETTINGS_DEFAULTS = Object.freeze({musicModel: 'music_v2_5', monthlyMusicSeconds: 3600, monthlySfx: 300, centsPerMusicMinute: 30, centsPerSfx: 3, rights: null});
+const SETTINGS_DEFAULTS = Object.freeze({source: 'library', sfxPicks: {}, musicModel: 'music_v2_5', monthlyMusicSeconds: 3600, monthlySfx: 300, centsPerMusicMinute: 30, centsPerSfx: 3, rights: null});
+const SOURCES = Object.freeze(['library', 'elevenlabs']);
 
 // ElevenLabs music and sound effects: fixed origin, header-only key, bounded download.
 class ElevenLabsAudioClient {
@@ -46,8 +50,8 @@ class ElevenLabsAudioClient {
 }
 
 class SoundtrackRoom {
-  constructor(store, connectors, sceneRoom, {dataRoot, ai = new Ai(connectors), renders = null, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', clientFor = null} = {}) {
-    Object.assign(this, {store, db: store.db, connectors, scenes: sceneRoom, ai, renders, ffmpeg, ffprobe});
+  constructor(store, connectors, sceneRoom, {dataRoot, ai = new Ai(connectors), renders = null, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', clientFor = null, sounds = null} = {}) {
+    Object.assign(this, {store, db: store.db, connectors, scenes: sceneRoom, ai, renders, ffmpeg, ffprobe, sounds});
     this.dataRoot = dataRoot || store.artifactRoot || path.join(process.cwd(), 'data');
     this.assetDir = path.join(this.dataRoot, 'audio-assets');
     this.clientFor = clientFor || (connectorId => new ElevenLabsAudioClient(this.connectors.key(connectorId), this.connectors.fetch || fetch));
@@ -86,16 +90,17 @@ class SoundtrackRoom {
   }
   saveSettings(familyId, input) {
     object(input);
-    const family = this.store.family(familyId), by = person(input.updatedBy);
+    const family = this.store.family(familyId), by = person(input.updatedBy), source = input.source ?? 'library';
+    requireValue(SOURCES.includes(source), 'Music and effects come from your sound library or from ElevenLabs.');
     requireValue(MUSIC_MODELS.includes(input.musicModel), `Choose a music model: ${MUSIC_MODELS.join(', ')}.`);
-    const payload = {musicModel: input.musicModel, monthlyMusicSeconds: number(input.monthlyMusicSeconds, 0, 360000, 'Monthly music seconds'), monthlySfx: number(input.monthlySfx, 0, 100000, 'Monthly sound effects'),
+    const payload = {source, sfxPicks: this.settings(family.id).sfxPicks, musicModel: input.musicModel, monthlyMusicSeconds: number(input.monthlyMusicSeconds, 0, 360000, 'Monthly music seconds'), monthlySfx: number(input.monthlySfx, 0, 100000, 'Monthly sound effects'),
       centsPerMusicMinute: number(input.centsPerMusicMinute, 0, 100000, 'Estimated cents per music minute'), centsPerSfx: number(input.centsPerSfx, 0, 10000, 'Estimated cents per sound effect'),
       rights: input.commercialUseConfirmed === true ? {commercialUseConfirmed: true, confirmedBy: by, confirmedAt: now(), note: String(input.rightsNote || '').slice(0, 300)} : null};
     return this.store.transaction(() => {
       const current = this.settings(family.id);
       requireValue(input.revision === current.revision, 'Soundtrack settings changed in another tab. Reload before saving.', 409);
       this.db.prepare('INSERT INTO soundtrack_settings(family_id,revision,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(family_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at').run(family.id, current.revision + 1, JSON.stringify(payload), now());
-      this.store.event(`Updated soundtrack settings for ${family.name}: ${payload.musicModel}, ${payload.rights ? 'commercial use confirmed' : 'commercial use not confirmed'}`);
+      this.store.event(`Updated soundtrack settings for ${family.name}: ${source === 'library' ? 'music and effects from the sound library' : `ElevenLabs ${payload.musicModel}, ${payload.rights ? 'commercial use confirmed' : 'commercial use not confirmed'}`}`);
       return this.settings(family.id);
     });
   }
@@ -110,6 +115,10 @@ class SoundtrackRoom {
     const inputs = this.scenes.inputs(content);
     return {content, family, voice, manifest, spec: inputs.spec, engine: inputs.engine, durationSeconds: voice?.analysis?.durationSeconds ?? null, ready: !blockers.length, blockers};
   }
+  // The music tracks a score may use: the sound library's, when the family's source is the library.
+  libraryTracks(familyId) { return this.sounds && this.settings(familyId).source === 'library' ? this.sounds.tracks('music') : []; }
+  // Tracks the family's other videos used lately, so a new video sounds a little different.
+  recentTracks(familyId, contentId) { return [...new Set(this.db.prepare('SELECT payload FROM scores WHERE family_id=? AND content_id<>? ORDER BY created_at DESC LIMIT 10').all(familyId, contentId).flatMap(row => JSON.parse(row.payload).cues.map(cue => cue.track).filter(Boolean)))]; }
   promptInput(inputs) {
     const performed = inputs.voice.auditionId ? this.store.voiceDirectionLines(inputs.voice.auditionId) : null;
     return {family: {niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format},
@@ -122,8 +131,10 @@ class SoundtrackRoom {
     object(input);
     const by = person(input.requestedBy), inputs = this.scoreInputs(contentId);
     requireValue(inputs.ready, inputs.blockers[0], 409);
-    const score = M.rulesScore({scenes: inputs.manifest.plan.scenes, durationSeconds: inputs.durationSeconds, moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche});
-    return this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: 'Free score from the story sections', createdBy: by}));
+    let score = M.rulesScore({scenes: inputs.manifest.plan.scenes, durationSeconds: inputs.durationSeconds, moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche});
+    const tracks = this.libraryTracks(inputs.family.id);
+    if (tracks.length) score = {...score, cues: M.assignTracks(score.cues, tracks, {recent: this.recentTracks(inputs.family.id, contentId)})};
+    return this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: tracks.length ? 'Free score from the story sections, tracks from your sound library' : 'Free score from the story sections', createdBy: by}));
   }
   queueScore(contentId, input) {
     object(input);
@@ -132,9 +143,10 @@ class SoundtrackRoom {
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM score_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'Claude is already scoring this video.', 409);
-      const promptInput = this.promptInput(inputs), maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
+      const tracks = this.libraryTracks(inputs.family.id), library = tracks.length ? M.catalogue(tracks, {moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche}) : null;
+      const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
-      this.db.prepare("INSERT INTO score_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, voiceApprovalId: inputs.voice.approvalId, connector, promptInput, maxTokens, tokenLimit}), by, at, at);
+      this.db.prepare("INSERT INTO score_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, voiceApprovalId: inputs.voice.approvalId, connector, promptInput, ...(library ? {refs: Object.fromEntries(library.map(item => [item.ref, item.id]))} : {}), maxTokens, tokenLimit}), by, at, at);
       this.store.event(`Queued Claude music score for "${inputs.content.title}"`);
       return this.publicScoreJob(this.scoreJobRow(id));
     });
@@ -185,8 +197,12 @@ class SoundtrackRoom {
       let raw = null;
       try { raw = JSON.parse(text); } catch { try { raw = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)); } catch { raw = null; } }
       const warnings = [];
+      // Library refs become the tracks' checksums; an unknown ref is named and the cue gets the best fitting track.
+      if (job.scope.refs && Array.isArray(raw?.cues)) for (const [k, cue] of raw.cues.entries()) if (cue && typeof cue === 'object' && cue.track !== undefined) { const id = job.scope.refs[String(cue.track)]; if (id) cue.track = id; else { warnings.push(`Cue ${k + 1} named a track that is not in the library (${String(cue.track).slice(0, 12)}); the best fitting one was chosen.`); delete cue.track; } }
       let score;
       try { score = M.validate(raw, inputs.durationSeconds, {lenient: true, warn: message => warnings.push(message)}); } catch (error) { throw Object.assign(new AiError(`Claude's score was not usable: ${error.message}`), {quality: true}); }
+      const tracks = job.scope.refs ? this.libraryTracks(inputs.family.id) : [];
+      if (tracks.length) score = {...score, cues: M.assignTracks(score.cues, tracks, {recent: this.recentTracks(inputs.family.id, inputs.content.id)})};
       return this.store.transaction(() => {
         const created = this.insertScore({inputs, score, warnings, source: 'claude', note: `Claude score (${reply.model})`, createdBy: job.created_by}), at = now();
         settle(Number.isSafeInteger(usage?.totalTokens) ? 'settled' : 'unknown', at);
@@ -216,7 +232,7 @@ class SoundtrackRoom {
     const row = this.scoreRow(id), payload = JSON.parse(row.payload), settings = this.settings(row.family_id);
     const latest = this.db.prepare('SELECT id FROM scores WHERE content_id=? ORDER BY revision DESC LIMIT 1').get(row.content_id);
     const voice = this.store.voiceHandoffs(row.family_id).find(item => item.contentId === row.content_id);
-    const cues = payload.cues.map(cue => { const asset = this.assetFor(row.family_id, 'music', M.musicRequest(cue, {model: settings.musicModel})); return {...cue, asset: asset ? this.publicAsset(asset) : null}; });
+    const cues = payload.cues.map(cue => { if (cue.track) return {...cue, asset: this.soundAsset(cue.track)}; const asset = this.assetFor(row.family_id, 'music', M.musicRequest(cue, {model: settings.musicModel})); return {...cue, asset: asset ? this.publicAsset(asset) : null}; });
     return {id: row.id, contentId: row.content_id, revision: row.revision, source: row.source, note: row.note, createdBy: row.created_by, createdAt: row.created_at, voiceApprovalId: row.voice_approval_id,
       current: latest.id === row.id && voice?.approvalId === row.voice_approval_id, summary: payload.summary, durationSeconds: payload.durationSeconds, warnings: payload.warnings || [], cues, ready: cues.every(cue => cue.asset)};
   }
@@ -238,6 +254,13 @@ class SoundtrackRoom {
 
   // ------------------------------------------------------------ generated audio
   assetFor(familyId, kind, request) { return this.db.prepare('SELECT * FROM audio_assets WHERE family_id=? AND kind=? AND request_hash=? ORDER BY created_at DESC LIMIT 1').get(familyId, kind, hash(request)) || null; }
+  // A sound-library file as a cue or effect asset (null when it left the library or was switched off).
+  soundAsset(id) {
+    const row = this.sounds && this.db.prepare('SELECT * FROM sounds WHERE id=? AND enabled=1').get(id);
+    return row ? {id: row.id, kind: row.kind, key: row.title, probe: {durationSeconds: row.seconds, loudnessLufs: row.loudness_lufs, peakDb: row.peak_db}, sha256: row.id, url: `/api/sounds/${row.id}/audio`, library: {title: row.title, source: row.source, licence: row.licence, attribution: row.attribution}} : null;
+  }
+  // The stored file of a cue or effect asset, for the render.
+  fileOf(asset) { const row = asset.library ? this.db.prepare('SELECT relative_path, id AS sha256 FROM sounds WHERE id=?').get(asset.id) : this.db.prepare('SELECT relative_path, sha256 FROM audio_assets WHERE id=?').get(asset.id); return {relativePath: row.relative_path, sha256: row.sha256}; }
   publicAsset(row) { return {id: row.id, kind: row.kind, key: row.key, probe: JSON.parse(row.probe), sha256: row.sha256, createdAt: row.created_at, url: `/api/audio-assets/${row.id}/audio`}; }
   assetFile(id) {
     const row = this.db.prepare('SELECT * FROM audio_assets WHERE id=?').get(id);
@@ -248,6 +271,7 @@ class SoundtrackRoom {
   }
   generationGate(familyId, input) {
     const settings = this.settings(familyId);
+    requireValue(settings.source === 'elevenlabs', 'This family\'s music and effects come from your sound library (free). To generate them with ElevenLabs instead, change the source in the soundtrack settings.', 409);
     requireValue(settings.rights?.commercialUseConfirmed, 'Confirm in the soundtrack settings that your ElevenLabs plan covers commercial use of generated music and sound effects.', 409);
     const connector = connectorReference(this.connectors, input.connector, 'elevenlabs', 'ElevenLabs', true);
     return {settings, connector};
@@ -285,7 +309,31 @@ class SoundtrackRoom {
     const engine = style ? E.primaryEngine(JSON.parse(this.scenes.styles.revisionRow(style.revisionId).spec)) : 'montage';
     return Object.keys(M.SFX).map(kind => ({kind, engine, request: M.sfxRequest(kind, engine)}));
   }
-  library(familyId) { return this.libraryKinds(familyId).map(item => { const asset = this.assetFor(familyId, 'sfx', item.request); return {kind: item.kind, engine: item.engine, prompt: item.request.text, asset: asset ? this.publicAsset(asset) : null, generating: !!this.activeAudioJob(familyId, hash(item.request))}; }); }
+  library(familyId) {
+    const settings = this.settings(familyId);
+    if (settings.source === 'library') {
+      const picked = this.sounds ? M.pickEffects(this.sounds.tracks('sfx'), settings.sfxPicks) : {};
+      return Object.keys(M.SFX).map(kind => ({kind, engine: null, prompt: null, asset: picked[kind] ? this.soundAsset(picked[kind].id) : null, chosen: !!(settings.sfxPicks[kind] && picked[kind]?.id === settings.sfxPicks[kind]), generating: false}));
+    }
+    return this.generatedLibrary(familyId);
+  }
+  // The owner chooses the library sound of one effect slot (null: the program's pick again). A new settings revision.
+  chooseEffect(familyId, input) {
+    object(input);
+    const by = person(input.chosenBy), family = this.store.family(familyId);
+    requireValue(Object.hasOwn(M.SFX, input.kind), `An effect slot is one of: ${Object.keys(M.SFX).join(', ')}.`);
+    if (input.soundId !== null) requireValue(this.sounds && this.db.prepare("SELECT 1 FROM sounds WHERE id=? AND kind='sfx' AND enabled=1").get(String(input.soundId)), 'Choose a sound effect from the library.');
+    return this.store.transaction(() => {
+      const current = this.settings(family.id);
+      requireValue(input.revision === current.revision, 'Soundtrack settings changed in another tab. Reload before choosing.', 409);
+      const {revision, ...payload} = current, picks = {...payload.sfxPicks};
+      if (input.soundId === null) delete picks[input.kind]; else picks[input.kind] = String(input.soundId);
+      this.db.prepare('INSERT INTO soundtrack_settings(family_id,revision,payload,updated_at) VALUES(?,?,?,?) ON CONFLICT(family_id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at').run(family.id, revision + 1, JSON.stringify({...payload, sfxPicks: picks}), now());
+      this.store.event(`${family.name}: the "${input.kind}" effect is ${input.soundId === null ? 'chosen by the program again' : `now "${this.sounds.row(input.soundId).title}"`} (by ${by})`);
+      return this.library(family.id).find(item => item.kind === input.kind);
+    });
+  }
+  generatedLibrary(familyId) { return this.libraryKinds(familyId).map(item => { const asset = this.assetFor(familyId, 'sfx', item.request); return {kind: item.kind, engine: item.engine, prompt: item.request.text, asset: asset ? this.publicAsset(asset) : null, generating: !!this.activeAudioJob(familyId, hash(item.request))}; }); }
   queueLibrary(familyId, input) {
     object(input);
     const by = person(input.requestedBy), {settings, connector} = this.generationGate(familyId, input);
@@ -386,8 +434,8 @@ class SoundtrackRoom {
       const voice = this.store.voiceHandoffs(content.familyId).find(item => item.contentId === content.id);
       requireValue(voice?.approvalId === score.voiceApprovalId, 'The chosen score was made for an earlier narration. Score the current narration.', 409);
       const missing = score.cues.filter(cue => !cue.asset);
-      requireValue(!missing.length, `Generate the music for score r${score.revision} first (${score.cues.length - missing.length} of ${score.cues.length} cues ready).`, 409);
-      for (const cue of score.cues) { const row = this.db.prepare('SELECT * FROM audio_assets WHERE id=?').get(cue.asset.id); out.music.push({cueId: cue.id, start: cue.start, end: cue.end, entry: cue.entry, exit: cue.exit, measuredLufs: cue.asset.probe.loudnessLufs, relativePath: row.relative_path, sha256: row.sha256}); }
+      requireValue(!missing.length, missing.some(cue => cue.track) ? `A track of score r${score.revision} left the sound library or was switched off. Choose another track or score again.` : `Generate the music for score r${score.revision} first (${score.cues.length - missing.length} of ${score.cues.length} cues ready).`, 409);
+      for (const cue of score.cues) out.music.push({cueId: cue.id, start: cue.start, end: cue.end, entry: cue.entry, exit: cue.exit, measuredLufs: cue.asset.probe.loudnessLufs, ...(cue.offset ? {offset: cue.offset} : {}), trackSeconds: cue.asset.probe.durationSeconds, ...this.fileOf(cue.asset)});
     }
     if (config.sfx?.enabled && config.sfx.density !== 'none') {
       const words = (timeline.captions?.groups || []).flatMap(group => group.words);
@@ -398,8 +446,8 @@ class SoundtrackRoom {
       out.events = M.sfxEvents({clips, density: config.sfx.density, engine});
       const library = new Map(this.library(content.familyId).map(item => [item.kind, item]));
       const missing = [...new Set(out.events.map(event => event.kind))].filter(kind => !library.get(kind)?.asset);
-      requireValue(!missing.length, `Generate the sound-effect library first (missing: ${missing.join(', ')}).`, 409);
-      for (const event of out.events) { const asset = library.get(event.kind).asset, row = this.db.prepare('SELECT * FROM audio_assets WHERE id=?').get(asset.id); out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, relativePath: row.relative_path, sha256: row.sha256}); }
+      requireValue(!missing.length, this.settings(content.familyId).source === 'library' ? `Your sound library has no sound for: ${missing.join(', ')}. Import effects whose names say what they are (for example "whoosh"), or choose one per slot in Room 07.` : `Generate the sound-effect library first (missing: ${missing.join(', ')}).`, 409);
+      for (const event of out.events) { const asset = library.get(event.kind).asset; out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, ...this.fileOf(asset)}); }
     }
     return out;
   }
@@ -408,8 +456,8 @@ class SoundtrackRoom {
     const families = this.store.families().map(family => ({familyId: family.id, settings: this.settings(family.id), usage: this.usage(family.id), library: this.library(family.id)}));
     const contents = this.store.contents().filter(content => content.state === 'approved').map(content => ({contentId: content.id, score: this.latestScore(content.id), scoreJob: (row => (row ? this.publicScoreJob(row) : null))(this.db.prepare('SELECT * FROM score_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(content.id))}));
     const jobs = this.db.prepare('SELECT * FROM audio_jobs ORDER BY created_at DESC, rowid DESC LIMIT 200').all().map(row => this.publicAudioJob(row));
-    return {musicModels: MUSIC_MODELS, sfxKinds: Object.keys(M.SFX), densities: M.DENSITIES, families, contents, jobs};
+    return {sources: SOURCES, sounds: this.sounds ? this.sounds.state() : null, musicModels: MUSIC_MODELS, sfxKinds: Object.keys(M.SFX), densities: M.DENSITIES, families, contents, jobs};
   }
 }
 
-module.exports = {SoundtrackRoom, ElevenLabsAudioClient, SETTINGS_DEFAULTS, MUSIC_MODELS};
+module.exports = {SoundtrackRoom, ElevenLabsAudioClient, SETTINGS_DEFAULTS, MUSIC_MODELS, SOURCES};

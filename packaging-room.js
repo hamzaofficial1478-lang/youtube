@@ -58,7 +58,9 @@ class PackagingRoom {
     try { const edit = this.editing.inputs(content); if (edit.ready && family.format === 'long-form') { const draft = this.editing.craft(edit).chapters; if (draft?.valid) chapters = draft.chapters.map(item => ({at: item.start, title: item.title})); } } catch { chapters = []; }
     const approvedRender = this.approvedRender(contentId);
     const voice = this.store.voiceProfiles(family.id).at(-1)?.rights?.ownershipBasis || null;
-    return {content, family, shots, spec, chapters, approvedRender, voice, blockers, ready: !blockers.length};
+    // The library tracks the approved render plays, for their credit lines (0.60).
+    const music = approvedRender ? (JSON.parse(this.db.prepare('SELECT scope FROM render_jobs WHERE id=?').get(approvedRender.id).scope).edit?.soundtrack?.music || []).map(cue => { try { return this.db.prepare('SELECT title, attribution FROM sounds WHERE id=?').get(cue.sha256) || null; } catch { return null; } }).filter(Boolean) : [];
+    return {content, family, shots, spec, chapters, approvedRender, voice, music, blockers, ready: !blockers.length};
   }
   // The newest render the owner approved in Room 08 that is still current (the package's video).
   approvedRender(contentId) {
@@ -105,7 +107,7 @@ class PackagingRoom {
       const latest = this.latestRow(inputs.content.id), content = this.store.content(inputs.content.id);
       requireValue(content.revision === inputs.content.revision, 'The script changed while the package was being prepared. Reload and try again.', 409);
       if (expectedRevision !== null) requireValue((latest?.revision || 0) === expectedRevision, `This package changed (now r${latest?.revision || 0}). Reload before saving.`, 409);
-      const checks = P.checkPackage(payload, {script: content.script, locale: inputs.family.primaryLocale, writingVoice: inputs.family.writingVoice, assets: inputs.shots.map(shot => ({id: shot.assetId, label: shot.label, origin: shot.origin, rights: shot.rights})), voice: inputs.voice, actor, images});
+      const checks = P.checkPackage(payload, {script: content.script, locale: inputs.family.primaryLocale, writingVoice: inputs.family.writingVoice, assets: inputs.shots.map(shot => ({id: shot.assetId, label: shot.label, origin: shot.origin, rights: shot.rights})), music: inputs.music, voice: inputs.voice, actor, images});
       const id = randomUUID(), revision = (latest?.revision || 0) + 1;
       this.db.prepare('INSERT INTO package_revisions(id,family_id,content_id,revision,content_revision,parent_id,actor,payload,payload_hash,images,checks,note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .run(id, inputs.family.id, content.id, revision, content.revision, latest?.id || null, actor, JSON.stringify(payload), hash(payload), JSON.stringify(images), JSON.stringify(checks), note, createdBy, now());

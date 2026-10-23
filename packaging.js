@@ -86,21 +86,23 @@ function credits(assets) {
 }
 const chapterClock = seconds => { const t = Math.round(seconds), h = Math.floor(t / 3600), m = Math.floor(t / 60) % 60, s = t % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`; };
 // The description as it would be pasted into YouTube Studio: the text, chapters, the AI note and credits.
-function composeDescription(payload, creditLines) {
+function composeDescription(payload, creditLines, musicLines = []) {
   const blocks = [payload.description];
   if (payload.chapters.length) blocks.push(payload.chapters.map(item => `${chapterClock(item.at)} ${item.title}`).join('\n'));
   if (payload.disclosure.note) blocks.push(payload.disclosure.note);
   if (creditLines.length) blocks.push(`Visual credits:\n${creditLines.map(item => item.line).join('\n')}`);
+  // 0.60: a library track whose licence asks for a credit (YouTube Audio Library "attribution required", CC BY).
+  if (musicLines.length) blocks.push(`Music:\n${musicLines.map(item => item.line).join('\n')}`);
   return blocks.filter(Boolean).join('\n\n');
 }
 
 // Checks on one package revision. critical blocks approval; suggestion and nitpick are advice.
-function checkPackage(payload, {script, locale = 'en', writingVoice = null, assets = [], voice = null, actor = 'owner', images = {}}) {
+function checkPackage(payload, {script, locale = 'en', writingVoice = null, assets = [], music = [], voice = null, actor = 'owner', images = {}}) {
   const issues = [], add = (severity, code, message, target = null) => issues.push({severity, code, message, target});
   const title = payload.titles.find(item => item.id === payload.chosenTitle), thumb = payload.thumbnails.find(item => item.id === payload.chosenThumbnail);
   const lint = C.lintPackaging({title: title.text, thumbnailText: thumb.text, locale});
   for (const item of lint.issues) add(item.code === 'length' && title.text.length > LIMITS.titleChars ? 'critical' : 'suggestion', `title-${item.code}`, item.message, title.id);
-  const lines = credits(assets), description = composeDescription(payload, lines);
+  const lines = credits(assets), musicLines = [...new Map(music.filter(item => item.attribution).map(item => [item.attribution, {label: item.title, line: item.attribution}])).values()], description = composeDescription(payload, lines, musicLines);
   const meta = validateYouTubeMetadata({title: title.text, description, tags: payload.tags, defaultLanguage: String(locale).slice(0, 2)});
   for (const error of meta.errors || []) add('critical', 'metadata', error);
   if (description.length > LIMITS.descriptionChars) add('critical', 'description-length', `The full description is ${description.length} characters; YouTube allows ${LIMITS.descriptionChars}.`);

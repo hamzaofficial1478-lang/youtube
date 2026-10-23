@@ -1213,7 +1213,7 @@ function soundtrackRoom({store, scenes, renders, editing, dataRoot}, {reply = ''
   editing.soundtrack = room;
   return {room, asked, generated, claude: {id: 'claude-1', revision: 1}, eleven: {id: 'eleven-1', revision: 1}};
 }
-const SOUND_SETTINGS = {updatedBy: 'Owner', musicModel: 'music_v2_5', monthlyMusicSeconds: 120, monthlySfx: 30, centsPerMusicMinute: 30, centsPerSfx: 3};
+const SOUND_SETTINGS = {updatedBy: 'Owner', source: 'elevenlabs', musicModel: 'music_v2_5', monthlyMusicSeconds: 120, monthlySfx: 30, centsPerMusicMinute: 30, centsPerSfx: 3};
 
 test('Room 07 scores the video with Claude, generates each cue once inside the limits and mixes it under the voice', {skip}, async t => {
   const env = setup(t);
@@ -1223,12 +1223,15 @@ test('Room 07 scores the video with Claude, generates each cue once inside the l
     {start: 0, end: 14, mood: 'curious', energy: 3, prompt: 'Soft marimba and pizzicato strings, 92 BPM, curious and light', entry: 'hit', exit: 'fade', reason: 'The hook.'},
     {start: 16, end: 50, mood: 'warm', energy: 2, prompt: 'Warm felt piano with gentle pads, 80 BPM, reflective', entry: 'fade', exit: 'fade', reason: 'The promise lands dry first.'}]})}`;
   const {room, asked, generated, claude, eleven} = soundtrackRoom(env, {reply});
-  // The free score works at once; nothing is generated before the owner confirms commercial use.
+  // The free score works at once; nothing is generated while the family's source is the sound library (0.60), or
+  // before the owner confirms commercial use.
   const free = room.rulesScore(content.id, {requestedBy: 'Owner'});
   assert.deepEqual([free.revision, free.source, free.ready, free.cues[0].start, free.cues.at(-1).end], [1, 'rules', false, 0, 36]);
+  assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), /sound library/);
+  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 0});
   assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), /commercial use/);
-  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 0, commercialUseConfirmed: true});
-  assert.throws(() => room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 0, commercialUseConfirmed: true}), /another tab/);
+  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true});
+  assert.throws(() => room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true}), /another tab/);
   // Claude scores from the scenes and the narration, inside a token reservation.
   room.queueScore(content.id, {requestedBy: 'Owner', connector: claude});
   assert.throws(() => room.queueScore(content.id, {requestedBy: 'Owner', connector: claude}), /already scoring/);
@@ -1253,13 +1256,13 @@ test('Room 07 scores the video with Claude, generates each cue once inside the l
   assert.equal(room.usage(family.id).musicSeconds, 37);
   assert.throws(() => store.db.prepare("UPDATE audio_assets SET key='x'").run(), /immutable/);
   // The sound-effect library stops at the monthly limit and continues after a deliberate retry.
-  room.saveSettings(family.id, {...SOUND_SETTINGS, monthlySfx: 19, revision: 1, commercialUseConfirmed: true});
+  room.saveSettings(family.id, {...SOUND_SETTINGS, monthlySfx: 19, revision: 2, commercialUseConfirmed: true});
   assert.deepEqual(room.queueLibrary(family.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), {queued: 20, estimatedCents: 60});
   for (let k = 0; k < 20; k++) await room.processNextAudio();
   const blocked = room.state().jobs.filter(job => job.status === 'blocked_budget');
   assert.equal(blocked.length, 1);
   assert.equal(room.library(family.id).filter(item => item.asset).length, 19);
-  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 2, commercialUseConfirmed: true});
+  room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 3, commercialUseConfirmed: true});
   room.retryAudio(blocked[0].id, {});
   assert.equal((await room.processNextAudio())?.status, 'completed');
   assert.equal(room.library(family.id).every(item => item.asset), true);
@@ -1282,4 +1285,96 @@ test('Room 07 scores the video with Claude, generates each cue once inside the l
   assert.deepEqual(record.audio.mix.music.map(item => item.cueId), ['cue001', 'cue002']);
   assert.ok(record.commands.some(command => command.step === 'mix music and effects'));
   assert.ok(record.commands.every(command => !command.args.join(' ').includes(dataRoot)), 'command plans do not leak local paths');
+});
+
+// ---------------------------------------------------------------- 0.60 the sound library
+const {SoundLibrary} = require('../sound-library');
+test('0.60: music and effects come from the owner\'s sound library: imported once, matched to the story, looped when short, mixed for free', {skip}, async t => {
+  const env = setup(t);
+  const {editing, renders, store, scenes, content, family, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  // The owner's downloads: music in folders, effects named for what they are, a copy, a silent file and a note.
+  const downloads = fs.mkdtempSync(path.join(os.tmpdir(), 'downloads-'));
+  t.after(() => fs.rmSync(downloads, {recursive: true, force: true}));
+  const make = (rel, source, seconds) => { const file = path.join(downloads, rel); fs.mkdirSync(path.dirname(file), {recursive: true}); ffmpeg(['-f', 'lavfi', '-i', source, '-t', String(seconds), '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '96k', '-y', file]); return file; };
+  make('Music/Calm/soft-piano-reflective-116199.mp3', 'sine=frequency=220:sample_rate=44100', 30);
+  make('Music/mystery-documentary-curious-550123.mp3', 'sine=frequency=180:sample_rate=44100', 12);
+  make('Music/epic-cinematic-trailer-998877.mp3', 'sine=frequency=140:sample_rate=44100', 40);
+  const whoosh = make('SFX/whoosh-6316.mp3', 'anoisesrc=c=pink:a=0.6:r=44100', 1);
+  fs.copyFileSync(whoosh, path.join(downloads, 'SFX', 'whoosh-copy.mp3'));
+  make('SFX/silent-room.mp3', 'anullsrc=r=44100:cl=stereo', 1);
+  make('cash-register-ching-551.mp3', 'anoisesrc=c=white:a=0.5:r=44100', 1.5);
+  fs.writeFileSync(path.join(downloads, 'readme.txt'), 'not audio');
+  const sounds = new SoundLibrary(store, {dataRoot, renders});
+  assert.throws(() => sounds.queueImport({requestedBy: 'Owner', folder: 'Music', source: 'pixabay', licenceConfirmed: true}), /full path/);
+  assert.throws(() => sounds.queueImport({requestedBy: 'Owner', folder: downloads, source: 'pixabay'}), /Confirm/);
+  assert.throws(() => sounds.queueImport({requestedBy: 'Owner', folder: dataRoot, source: 'pixabay', licenceConfirmed: true}), /outside the program's data folder/);
+  assert.throws(() => sounds.queueImport({requestedBy: 'Owner', folder: downloads, source: 'other', licence: 'free', licenceConfirmed: true}), /licence/);
+  assert.equal(sounds.queueImport({requestedBy: 'Owner', folder: downloads, source: 'pixabay', licenceConfirmed: true}).progress.total, 7, 'audio files only');
+  const imported = await sounds.processNextImport();
+  assert.deepEqual([imported.status, imported.progress.added, imported.progress.already, imported.progress.failed], ['completed', 5, 1, 1], JSON.stringify(imported.progress));
+  assert.match(imported.progress.problems[0], /silent-room/);
+  const music = sounds.tracks('music'), effects = sounds.tracks('sfx');
+  assert.deepEqual(music.map(item => item.title).sort(), ['epic cinematic trailer', 'mystery documentary curious', 'soft piano reflective']);
+  assert.deepEqual(music.find(item => item.title.startsWith('soft')).tags, ['calm', 'soft', 'piano', 'reflective'], 'tags from the folders and the name');
+  assert.deepEqual(effects.map(item => item.title).sort(), ['cash register ching', 'whoosh'], 'a short file at the top is an effect');
+  assert.ok(fs.existsSync(path.join(dataRoot, 'sound-library', music[0].id.slice(0, 2), `${music[0].id}.mp3`)), 'kept once by its checksum in the data folder');
+  assert.ok(music.every(item => Number.isFinite(item.loudnessLufs) && item.licence.startsWith('Pixabay Content License')));
+  assert.equal(sounds.list({q: 'piano'}).total, 1);
+  sounds.queueImport({requestedBy: 'Owner', folder: downloads, source: 'pixabay', licenceConfirmed: true});
+  assert.equal((await sounds.processNextImport()).progress.already, 6, 'importing again adds nothing');
+
+  // The library is the default source: nothing to confirm, nothing to pay, every cue gets a track at once.
+  const at = new Date().toISOString(), asked = [];
+  store.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?)').run('claude-1', 'claude-1', JSON.stringify({name: 'claude-1', provider: 'claude-code', revision: 1, test: {status: 'passed', at}}), null);
+  const ai = {complete: async ({messages, onStart}) => {
+    onStart?.();
+    const input = JSON.parse(messages[1].content), ref = title => input.library.find(item => item.title.startsWith(title)).ref;
+    asked.push({system: messages[0].content, input});
+    return {content: JSON.stringify({summary: 'Curious open, then the push.', cues: [
+      {start: 0, end: 20, mood: 'curious', energy: 3, prompt: 'Light mystery pulse under the hook', entry: 'hit', exit: 'fade', track: ref('mystery')},
+      {start: 20, end: 36, mood: 'punchy', energy: 4, prompt: 'Driving drums for the payoff', entry: 'fade', exit: 'fade', track: 'T99'}]}), usage: {promptTokens: 2000, completionTokens: 300, totalTokens: 2300}, model: 'claude-opus-5-5'};
+  }};
+  const room = new SoundtrackRoom(store, new ConnectorSlots(store, {transform: (op, input) => input}), scenes, {dataRoot, ai, renders, sounds});
+  editing.soundtrack = room;
+  assert.equal(room.settings(family.id).source, 'library');
+  const free = room.rulesScore(content.id, {requestedBy: 'Owner'});
+  assert.equal(free.ready, true);
+  assert.ok(free.cues.every(cue => cue.asset.library.source === 'pixabay'));
+  assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: {id: 'claude-1', revision: 1}, costConfirmed: true}), /sound library/);
+  room.queueScore(content.id, {requestedBy: 'Owner', connector: {id: 'claude-1', revision: 1}});
+  const scored = await room.processNextScore();
+  assert.ok(scored, JSON.stringify(room.state().contents));
+  assert.ok(asked[0].input.library.length === 3 && asked[0].input.library.every(item => /^T\d+$/.test(item.ref) && !item.id), 'Claude sees short refs, not checksums');
+  assert.match(asked[0].system, /LIBRARY:/);
+  assert.equal(scored.cues[0].asset.library.title, 'mystery documentary curious');
+  assert.ok(scored.warnings.some(item => /not in the library/.test(item)) && scored.cues[1].asset, 'an unknown ref gets the best fitting track');
+  assert.equal(scored.cues[1].asset.library.title, 'epic cinematic trailer');
+  // The effect slots are filled by the sounds' names; the owner can choose another one per slot.
+  const slots = room.library(family.id), slot = kind => slots.find(item => item.kind === kind);
+  assert.deepEqual([slot('whoosh').asset.key, slot('cash').asset.key, slot('thunder').asset], ['whoosh', 'cash register ching', null]);
+  const cash = effects.find(item => item.title.startsWith('cash'));
+  const picked = room.chooseEffect(family.id, {chosenBy: 'Owner', kind: 'ding', soundId: cash.id, revision: room.settings(family.id).revision});
+  assert.deepEqual([picked.asset.id, picked.chosen], [cash.id, true]);
+  assert.throws(() => room.chooseEffect(family.id, {chosenBy: 'Owner', kind: 'ding', soundId: music[0].id, revision: room.settings(family.id).revision}), /sound effect from the library/);
+  // The render: the edit names the score, the 12 s track under a 20 s cue loops, and the mix is checked.
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const mixed = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'normalize', targetLufs: -16, truePeakDb: -2, music: {enabled: true, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: scored.id}, sfx: {enabled: false, density: 'none', levelDb: -12}}}]});
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the library mix.'});
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: mixed.id});
+  const cues = JSON.parse(renders.row(queued.id).scope).edit.soundtrack.music;
+  assert.ok(cues.every(cue => cue.relativePath.startsWith('sound-library/')));
+  assert.ok(cues[0].trackSeconds < cues[0].end - cues[0].start, 'the first track is shorter than its cue');
+  const rendered = await renders.processNext();
+  assert.equal(rendered?.status, 'completed', JSON.stringify(renders.publicJob(renders.row(queued.id)).error));
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.equal(result.audioQc.passed, true, JSON.stringify(result.audioQc));
+  const record = JSON.parse(fs.readFileSync(path.join(dataRoot, result.manifest.relativePath), 'utf8'));
+  const mixArgs = record.commands.find(command => command.step === 'mix music and effects').args;
+  assert.equal(mixArgs.filter(arg => arg === '-stream_loop').length, 1, 'only the short track loops');
+  // A track switched off leaves the score unready, with a plain reason at the next render.
+  sounds.update(cues[0].sha256, {updatedBy: 'Owner', enabled: false});
+  assert.equal(room.score(scored.id).ready, false);
+  assert.throws(() => renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: mixed.id}), /left the sound library or was switched off/);
 });

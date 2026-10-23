@@ -89,6 +89,29 @@ test('the voice-over carve: under the voice the music gives up its speech band a
 });
 
 // 0.41: an effect's hit lands on its moment (video-use: start the file its attack earlier).
+test('0.60 library tracks fit their cues by mood, energy and length; effects fill their slots by name', () => {
+  const track = (letter, title, tags, seconds) => ({id: letter.repeat(64), title, tags, seconds});
+  const tracks = [track('a', 'Epic cinematic trailer', ['epic', 'cinematic', 'trailer'], 150), track('b', 'Calm piano', ['calm', 'piano'], 200), track('c', 'Mystery documentary', ['mystery', 'documentary'], 40), track('d', 'Happy ukulele', ['happy', 'ukulele'], 120)];
+  const cues = [{start: 0, end: 20, mood: 'punchy', energy: 4, prompt: 'drums'}, {start: 20, end: 80, mood: 'curious', energy: 3, prompt: 'pizzicato'}, {start: 80, end: 110, mood: 'warm', energy: 2, prompt: 'reflective'}, {start: 110, end: 140, mood: 'warm', energy: 2, prompt: 'reflective'}];
+  const assigned = M.assignTracks(cues, tracks);
+  assert.deepEqual(assigned.map(cue => cue.track[0]), ['a', 'c', 'b', 'd'], 'by mood; never the same track twice in a row');
+  assert.deepEqual(M.assignTracks([{...cues[0], track: 'd'.repeat(64)}], tracks)[0].track[0], 'd', 'a chosen track stays');
+  assert.deepEqual(M.assignTracks(cues, []), cues, 'no library, nothing changes');
+  assert.deepEqual(M.catalogue(tracks, {moods: ['curious'], limit: 2}).map(item => [item.ref, item.title]), [['T1', 'Mystery documentary'], ['T2', 'Calm piano']]);
+  const sfx = [{id: '1'.repeat(64), title: 'whoosh 6316', tags: ['whoosh'], seconds: 1.2}, {id: '2'.repeat(64), title: 'long whoosh ambience', tags: ['whoosh'], seconds: 20}, {id: '3'.repeat(64), title: 'cash register', tags: ['cash', 'register'], seconds: 1.5}];
+  const picked = M.pickEffects(sfx);
+  assert.deepEqual([picked.whoosh.id[0], picked.cash.id[0], picked.thunder], ['1', '3', null], 'the short file that says it, nothing for a slot without one');
+  assert.equal(M.pickEffects(sfx, {whoosh: '2'.repeat(64)}).whoosh.id[0], '2', 'the owner\'s pick wins');
+  // A cue keeps its track and in-point; a bad track is refused for the owner, dropped with a warning for Claude.
+  const score = M.validate({cues: [{start: 0, end: 10, mood: 'calm', energy: 2, prompt: 'soft piano under the voice', entry: 'fade', exit: 'fade', track: 'a'.repeat(64), offset: 4}]}, 30);
+  assert.deepEqual([score.cues[0].track[0], score.cues[0].offset], ['a', 4]);
+  assert.throws(() => M.validate({cues: [{...score.cues[0], track: 'T3'}]}, 30), /track must be a sound from the library/);
+  const warnings = [];
+  assert.equal(M.validate({cues: [{...score.cues[0], track: 'T3'}]}, 30, {lenient: true, warn: message => warnings.push(message)}).cues[0].track, undefined);
+  assert.equal(warnings.length, 1);
+  assert.match(M.mixGraph({music: [{start: 2, end: 12, entry: 'fade', exit: 'fade', measuredLufs: -14, offset: 4}], settings: {music: {levelLufs: -26, duck: 'off', fadeSeconds: 1}, sfx: {levelDb: -12}}}), /atrim=4:14,/, 'the music starts at its in-point');
+});
+
 test('an effect with a build before its hit starts that much earlier, at most two seconds', () => {
   const M = require('../music');
   assert.equal(M.attackOf('[silencedetect @ 0] silence_start: 0\n[silencedetect @ 0] silence_end: 0.355 | silence_duration: 0.355'), 0.355);

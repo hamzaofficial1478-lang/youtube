@@ -408,15 +408,17 @@ class RenderRoom {
         if (soundtrack && (soundtrack.music.length || soundtrack.sfx.length)) {
           const files = [...soundtrack.music, ...soundtrack.sfx].map(item => {
             const file = this.localFile(item.relativePath);
-            requireValue(fs.existsSync(file) && R.fileSha256(file) === item.sha256, 'A generated music or sound-effect file is missing or changed.', 409);
+            requireValue(fs.existsSync(file) && R.fileSha256(file) === item.sha256, 'A music or sound-effect file is missing or changed.', 409);
             return file;
           });
+          // A library track shorter than its cue (from its in-point) plays again from its start (0.60).
+          const loops = new Set(soundtrack.music.map((cue, k) => (Number.isFinite(cue.trackSeconds) && cue.trackSeconds < (cue.offset || 0) + cue.end - cue.start + 0.05 ? k : -1)).filter(k => k >= 0));
           // Each effect hits on its moment: its attack (the build before the hit) is measured once per file.
           const attacks = new Map();
           for (const hit of soundtrack.sfx) if (!attacks.has(hit.sha256)) attacks.set(hit.sha256, M.attackOf((await exec('measure effect attack', job.paths.ffmpeg, M.attackArgs(this.localFile(hit.relativePath), hit.measuredPeakDb), 60000)).stderr));
           const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx.map(hit => ({...hit, attackSeconds: attacks.get(hit.sha256)})), settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS}});
           fs.writeFileSync(path.join(work, 'mix-graph.txt'), graph);
-          const mixed = path.join(work, 'mix.wav'), mixArgs = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', narrationFile, ...files.flatMap(file => ['-i', file]), '-filter_complex_script', 'mix-graph.txt', '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s24le', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-y', mixed];
+          const mixed = path.join(work, 'mix.wav'), mixArgs = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', narrationFile, ...files.flatMap((file, k) => [...(loops.has(k) ? ['-stream_loop', '-1'] : []), '-i', file]), '-filter_complex_script', 'mix-graph.txt', '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s24le', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-y', mixed];
           this.progress(job.id, `mixing ${soundtrack.music.length} music cue(s) and ${soundtrack.sfx.length} sound effect(s)`, 0, total);
           await exec('mix music and effects', job.paths.ffmpeg, mixArgs, Math.max(120000, scope.narration.durationSeconds * 2000), work);
           audioCommands.push({step: 'mix music and effects', args: mixArgs.map(arg => (path.isAbsolute(arg) ? path.basename(arg) : arg)), graphSha256: createHash('sha256').update(graph).digest('hex')});

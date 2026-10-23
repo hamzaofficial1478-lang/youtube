@@ -1,7 +1,7 @@
 {
-  "version": "0.59.0",
+  "version": "0.60.0",
   "updated": "2026-10-22",
-  "nextAction": "Owner: open Operations to see how the program has been running. Start the program and look at the Backups page (a first automatic backup runs a few minutes after start; an external drive folder is safer). Then follow \"Make your first video\" on the Overview; A01 analytics follows the first published video.",
+  "nextAction": "Owner: connect Fish Audio (Connections), download music and sound effects from Pixabay (or the YouTube Audio Library) into a folder with Music and SFX sub-folders, and import it on the Sound library page. Then a real video is made with real voice, music and effects to see what needs improving.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -342,8 +342,8 @@
           "id": "P08c",
           "title": "Music and sound effects: the score, generated music, the family library and the mix",
           "status": "testing",
-          "remaining": "Not yet heard live: needs the owner's ElevenLabs key, the commercial-use confirmation and a real listening review. No speech-frequency carve (built in 0.28) of the music yet. Per-cue editing exists in the API only.",
-          "evidence": "0.23.0 (2026-10-09): music.js (score validation that refuses named artists, free score, Claude music-supervisor prompt, ElevenLabs music and sound-effect requests, 20 effect kinds in the main engine's flavour, effects placed from drawn-shot events by density, one FFmpeg mix graph with sidechain ducking); soundtrack.js (family settings with commercial-use confirmation and monthly limits, immutable scores and checksummed generated files, Claude and ElevenLabs only on a click inside reservations, never retried by themselves); the render mixes music and effects under the finished voice and normalizes the whole mix; Room 07 page with score, settings, library, players and the mix settings. tests/soundtrack.test.js (3, one with real FFmpeg for every ducking choice) and two render tests with real FFmpeg (a Claude score generated through a fake ElevenLabs, limits, retry, mix at -16 LUFS; effects on hand-drawn and motion cutaways). Two bugs found by the tests and the browser check and fixed: generated-file checksums and a rounding overlap in the free score. Browser check on the demo workspace: free score, settings save, paid buttons refuse without a tested ElevenLabs connection."
+          "remaining": "The owner fills the library with real Pixabay or YouTube Audio Library downloads; a real video with real voice, music and effects is listened to in Room 08.",
+          "evidence": "0.23.0 (2026-10-09): music.js (score validation that refuses named artists, free score, Claude music-supervisor prompt, ElevenLabs music and sound-effect requests, 20 effect kinds in the main engine's flavour, effects placed from drawn-shot events by density, one FFmpeg mix graph with sidechain ducking); soundtrack.js (family settings with commercial-use confirmation and monthly limits, immutable scores and checksummed generated files, Claude and ElevenLabs only on a click inside reservations, never retried by themselves); the render mixes music and effects under the finished voice and normalizes the whole mix; Room 07 page with score, settings, library, players and the mix settings. tests/soundtrack.test.js (3, one with real FFmpeg for every ducking choice) and two render tests with real FFmpeg (a Claude score generated through a fake ElevenLabs, limits, retry, mix at -16 LUFS; effects on hand-drawn and motion cutaways). Two bugs found by the tests and the browser check and fixed: generated-file checksums and a rounding overlap in the free score. Browser check on the demo workspace: free score, settings save, paid buttons refuse without a tested ElevenLabs connection. 0.60.0 (2026-10-23, owner decision: no ElevenLabs for music and effects): the sound library (sound-library.js, Sound library page): folders of downloaded music and effects imported, measured, tagged and stored once by checksum with their licence; scores pick library tracks by mood, energy and length (Claude from a short catalogue), effect slots filled by name, owner changes per cue and slot, short tracks loop at render, credit lines in the description. Tests: tests/editing.test.js \"0.60 ...\", tests/soundtrack.test.js, tests/packaging.test.js; browser check with 10 sample files."
         },
         {
           "id": "P06f",
@@ -645,7 +645,8 @@
     "2026-10-22: The Editing Room is a timeline editor: every track and every drawn element is shown and editable; typed instructions become checked operations that only the owner applies.",
     "2026-10-22: Phase 06 starts with A02 (backups and restore) because nothing is published yet for A01 analytics to measure.",
     "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it.",
-    "2026-10-22: Real images come from licensed sources only (stock libraries, Wikimedia Commons public domain/CC0/CC BY with credits, AI); never unlicensed images from websites, social media or YouTube. Reddit is read through the owner's own app, as topic signals only."
+    "2026-10-22: Real images come from licensed sources only (stock libraries, Wikimedia Commons public domain/CC0/CC BY with credits, AI); never unlicensed images from websites, social media or YouTube. Reddit is read through the owner's own app, as topic signals only.",
+    "2026-10-23: Music and sound effects come from the owner's free sound library (hand downloads from Pixabay or the YouTube Audio Library, imported from a folder), not ElevenLabs generation. The Pexels and Pixabay APIs have no audio; Freesound's API needs a negotiated commercial agreement and is not used."
   ],
-  "milestone": "The operations report: reliability, render capacity, usage, review load and channel validation"
+  "milestone": "A free sound library: music and effects from the owner's Pixabay and YouTube Audio Library downloads"
 }

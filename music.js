@@ -41,7 +41,10 @@ function validate(raw, durationSeconds, {lenient = false, warn = () => {}} = {})
     cues.push({id: `cue${String(cues.length + 1).padStart(3, '0')}`, start: round(start, 2), end: round(end, 2), mood: clean(item.mood, 40) || 'neutral', energy, prompt,
       entry: ENTRIES.includes(item.entry) ? item.entry : problem(`${label} entry must be one of: ${ENTRIES.join(', ')}.`, 'fade'),
       exit: EXITS.includes(item.exit) ? item.exit : problem(`${label} exit must be one of: ${EXITS.join(', ')}.`, 'fade'),
-      ...(clean(item.reason, 200) ? {reason: clean(item.reason, 200)} : {})});
+      ...(clean(item.reason, 200) ? {reason: clean(item.reason, 200)} : {}),
+      // 0.60: a track from the sound library (its SHA-256) and where to start in it.
+      ...(item.track !== undefined && item.track !== null ? (/^[0-9a-f]{64}$/.test(item.track) ? {track: item.track} : problem(`${label} track must be a sound from the library.`, {})) : {}),
+      ...(item.offset !== undefined && item.offset !== null ? (Number.isFinite(Number(item.offset)) && item.offset >= 0 && item.offset <= 3600 ? {offset: round(Number(item.offset), 2)} : problem(`${label} offset must be 0-3600 seconds.`, {})) : {})});
   }
   if (!cues.length && raw.cues.length) fail('No usable music cue remained.');
   return {schema: SCHEMA, summary: clean(raw.summary, 600), cues};
@@ -73,7 +76,8 @@ function messages(input) {
     'Score the video with instrumental music cues that follow the story: the hook grabs, explanations sit back, a turn or reveal lifts or drops, sad or serious moments soften, the close resolves. Use the scenes (purpose, timing), the narrator\'s delivery per sentence and the style\'s music moods. Learn techniques from any competitor guidance; never copy a track, artist or signature sound.',
     'Music supports the voice, never competes: steady, uncluttered arrangements under speech. Leave short silences (no cue) where a shock, a punchline or a key line should land dry, at most 15% of the runtime. Typical cues last 20-90 seconds and change where the story changes; cues never overlap.',
     'Write each prompt as a producer would: genre, instruments, tempo in BPM, mood and energy, "instrumental, no vocals". Never name an artist, a song, a film or a label.',
-    'Return only one JSON object: {"summary": up to 600 characters, "cues": [{"start": seconds, "end": seconds, "mood": up to 40 characters, "energy": 1-5, "prompt": up to 600 characters, "entry": fade|hit|cut, "exit": fade|cut, "reason": up to 200 characters}]}.',
+    ...(input.library ? ['LIBRARY: the music comes from the channel\'s own licensed library, listed in the data as library (ref, title, tags, seconds). Give every cue the track that fits it best as "track": its ref (e.g. "T3"): its tags must match the cue\'s mood and energy; a track at least as long as the cue is best (a shorter one loops); use a track again only for cues far apart. Write the prompt as a short description of the chosen music.'] : []),
+    `Return only one JSON object: {"summary": up to 600 characters, "cues": [{"start": seconds, "end": seconds, "mood": up to 40 characters, "energy": 1-5, "prompt": up to 600 characters, "entry": fade|hit|cut, "exit": fade|cut, "reason": up to 200 characters${input.library ? ', "track": a library ref' : ''}}]}.`,
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -169,7 +173,8 @@ function mixGraph({music = [], sfx = [], settings}) {
   music.forEach((cue, k) => {
     const input = k + 1, length = round(cue.end - cue.start, 3), fadeIn = cue.entry === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.02, fadeOut = cue.exit === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.05;
     const gain = round(Math.max(-40, Math.min(12, settings.music.levelLufs - (Number.isFinite(cue.measuredLufs) ? cue.measuredLufs : -14))), 2), delay = Math.round(cue.start * 1000);
-    parts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=0:${length},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${round(fadeIn, 3)},afade=t=out:st=${round(Math.max(0, length - fadeOut), 3)}:d=${round(fadeOut, 3)},volume=${gain}dB,adelay=${delay}|${delay}[m${k}]`);
+    const from = round(cue.offset || 0, 3);
+    parts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=${from}:${round(from + length, 3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${round(fadeIn, 3)},afade=t=out:st=${round(Math.max(0, length - fadeOut), 3)}:d=${round(fadeOut, 3)},volume=${gain}dB,adelay=${delay}|${delay}[m${k}]`);
     beds.push(`[m${k}]`);
   });
   sfx.forEach((hit, k) => {
@@ -194,7 +199,95 @@ function mixGraph({music = [], sfx = [], settings}) {
   return parts.join(';');
 }
 
+// ---------------------------------------------------------------- the sound library (0.60)
+// Owner decision 2026-10-23: music and effects come from free libraries the owner downloads (Pixabay Music and Sound
+// Effects, the YouTube Audio Library), not from paid generation. A track fits a cue by its tags (from its file name
+// and folders) against the cue's mood and prompt, by its energy and by its length; the same track is not used twice
+// in a row. Effects fill the 20 slots by the words of their names (a "whoosh" file is a whoosh).
+const MOOD_TAGS = Object.freeze({
+  punchy: ['epic', 'energetic', 'action', 'powerful', 'upbeat', 'intense', 'trailer', 'drums', 'rock', 'hype', 'sport'],
+  curious: ['mystery', 'mysterious', 'curious', 'documentary', 'ambient', 'suspense', 'investigation', 'thoughtful', 'quirky', 'pizzicato'],
+  light: ['happy', 'playful', 'light', 'fun', 'cheerful', 'quirky', 'ukulele', 'whistle', 'comedy', 'bright', 'children'],
+  focused: ['corporate', 'technology', 'tech', 'minimal', 'focus', 'background', 'ambient', 'lofi', 'study', 'business'],
+  dramatic: ['dramatic', 'cinematic', 'epic', 'tension', 'dark', 'suspense', 'orchestral', 'emotional', 'trailer', 'war', 'battle'],
+  warm: ['warm', 'emotional', 'piano', 'gentle', 'soft', 'acoustic', 'nostalgic', 'calm', 'guitar', 'romantic'],
+  uplifting: ['uplifting', 'inspiring', 'motivational', 'hopeful', 'positive', 'inspirational', 'success', 'optimistic', 'bright'],
+  sad: ['sad', 'melancholy', 'melancholic', 'emotional', 'piano', 'sorrow', 'lonely', 'slow', 'strings'],
+  tense: ['tension', 'suspense', 'dark', 'thriller', 'horror', 'mystery', 'pulse', 'ominous'],
+  calm: ['calm', 'relaxing', 'peaceful', 'ambient', 'meditation', 'soft', 'chill', 'lofi'],
+  historical: ['medieval', 'ancient', 'historical', 'baroque', 'classical', 'folk', 'celtic', 'arabic', 'oriental', 'renaissance'],
+});
+const HIGH_ENERGY = new Set(['epic', 'energetic', 'action', 'powerful', 'intense', 'upbeat', 'rock', 'trailer', 'drums', 'edm', 'hype', 'sport', 'battle', 'dubstep']);
+const LOW_ENERGY = new Set(['calm', 'ambient', 'soft', 'gentle', 'relaxing', 'piano', 'meditation', 'sleep', 'lofi', 'peaceful', 'slow', 'chill']);
+const EFFECT_WORDS = Object.freeze({
+  whoosh: ['whoosh', 'woosh', 'swoosh', 'swish', 'swipe', 'transition', 'fly', 'pass'], 'swoosh-up': ['swoosh', 'riser', 'rise', 'rising', 'upward', 'sweep'],
+  pop: ['pop', 'bubble', 'plop', 'click', 'blip'], impact: ['impact', 'hit', 'thud', 'punch', 'slam', 'knock'], stamp: ['stamp', 'slam', 'stomp', 'seal'],
+  boom: ['boom', 'explosion', 'explode', 'blast', 'bang'], zap: ['zap', 'electric', 'spark', 'laser', 'shock'], thunder: ['thunder', 'storm', 'lightning'],
+  ding: ['ding', 'bell', 'notification', 'chime'], right: ['correct', 'success', 'win', 'positive', 'achievement', 'level'], wrong: ['wrong', 'error', 'buzzer', 'fail', 'negative', 'denied'],
+  tick: ['tick', 'clock', 'ticking', 'timer', 'countdown'], riser: ['riser', 'rising', 'build', 'buildup', 'tension', 'swell'], sparkle: ['sparkle', 'magic', 'shimmer', 'twinkle', 'glitter', 'fairy'],
+  cash: ['cash', 'register', 'coin', 'coins', 'money', 'ching'], glitch: ['glitch', 'digital', 'static', 'distortion', 'stutter'], scribble: ['scribble', 'pencil', 'marker', 'writing', 'pen', 'chalk', 'drawing'],
+  boing: ['boing', 'spring', 'bounce', 'cartoon'], heartbeat: ['heartbeat', 'heart', 'pulse'], typing: ['typing', 'keyboard', 'typewriter', 'keys'],
+});
+const words = text => String(text || '').toLowerCase().split(/[^a-z]+/).filter(word => word.length > 2);
+const tagsOf = track => new Set([...(track.tags || []), ...words(track.title)]);
+const trackEnergy = tags => { const hi = [...tags].some(tag => HIGH_ENERGY.has(tag)), lo = [...tags].some(tag => LOW_ENERGY.has(tag)); return hi && !lo ? 4.5 : lo && !hi ? 1.8 : 3; };
+// How well a library track fits a cue: matching mood words, energy, and a length that covers the cue.
+function trackFit(cue, track) {
+  const want = new Set([...words(cue.mood), ...words(cue.prompt)]), tags = tagsOf(track);
+  for (const word of words(cue.mood)) for (const [mood, list] of Object.entries(MOOD_TAGS)) if (word === mood || list.includes(word)) { want.add(mood); list.forEach(tag => want.add(tag)); }
+  let fit = 0;
+  for (const tag of tags) if (want.has(tag)) fit += 1;
+  const length = cue.end - cue.start;
+  fit += track.seconds >= length ? 2 : track.seconds >= length * 0.6 ? 0.5 : -1;
+  return fit - Math.abs(trackEnergy(tags) - cue.energy) * 0.6;
+}
+// Each cue without a track gets the best one; never the same track twice in a row, a track already used in this
+// score less, one used in the family's recent videos a little less. Deterministic (ties by id).
+function assignTracks(cues, tracks, {recent = []} = {}) {
+  if (!tracks.length) return cues;
+  const used = new Map(), out = [];
+  for (const cue of cues) {
+    let track = cue.track && tracks.find(item => item.id === cue.track);
+    if (!track) {
+      let best = -Infinity;
+      for (const item of tracks) {
+        const fit = trackFit(cue, item) - 3 * (used.get(item.id) || 0) - (recent.includes(item.id) ? 1 : 0) - (out.at(-1)?.track === item.id ? 6 : 0);
+        if (fit > best || (fit === best && item.id < track.id)) { best = fit; track = item; }
+      }
+    }
+    used.set(track.id, (used.get(track.id) || 0) + 1);
+    out.push({...cue, track: track.id});
+  }
+  return out;
+}
+// The library tracks Claude may choose from: the ones that fit the style's moods and the niche best, each with a
+// short reference ("T1") so the answer stays small.
+function catalogue(tracks, {moods = [], niche = '', limit = 120} = {}) {
+  const want = new Set([...moods.flatMap(words), ...words(niche)]);
+  for (const word of [...want]) if (MOOD_TAGS[word]) MOOD_TAGS[word].forEach(tag => want.add(tag));
+  return tracks.map(track => ({track, fit: [...tagsOf(track)].filter(tag => want.has(tag)).length}))
+    .sort((a, b) => b.fit - a.fit || b.track.seconds - a.track.seconds || (a.track.id < b.track.id ? -1 : 1)).slice(0, limit)
+    .map(({track}, k) => ({ref: `T${k + 1}`, id: track.id, title: track.title.slice(0, 60), tags: [...track.tags].slice(0, 8), seconds: Math.round(track.seconds)}));
+}
+// The effect slots filled from the library: the owner's pick, else the file whose name says it best (short ones first).
+function pickEffects(sounds, picks = {}) {
+  const out = {};
+  for (const kind of Object.keys(SFX)) {
+    const chosen = picks[kind] && sounds.find(sound => sound.id === picks[kind]);
+    if (chosen) { out[kind] = chosen; continue; }
+    let best = null, bestFit = 0;
+    for (const sound of sounds) {
+      const tags = tagsOf(sound), hits = EFFECT_WORDS[kind].filter(word => tags.has(word)).length + (tags.has(kind) ? 1 : 0);
+      if (!hits) continue;
+      const fit = hits + (sound.seconds <= SFX[kind].seconds * 3 ? 1 : 0) - (sound.seconds > 6 ? 2 : 0);
+      if (fit > bestFit || (best && fit === bestFit && (sound.seconds < best.seconds || (sound.seconds === best.seconds && sound.id < best.id)))) { best = sound; bestFit = fit; }
+    }
+    out[kind] = best;
+  }
+  return out;
+}
+
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {MOOD_TAGS, EFFECT_WORDS, trackFit, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

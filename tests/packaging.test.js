@@ -79,3 +79,10 @@ test('Claude drafts the package from untrusted data; its answer is held to the s
   assert.throws(() => P.parseDraft({titles: [], thumbnails: [], extra: 1}, {shots, chapters: []}), /unexpected fields/);
   assert.throws(() => P.parseDraft({titles: [{text: 'Fine title'}], thumbnails: [{text: 'X', shot: 'Nope'}]}, {shots, chapters: []}), /not on the approved board/);
 });
+
+test('0.60 a library track whose licence asks for a credit gets a Music line in the description', () => {
+  const payload = {description: 'Why one coin changed a city.', chapters: [], disclosure: {note: ''}};
+  const text = P.composeDescription(payload, [], [{label: 'Calm River', line: 'Calm River by A. Artist (YouTube Audio Library)'}]);
+  assert.match(text, /\n\nMusic:\nCalm River by A\. Artist \(YouTube Audio Library\)$/);
+  assert.equal(P.composeDescription(payload, []), 'Why one coin changed a city.', 'no credits, no block');
+});

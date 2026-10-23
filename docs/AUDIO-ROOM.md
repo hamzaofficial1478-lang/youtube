@@ -67,6 +67,56 @@ Owner request 2026-10-09: "add music and sfx build this room now all the related
 - Sound effects are placed by the edit, never invented: transitions that open a drawn shot (whip, zoom, pop, ink, glitch), stamps, counters, headline and number text, bursts, flashes, shockwaves, checks and crosses, props that drop or appear, at the time the drawing engine draws them. Each event needs a density; no two effects within 0.18 s (the more important one stays). Stock footage and stills get no effects.
 - The edit revision's audio settings name the score. The render checks every music and effect file against its checksum, finishes the voice first, lays music cues at their times with fades and gains from their measured loudness, carves room for the voice (0.28: split at 300 Hz and 4 kHz, the speech band ducked under the voice by a sidechain compressor, the bass and the top kept, the whole bed dipped a little; the HyperFrames voice-over carve, applied to the music, never to the narration), adds the effects at gains from their measured peak, limits, then measures the whole mix and brings it back to the loudness target (two-pass) before encoding. The manifest records the cues, effects, graph checksum and measurements; the encoded audio is checked as before. When music or effects are on, the mix is always normalized, even if the voice was kept at its original level.
 
+## The sound library (0.60.0)
+
+Owner decision 2026-10-23: "we will use Pexels, Pixabay for the music, sfx and sounds, not ElevenLabs". ElevenLabs
+charges for every track and effect, while free libraries hold thousands. Checked the same day:
+
+- the Pexels API documents photos, videos and collections only;
+- the Pixabay API documents images and videos only, and its rules forbid "systematic mass downloads", so its music and
+  sound effects (free for commercial use, no attribution required) are downloaded by hand;
+- Freesound has an API, but its terms negotiate commercial use of the API case by case, so it is not used.
+
+### How it works
+
+- **Sound library page** (`sound-library.js`, nav "Sound library"). The owner downloads tracks and effects into a folder
+  (Music and SFX sub-folders; sub-folder names become tags) and presses **Import a folder**. The import:
+  - takes every MP3/WAV/OGG/M4A/FLAC/AAC/Opus file of at most 60 MB;
+  - measures it once (length, loudness, peak; silent or broken files are listed as not usable);
+  - tags it from its file name and folders (Pixabay names files like `inspiring-cinematic-ambient-116199.mp3`);
+  - stores it once by SHA-256 under `sound-library/` in the data folder, so backups include it and a render can prove
+    the file is unchanged;
+  - records the source and licence the owner chose: Pixabay, YouTube Audio Library, their own, or another library with
+    its licence written out, after a confirmation that the licence allows monetized videos.
+
+  Importing the same folder again adds only new files; an import stopped by a restart continues on a click. The owner
+  can rename a sound, correct its kind and tags, add a credit line, or switch it off (left out of every pick).
+- **The source per family** (Room 07 soundtrack settings): `library` (the default) or `elevenlabs`. ElevenLabs
+  generation (`queueMusic`, `queueLibrary`) refuses unless the family is switched to it.
+- **Scores with tracks** (`music.js`):
+  - Every cue gets a library `track` (its SHA-256) and an optional `offset`. `assignTracks` fits tracks by the cue's
+    mood words (with mood families such as curious: mystery, documentary, ambient), by energy (epic or action tags
+    high, calm or piano tags low) and by length.
+  - The same track is never used twice in a row, is used again in a score only when nothing else fits, and tracks the
+    family used lately count a little less.
+  - The free score gets its tracks at once. Claude's score receives a short catalogue (`catalogue`, up to 120 tracks
+    as T1, T2...) and names a track per cue; an unknown name is reported and the best fitting track is used.
+  - **Change track** in Room 07 saves a new score revision.
+- **Effects**: the 20 effect slots are filled by `pickEffects`: the short library sound whose name says it (a file
+  named "whoosh..." is the whoosh), or the owner's choice per slot (**Change**, kept in the family's soundtrack
+  settings as `sfxPicks`). A slot without a sound plays nothing.
+- **The render**:
+  - checks every library file's SHA-256;
+  - starts a track at its in-point;
+  - loops a track shorter than its cue (`-stream_loop`, decided at render time from the track's length, so language
+    editions that lengthen a cue loop too);
+  - mixes everything as before (carve, ducking, loudness).
+- **Credits**: a library track with a credit line (YouTube Audio Library "attribution required", CC BY) adds a
+  **Music:** block to the package description.
+
+Note on Pixabay music: some Pixabay tracks are also registered with YouTube's Content ID by their artists. A claim on
+such a track is usually released by showing the Pixabay licence; the YouTube Audio Library avoids claims.
+
 ### Deferred work
 
 Owner-uploaded or stock music, per-cue manual edits in the page (the API accepts them as a new score revision), and a live listening proof with real ElevenLabs output are not done. There are no uploaded owner-media requirements. Map routes, stick-figure animation, full-resolution final masters, publishing and autopilot remain separate milestones.
