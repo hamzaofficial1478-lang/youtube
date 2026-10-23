@@ -606,3 +606,27 @@ or YouTube (they need licences; see the owner question in BUILD-PROGRESS.md).
   picture shows exactly what the words say). It is a planner line and a review check.
 - Previews can render at 720p (`R.PRESETS.proxy720`, render scope `resolution: 720`, "Preview size" in the render
   dialog); masters stay 1080p and compare against a preview of any size.
+
+## 30. Fixes from the documentary test (0.58.0)
+
+The 69-second documentary test of 0.57 showed four faults in its frames. Each one was traced to its cause in the
+drawing engine and redrawn from the test's own plan (`drawn-scene/27`):
+
+- **Words cut off at the frame edge** ("STAY AWAKE"): the layout measured a keyword in the letters Claude wrote, but the
+  engine draws keywords and stamps in capitals, which are wider. Words are now measured as drawn. A word's box also
+  holds its whole shape (`TEXT_BOX`: a tag's paper, a label's pill, a stamp's tilted frame), so the camera's push keeps
+  all of it in the frame; before, tags and stamps were up to twice as tall as their boxes.
+- **The data chart squeezed and showing raw numbers**: a big "1/3" beside a donut counted as a word *above* it, so the
+  chart shrank into the bottom quarter. Only a word that ends in the chart's upper half is above it; a word beside it
+  is stepped around like a character. Pie and donut charts show each part's share ("Brazil 33%"), unless a unit other
+  than % is named. Chart labels are cut at a word and may have 18 characters ("Rest of the world", not "Rest of the wo").
+- **The headband that read as headphones**: the band ran over the crown and curly hair ended in round curls at the ears.
+  The headband now goes round the forehead with its knot at the side, and curls stay above the ears.
+- **Name chips under words**: a character's name chip that a word covers, or that a big character pushes out of the
+  frame, moves beside the head, then beside the shoulders, never onto the face.
+- **Words pushing other words off**: when a word has to move off its spot (a drawing is there), earlier words count
+  too, so it picks a free height. A word placed on an earlier word's spot still replaces it (the planner's intent).
+
+Not fixed here: the painted-story scene of the test stays drawn, because ChatGPT's image generation stopped answering
+during that run; it is painted when a plan is made again with ChatGPT answering. Tested in tests/drawn.test.js
+("0.58 words fit as drawn ...").

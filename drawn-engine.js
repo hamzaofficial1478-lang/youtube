@@ -16,6 +16,9 @@
   const PROP_SIZE = {s: 150, m: 230, l: 330, xl: 460};
   const TEXT_BASE = {statement: 88, poster: 300, title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
+  // How far a word's drawn shape reaches past its letters, in font sizes [each side, half height] (documentary demo
+  // 2026-10-22: tags, labels and stamps were taller than their boxes and the camera's push cropped them).
+  const TEXT_BOX = {tag: [0.75, 1.15], callout: [0.75, 1.15], sticky: [0.75, 1.15], label: [0.4, 0.75], stamp: [0.35, 0.8]};
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
   const ENTER_SECONDS = {pop: 0.4, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, mask: 0.6, swing: 0.55, blur: 0.5, rise: 0.45, land: 0.42, none: 0};
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
@@ -143,22 +146,43 @@
       const split = d.elements.reduce((m, o, j) => (j !== i && o.kind === 'text' && !['statement', 'poster', 'chapter', 'headline', 'versus'].includes(o.style) && Math.abs(o.x - el.x) >= 0.2 && Math.abs(o.y - el.y) < 0.12 ? Math.min(m, Math.abs(o.x - el.x) * K.W * 0.92) : m), Infinity);
       const base = textSize(el), band = [0.13 * K.H - base * 0.7, 0.13 * K.H + base * 0.7], edge = K.M + 0.05 * K.W + 0.02 * K.W;
       const room = el.style !== 'keyword' ? Infinity : chips.filter(c => c[3] > band[0] && c[1] < band[1]).reduce((m, c) => Math.min(m, el.x <= 0.5 ? c[0] - edge : K.W - edge - c[2]), Infinity);
-      const safe = Math.min((K.W - 2 * K.M) / 1.12, split, room > 0.3 * K.W ? room : Infinity), natural = K.measure(el.text, base, {weight: 800}) * 1.08;
-      const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base), half = width / 2;
+      const [padX, padY] = TEXT_BOX[el.style] || [0, 0.55], shown = ['keyword', 'stamp'].includes(el.style) ? el.text.toUpperCase() : el.text;
+      const safe = Math.min((K.W - 2 * K.M) / 1.12, split, room > 0.3 * K.W ? room : Infinity), natural = K.measure(shown, base, {weight: 800}) * 1.08 + 2 * padX * base;
+      const size = base * Math.min(1, safe / natural), width = Math.min(safe, natural * size / base) - 2 * padX * size, half = width / 2 + padX * size;
+      const halfH = size * padY + (el.style === 'stamp' ? 0.12 * half : 0);
       const x = ['headline', 'chapter'].includes(el.style) ? K.W / 2 : el.style === 'keyword' ? (el.x <= 0.5 ? K.M + 0.05 * K.W + half : K.W - K.M - 0.05 * K.W - half) : el.style === 'versus' ? Math.min(0.8, Math.max(0.2, el.x)) * K.W : Math.min(K.W - K.M - half, Math.max(K.M + half, el.x * K.W));
-      const cover = y => solid.reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + size * 0.6, y2) - Math.max(y - size * 0.6, y1)), 0);
+      // When a word has to move off its spot, earlier words count too, so it picks a free height instead of pushing one
+      // off (documentary demo 2026-10-22: a stamp moved onto the "London" tag). A word asked for an earlier word's spot
+      // replaces it (below), and one that leaves on a cue (until) makes way by itself.
+      const said = d.elements.map((o, j) => (j < i && o.kind === 'text' && o.style !== 'poster' && !o.until ? est[j].box : null)).filter(Boolean);
+      const cover = (y, moved = false) => [...solid, ...(moved ? said : [])].reduce((sum, [x1, y1, x2, y2]) => sum + Math.max(0, Math.min(x + half, x2) - Math.max(x - half, x1)) * Math.max(0, Math.min(y + halfH, y2) - Math.max(y - halfH, y1)), 0);
       // Big words keep room above them for the camera's push (live 0.25 run: an xl counter touched the top edge).
-      const limit = 0.8 * K.H - size * 0.6, top = 0.07 * K.H + size * 0.6;
-      const y = ['chapter', 'versus'].includes(el.style) ? K.H / 2 : el.style === 'keyword' ? Math.max(top, 0.13 * K.H) : el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).reduce((a, b) => (cover(b) < cover(a) - 1 ? b : a));
-      est[i] = {box: [x - half, y - size * 0.55, x + half, y + size * 0.55], center: [x, y], r: half};
+      const limit = 0.8 * K.H - halfH, top = 0.07 * K.H + halfH;
+      const y = ['chapter', 'versus'].includes(el.style) ? K.H / 2 : el.style === 'keyword' ? Math.max(top, 0.13 * K.H) : el.style === 'headline' ? Math.max(top, 0.09 * K.H) : [el.y * K.H, 0.12 * K.H, 0.22 * K.H, 0.34 * K.H, 0.5 * K.H].map(v => Math.min(limit, Math.max(top, v))).map((v, k) => [v, cover(v, k > 0)]).reduce((a, b) => (b[1] < a[1] - 1 ? b : a))[0];
+      est[i] = {box: [x - half, y - halfH, x + half, y + halfH], center: [x, y], r: half};
       return {x, y, size, width};
+    });
+    // A name chip sits above the head; when a word covers it or the frame cuts it (a big character), it moves beside the
+    // head, then beside the shoulders, never onto the face (documentary demo 2026-10-22: the keyword "THE LEGEND" sat
+    // on "Kaldi, goat herder").
+    d.elements.forEach((el, i) => {
+      if (el.kind !== 'figure' || !el.label) return;
+      const [hx, hy, hr] = est[i].head, s = 46 * K.u, w = K.measure(el.label, s, {weight: 800}) + s * 0.9, h = s * 1.46;
+      const covered = (x, y) => d.elements.some((o, j) => o.kind === 'text' && o.style !== 'poster' && est[j].box[0] < x + w / 2 && est[j].box[2] > x - w / 2 && est[j].box[1] < y + h / 2 && est[j].box[3] > y - h / 2);
+      const onFace = (x, y) => Math.abs(x - hx) < hr + w / 2 - 1 && Math.abs(y - hy) < hr + h / 2;
+      const beside = k => Math.min(K.W - K.M - w / 2, Math.max(K.M + w / 2, hx + k * (hr * 1.4 + w / 2))), toward = hx > K.W / 2 ? -1 : 1;
+      const spots = [[hx, hy - hr * 1.7], [beside(toward), hy - hr * 0.3], [beside(-toward), hy - hr * 0.3], [beside(toward), hy + hr * 0.9], [beside(-toward), hy + hr * 0.9]];
+      est[i].chip = spots.find(([x, y]) => y - h / 2 >= 0.02 * K.H && !covered(x, y) && !onFace(x, y)) || [hx, Math.max(hy - hr * 1.7, 0.02 * K.H + h / 2)];
     });
     // A chart, network or map makes room for words above it (motion demo 2026-10-17: a counter sat on a chart's title).
     d.elements.forEach((item, i) => {
       if (!['chart', 'network', 'map', 'quote', 'document', 'gauge'].includes(item.kind)) return;
       const e = est[i];
       let top = e.box[1];
-      d.elements.forEach((other, j) => { const b = est[j].box; if (other.kind === 'text' && other.style !== 'poster' && b[2] > e.box[0] && b[0] < e.box[2] && b[3] > e.box[1] && est[j].center[1] < e.center[1]) top = Math.max(top, b[3] + 0.02 * K.H); });
+      // Only a word that ends in the chart's upper half is above it (documentary demo 2026-10-22: a big "1/3" beside a
+      // donut squeezed it into the bottom quarter); a word beside it is stepped around below.
+      const above = j => est[j].box[3] < e.center[1];
+      d.elements.forEach((other, j) => { const b = est[j].box; if (other.kind === 'text' && other.style !== 'poster' && b[2] > e.box[0] && b[0] < e.box[2] && b[3] > e.box[1] && above(j)) top = Math.max(top, b[3] + 0.02 * K.H); });
       if (top > e.box[1]) {
         const h = Math.max(0.25 * K.H, e.box[3] - top), w = (e.box[2] - e.box[0]) * h / (e.box[3] - e.box[1]), cx = e.center[0];
         est[i] = {...e, box: [cx - w / 2, top, cx + w / 2, top + h], center: [cx, top + h / 2], r: Math.min(w, h) / 2, w, h};
@@ -167,7 +191,7 @@
       // covered a customer).
       let [x1, y1, x2, y2] = est[i].box;
       d.elements.forEach((other, j) => {
-        if (other.kind !== 'figure') return;
+        if (other.kind !== 'figure' && !(other.kind === 'text' && !['poster', 'statement'].includes(other.style) && !above(j))) return;
         const f = est[j].box;
         if (Math.min(x2, f[2]) - Math.max(x1, f[0]) <= 0 || Math.min(y2, f[3]) - Math.max(y1, f[1]) <= 0) return;
         if ((f[0] + f[2]) / 2 > (x1 + x2) / 2) { const right = f[0] - 0.01 * K.W, shift = Math.min(x1 - K.M, x2 - right); x1 -= shift; x2 -= shift; if (x2 > right) x2 = right; }
@@ -363,7 +387,7 @@
     const speaking = Array.isArray(D.speech) ? D.speech.some(([from, to]) => t >= from - 0.03 && t <= to) : null;
     const a = K.drawFigure({x: s.x * K.W, y: el.y * K.H, dir: s.facing === 'left' ? -1 : 1, size: el.size, A: s.A, pose: s.pose, expression: s.expression, emote: s.emote, talk: !!pose.talk, speaking, holds: el.holds, tl: local, seed: LAYOUT.el[i].seed, look: el.look, engine: D.engine}, p);
     LAYOUT.anchors[i] = {center: [(a.box[0] + a.box[2]) / 2, (a.box[1] + a.box[3]) / 2], r: (a.box[2] - a.box[0]) / 2, box: a.box, head: a.head};
-    if (el.label && p >= 1) K.pill(el.label, a.head[0], a.head[1] - a.head[2] * 1.7, 46 * K.u);
+    if (el.label && p >= 1) { const [cx, cy] = LAYOUT.est[i].chip || [a.head[0], a.head[1] - a.head[2] * 1.7], dx = cx - (LAYOUT.est[i].head?.[0] ?? cx), dy = cy - (LAYOUT.est[i].head?.[1] ?? cy); K.pill(el.label, a.head[0] + dx, a.head[1] + dy, 46 * K.u); }
   }
   function drawProp(el, i, t, local, p) {
     const s = propS(el), [cx, cy] = LAYOUT.est[i].center, {ctx} = K;
@@ -507,12 +531,15 @@
         ctx.fillStyle = single && k === 1 ? K.alpha(st.text, 0.12) : el.highlight === undefined || el.highlight === k ? colours[k % colours.length] : muted;
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a, a + sweep); ctx.closePath(); ctx.fill(); a += sweep;
       });
-      if (el.type === 'donut') { ctx.fillStyle = st.fill || K.PAL.bg; ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, TAU); ctx.fill(); K.text(fmtValue((single ? el.values[0] : el.values[el.highlight ?? 0]) * q, el.unit ?? (single ? '%' : '')), cx, cy, r * 0.38, {color: st.text, outline: false}); }
+      // A part of a whole reads as its share (documentary demo 2026-10-22: "about a third" as [1, 2] showed "1" and
+      // "Brazil 1"); a unit other than % keeps the number it names.
+      const share = !el.unit || el.unit === '%', shown = k => (share ? `${Math.round(values[k] * 100 / total)}%` : fmtValue(values[k], el.unit));
+      if (el.type === 'donut') { const k = single ? 0 : el.highlight ?? 0; ctx.fillStyle = st.fill || K.PAL.bg; ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, TAU); ctx.fill(); K.text(share ? `${Math.round(values[k] * 100 / total * q)}%` : fmtValue(values[k] * q, el.unit), cx, cy, r * 0.38, {color: st.text, outline: false}); }
       (el.labels || []).forEach((name, k) => {
         if (!name) return;
         const ly = cy - r * 0.8 + k * Math.min(r * 0.42, 52 * u), lx = cx + r * 1.25;
         ctx.fillStyle = el.highlight === undefined || el.highlight === k ? colours[k % colours.length] : muted; ctx.beginPath(); ctx.roundRect(lx, ly - 12 * u, 24 * u, 24 * u, 6 * u); ctx.fill();
-        K.text(`${name} ${fmtValue(el.values[k], el.unit)}`, lx + 36 * u, ly, Math.min(36 * u, h * 0.07), {color: st.text, align: 'left', weight: 700, outline: false, maxWidth: x1 - pad - lx - 36 * u});
+        K.text(`${name} ${shown(k)}`, lx + 36 * u, ly, Math.min(36 * u, h * 0.07), {color: st.text, align: 'left', weight: 700, outline: false, maxWidth: x1 - pad - lx - 36 * u});
       });
     } else if (el.type === 'units') {
       // A unit chart (0.39, isotype): the whole as identical marks, the part lit in the accent while the rest dims -

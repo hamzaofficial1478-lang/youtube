@@ -1,5 +1,5 @@
 {
-  "version": "0.57.0",
+  "version": "0.58.0",
   "updated": "2026-10-22",
   "nextAction": "Owner: start the program and look at the Backups page (a first automatic backup runs a few minutes after start; an external drive folder is safer). Try the timeline editor in Room 05 and the AI team on Connections. Then follow \"Make your first video\" on the Overview.",
   "repositories": [
@@ -482,7 +482,7 @@
           "id": "P06y",
           "title": "Visual rules per look: pictures, places and objects made in the engine and style, one style key per video, an art director's check",
           "status": "testing",
-          "evidence": "0.56.0 (2026-10-22): visual-dna.js rules for every look; planner VISUAL RULES lines; paint and illustrator prompts by the rules; style key attached to later paintings; art director check with one repaint (tests in ai-team.test.js and scene.test.js). Live: the owner's rejected camp painted again under the classic Stickman rules as a flat cartoon, passed by the art director and drawn with a stick figure on top. 0.57.0: Wikimedia Commons as the licensed archive source (live search from the owner's PC through api.wikimedia.org: public-domain maps and paintings of the port of Mocha and a Viennese coffeehouse found), a footage look painted by ChatGPT, the REAL WORLD rule, 720p previews; tests in tests/wikimedia.test.js.",
+          "evidence": "0.56.0 (2026-10-22): visual-dna.js rules for every look; planner VISUAL RULES lines; paint and illustrator prompts by the rules; style key attached to later paintings; art director check with one repaint (tests in ai-team.test.js and scene.test.js). Live: the owner's rejected camp painted again under the classic Stickman rules as a flat cartoon, passed by the art director and drawn with a stick figure on top. 0.57.0: Wikimedia Commons as the licensed archive source (live search from the owner's PC through api.wikimedia.org: public-domain maps and paintings of the port of Mocha and a Viennese coffeehouse found), a footage look painted by ChatGPT, the REAL WORLD rule, 720p previews; tests in tests/wikimedia.test.js. 0.58.0: the faults of the documentary test fixed and redrawn from its plan (words measured as drawn, boxes that hold tags and stamps, charts that keep their size and show shares, the headband, name chips beside the head); tests/drawn.test.js \"0.58 words fit as drawn\".",
           "remaining": "A full live plan with painted pictures for a real family; photo-real AI pictures for footage documentaries through ChatGPT; licensed web image sources after the owner decides."
         },
         {
@@ -646,5 +646,5 @@
     "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it.",
     "2026-10-22: Real images come from licensed sources only (stock libraries, Wikimedia Commons public domain/CC0/CC BY with credits, AI); never unlicensed images from websites, social media or YouTube. Reddit is read through the owner's own app, as topic signals only."
   ],
-  "milestone": "Licensed web images, Reddit topics, competitor watch, and a documentary test of every look"
+  "milestone": "Fixes from the documentary test: words that fit, charts that read, a real headband"
 }

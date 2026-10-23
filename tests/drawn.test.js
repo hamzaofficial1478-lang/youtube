@@ -395,3 +395,31 @@ test('0.41 words take their chosen colour, natural media draw, fast moments blur
     assert.ok((await frame(renderer, fast, 0.2, {...motion, ...twos})).equals(await frame(renderer, fast, 0.2 + 1 / 30, {...motion, ...twos})), 'the second frame of a pair repeats the first');
   } finally { await renderer.close(); }
 });
+
+test('0.58 words fit as drawn (capitals, tags, stamps), a chart keeps its size beside a number and shows shares, name chips step aside', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  const box = async (sketch, k, extra = {}) => { await frame(renderer, sketch, 2.5, {primary: 'motion', ...extra}); return (await renderer.evaluate('DRAWN.layout()')).est[k]; };
+  try {
+    await renderer.start();
+    // A keyword is measured in the capitals it is drawn in, so "Stay awake" and "STAY AWAKE" take the same room and stay in the frame.
+    const key = text => box({set: 'none', camera: 'push', elements: [{kind: 'text', style: 'keyword', text, x: 0.8, y: 0.3, size: 'l'}]}, 0);
+    const [lower, upper] = [await key('Stay awake'), await key('STAY AWAKE')];
+    assert.deepEqual(lower.box, upper.box);
+    assert.ok(upper.box[2] <= 1920 && upper.box[0] >= 0, JSON.stringify(upper.box));
+    // A tag's box holds its paper, not only its letters.
+    const tag = await box({set: 'none', camera: 'still', elements: [{kind: 'text', style: 'tag', text: 'London', x: 0.2, y: 0.14}]}, 0);
+    assert.ok(tag.box[1] >= 0 && tag.box[3] - tag.box[1] > 2 * (tag.box[2] - tag.box[0]) / 'London'.length, JSON.stringify(tag.box));
+    // A big number beside a donut does not squeeze it into the bottom of the frame.
+    const donut = {kind: 'chart', type: 'donut', values: [1, 2], labels: ['Brazil', 'Rest of the world'], x: 0.36, y: 0.5, size: 'xl'};
+    const alone = await box({set: 'none', camera: 'still', elements: [donut]}, 0), beside = await box({set: 'none', camera: 'still', elements: [donut, {kind: 'text', style: 'number', text: '1/3', x: 0.8, y: 0.48, size: 'xl'}]}, 0);
+    assert.ok(beside.box[3] - beside.box[1] > 0.8 * (alone.box[3] - alone.box[1]), `${JSON.stringify(alone.box)} ${JSON.stringify(beside.box)}`);
+    assert.equal(Sk.validate({elements: [donut]}, {primary: 'motion'}).elements[0].labels[1], 'Rest of the world');
+    assert.equal(Sk.validate({elements: [{...donut, labels: ['Brazil', 'Everyone else in the world']}]}, {primary: 'motion', lenient: true}).elements[0].labels[1], 'Everyone else in', 'cut at a word');
+    // A name chip under a keyword moves beside the head.
+    const scene = {set: 'none', camera: 'still', elements: [{kind: 'text', style: 'keyword', text: 'The legend', x: 0.15, y: 0.12}, {kind: 'figure', pose: 'stand', x: 0.2, y: 0.8, size: 'xl', label: 'Kaldi, goat herder'}]};
+    await frame(renderer, scene, 2.5, {primary: 'motion'});
+    const {est} = await renderer.evaluate('DRAWN.layout()'), [hx, hy, hr] = est[1].head;
+    assert.ok(est[1].chip && est[1].chip[1] > hy - hr * 1.7, 'the chip left its place under the word');
+    assert.ok(Math.abs(est[1].chip[0] - hx) > hr, 'beside the head, not on the face');
+  } finally { await renderer.close(); }
+});

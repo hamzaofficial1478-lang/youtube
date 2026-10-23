@@ -64,7 +64,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/26';
+const VERSION = 'drawn-scene/27';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
@@ -97,6 +97,9 @@ const PROP_SYNONYMS = Object.freeze({
 const fail = message => { throw Object.assign(new Error(message), {status: 400}); };
 const clean = (value, max) => String(value ?? '').replace(/[\x00-\x1F\x7F{}\\<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 const round3 = n => Math.round(n * 1000) / 1000;
+// A short label that runs long is cut at a word, never inside one (documentary demo 2026-10-22: "Rest of the world"
+// became "Rest of the wo").
+const cleanWord = (value, max) => { const text = clean(value, 400); if (text.length <= max) return text; const at = text.slice(0, max + 1).lastIndexOf(' '); return (at > 0 ? text.slice(0, at) : text.slice(0, max)).trim(); };
 
 // A validator that fails on the first problem (strict, for the owner's own edits) or, for Claude's drawings,
 // repairs what it can and reports each repair as a warning (lenient), so one unknown word never sinks a plan.
@@ -229,7 +232,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       const type = c.pick(item.type, CHART_TYPES, `${label} chart type`, 'bar');
       // A unit chart is [part, whole] ("1 in 10" is [1, 10]; the whole defaults to 100).
       if (type === 'units') { const whole = values[1] ?? 100; if (values[0] < 0 || whole < values[0] || whole > 1e12) c.problem(`${label} unit chart needs [part, whole] with 0 <= part <= whole.`); values.splice(0, values.length, Math.max(0, values[0]), Math.max(values[0], Math.min(1e12, whole))); }
-      const labels = (Array.isArray(item.labels) ? item.labels : []).slice(0, values.length).map(value => clean(value, 14));
+      const labels = (Array.isArray(item.labels) ? item.labels : []).slice(0, values.length).map(value => cleanWord(value, 18));
       elements.push({kind: 'chart', type, values: type === 'rating' ? [Math.min(5, Math.max(0, values[0]))] : ['pie', 'donut'].includes(type) ? values.map(value => Math.max(0, value)) : values,
         ...(labels.some(Boolean) ? {labels} : {}), ...(clean(item.title, 40) ? {title: clean(item.title, 40)} : {}), ...(clean(item.unit, 6) ? {unit: clean(item.unit, 6)} : {}),
         ...(Number.isInteger(item.highlight) && item.highlight >= 0 && item.highlight < values.length ? {highlight: item.highlight} : {}), ...(type === 'units' && item.icon === 'person' ? {icon: 'person'} : {}),
