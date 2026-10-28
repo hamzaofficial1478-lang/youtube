@@ -154,6 +154,15 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Implementation log
 
+### 2026-10-28 - The laptop program joins GitHub main, with review fixes (0.61.1)
+
+- **Owner request:** the program built on the laptop (0.6.0 to 0.61.0, 79 commits never pushed) becomes the GitHub program without mixing or overriding code wrongly; review it, fix the issues found, merge it into `main` and delete the import branch. From now on GitHub `main` is the source of truth (AGENTS.md).
+- **Checked:** the history was pushed to `laptop-import`; its first commit follows `main`'s newest commit (02d0794), so the merge only moves `main` forward. Every commit was searched for keys, databases, logs and large files (none). The review and its nine findings are in CONTINUATION-REVIEW.md.
+- **Fixed:** Codex tool use discards the answer (ai.js); media redirects checked per hop (visual-sources.js); restore refuses manifest paths outside the data folder (backup.js); replacing a channel waits for its upload and drops the old token (publishing-room.js); real YouTube and translation status and a correct start message (server.js); line breaks in caption text (captions.js); the launcher installs the locked packages on a fresh download or a changed lockfile (Start-ControlRoom.ps1); documents updated to GitHub `main`, 0.61.1 and the current README; the Windows user name removed from the docs.
+- **Tested** (Linux review machine, Node 24.22.1, FFmpeg 6.1.1): `npm run check` passed; `npm test` 369 tests, 343 passed, 0 failed, 26 skipped (23 need Edge or Chrome, 1 the Windows fonts, 2 the Windows DPAPI account); the five browser test files (atelier, drawn, world, scene, editing) run again with a local Chromium: 72 of 72 passed, so the 23 browser skips pass too. New checks: tests/ai-team.test.js (four kinds of Codex tool use refused), tests/scene.test.js (a redirect to a local address is never requested; a redirect on the media host is followed), tests/backup.test.js (three tampered manifest paths refused, nothing written, database untouched), tests/publishing.test.js (a channel replacement refused while its upload is queued).
+- **Not tested:** the launcher change (no PowerShell on the review machine: the first double-click on the owner's PC is its test); the DPAPI and fonts tests (owner's PC); live Pexels and Pixabay video downloads through the per-hop redirect check; every live provider, as before.
+- **Owner decision still open:** the repository is public, including the skill packs restated from the paid course documents; making it private is done in GitHub Settings.
+
 ### 2026-10-23 - Freesound and Jamendo in the sound library (0.61.0)
 
 - **Owner request:** use the Freesound and Jamendo APIs; both offer free, licensed music and sounds.
