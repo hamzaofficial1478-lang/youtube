@@ -202,7 +202,8 @@ class CodexCli {
   // command/prefix/home: tests run a fake script through node with its own Codex home.
   constructor({command, prefix = [], home = null} = {}) { this.override = command; this.prefix = prefix; this.home = home; }
   get command() { return this.override !== undefined ? this.override : findCodex(); }
-  run({text, images = [], model, effort, timeoutMs, onStart = () => {}}) {
+  // guard: a text answer is discarded when Codex used a tool; a picture request leaves Codex its image tool.
+  run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true}) {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app and sign in with your ChatGPT account.', 503));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-codex-')), last = path.join(dir, 'answer.txt');
     const files = images.map((image, k) => { const file = path.join(dir, `image-${k + 1}.${/png/.test(image.media_type) ? 'png' : 'jpg'}`); fs.writeFileSync(file, Buffer.from(image.data, 'base64')); return file; });
@@ -218,12 +219,12 @@ class CodexCli {
       let out = '', bytes = 0;
       // Read-only still lets Codex open any file of this Windows account, and prompts carry outside text (Reddit,
       // competitors, screenshots): a tool call stops the run and its answer is thrown away, so nothing it read is saved.
-      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (CODEX_TOOL.test(chunk)) child.kill(); });
+      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (guard && CODEX_TOOL.test(chunk)) child.kill(); });
       child.stderr.on('data', () => {});
       child.on('error', () => done(new AiError('The Codex app could not be started.', 503)));
       child.on('close', code => {
         const events = out.split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
-        if (events.some(event => CODEX_TOOL_ITEMS.includes(event.item?.type))) return done(new AiError('ChatGPT tried to run a command, read a file or browse, so its answer was thrown away and nothing was saved. Its usage may still count.', 502));
+        if (guard && events.some(event => CODEX_TOOL_ITEMS.includes(event.item?.type))) return done(new AiError('ChatGPT tried to run a command, read a file or browse, so its answer was thrown away and nothing was saved. Its usage may still count.', 502));
         const failed = events.find(event => event.type === 'turn.failed' || event.type === 'error');
         const said = String(failed?.error?.message || failed?.message || '');
         if (failed || !events.some(event => event.type === 'turn.completed')) {
@@ -251,7 +252,7 @@ class CodexCli {
   async image({prompt, outFile, model, references = [], onStart}) {
     const text = `Generate exactly one image with your image generation tool. ${prompt}\nDo not run commands, read or write files, or ask questions. When the image is made, reply with only the word DONE.`;
     const images = references.map(file => ({media_type: /\.png$/i.test(file) ? 'image/png' : 'image/jpeg', data: fs.readFileSync(file).toString('base64')}));
-    const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart});
+    const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart, guard: false});
     const folder = reply.thread ? path.join(codexHome(this.home), 'generated_images', reply.thread) : null;
     let made = [];
     try { made = fs.readdirSync(folder).filter(name => /\.(png|jpe?g|webp)$/i.test(name)).map(name => path.join(folder, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs); } catch { /* none */ }

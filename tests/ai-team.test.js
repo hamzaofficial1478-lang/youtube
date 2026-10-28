@@ -63,6 +63,10 @@ test('ChatGPT paints a picture: the newest image of the request is copied out; n
   assert.deepEqual(fs.readFileSync(out), Buffer.from(PNG, 'base64'));
   assert.equal(made.file, out);
   assert.match(fake.calls()[0].stdin, /Generate exactly one image[\s\S]*A harbour at dawn\./);
+  // The text-answer guard never blocks a picture: Codex keeps its image tool.
+  fs.rmSync(path.join(fake.home, 'generated_images'), {recursive: true, force: true});
+  fake.reply('DONE', {image: PNG, tool: 'mcp_tool_call'});
+  assert.equal((await codex.image({prompt: 'A harbour at dusk.', outFile: out, model: null})).file, out);
   fs.rmSync(path.join(fake.home, 'generated_images'), {recursive: true, force: true});
   fake.reply('I cannot draw that.');
   await assert.rejects(codex.image({prompt: 'x', outFile: out}), /made no picture/);
