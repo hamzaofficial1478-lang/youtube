@@ -107,12 +107,14 @@ const MOTION_LAYER = 'MOTION GRAPHICS are a layer of every engine, not an engine
 function engineScope(spec) {
   const primary = primaryEngine(spec);
   // Film looks (0.39) a shot may name: any when the style has one or lets Claude choose; none otherwise.
-  const films = spec?.drawing?.film && spec.drawing.film !== 'none' ? null : [];
-  if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true, films};
-  if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false, films};
+  // 0.62: a mix of ticked looks limits a shot's look, board, design and Claude's film choice to them (null: any).
+  const d = spec?.drawing || {}, films = d.film && d.film !== 'none' ? (d.film === 'choose' && d.films?.length ? d.films : null) : [];
+  const picks = Object.fromEntries(Object.entries({looks: d.look === 'mix' && d.looks, boards: d.board === 'mix' && d.boards, designs: d.design === 'mix' && d.designs}).filter(([, list]) => list?.length));
+  if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true, films, ...picks};
+  if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false, films, ...picks};
   // The Cinematic engine draws nothing: footage and images only (its titles come from the editing brain).
   if (primary === 'cinema') return {mix: false, drawn: [], footage: true, frames: false, films: []};
-  return {mix: false, drawn: [primary], footage: false, frames: false, films};
+  return {mix: false, drawn: [primary], footage: false, frames: false, films, ...picks};
 }
 // Film looks (0.39): how a medium prints the finished frame, for the drawn shots of every engine (drawn-engine.js
 // drawFilm). After lemo-opuscar's film styles (MIT), restated in our own words: what each suits and how to plan for it.
@@ -152,7 +154,7 @@ const CINEMA = 'CINEMATIC ENGINE. This video uses one engine: Cinematic - real m
 ].join('\n');
 const FILM_RULE = 'Drawn shots are printed in it automatically (footage keeps its own grade). A shot may name another film look in sketch.film, or "none", only for a change of register (a flashback, an archive memory, a dream) and says why in its notes; the video must still feel like one film.';
 const MIX_RULE ='Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
-function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null, grade = null, painted = false} = {}) {
+function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null, grade = null, painted = false, looks = null, boards = null, designs = null, films = null} = {}) {
   // The Cinematic engine (0.40) has its own guide: footage only, no drawing vocabulary or motion layer.
   if (primary === 'cinema') return [CINEMA, ...(GRADES[grade] ? [`GRADE: ${GRADES[grade].name}. ${GRADES[grade].plan} Every clip is graded alike, so choose footage whose light suits it.`] : []), ...(grade === 'choose' ? [`GRADE: choose one grade for the whole video and put its key in the plan's "grade" field: ${Object.entries(GRADES).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}`] : []), 'TASTE: references are ideas, never rules. Choose shots, light and rhythm that make each moment feel like a film for this audience, and say why when it matters.', ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : [])].join('\n');
   // One engine (0.37): every shot comes from it; documentary means its footage and its drawn shots.
@@ -161,6 +163,9 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
   const stickman = LOOKS[look] && look !== 'classic' && (mix || primary === 'stickman');
   const stickMix = look === 'mix' && (mix || primary === 'stickman'), boardMix = board === 'mix' && (mix || primary === 'handdrawn'), motionMain = mix || documentary;
   const docName = key => (key === 'footage' ? FOOTAGE : DESIGNS[key]);
+  // The looks a mix may use: the ones the owner ticked (0.62), else every look.
+  const only = (table, keys) => Object.entries(table).filter(([key]) => !keys?.length || keys.includes(key)), uses = (keys, what) => (keys?.length ? `this video mixes only the ${what} the owner ticked (never another one)` : `this video uses every ${what.replace(/s$/, '')}`);
+  const footageMix = !designs?.length || designs.includes('footage');
   return [
     ...(single ? [
       documentary ? `ENGINE. This video uses one engine: the Documentary engine - ${footage ? 'real footage (sources other than generated-graphics) and ' : ''}its drawn shots (sketch.engine "motion", in the documentary looks below). Use nothing from the other engines (no stick figures, no whiteboard, no designed atelier frames).`
@@ -178,13 +183,13 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
         : `When a shot leaves the main look (another engine or source), say why in its notes in one sentence. Drawn shots name their engine in sketch.engine: ${drawEngines(primary).join(', ')}. An atelier shot carries a "frame" instead of a sketch.`,
     ]),
     ...(stickman ? [`STICKMAN LOOK: ${LOOKS[look].name}. ${LOOKS[look].plan}`] : []),
-    ...(stickMix ? [`STICKMAN LOOKS (mix): this video uses every stickman look. Give each stickman shot its look in sketch.look, chosen for what its scene needs: ${Object.entries(LOOKS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
+    ...(stickMix ? [`STICKMAN LOOKS (mix): ${uses(looks, 'stickman looks')}. Give each stickman shot its look in sketch.look, chosen for what its scene needs: ${only(LOOKS, looks).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(primary === 'handdrawn' || mix ? [`HAND-DRAWN SHOTS: ${ENGINES.handdrawn.plan}${BOARDS[board] ? ` WHITEBOARD LOOK: ${BOARDS[board].name}. ${BOARDS[board].plan}` : ''}`] : []),
     ...(docName(design) && motionMain ? [`DOCUMENTARY LOOK: ${docName(design).name}. ${docName(design).plan}${design === 'footage' && !footage ? (painted ? ` Footage is not connected on this PC, but ChatGPT paints: build each shot as a documentary drawn shot with "design": "footage" whose place is a photo-real picture with "backdrop": true (${PAINTED_FOOTAGE}), and the motion graphics over it.` : ' Footage is not connected on this PC (no stock or image key), so build it from the documentary drawn shots with the same motion graphics.') : ''}`] : []),
-    ...(design === 'mix' && motionMain ? [`DOCUMENTARY LOOKS (mix): this video uses every documentary look. Give each drawn shot its look in sketch.design, chosen for what its scene needs: ${Object.entries(DESIGNS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}${footage ? ` Footage shots (stock or image sources): ${FOOTAGE.plan}` : ''}${painted ? ` footage (${FOOTAGE.name}, painted): a drawn shot with "design": "footage" whose place is a photo-real picture with "backdrop": true (${PAINTED_FOOTAGE}), with motion graphics over it.` : ''} ${MIX_RULE}`] : []),
-    ...(boardMix ? [`WHITEBOARD LOOKS (mix): this video uses every whiteboard look. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${Object.entries(BOARDS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
+    ...(design === 'mix' && motionMain ? [`DOCUMENTARY LOOKS (mix): ${uses(designs, 'documentary looks')}. Give each drawn shot its look in sketch.design, chosen for what its scene needs: ${only(DESIGNS, designs).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}${footage && footageMix ? ` Footage shots (stock or image sources): ${FOOTAGE.plan}` : ''}${painted && footageMix ? ` footage (${FOOTAGE.name}, painted): a drawn shot with "design": "footage" whose place is a photo-real picture with "backdrop": true (${PAINTED_FOOTAGE}), with motion graphics over it.` : ''} ${MIX_RULE}`] : []),
+    ...(boardMix ? [`WHITEBOARD LOOKS (mix): ${uses(boards, 'whiteboard looks')}. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${only(BOARDS, boards).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(FILMS[film] ? [`FILM LOOK: ${FILMS[film].name}. ${FILMS[film].plan} ${FILM_RULE}`] : []),
-    ...(film === 'choose' ? [`FILM LOOK: choose one film look for this whole video, or none, and set it on every drawn shot as sketch.film: ${Object.entries(FILMS).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} A second look only for a change of register (a flashback, an archive memory), with the reason in notes.`] : []),
+    ...(film === 'choose' ? [`FILM LOOK: choose one film look for this whole video, or none, and set it on every drawn shot as sketch.film${films?.length ? ' (only from the film looks the owner ticked)' : ''}: ${only(FILMS, films).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} A second look only for a change of register (a flashback, an archive memory), with the reason in notes.`] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
     ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : []),

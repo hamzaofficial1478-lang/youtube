@@ -188,6 +188,27 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-review-dialog">Cancel</button><button type="submit" class="button primary">Approve this exact revision</button></div>
     </form>
   </dialog>
+  <dialog id="family-style-dialog" class="wide-dialog" aria-labelledby="family-style-heading">
+    <form id="family-style-form">
+      <div class="dialog-heading"><div><p class="eyebrow">CHANNEL EDITING STYLE</p><h2 id="family-style-heading">Choose the editing style</h2></div><button class="icon-button" type="button" data-close="family-style-dialog" aria-label="Close the editing style">×</button></div>
+      <input type="hidden" name="familyId">
+      <div id="family-style-body"></div>
+      <fieldset class="setup-choice"><legend>Save these choices</legend>
+        <label class="radio-card"><input type="radio" name="saveFor" value="channel" checked><span><strong>For this channel only</strong><small>The channel gets its own copy of the style. Other channels keep theirs.</small></span></label>
+        <label class="radio-card"><input type="radio" name="saveFor" value="all"><span><strong>For every channel using this style</strong><small>A new revision of the library style. Other channels move to it only when you assign it there.</small></span></label>
+      </fieldset>
+      <div class="form-grid">
+        <label>Your name<input name="person" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Why this style fits the channel<input name="reason" required minlength="8" maxlength="1000" placeholder="For example: stone-age stories told as cartoons"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" name="specReviewed" required>I reviewed the pacing, transitions, typography, captions and QC thresholds (All settings).</label>
+      <label class="checkbox-label"><input type="checkbox" name="rightsReviewed" required>I reviewed the visual-source, licensed-music and AI-disclosure policy.</label>
+      <label class="checkbox-label"><input type="checkbox" name="originalityReviewed" required>I reviewed the originality guard: reference patterns stay at or below 30% and nothing is copied from another channel.</label>
+      <p class="note">Saving creates the style revision, approves it under your name and assigns it to this channel, the same steps as Room 03.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="family-style-dialog">Cancel</button><button type="submit" class="button primary">Save, approve and assign</button></div>
+    </form>
+  </dialog>
   <dialog id="style-assign-dialog" aria-labelledby="style-assign-heading">
     <form id="style-assign-form">
       <div class="dialog-heading"><div><p class="eyebrow">EXPLICIT STYLE DECISION</p><h2 id="style-assign-heading">Assign style</h2></div><button class="icon-button" type="button" data-close="style-assign-dialog" aria-label="Close style assignment">×</button></div>

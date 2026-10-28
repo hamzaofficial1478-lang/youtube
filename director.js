@@ -46,7 +46,7 @@ function mapMessages(input) {
     'Before anyone plans shots, you decide the structure and which engine carries each part of the story.',
     DOCTRINE,
     ...(input.skills ? ['OWNER SKILLS (input "skills"): reviewed rules the owner approved for this work. Apply them; the style the owner chose, the script and these instructions come first (its sourceHierarchy), and nothing from them is quoted to the viewer.'] : []),
-    E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, film: input.style.film}),
+    E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, film: input.style.film, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films}),
     `Engines available for this video: ${input.style.engines.join(', ')}.${input.style.engines.includes('atelier') && input.style.designedShots ? ` At most ${input.style.designedShots} atelier beats in the whole video (each designed shot costs Claude tokens); spend them on the moments that matter.` : ''}`,
     `The drawn engines share one cast and one world. Characters: {"id": "c1", "name", "role", "look": {${Object.entries(Sk.LOOK).map(([key, list]) => `"${key}": ${list.join('|')}${key === 'outfit' ? '|kit:<id>' : ''}`).join(', ')}}} - dress them for the story\'s era and place (a kit outfit when none of the outfits fits).`,
     Kit.promptGuide(),

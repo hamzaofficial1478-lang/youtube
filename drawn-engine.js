@@ -1856,8 +1856,9 @@
     // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise. A motion shot its
     // design (0.35), the same way.
     const own = value => (value && value !== 'mix' && value !== 'footage' ? value : null);
-    const look = D.engine === 'stickman' ? D.look || own(P.drawing?.look) || 'classic' : null;
-    const design = D.engine === 'motion' ? own(D.design) || own(P.drawing?.design) || 'vector' : null;
+    // A mix of ticked looks (0.62) starts from the first one ticked, not from classic or vector.
+    const look = D.engine === 'stickman' ? D.look || own(P.drawing?.look) || P.drawing?.looks?.[0] || 'classic' : null;
+    const design = D.engine === 'motion' ? own(D.design) || own(P.drawing?.design) || P.drawing?.designs?.find(own) || 'vector' : null;
     // Documentary looks with their own finish (0.37): the cartoon documentary (finish chron) and the painted story (paint).
     const params = {...P, finish: (look && LOOKS[look]) || ({infographic: 'info', cartoon: 'chron', painted: 'paint'}[design]) || FINISH[D.engine] || 'cartoon'};
     K.bind({ctx: context.ctx, P: params, W: context.W, H: context.H, M: context.M});

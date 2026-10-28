@@ -154,6 +154,45 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 
 ## Implementation log
 
+### 2026-10-28 - Channel pages, the editing style from the channel page, mixes of ticked looks (0.62.0)
+
+- **Owner requests (live test on the laptop):** (1) the main menu could not scroll; (2) clicking a family should open
+  that channel's whole setup instead of walking through every tab; (3) inside one engine, mix only the looks the
+  owner ticks; (4) choose the engine, looks, film looks and settings while setting up the family, saved for this
+  channel or for every channel, with a road that leads through the tabs and back; (5) Cartoon / Natural / Mix
+  (planned: natural = realistic pictures painted by ChatGPT, never real photos; Mix chosen by the AI per scene);
+  (6) a question about learned skills.
+- **Built:**
+  - the menu scrolls (0.61.1 follow-up, merged first);
+  - the channel page (`#family`): the setup road with the state of each step, a button to the tab built for it
+    on this family and a "Back to <channel> setup" bar there; the channel's videos with their next step;
+  - mixes of ticked looks (STYLE-ROOM.md "Mix of ticked looks"): `drawing.looks`/`boards`/`designs`/`films`,
+    the planner, the story director, the visual rules and the drawing check use only them; a shot that names no
+    look draws the first ticked one;
+  - the channel's editing-style window (STYLE-ROOM.md "A channel's editing style from its page"), also opened
+    right after a family is created;
+  - engine cards say "built and tested, not yet proven on a real video" instead of the stale "not built".
+- **Found and fixed while testing:** a family name with HTML characters was not escaped on the back bar; the
+  channel page and the new window read `styleRevisionById` as a revision (it returns `{profile, revision}`), which
+  would have broken the page of any channel with an assigned style.
+- **Tested:**
+  - tests/engines.test.js (new): the style keeps ticks in the engine's order, refuses them unless mixing, needs two,
+    rejects unknown or repeated looks; the scope carries them; the planner lists only them (stickman, documentary,
+    film looks); a planned shot outside them is repaired to the first ticked look with a warning, an owner edit is
+    refused; without ticks nothing changes;
+  - tests/style.test.js: renderers are `built`;
+  - browser (Chromium, throwaway data): the menu scrolls at 1912 x 651; the channel page (12 checks: card click,
+    sidebar, escaped names, competitors tab on the same family and back, Production Room 03 on the family, Edit
+    still opens the form); the style editor ticks (7 checks: hidden until Mix, saved, shown on the card); the
+    editing-style window (15 checks: opens after creating a family, the engine's own looks, the channel's own copy
+    approved and assigned, a second save revises the same copy, a library revision for every channel, the road
+    shows it); no page errors;
+  - npm run check; npm test 370 tests, 344 passed, 0 failed, 26 skipped (23 need a browser, 1 Windows fonts, 2 Windows DPAPI); the five browser test files with Chromium 72 of 72.
+- **Not tested:** on the owner's Windows PC; a live Claude plan with ticked looks (the planner text and the checks are
+  tested, not a paid plan).
+- **Answer to (6):** see the reply of 2026-10-28; learned lessons stay drafts until approved, and the rule-based
+  editing brain does not change when an editing skill is approved (provenance only).
+
 ### 2026-10-28 - The laptop program joins GitHub main, with review fixes (0.61.1)
 
 - **Owner request:** the program built on the laptop (0.6.0 to 0.61.0, 79 commits never pushed) becomes the GitHub program without mixing or overriding code wrongly; review it, fix the issues found, merge it into `main` and delete the import branch. From now on GitHub `main` is the source of truth (AGENTS.md).
