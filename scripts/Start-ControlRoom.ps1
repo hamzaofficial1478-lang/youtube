@@ -18,6 +18,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'The Node.js runtime did not start correctly.' }
     $runtimeMajor = $runtimeVersion.Split('.')[0]
     if ($runtimeMajor -ne '24') { throw ('Node.js 24 is required; this launcher found major version ' + $runtimeMajor + '.') }
+    # The locked packages are installed on the first start of a fresh download, and again when an update changes package-lock.json.
+    $installedLock = Join-Path $programDirectory 'node_modules\.package-lock.json'
+    if (-not (Test-Path -LiteralPath $installedLock) -or (Get-Item -LiteralPath (Join-Path $programDirectory 'package-lock.json')).LastWriteTimeUtc -gt (Get-Item -LiteralPath $installedLock).LastWriteTimeUtc) {
+        $npmCommand = Get-Command npm.cmd -ErrorAction SilentlyContinue
+        if (-not $npmCommand) { throw 'npm (installed with Node.js 24) was not found. Reinstall Node.js 24, then reopen this launcher.' }
+        Write-Host 'Installing the program''s packages (first start or after an update)...'
+        Push-Location -LiteralPath $programDirectory
+        try { & $npmCommand.Source ci --ignore-scripts --no-audit --no-fund; $npmExit = $LASTEXITCODE } finally { Pop-Location }
+        if ($npmExit -ne 0) { throw 'Installing the packages failed. Check the internet connection, then reopen this launcher.' }
+    }
     $dataDirectory = Join-Path $programDirectory 'data'
     New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
     $env:PORT = '3456'

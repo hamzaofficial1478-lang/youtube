@@ -345,11 +345,20 @@ function validImageModel(model) {
 async function downloadTo(fetchImpl, url, file, {maxBytes, accept, label = 'Media download', timeout = 300000}) {
   const safe = mediaUrl(url);
   requireValue(safe, `${label}: the source address is not an allowed provider media address.`, 502);
-  let response;
-  try {
-    response = await fetchImpl(safe, {redirect: 'follow', signal: AbortSignal.timeout(timeout), ...(/\.wikimedia\.org$/.test(new URL(safe).hostname) ? {headers: {'User-Agent': WIKIMEDIA_AGENT}} : {})});
-  } catch {
-    throw new InputError(`${label} failed or timed out.`, 502);
+  let response, target = safe;
+  // Redirects are followed one hop at a time: a followed redirect would visit any address before its end is checked.
+  for (let hop = 0; ; hop++) {
+    try {
+      response = await fetchImpl(target, {redirect: 'manual', signal: AbortSignal.timeout(timeout), ...(/\.wikimedia\.org$/.test(new URL(target).hostname) ? {headers: {'User-Agent': WIKIMEDIA_AGENT}} : {})});
+    } catch {
+      throw new InputError(`${label} failed or timed out.`, 502);
+    }
+    if (![301, 302, 303, 307, 308].includes(response.status)) break;
+    await response.body?.cancel();
+    let next = null;
+    try { next = hop < 4 ? mediaUrl(new URL(response.headers.get('location') || '', target).toString()) : null; } catch { /* not an address */ }
+    if (!next) throw new InputError(`${label} was redirected outside the provider's media hosts.`, 502);
+    target = next;
   }
   if (response.url && !mediaUrl(response.url)) { await response.body?.cancel(); throw new InputError(`${label} was redirected outside the provider's media hosts.`, 502); }
   if (!response.ok) { await response.body?.cancel(); throw new InputError(`${label} returned HTTP ${response.status}.`, 502); }

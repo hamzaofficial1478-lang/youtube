@@ -1,7 +1,7 @@
 {
-  "version": "0.61.0",
-  "updated": "2026-10-22",
-  "nextAction": "Owner: add Fish Audio, Freesound (API key) and Jamendo (client ID) on Connections, confirming each platform allows your use. Then fill the sound library (Find free sounds online, or import Pixabay downloads), and a real video is made with real voice, music and effects to see what needs improving.",
+  "version": "0.61.1",
+  "updated": "2026-10-28",
+  "nextAction": "Next build (owner request 2026-10-28): the editing styles and their updates. Still open for the owner from 0.61: add Fish Audio, Freesound (API key) and Jamendo (client ID) on Connections, confirming each platform allows your use. Then fill the sound library (Find free sounds online, or import Pixabay downloads), and a real video is made with real voice, music and effects to see what needs improving.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -624,6 +624,7 @@
     }
   ],
   "decisions": [
+    "2026-10-28: GitHub main (hamzaofficial1478-lang/youtube) is the source of truth; the laptop folder is a working copy that pulls from main. This supersedes the 2026-10-04 local-folder delivery rule. The laptop history (0.6.0-0.61.0) was merged into main with the 0.61.1 review fixes.",
     "2026-10-07: Preserve the existing Claude writer direction; this supersedes the earlier Hermes-only decision.",
     "2026-10-07: Build narration-only Audio Room first; choose music sourcing later.",
     "2026-10-04: Deliver verified changes to the owner's local folder (Desktop\\YT\\youtube); push to GitHub only on request.",
@@ -649,5 +650,5 @@
     "2026-10-23: Music and sound effects come from the owner's free sound library (hand downloads from Pixabay or the YouTube Audio Library, imported from a folder), not ElevenLabs generation. The Pexels and Pixabay APIs have no audio; Freesound's API needs a negotiated commercial agreement and is not used.",
     "2026-10-23: Freesound and Jamendo APIs are used for free sounds and music on the owner's request. Only CC0 and CC BY material is admitted. Both platforms reserve commercial API use, so each connection records the owner's confirmation that the platform allows their use."
   ],
-  "milestone": "Freesound and Jamendo in the sound library: CC0 and CC BY sounds and music with their credits"
+  "milestone": "0.61.1: the laptop program merged into GitHub main, with the fixes of the 2026-10-28 review"
 }

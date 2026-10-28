@@ -195,6 +195,9 @@ const codexUsage = usage => {
   const prompt = Math.max(0, usage.input_tokens - (usage.cached_input_tokens || 0)), completion = usage.output_tokens + (usage.reasoning_output_tokens || 0);
   return {promptTokens: prompt, completionTokens: completion, totalTokens: prompt + completion};
 };
+// Codex's event items for tools (`codex exec --json`); the program's requests never need one.
+const CODEX_TOOL_ITEMS = Object.freeze(['command_execution', 'file_change', 'mcp_tool_call', 'web_search']);
+const CODEX_TOOL = new RegExp(`"type":"(${CODEX_TOOL_ITEMS.join('|')})"`);
 class CodexCli {
   // command/prefix/home: tests run a fake script through node with its own Codex home.
   constructor({command, prefix = [], home = null} = {}) { this.override = command; this.prefix = prefix; this.home = home; }
@@ -213,11 +216,14 @@ class CodexCli {
       catch { return done(new AiError('The Codex app could not be started.', 503)); }
       const timer = setTimeout(() => { child.kill(); }, timeoutMs);
       let out = '', bytes = 0;
-      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); });
+      // Read-only still lets Codex open any file of this Windows account, and prompts carry outside text (Reddit,
+      // competitors, screenshots): a tool call stops the run and its answer is thrown away, so nothing it read is saved.
+      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (CODEX_TOOL.test(chunk)) child.kill(); });
       child.stderr.on('data', () => {});
       child.on('error', () => done(new AiError('The Codex app could not be started.', 503)));
       child.on('close', code => {
         const events = out.split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
+        if (events.some(event => CODEX_TOOL_ITEMS.includes(event.item?.type))) return done(new AiError('ChatGPT tried to run a command, read a file or browse, so its answer was thrown away and nothing was saved. Its usage may still count.', 502));
         const failed = events.find(event => event.type === 'turn.failed' || event.type === 'error');
         const said = String(failed?.error?.message || failed?.message || '');
         if (failed || !events.some(event => event.type === 'turn.completed')) {

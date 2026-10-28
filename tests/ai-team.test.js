@@ -46,7 +46,12 @@ test('the ChatGPT connection runs Codex isolated: read-only, no saved settings, 
   await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /usage limit/);
   fake.reply('   ');
   await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /ChatGPT returned an empty answer/);
-  assert.equal(fake.calls().length, 5, 'one call per request');
+  // Outside text may tell the model to read a file: any tool use throws the whole answer away.
+  for (const tool of ['command_execution', 'file_change', 'mcp_tool_call', 'web_search']) {
+    fake.reply('{"title":"the file said ..."}', {tool});
+    await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /tried to run a command, read a file or browse/, tool);
+  }
+  assert.equal(fake.calls().length, 9, 'one call per request');
   await assert.rejects(new CodexCli({command: null}).complete({prompt: 'x', maxTokens: 400}), /not found/);
 });
 

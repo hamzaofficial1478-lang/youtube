@@ -169,8 +169,12 @@ class Backups {
     const requestFile = path.join(dataRoot, 'restore-request.json'), request = readJson(requestFile);
     if (!request) return null;
     const at = clock(), resultFile = path.join(dataRoot, 'restore-result.json'), done = result => { writeJson(resultFile, {...result, backupId: request.backupId, at: at.toISOString(), requestedBy: request.requestedBy}); fs.rmSync(requestFile, {force: true}); return result; };
-    const folder = request.folder, set = readJson(path.join(folder, 'sets', `${request.backupId}.json`)), snapshot = set && path.join(folder, 'sets', set.database.file);
-    if (!set || !fs.existsSync(snapshot) || hashSync(snapshot) !== set.database.sha || integrity(snapshot) !== 'ok') return done({ok: false, reason: 'The backup was missing or changed when the program started, so nothing was restored.'});
+    const folder = request.folder, set = readJson(path.join(folder, 'sets', `${request.backupId}.json`));
+    // The manifest lives on the backup drive: every name it gives must stay inside the backup and the data folder.
+    const inside = rel => typeof rel === 'string' && rel && !path.isAbsolute(rel) && !rel.split(/[\\/]/).some(part => part === '..' || part === '') && path.resolve(dataRoot, rel).startsWith(path.resolve(dataRoot) + path.sep);
+    if (!/^[0-9TZ]+-[0-9a-f]{4}$/.test(String(request.backupId)) || !set || !/^[0-9TZ]+-[0-9a-f]{4}\.sqlite$/.test(String(set.database?.file)) || !Array.isArray(set.files) || set.files.some(file => !inside(file?.path) || !/^[0-9a-f]{64}$/.test(String(file?.sha)))) return done({ok: false, reason: 'The backup\'s list of files is not valid (a name points outside the data folder), so nothing was restored.'});
+    const snapshot = path.join(folder, 'sets', set.database.file);
+    if (!fs.existsSync(snapshot) || hashSync(snapshot) !== set.database.sha || integrity(snapshot) !== 'ok') return done({ok: false, reason: 'The backup was missing or changed when the program started, so nothing was restored.'});
     const missing = set.files.find(file => !fs.existsSync(path.join(folder, 'files', file.sha.slice(0, 2), file.sha)));
     if (missing) return done({ok: false, reason: `${missing.path} is missing from the backup, so nothing was restored.`});
     // Everything replaced is set aside first.

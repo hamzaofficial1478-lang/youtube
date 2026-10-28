@@ -482,6 +482,12 @@ test('downloads refuse other hosts, oversize or mislabelled files; ffprobe evide
   await assert.rejects(VS.downloadTo(serve(fixtures.jpg), 'https://evil.example/a.jpg', path.join(dir, 'a'), {maxBytes: 1e7, accept: ['image/jpeg']}), /not an allowed/);
   const redirected = async () => { const response = new Response(fixtures.jpg); Object.defineProperty(response, 'url', {value: 'https://evil.example/b.jpg'}); return response; };
   await assert.rejects(VS.downloadTo(redirected, 'https://images.pexels.com/b.jpg', path.join(dir, 'b'), {maxBytes: 1e7, accept: ['image/jpeg']}), /redirected outside/);
+  // Every hop is checked before it is visited: a hop to another address is never requested.
+  const hops = [], redirect = to => async url => { hops.push(String(url)); return String(url).includes('/start') ? new Response(null, {status: 302, headers: {location: to}}) : new Response(fixtures.jpg); };
+  await assert.rejects(VS.downloadTo(redirect('http://127.0.0.1:3456/api/state'), 'https://images.pexels.com/start.jpg', path.join(dir, 'b2'), {maxBytes: 1e7, accept: ['image/jpeg']}), /redirected outside/);
+  assert.deepEqual(hops, ['https://images.pexels.com/start.jpg'], 'the local address was never requested');
+  const hopped = await VS.downloadTo(redirect('/photos/b3.jpg'), 'https://images.pexels.com/start.jpg', path.join(dir, 'b3'), {maxBytes: 1e7, accept: ['image/jpeg']});
+  assert.equal(hopped.sha256, createHash('sha256').update(fixtures.jpg).digest('hex'), 'a hop on the media host is followed');
   await assert.rejects(VS.downloadTo(serve(fixtures.jpg), 'https://images.pexels.com/c.jpg', path.join(dir, 'c'), {maxBytes: 100, accept: ['image/jpeg']}), /larger than/);
   assert.equal(fs.existsSync(path.join(dir, 'c')), false, 'a partial file is removed');
   await assert.rejects(VS.downloadTo(serve(Buffer.from('<html>not an image</html>')), 'https://images.pexels.com/d.jpg', path.join(dir, 'd'), {maxBytes: 1e7, accept: ['image/jpeg']}), /not an accepted/);

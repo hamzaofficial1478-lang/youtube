@@ -1,3 +1,23 @@
+# Review of the laptop program before it joined GitHub main - 2026-10-28
+
+The owner had built 0.6.0 to 0.61.0 (79 commits) on the laptop without pushing. That history was pushed to the branch `laptop-import`, reviewed, fixed (0.61.1) and merged into `main`. `main` had nothing the laptop history lacked: its newest commit (02d0794) is where the laptop history starts, so the merge replaced outdated files with their newer versions and lost nothing. Only `hermes.js` (replaced by `writer.js` on 2026-10-06) and `tests/hermes.test.js` (renamed `tests/writer.test.js`) left on purpose.
+
+Checked: every commit of the branch for keys, databases, logs and large files (none; only fake test keys); the server boundary (loopback only, Host and Origin checks against DNS rebinding and cross-site requests, Sec-Fetch-Site, the write token, CSP); every child process (argument arrays, no shell); key storage (DPAPI, never in responses); downloads; backup and restore; OAuth and uploads; the autopilot gate; the page templates (escaped, and the CSP blocks inline script); interrupted-job recovery; tests use temporary data folders only; `npm audit` (0 vulnerabilities). The large drawing and scene engines (drawn-engine.js, scene-room.js) were reviewed through their documents and targeted searches, not line by line.
+
+| # | Finding | Fix in 0.61.1 |
+|---|---|---|
+| 1 | The repository is public: the skill packs restated from the owner's paid course documents (precision-os, prompt-library, mastery-bundle) and the Windows user name in the docs are visible to anyone. | The user name is removed from the docs. Making the repository private is the owner's decision (GitHub Settings, General, Change visibility); it is still public in the history. |
+| 2 | A fresh download could not start: the launcher never installed the three npm packages. | Start-ControlRoom.ps1 runs `npm ci --ignore-scripts` on the first start and when package-lock.json is newer than the installed packages. Not run on Windows in the review (no PowerShell in the review machine). |
+| 3 | AGENTS.md, README, HANDOFF, CLAUDE.md and BUILD-PROGRESS still said the laptop folder was the source of truth, and BUILD-PROGRESS still said 0.31.0. | Updated: GitHub `main` is the source of truth; stale README items (Reddit, music) corrected. |
+| 4 | Codex runs read-only, which still reads any file of the Windows account; prompts carry outside text (Reddit, competitors, screenshots). | ai.js: any Codex tool event (command, file change, MCP, web search) stops the run and discards the answer. tests/ai-team.test.js. |
+| 5 | Media downloads followed redirects and checked only the final address. | visual-sources.js: one hop at a time, each on the provider's media hosts. tests/scene.test.js. |
+| 6 | A restore trusted the backup manifest's paths. | backup.js: names leaving the data folder (or odd backup IDs and hashes) refuse the whole restore before anything changes. tests/backup.test.js. |
+| 7 | Replacing a language's channel did not wait for a running upload and kept the old access token in memory. | publishing-room.js: the same guard as a disconnect; replaced tokens dropped; a cached token is used only for an active connection. tests/publishing.test.js. |
+| 8 | The state said YouTube "not_connected" and translation "not_implemented", and the start message said publishing was not enabled. | server.js reports a confirmed channel and the Claude-ready editions; the start message describes Room 11. |
+| 9 | Caption text with a line break would end an .ass Dialogue line. | captions.js turns line breaks into spaces. Owner corrections already refused control characters, so this guards future paths only. |
+
+Not bugs, but limits to keep in mind: Freesound sounds arrive as the 128 kbps preview MP3; Freesound and Jamendo reserve commercial API use; no live YouTube, Claude, ElevenLabs, Fish Audio, Reddit, Freesound or Jamendo call has been verified; the Windows DPAPI and fonts tests need the owner's PC.
+
 # Program review and continuation roadmap — 2026-10-07
 
 ## Assessment
@@ -74,7 +94,7 @@ The synchronous SQLite design is acceptable for the current single-process scope
 
 ## Delivery and file inventory
 
-All work was written directly to `C:\Users\ammar laptops\Desktop\YT\youtube`. No standalone project copy, GitHub commit or push was made. The pre-existing dirty Claude migration was retained; the following list describes this continuation's edits, not authorship of every pre-existing diff.
+All work was written directly to `%USERPROFILE%\Desktop\YT\youtube`. No standalone project copy, GitHub commit or push was made. The pre-existing dirty Claude migration was retained; the following list describes this continuation's edits, not authorship of every pre-existing diff.
 
 - New implementation: `audio.js`, `public/audio-room.js`.
 - Integration and integrity fixes: `editing-brain.js`, `editing-room.js`, `render.js`, `render-room.js`, `server.js`, `public/app.js`, `public/editing-room.js`, `public/render-room.js`, `public/index.html`.

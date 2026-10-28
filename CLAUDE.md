@@ -1,6 +1,6 @@
 # YouTube Control Room — instructions for Claude Code
 
-This project moved from the Claude desktop app's Cowork mode to Claude Code on 2026-10-05. Follow these files:
+This project moved from the Claude desktop app's Cowork mode to Claude Code on 2026-10-05. Since 2026-10-28 GitHub `main` is the source of truth (AGENTS.md delivery rule). Follow these files:
 
 @AGENTS.md
 @docs/HANDOFF.md

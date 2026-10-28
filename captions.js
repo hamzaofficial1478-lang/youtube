@@ -215,7 +215,8 @@ function visibleGroups(captions, clears) {
 // ---------------------------------------------------------------- outputs
 
 const assTime = value => { const cs = Math.max(0, Math.round(value * 100)); return `${Math.floor(cs / 360000)}:${String(Math.floor(cs / 6000) % 60).padStart(2, '0')}:${String(Math.floor(cs / 100) % 60).padStart(2, '0')}.${String(cs % 100).padStart(2, '0')}`; };
-const assText = value => String(value).replace(/\\/g, '').replace(/[{}]/g, '');
+// A line break inside a word would end the Dialogue line of the .ass file; the program lays the lines out itself.
+const assText = value => String(value).replace(/\\/g, '').replace(/[{}]/g, '').replace(/[\r\n]+/g, ' ');
 const assInline = hex => `&H${(/^#?([0-9a-f]{6})$/i.exec(String(hex || ''))?.[1] || 'FFD23F').replace(/^(..)(..)(..)$/, '$3$2$1').toUpperCase()}&`;
 // The caption style and events for the graphics ASS script (same 1920x1080 / 1080x1920 script space).
 // Caption themes (0.41; caption-ai's theme set, MIT, restated as our own ASS styles): how burned-in captions look.

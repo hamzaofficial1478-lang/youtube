@@ -135,6 +135,11 @@ test('Y01: the approved master uploads privately in resumable chunks, survives a
   const queued = queue({madeForKids: false});
   assert.deepEqual([queued.status, queued.kind, queued.privacy, queued.title], ['queued', 'master', 'private', 'The first company you could own']);
   assert.throws(() => queue({madeForKids: false}), /already has an upload record \(queued\)[\s\S]*never uploaded blindly/);
+  // Replacing the language's channel waits for this upload, as a disconnect does.
+  const again = room.connect({requestedBy: 'Owner', familyId: env.family.id, locale: 'en-US', connectorId: env.client.id}, 'http://127.0.0.1:3456');
+  assert.equal((await room.callback(new URLSearchParams({state: new URL(again.url).searchParams.get('state'), code: 'good-code'}))).ok, true);
+  const waiting = room.state().families[0].locales[0].pending[0];
+  assert.throws(() => room.confirm(waiting.id, {confirmedBy: 'Owner', channelId: CHANNEL, confirmed: true}), /upload to the channel being replaced is running/);
   g.dropAt = 8 * 1024 * 1024; // the answer to the second chunk is lost
   const done = await room.processNext();
   assert.equal(done.status, 'uploaded', room.publicationRow(queued.id).error);

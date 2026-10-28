@@ -97,7 +97,9 @@ class PublishingRoom {
       requireValue(channel, 'Choose one of the channels Google returned.', 400);
       requireValue(input.confirmed === true, `Confirm that "${channel.title}" is the channel for this language.`);
       const old = this.db.prepare("SELECT * FROM youtube_bindings WHERE family_id=? AND locale=? AND status IN ('active','reconnect')").all(row.family_id, row.locale);
-      for (const item of old) this.db.prepare("UPDATE youtube_bindings SET status='replaced', secret=NULL, updated_at=? WHERE id=?").run(now(), item.id);
+      // As for a disconnect: an upload to the channel being replaced finishes (or stops) first.
+      requireValue(!old.some(item => this.db.prepare("SELECT 1 FROM publications WHERE binding_id=? AND status IN ('queued','uploading')").get(item.id)), 'An upload to the channel being replaced is running. Wait for it or let it stop first.', 409);
+      for (const item of old) { this.db.prepare("UPDATE youtube_bindings SET status='replaced', secret=NULL, updated_at=? WHERE id=?").run(now(), item.id); this.tokens.delete(item.id); }
       this.db.prepare("UPDATE youtube_bindings SET status='active', channel_id=?, channel_title=?, uploads_playlist=?, confirmed_by=?, updated_at=? WHERE id=?").run(channel.id, channel.title, channel.uploads, by, now(), id);
       this.store.event(`${this.store.family(row.family_id).name} (${row.locale}) now publishes to "${channel.title}" (${channel.id}), confirmed by ${by}`);
       return old;
@@ -119,9 +121,9 @@ class PublishingRoom {
   }
   // A short-lived access token from the saved refresh token; a refusal pauses this channel until it is reconnected.
   async accessToken(row) {
+    requireValue(row.secret && row.status === 'active', 'Connect this channel again (Room 11).', 409);
     const cached = this.tokens.get(row.id);
     if (cached && cached.expiresAt > Date.now()) return cached.accessToken;
-    requireValue(row.secret && row.status === 'active', 'Connect this channel again (Room 11).', 409);
     const client = this.client(row.connector_id);
     try {
       const fresh = await G.refresh(this.fetch, {clientId: client.clientId, clientSecret: client.clientSecret, refreshToken: this.unprotect(row.secret).refreshToken});

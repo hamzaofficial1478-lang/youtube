@@ -116,6 +116,24 @@ test('a restore whose backup changed in the meantime does nothing; a full drive 
   assert.throws(() => backups.saveSettings({auto: true, everyHours: 24, keep: 2, folder: path.join(os.tmpdir(), 'no-such-folder-xyz')}), /does not exist/);
 });
 
+test('a backup list edited on the backup drive cannot make a restore write outside the data folder', async t => {
+  const ws = workspace(t), store = ws.open();
+  let clock = new Date('2026-10-22T10:00:00Z');
+  const backups = new Backups(store, {dataRoot: ws.dataRoot, dataFile: ws.dataFile, clock: () => clock});
+  for (const bad of ['../outside.txt', 'voice-artifacts/../../outside.txt', path.resolve(ws.dataRoot, '..', 'outside.txt')]) {
+    const tampered = await backups.create({by: 'Owner'}), manifest = path.join(ws.dataRoot, 'backups', 'sets', `${tampered.id}.json`), json = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+    json.files.push({path: bad, size: 1, sha: json.database.sha});
+    fs.writeFileSync(manifest, JSON.stringify(json));
+    fs.writeFileSync(path.join(ws.dataRoot, 'restore-request.json'), JSON.stringify({backupId: tampered.id, folder: path.join(ws.dataRoot, 'backups'), requestedBy: 'Owner'}));
+    const before = fs.readFileSync(ws.dataFile), refused = Backups.applyPendingRestore({dataRoot: ws.dataRoot, dataFile: ws.dataFile});
+    assert.equal(refused.ok, false, bad);
+    assert.match(refused.reason, /not valid/);
+    assert.equal(fs.existsSync(path.join(ws.dataRoot, '..', 'outside.txt')), false, 'nothing was written outside');
+    assert.deepEqual(fs.readFileSync(ws.dataFile), before, 'the live database was not touched');
+    clock = new Date(clock.getTime() + 60000);
+  }
+});
+
 test('through the program: a backup from the page, a restore at the next start, and renders refused on a nearly full drive', async t => {
   const {createApp} = require('../server');
   const {RenderRoom} = require('../render-room');
