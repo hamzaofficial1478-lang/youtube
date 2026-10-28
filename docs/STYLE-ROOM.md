@@ -43,6 +43,40 @@ The chosen renderer must support every format, frame rate, transition and camera
 
 **Decision (2026-10-04):** Documentary Montage is the first style to become executable, because the owner's visuals come from stock libraries and AI generation, and an FFmpeg montage of stock clips and stills with Ken Burns moves is the most dependable first renderer. The owner decides which channel uses which style.
 
+## Mix of ticked looks (0.62)
+
+Owner request 2026-10-28: inside one engine, the owner chooses which looks a video mixes. A style whose look is
+"mix" (Stickman `drawing.look`, Whiteboard `drawing.board`, Documentary `drawing.design`) may tick two or more of
+that engine's looks (`drawing.looks`, `drawing.boards`, `drawing.designs`); a style whose film look is "choose" may
+tick the film looks Claude chooses from (`drawing.films`). Nothing ticked means every look, as before. The ticks
+are part of the immutable revision, so they need the same named approval.
+
+- `engines.js` `engineScope` carries the ticks (only when there are some) and `promptGuide` lists only those
+  looks to the planner and the story director ("this video mixes only the ... the owner ticked").
+- `sketch.js` `validate` keeps a shot's own look inside the ticks: Claude's plan is repaired to the first
+  ticked look with a named warning, an owner edit naming another look is refused.
+- A shot that names no look draws the first ticked look (`drawn-engine.js`, `drawn-kit.js`, paid pictures).
+- The visual rules given to the planner (`scene-room.js` `dnaKeys`) are those of the ticked looks only.
+- The style editor shows the ticks under each look menu while it says Mix (or "Claude chooses" for film looks);
+  the style card lists them.
+
+## A channel's editing style from its page (0.62)
+
+Owner request 2026-10-28: set a channel's engine and looks without walking through the rooms. The channel page's
+"Editing style" step (and a new family, right after it is created) opens one window: the editing engine (every
+style of the library, the channel's own copies included), that engine's looks to tick (one = that look, two or
+more = a mix of only those), the film looks (none, one, or two or more for Claude to choose from) and "All
+settings" (the full style editor). It saves:
+
+- **For this channel only:** the channel's own copy, named "<channel> · <style>" (a derived profile of the chosen
+  style); saving again revises that copy and keeps its own settings.
+- **For every channel using this style:** a new revision of the chosen library style. Other channels stay on
+  their revision until it is assigned there.
+
+Then it approves the revision under the owner's name with the same three confirmations as Room 03, and assigns it
+as the family default, through Room 03's own routes. An unchanged spec is not revised again; a revision made by a
+failed try is reused.
+
 ## Competitor learning (30 / 70)
 
 The owner supplies 3-10 competitor channels per family (milestone F07, done). Milestone R05 (Competitor Intelligence) will study them and may propose a **derived style revision** as a draft. Such a draft still needs the normal human review, keeps the reference share at or below 30%, and must not copy another channel's wording, footage, thumbnails, characters or signature look.

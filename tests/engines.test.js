@@ -104,3 +104,41 @@ test('the Cinematic engine plans footage only, with shot grammar and one grade f
   assert.match(E.promptGuide('cinema', {grade: 'noir'}), /GRADE: black and white\. /);
   assert.doesNotMatch(E.promptGuide('cinema', {grade: 'noir'}), /"grade" field/, 'a fixed grade is not chosen again');
 });
+
+// 0.62 (owner request 2026-10-28): a mix may use only the looks the owner ticks, inside the same engine.
+test('Mix of ticked looks: the style keeps them, the planner sees only them, shots stay inside them', () => {
+  const {validateStyleSpec} = require('../style'), Sk = require('../sketch');
+  const stick = spec('stickman-sketch-explainer'), hand = spec('hand-drawn-canvas'), doc = spec('documentary-montage');
+  const ticked = validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false, looks: ['doodle', 'classic', 'storybook'], film: 'choose', films: ['sepia', 'noir']}});
+  assert.deepEqual(ticked.drawing.looks, ['classic', 'storybook', 'doodle'], 'kept in the engine\'s own order');
+  assert.deepEqual(ticked.drawing.films, ['noir', 'sepia']);
+  assert.equal(validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false, looks: []}}).drawing.looks, undefined, 'nothing ticked: every look, as before');
+  assert.throws(() => validateStyleSpec({...structuredClone(stick), drawing: {look: 'classic', hand: false, looks: ['classic', 'doodle']}}), /only when the stickman look is "mix"/);
+  assert.throws(() => validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false, looks: ['classic']}}), /at least 2/);
+  assert.throws(() => validateStyleSpec({...structuredClone(stick), drawing: {look: 'mix', hand: false, looks: ['classic', 'chronicle']}}), /stickman looks to mix/);
+  assert.throws(() => validateStyleSpec({...structuredClone(hand), drawing: {look: 'classic', hand: true, board: 'mix', boards: ['marker', 'marker']}}), /once/);
+  const docTicked = validateStyleSpec({...structuredClone(doc), drawing: {...doc.drawing, design: 'mix', designs: ['painted', 'cartoon']}});
+  assert.deepEqual(docTicked.drawing.designs, ['cartoon', 'painted']);
+  // The engine scope carries them; without ticks its shape is unchanged.
+  assert.deepEqual(E.engineScope(ticked), {mix: false, drawn: ['stickman'], footage: false, frames: false, films: ['noir', 'sepia'], looks: ['classic', 'storybook', 'doodle']});
+  assert.deepEqual(E.engineScope(docTicked).designs, ['cartoon', 'painted']);
+  // The planner is told only the ticked looks.
+  const guide = E.promptGuide('stickman', {look: 'mix', looks: ticked.drawing.looks, film: 'choose', films: ticked.drawing.films});
+  assert.match(guide, /STICKMAN LOOKS \(mix\): this video mixes only the stickman looks the owner ticked/);
+  assert.match(guide, /classic \(classic cartoon\).*storybook.*doodle \(doodle\)/);
+  assert.doesNotMatch(guide, /whiteboard \(|illustrated \(/, 'unticked looks are not offered');
+  assert.match(guide, /only from the film looks the owner ticked\): noir .*sepia /);
+  assert.doesNotMatch(guide, /silent \(/);
+  const docGuide = E.promptGuide('montage', {design: 'mix', designs: ['cartoon', 'painted'], sources: ['generated-graphics']});
+  assert.match(docGuide, /DOCUMENTARY LOOKS \(mix\): this video mixes only the documentary looks the owner ticked/);
+  assert.doesNotMatch(docGuide, /vector \(|data \(/);
+  assert.match(E.promptGuide('stickman', {look: 'mix'}), /this video uses every stickman look/, 'nothing ticked: every look, as before');
+  assert.match(Sk.promptGuide('stickman', {looks: ['classic', 'doodle']}), /names its look: "look": classic\|doodle\./);
+  // A shot's own look: Claude's plan is repaired to the first ticked look with a named warning; an owner edit is refused.
+  const warnings = [], shot = look => ({engine: 'stickman', set: 'none', mood: 'normal', camera: 'still', look, elements: [{kind: 'text', text: 'Fire changed everything'}]});
+  assert.equal(Sk.validate(shot('whiteboard'), {lenient: true, warn: message => warnings.push(message), looks: ticked.drawing.looks}).look, 'classic');
+  assert.match(warnings.join(' '), /Stickman look must be one of: classic, storybook, doodle/);
+  assert.equal(Sk.validate(shot('doodle'), {looks: ticked.drawing.looks}).look, 'doodle');
+  assert.throws(() => Sk.validate(shot('whiteboard'), {looks: ticked.drawing.looks}), /Stickman look must be one of: classic, storybook, doodle/);
+  assert.equal(Sk.validate(shot('whiteboard'), {}).look, 'whiteboard', 'without ticks every look stays allowed');
+});

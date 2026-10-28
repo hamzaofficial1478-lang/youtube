@@ -44,7 +44,7 @@ test('launch library seeds six valid draft profiles once and every launch spec p
   for (const launch of LAUNCH_PROFILES) assert.deepEqual(validateStyleSpec(structuredClone(launch.spec)).name, launch.spec.name);
   assert.equal(profile(styles, 'documentary-montage').revisions[0].spec.renderer.adapter, 'ffmpeg-montage');
   assert.equal(RENDERERS['ffmpeg-montage'].firstProof, true);
-  assert.ok(Object.values(RENDERERS).every(renderer => renderer.status === 'not_implemented'), 'no renderer may claim to be ready before P05');
+  assert.ok(Object.values(RENDERERS).every(renderer => renderer.status === 'built'), 'every engine renders and is tested (0.62); a live proof on a real video is separate');
 });
 
 test('the stickman drawing setting: a look and the drawing hand, optional, checked strictly', () => {

@@ -35,46 +35,46 @@ const RENDERERS = {
   'ffmpeg-montage': {
     // 0.37 (owner decision 2026-10-18): the Documentary engine - footage with motion graphics, the cartoon documentary,
     // the painted story and the designed looks that were the motion engine's in 0.35.
-    features: ['Looks: Footage with motion graphics, Cartoon documentary, Painted story, Vector world, Infographic, Collage, Data desk, or Mix of all documentary looks (choose in the style)', 'Mix uses only documentary looks; for every engine at once choose the Story Mix style', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Footage needs a stock or image key (Pexels and Pixabay keys are free); without one the drawn looks carry the video', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
-    name: 'Documentary', milestone: 'P05', status: 'not_implemented', firstProof: true,
+    features: ['Looks: Footage with motion graphics, Cartoon documentary, Painted story, Vector world, Infographic, Collage, Data desk, or Mix of all documentary looks, or only the ones you tick (choose in the style)', 'Mix uses only documentary looks; for every engine at once choose the Story Mix style', 'Real maps: countries colour in, armies march as arrows, pins drop; crowds for nations and armies', 'Footage needs a stock or image key (Pexels and Pixabay keys are free); without one the drawn looks carry the video', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
+    name: 'Documentary', milestone: 'P05', status: 'built', firstProof: true,
     note: 'First executable target: stock and AI stills/clips, Ken Burns moves, cuts and crossfades, rendered deterministically with FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'ken-burns', 'pan', 'zoom']},
   },
   'ffmpeg-sketch': {
-    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all Stickman looks (choose in the style)', 'Mix uses only Stickman looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
-    name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'not_implemented',
+    features: ['Looks: Classic, Whiteboard, Storybook, Doodle, Illustrated, or Mix of all Stickman looks, or only the ones you tick (choose in the style)', 'Mix uses only Stickman looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Option: a hand draws each scene', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'A cast with looks, poses and expressions in built sets, on the narrator\'s words', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
+    name: 'FFmpeg sketch compositor', milestone: 'P05+', status: 'built',
     note: 'Stickman engine (0.20): cartoon stick characters with looks, expressions and gestures act each line in built sets, with a motion-graphics layer; every drawing arrives on the narrator\'s words. Drawn in the local browser and cut with the narration, captions and graphics.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'ken-burns']},
   },
   'canvas-frames': {
-    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all whiteboard looks (choose in the style)', 'Mix uses only whiteboard looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
-    name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'not_implemented',
+    features: ['Whiteboard animation: a hand draws people, objects and words, then colours them in', 'Looks: Colour cartoon, Black marker, Pencil sketch, Framed board, Dry-erase markers, or Mix of all whiteboard looks, or only the ones you tick (choose in the style)', 'Mix uses only whiteboard looks; for every engine at once choose the Story Mix style', 'Motion graphics in every shot: kinetic words, counters, maps, charts, timelines and crowds, drawn in this engine\'s look', 'Paid pictures where they count: Claude draws a detailed picture for the shots that need one, the program draws the rest free', 'People drawn as people: proportions, clothes, hands and expressive faces', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
+    name: 'Hand-drawn canvas frames', milestone: 'P05+', status: 'built',
     note: 'Hand-drawn engine (0.20): ink illustrations and ink figures drawn on paper with a living line, plus inked motion graphics; drawn frame by frame in the local browser, then assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'motion-graphics': {
     // 0.37: no longer an editing style (motion graphics are a layer of every engine); kept so older styles still work.
     features: ['Not an editing style since 0.37: motion graphics are part of every engine, and these designs are Documentary looks'],
-    name: 'Motion graphics compositor', milestone: 'P05+', status: 'not_implemented',
+    name: 'Motion graphics compositor', milestone: 'P05+', status: 'built',
     note: 'Motion-graphics engine (0.20): flat icons, kinetic words, counters and effects, with stick-figure moments and stock plates as partners, plus the animated charts, timelines and lists of the Editing Room; assembled like a montage.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   atelier: {
     features: ['Every shot designed by Claude for this video'],
-    name: 'Atelier compositions', milestone: 'P06h', status: 'not_implemented',
+    name: 'Atelier compositions', milestone: 'P06h', status: 'built',
     note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   'story-mix': {
     features: ['Mix of ALL engines: Stickman, Whiteboard, Documentary and Atelier in one video', 'The story director picks the engine for each beat; each engine still uses its own looks', 'Film looks for every drawn shot (0.39): 1920s silent film, film noir, old photograph, one-colour black and white, newspaper, risograph, blueprint, woodcut, 1950s TV, Technicolor, family album, silkscreen, engraving, art deco gold, or Claude chooses'],
-    name: 'Story mix (every engine)', milestone: 'P06i', status: 'not_implemented',
+    name: 'Story mix (every engine)', milestone: 'P06i', status: 'built',
     note: 'Story mix (0.26): no engine leads. Claude\'s story director reads the whole script, finds its chapters, hook and turns, and picks stickman, hand-drawn, atelier, motion graphics or footage for each beat by its job, with a rhythm made for long videos. Drawn and designed shots are rendered by the program on the narrator\'s words.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax']},
   },
   'cinematic-hybrid': {
     // 0.40: the Cinematic engine - real footage cut with film grammar, graded as one film (render.js GRADE_FILTERS).
     features: ['Real stock footage cut like a film: shot sizes, continuity of direction and light, cuts on motion', 'One colour grade for the whole video: natural, teal and orange, golden hour, bleach bypass, cold thriller, black and white, vintage film, moody, or Claude chooses for the story', 'Film grain and cinema bars (2.39:1) on long videos', 'Designed titles: place and date supers, the one number that matters, chapter titles', 'Nothing drawn: no characters, maps or charts (use the Documentary engine for those)', 'Footage needs a stock or image key (Pexels and Pixabay keys are free)'],
-    name: 'Cinematic', milestone: 'P06u', status: 'not_implemented',
+    name: 'Cinematic', milestone: 'P06u', status: 'built',
     note: 'Cinematic engine (0.40): real moving footage chosen like a cinematographer would (size, subject, movement, light), cut with film grammar and finished as one film: one colour grade on every clip, film grain and cinema bars, with designed titles from the editing brain. Rendered with the pinned FFmpeg.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30], transitions: TRANSITIONS, cameraMoves: CAMERA_MOVES},
   },
@@ -254,6 +254,12 @@ function choice(value, allowed, label) {
   requireValue(allowed.includes(value), `Choose a valid ${label}.`);
   return value;
 }
+// The looks ticked for a mix: absent or empty = every look of the list; otherwise two or more, only while mixing.
+function ticked(value, mixing, list, field, label, when) {
+  if (value === undefined || value === null || (Array.isArray(value) && !value.length)) return {};
+  requireValue(mixing, `Tick ${label} only when ${when}.`);
+  return {[field]: subset(value, list.filter(item => !['mix', 'choose', 'none'].includes(item)), label, 2)};
+}
 function subset(value, allowed, label, min = 1) {
   requireValue(Array.isArray(value) && value.length >= min && value.length <= allowed.length, `Choose at least ${min} ${label}.`);
   const unique = [...new Set(value)];
@@ -371,6 +377,12 @@ function validateStyleSpec(input) {
   const drawing = input.drawing === undefined ? null : (() => {
     const drawingIn = object(input.drawing, 'Stickman drawing');
     return {look: choice(drawingIn.look, DRAWING_LOOKS, 'stickman look'), hand: bool(drawingIn.hand, 'Drawing hand'), ...(drawingIn.board === undefined ? {} : {board: choice(drawingIn.board, DRAWING_BOARDS, 'whiteboard look')}), ...(drawingIn.design === undefined ? {} : {design: choice(drawingIn.design, DRAWING_DESIGNS, 'documentary look')}), ...(drawingIn.film === undefined || drawingIn.film === 'none' ? {} : {film: choice(drawingIn.film, DRAWING_FILMS, 'film look')}),
+      // 0.62 (owner request 2026-10-28): a mix uses only the looks the owner ticked (two or more); none ticked means every
+      // look, as before. The same for whiteboard looks, documentary looks and the film looks Claude chooses from.
+      ...ticked(drawingIn.looks, drawingIn.look === 'mix', DRAWING_LOOKS, 'looks', 'stickman looks to mix', 'the stickman look is "mix"'),
+      ...ticked(drawingIn.boards, drawingIn.board === 'mix', DRAWING_BOARDS, 'boards', 'whiteboard looks to mix', 'the whiteboard look is "mix"'),
+      ...ticked(drawingIn.designs, drawingIn.design === 'mix', DRAWING_DESIGNS, 'designs', 'documentary looks to mix', 'the documentary look is "mix"'),
+      ...ticked(drawingIn.films, drawingIn.film === 'choose', DRAWING_FILMS.filter(item => item !== 'none'), 'films', 'film looks to choose from', 'the film look is "choose"'),
       // 0.41: hand-made stepped motion (on twos or threes) and a film camera's motion blur on fast moments (unset: on for
       // the Documentary engine's designed shots, off for hand-made looks).
       ...(drawingIn.cadence === undefined || drawingIn.cadence === 'full' ? {} : {cadence: choice(drawingIn.cadence, ['twos', 'threes'], 'drawing cadence')}),
