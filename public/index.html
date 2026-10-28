@@ -1,7 +1,8 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/editing-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/audio-room.js" defer></script><script src="/review-room.js" defer></script><script src="/packaging-room.js" defer></script><script src="/master-room.js" defer></script><script src="/localization-room.js" defer></script><script src="/publishing-room.js" defer></script><script src="/voice-direction.js" defer></script><script src="/app.js" defer></script></head>
 <body>
+<div id="offline-banner" class="offline-banner" role="alert" hidden>The Control Room program has stopped. Start it again with "Start Control Room"; this page reconnects by itself.</div>
   <aside class="sidebar">
     <a class="brand" href="#overview"><span class="brand-icon">▶</span><span>Control Room<small>YOUR CONTENT OPERATING SYSTEM</small></span></a>
     <p class="nav-label">WORKSPACE</p>
@@ -9,12 +10,19 @@
       <a href="#overview" data-view="overview"><span>◫</span> Overview</a>
       <a href="#families" data-view="families"><span>▦</span> Channel families</a>
       <a href="#research" data-view="research"><span>⌁</span> Research briefs</a>
+      <a href="#competitors" data-view="competitors"><span>◎</span> Competitors</a>
+      <a href="#niches" data-view="niches"><span>✦</span> Niche Factory</a>
+      <a href="#trends" data-view="trends"><span>↗</span> Trending topics</a>
       <a href="#studio" data-view="studio"><span>✎</span> Content studio</a>
       <a href="#production" data-view="production"><span>◆</span> Production panel</a>
+      <a href="#skills" data-view="skills"><span>✦</span> Skills</a>
       <a href="#connections" data-view="connections"><span>⌘</span> Connections</a>
+      <a href="#backups" data-view="backups"><span>⛁</span> Backups</a>
+      <a href="#sounds" data-view="sounds"><span>♪</span> Sound library</a>
+      <a href="#operations" data-view="operations"><span>◷</span> Operations</a>
       <a href="#progress" data-view="progress"><span>☷</span> Build progress</a>
     </nav>
-    <div class="sidebar-bottom"><span class="status-dot"></span> Local workspace<p>Version 0.5 · Research briefs<br>Family-selected languages</p></div>
+    <div class="sidebar-bottom"><span class="status-dot"></span> Local workspace<p id="app-version">Local control room<br>Family-selected languages</p></div>
   </aside>
   <div class="workspace">
     <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="breadcrumb">Overview</span></div><span class="mode"><span class="status-dot"></span> Planning + review mode</span></header>
@@ -33,15 +41,25 @@
         <label class="full">Target countries <span class="hint">Separate with commas. These define your own market profile.</span><input name="countries" required placeholder="e.g. United States, United Kingdom"></label>
         <label class="full">Who is this for?<textarea name="audience" required minlength="10" maxlength="2000" rows="2" placeholder="Describe their interests, questions and viewing preferences."></textarea></label>
         <label class="full">Niche hypothesis <span class="hint">Optional; you can refine it after research.</span><textarea name="niche" maxlength="1000" rows="2" placeholder="The distinct value this channel could offer."></textarea></label>
+        <label class="full">Competitor channels <span class="hint">3-10 recommended. One per line: an @handle, a UC… channel ID or a youtube.com channel link. Competitor Intelligence will study them to learn techniques, never to copy. On the Competitors page you choose what to keep from each link (voice-over, narration, editing, thumbnails, visuals).</span><textarea name="competitors" rows="3" maxlength="4000" placeholder="https://www.youtube.com/@competitor-one&#10;@competitor-two"></textarea></label>
         <label>Primary content locale<input name="primaryLocale" required minlength="2" maxlength="255" value="en-US" placeholder="en-US"><span class="hint">Required. This is the original script and master channel language.</span></label>
         <label>Optional additional locales<input name="additionalLocales" maxlength="2560" placeholder="es-419, it-IT"><span class="hint">Leave blank for a one-channel family, or add comma-separated locale codes for more channels.</span></label>
-        <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning target only. Hermes script/research calls may use paid provider capacity; token limits and deliberate retries apply separately.</span></label>
+        <label>Monthly budget (USD)<input name="monthlyBudget" type="number" required min="0" max="100000" step="0.01" value="0"><span class="hint">Planning target only. Claude script/research calls may use paid provider capacity; token limits and deliberate retries apply separately.</span></label>
         <label>Original videos per week<input name="cadence" type="number" required min="1" max="14" step="1" value="2"></label>
         <label class="full">Planning time zone<input name="timezone" required value="Asia/Karachi" placeholder="Asia/Karachi"></label>
-        <label>Monthly LLM token limit<input name="monthlyTokenLimit" type="number" required min="0" max="10000000" step="1" value="100000"><span class="hint">Shared by script and research jobs. Zero blocks generation.</span></label>
-        <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="8000" step="1" value="6000"></label>
-        <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="8000" step="1" value="4000"></label>
+        <label>Monthly LLM token limit<input name="monthlyTokenLimit" type="number" required min="0" max="100000000" step="1" value="1000000"><span class="hint">Shared by script and research jobs. Zero blocks generation.</span></label>
+        <label>Script job token limit<input name="scriptTokenLimit" type="number" required min="1000" max="400000" step="1" value="24000"><span class="hint">Grows automatically for a long video: a chosen length gets the room its script needs.</span></label>
+        <label>Research job token limit<input name="researchTokenLimit" type="number" required min="1000" max="64000" step="1" value="12000"></label>
       </div>
+      <details class="writing-voice"><summary>Writing voice <span class="hint">Optional. Claude writes in it; words the channel never uses block a script candidate.</span></summary>
+        <div class="form-grid">
+          <label class="full">Who one video talks to <span class="hint">One person, named properly, not "viewers".</span><textarea name="wvAudience" maxlength="400" rows="2" placeholder="e.g. A first-time home baker whose loaves come out dense and who has watched ten recipe videos already."></textarea></label>
+          <label>Words the channel never uses <span class="hint">One per line or comma-separated (40 max).</span><textarea name="wvNever" rows="3" maxlength="2000" placeholder="unlock&#10;game-changer&#10;let's dive in"></textarea></label>
+          <label>The channel's own phrases <span class="hint">One per line (20 max).</span><textarea name="wvOwn" rows="3" maxlength="2000"></textarea></label>
+          <label class="full">Claims the channel will not make <span class="hint">One per line: numbers it cannot show, results that are not its own.</span><textarea name="wvRefused" rows="2" maxlength="4200"></textarea></label>
+          <label class="full">Format notes <span class="hint">How a video opens, intro or none, tone.</span><textarea name="wvFormat" rows="2" maxlength="600"></textarea></label>
+        </div>
+      </details>
       <p class="note">The first locale is the primary master. Add only the optional language channels this family actually needs. YouTube account connections will be added later.</p>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="family-dialog">Cancel</button><button type="submit" class="button primary">Save family</button></div>
@@ -63,7 +81,7 @@
         <label class="full">What the source supports<textarea name="notes" required minlength="10" maxlength="3000" rows="3"></textarea></label>
         <label class="full">Rights and use notes<textarea name="rightsNotes" required minlength="10" maxlength="2000" rows="2"></textarea></label>
       </div>
-      <p class="note">The URL is stored for review, not fetched. Source text is untrusted data. Only explicitly permitted, unexpired evidence can reach the tool-free Hermes profile.</p>
+      <p class="note">The URL is stored for review, not fetched. Source text is untrusted data. Only explicitly permitted, unexpired evidence can reach the tool-free Claude profile.</p>
       <p class="form-error" role="alert" hidden></p>
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="evidence-dialog">Cancel</button><button type="submit" class="button primary">Save evidence</button></div>
     </form>
@@ -75,10 +93,11 @@
       <div class="form-grid">
         <label>Channel family<select name="familyId" required></select></label>
         <label>Content type<select name="kind"><option value="factual">Factual / educational</option><option value="fiction">Clearly labeled original fiction</option></select></label>
+        <label>Target length (minutes)<input name="targetMinutes" type="number" min="1" max="180" step="1" placeholder="Standard, about 6"><span class="hint">Long-form videos: any length from 1 to 180 minutes. About 150 spoken words a minute.</span></label>
         <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
         <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
         <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
-        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Hermes candidate after reviewing it.</span><textarea name="script" maxlength="50000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
+        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Claude candidate after reviewing it.</span><textarea name="script" maxlength="300000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
       </div>
       <div class="section-heading"><h3>Evidence & source rights</h3><button class="button text-button" type="button" id="add-source">+ Add source</button></div>
       <div id="source-fields"></div>
@@ -113,7 +132,7 @@
         <label class="full">Delivery instructions<textarea name="instructions" maxlength="2000" rows="3" placeholder="Tone, cadence, emphasis and prohibited mannerisms."></textarea></label>
         <label class="full">Pronunciation lexicon <span class="hint">One per line: term =&gt; replacement | optional note</span><textarea name="lexicon" maxlength="20000" rows="5" placeholder="SQL => sequel | Channel standard"></textarea></label>
         <label>Monthly character limit<input name="monthlyCharacterLimit" type="number" min="1" max="100000000" step="1" value="100000" required></label>
-        <label>Per-audition character limit<input name="maxCharactersPerAudition" type="number" min="1" max="100000" step="1" value="12000" required></label>
+        <label>Per-audition character limit<input name="maxCharactersPerAudition" type="number" min="1" max="2000000" step="1" value="12000" required><span class="hint">A 30-minute narration is about 27,000 characters.</span></label>
         <label>Estimated cents per 1M characters<input name="priceCentsPerMillionCharacters" type="number" min="0" max="10000000" step="1" value="0" required></label>
         <label class="checkbox-label full"><input name="consentConfirmed" type="checkbox" required><span>I confirm the recorded owner or rights holder authorized this voice use.</span></label>
         <label class="checkbox-label full"><input name="commercialUseConfirmed" type="checkbox" required><span>I reviewed and confirmed commercial use for this exact voice and provider arrangement.</span></label>
@@ -123,11 +142,151 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-profile-dialog">Cancel</button><button type="submit" class="button primary">Save voice profile</button></div>
     </form>
   </dialog>
+  <dialog id="skill-dialog" class="wide-dialog" aria-labelledby="skill-dialog-heading">
+    <form id="skill-form"><div class="dialog-heading"><div><p class="eyebrow" id="skill-dialog-eyebrow">SKILL</p><h2 id="skill-dialog-heading">Skill</h2></div><button type="button" class="icon-button" data-close="skill-dialog" aria-label="Close skill dialog">&times;</button></div><div class="form-grid" id="skill-fields"></div><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="skill-dialog">Cancel</button><button type="submit" class="button primary" id="skill-dialog-submit">Save</button></div></form>
+  </dialog>
   <dialog id="voice-approval-dialog" aria-labelledby="voice-approval-heading">
     <form id="voice-approval-form"><div class="dialog-heading"><div><p class="eyebrow">HUMAN LISTENING GATE</p><h2 id="voice-approval-heading">Approve narration</h2></div><button type="button" class="icon-button" data-close="voice-approval-dialog" aria-label="Close approval dialog">×</button></div><input type="hidden" name="auditionId"><div class="form-grid"><label>Approver name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Comparison notes<textarea name="comparisonNotes" required minlength="20" maxlength="2000" rows="4" placeholder="What you compared and why this take wins."></textarea></label><label class="checkbox-label full"><input name="intelligibilityConfirmed" type="checkbox" required><span>I listened to the complete narration and confirmed every word is intelligible, correctly pronounced and suitable for the intended audience.</span></label></div><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-approval-dialog">Cancel</button><button type="submit" class="button primary">Approve exact narration</button></div></form>
   </dialog>
   <dialog id="voice-revoke-dialog" aria-labelledby="voice-revoke-heading">
     <form id="voice-revoke-form"><div class="dialog-heading"><div><p class="eyebrow">REVOKE THE HANDOFF</p><h2 id="voice-revoke-heading">Revoke approved narration</h2></div><button type="button" class="icon-button" data-close="voice-revoke-dialog" aria-label="Close revoke dialog">×</button></div><input type="hidden" name="approvalId"><div class="form-grid"><label>Operator name<input name="approvedBy" required minlength="2" maxlength="100"></label><label class="full">Revocation reason<textarea name="reason" required minlength="10" maxlength="1000" rows="3"></textarea></label></div><p class="note">Revocation blocks the Voice Room handoff and invalidates scene timing, captions, audio mix, QC, packaging and render state.</p><p class="form-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" class="button secondary" data-close="voice-revoke-dialog">Cancel</button><button type="submit" class="button danger">Revoke narration</button></div></form>
+  </dialog>
+    <dialog id="style-spec-dialog" class="wide-dialog" aria-labelledby="style-spec-heading">
+    <form method="dialog">
+      <div class="dialog-heading"><div><p class="eyebrow">IMMUTABLE STYLE SPECIFICATION</p><h2 id="style-spec-heading">Style</h2></div><button class="icon-button" type="button" data-close="style-spec-dialog" aria-label="Close style specification">×</button></div>
+      <div id="style-spec-body"></div>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-spec-dialog">Close</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-editor-dialog" class="wide-dialog" aria-labelledby="style-editor-heading">
+    <form id="style-editor-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="style-editor-kicker">NEW DRAFT REVISION</p><h2 id="style-editor-heading">Edit style</h2></div><button class="icon-button" type="button" data-close="style-editor-dialog" aria-label="Close style editor">×</button></div>
+      <input type="hidden" name="mode"><input type="hidden" name="profileId"><input type="hidden" name="expectedRevision"><input type="hidden" name="baseRevisionId">
+      <div id="style-editor-body"></div>
+      <div class="form-grid editor-sign">
+        <label class="full">What changed and why<textarea name="changeNote" required minlength="8" maxlength="1000" rows="2" placeholder="e.g. Longer shots for calmer finance explainers"></textarea></label>
+        <label class="full">Your name<input name="createdBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+      </div>
+      <p class="note">Saving creates a new draft. Existing revisions never change, and a draft cannot be assigned until someone reviews and approves it.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-editor-dialog">Cancel</button><button type="submit" class="button primary">Save draft revision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-review-dialog" class="wide-dialog" aria-labelledby="style-review-heading">
+    <form id="style-review-form">
+      <div class="dialog-heading"><div><p class="eyebrow">HUMAN STYLE REVIEW</p><h2 id="style-review-heading">Review style</h2></div><button class="icon-button" type="button" data-close="style-review-dialog" aria-label="Close style review">×</button></div>
+      <input type="hidden" name="revisionId">
+      <div id="style-review-summary"></div>
+      <div class="form-grid">
+        <label>Reviewer name<input name="approvedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Review notes <span class="hint">Optional.</span><input name="notes" maxlength="2000"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" name="specReviewed" required>I reviewed the pacing, transitions, typography, captions and QC thresholds.</label>
+      <label class="checkbox-label"><input type="checkbox" name="rightsReviewed" required>I reviewed the visual-source, licensed-music and AI-disclosure policy.</label>
+      <label class="checkbox-label"><input type="checkbox" name="originalityReviewed" required>I reviewed the originality guard: reference patterns stay at or below 30% and nothing is copied from another channel.</label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-review-dialog">Cancel</button><button type="submit" class="button primary">Approve this exact revision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-assign-dialog" aria-labelledby="style-assign-heading">
+    <form id="style-assign-form">
+      <div class="dialog-heading"><div><p class="eyebrow">EXPLICIT STYLE DECISION</p><h2 id="style-assign-heading">Assign style</h2></div><button class="icon-button" type="button" data-close="style-assign-dialog" aria-label="Close style assignment">×</button></div>
+      <input type="hidden" name="familyId"><input type="hidden" name="familyRevision"><input type="hidden" name="scope"><input type="hidden" name="expectedAssignmentId">
+      <div class="form-grid">
+        <label class="full" data-style-scope="channel">Channel edition<select name="locale"></select></label>
+        <label class="full">Approved style revision<select name="revisionId" required></select></label>
+        <div class="full style-preview" id="style-assign-preview"></div>
+        <label>Your name<input name="assignedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000" placeholder="Why this style fits the channel"></label>
+      </div>
+      <label class="checkbox-label" data-style-scope="channel"><input type="checkbox" name="separateProductionAcknowledged">I understand this override creates a separate visual production, cost plan and approval trail for that channel.</label>
+      <p class="note" id="style-assign-note"></p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-assign-dialog">Cancel</button><button type="submit" class="button primary">Assign style</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-fallback-dialog" aria-labelledby="style-fallback-heading">
+    <form id="style-fallback-form">
+      <div class="dialog-heading"><div><p class="eyebrow">NO SILENT FALLBACK</p><h2 id="style-fallback-heading">Approve a fallback style</h2></div><button class="icon-button" type="button" data-close="style-fallback-dialog" aria-label="Close fallback dialog">×</button></div>
+      <input type="hidden" name="assignmentId"><input type="hidden" name="familyRevision">
+      <div class="form-grid">
+        <label class="full">Fallback revision<select name="fallbackRevisionId"></select></label>
+        <label>Your name<input name="approvedBy" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000" placeholder="When this fallback is acceptable"></label>
+      </div>
+      <label class="checkbox-label"><input type="checkbox" name="confirmManualActivation">I understand the fallback is never used automatically. If a render fails, I still decide per job whether to use it.</label>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-fallback-dialog">Cancel</button><button type="submit" class="button primary">Save fallback decision</button></div>
+    </form>
+  </dialog>
+  <dialog id="style-decision-dialog" aria-labelledby="style-decision-heading">
+    <form id="style-decision-form">
+      <div class="dialog-heading"><div><p class="eyebrow">RECORDED DECISION</p><h2 id="style-decision-heading">Confirm</h2></div><button class="icon-button" type="button" data-close="style-decision-dialog" aria-label="Close decision dialog">×</button></div>
+      <input type="hidden" name="kind"><input type="hidden" name="targetId"><input type="hidden" name="familyRevision">
+      <p class="note" id="style-decision-note"></p>
+      <div class="form-grid">
+        <label>Your name<input name="person" required minlength="2" maxlength="80" autocomplete="name"></label>
+        <label>Reason<input name="reason" required minlength="8" maxlength="1000"></label>
+      </div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="style-decision-dialog">Cancel</button><button type="submit" class="button danger">Record decision</button></div>
+    </form>
+  </dialog>
+  <dialog id="scene-dialog" class="wide-dialog" aria-labelledby="scene-heading">
+    <form id="scene-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="scene-kicker"></p><h2 id="scene-heading">Scene room</h2></div><button class="icon-button" type="button" data-close="scene-dialog" aria-label="Close dialog">×</button></div>
+      <div id="scene-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="scene-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="render-dialog" aria-labelledby="render-heading">
+    <form id="render-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="render-kicker"></p><h2 id="render-heading">Render</h2></div><button class="icon-button" type="button" data-close="render-dialog" aria-label="Close dialog">×</button></div>
+      <div id="render-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="render-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="edit-dialog" aria-labelledby="edit-heading">
+    <form id="edit-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="edit-kicker"></p><h2 id="edit-heading">Edit</h2></div><button class="icon-button" type="button" data-close="edit-dialog" aria-label="Close dialog">×</button></div>
+      <div id="edit-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="edit-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="shot-dialog" class="wide-dialog shot-dialog" aria-labelledby="shot-heading">
+    <div class="dialog-heading"><div><p class="eyebrow">FIND A VISUAL FOR THIS SHOT</p><h2 id="shot-heading">Shot</h2></div><button class="icon-button" type="button" data-close="shot-dialog" aria-label="Close dialog">×</button></div>
+    <div id="shot-body" class="shot-dialog-body"></div>
+    <div class="dialog-actions"><button type="button" class="button secondary" data-close="shot-dialog">Done</button></div>
+  </dialog>
+  <dialog id="intel-dialog" class="wide-dialog" aria-labelledby="intel-heading">
+    <form id="intel-form">
+      <div class="dialog-heading"><div><p class="eyebrow" id="intel-kicker"></p><h2 id="intel-heading">Intelligence</h2></div><button class="icon-button" type="button" data-close="intel-dialog" aria-label="Close dialog">×</button></div>
+      <div id="intel-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="intel-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
+  </dialog>
+  <dialog id="setup-dialog" aria-labelledby="setup-heading">
+    <form id="setup-form">
+      <div class="dialog-heading"><div><p class="eyebrow">BEFORE YOU START</p><h2 id="setup-heading">Connect the AI for the program</h2></div></div>
+      <p class="hint">The AI writes the scripts and makes the editing, visual and niche decisions. Connect Claude, ChatGPT or both: one alone does everything; with both, ChatGPT paints the pictures, the two write scripts together and Claude plans and edits. Add the second one later in Connections.</p>
+      <fieldset class="setup-choice"><legend>Which AI should the program use first?</legend>
+        <label class="radio-card"><input type="radio" name="mode" value="claude-code" checked><span><strong>My Claude subscription</strong><small>Uses the Claude Code app already logged in on this PC. No per-token bill; your plan's usage limits apply. For your own personal use only. <b data-claude-code-status></b></small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="chatgpt"><span><strong>My ChatGPT subscription</strong><small>Uses the Codex app signed in with your ChatGPT account on this PC. No per-token bill; your plan's usage limits apply. For your own personal use only. <b data-codex-status></b></small></span></label>
+        <label class="radio-card"><input type="radio" name="mode" value="claude"><span><strong>A Claude API key</strong><small>Pay per token through your Claude Console account. The key is protected for your Windows account and never shown again.</small></span></label>
+      </fieldset>
+      <div class="form-grid">
+        <label class="full" data-setup-key hidden>Claude API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="sk-ant-..."></label>
+        <label data-setup-model>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
+        <label data-setup-model>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
+      </div>
+      <p class="note" data-setup-result aria-live="polite">Saving creates the connection and runs its test: the API key reads the two models' details (no generation); a subscription asks its AI one tiny question.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-setup-skip>Skip for now</button><button type="submit" class="button primary">Save and test</button></div>
+    </form>
   </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
     <form id="connector-form">
@@ -136,7 +295,14 @@
       <div class="form-grid">
         <label>Connector name<input name="name" required minlength="2" maxlength="80" placeholder="e.g. Main research project"></label>
         <label>Provider<select name="provider"></select></label>
-        <label class="full">API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Leave blank to keep the saved key"></label>
+        <label class="full" data-client-field hidden>OAuth client ID <span class="hint">From Google Cloud: an OAuth client of type "Desktop app"</span><input name="clientId" autocomplete="off" spellcheck="false" maxlength="120" placeholder="123456789-abc....apps.googleusercontent.com"></label>
+        <label data-reddit-field hidden>Reddit app ID <span class="hint">reddit.com/prefs/apps: the code under your app's name</span><input name="redditId" autocomplete="off" spellcheck="false" maxlength="40"></label>
+        <label data-reddit-field hidden>Your Reddit username <span class="hint">Without u/</span><input name="redditUser" autocomplete="off" spellcheck="false" maxlength="20"></label>
+        <label class="full checkbox-label" data-terms-field hidden><input type="checkbox" name="termsConfirmed">The platform allows my use of its API. Freesound and Jamendo give their API free for non-commercial use; for a monetized channel I have their OK (Freesound: freesound.org/help; Jamendo: licensing@jamendo.com).</label>
+        <label class="full" data-key-field>API key<input name="key" type="password" autocomplete="off" spellcheck="false" maxlength="512" placeholder="Leave blank to keep the saved key"></label>
+        <label data-model-field>Main model <span class="hint">Script writing, editing, visuals, niches</span><select name="mainModel"></select></label>
+        <label data-model-field>Support model <span class="hint">Research briefs, competitor analysis, checks</span><select name="supportModel"></select></label>
+        <label data-gpt-field>GPT model <span class="hint">Leave empty for the Codex app's own default</span><input name="gptModel" list="gpt-models" maxlength="48" placeholder="Codex default" spellcheck="false"><datalist id="gpt-models"></datalist></label>
         <label class="checkbox-label full"><input name="clearKey" type="checkbox"><span>Remove the saved key from this slot</span></label>
         <label class="full">Setup notes<input name="notes" maxlength="1000" placeholder="Purpose or planned setup. Do not put secrets here."></label>
       </div>

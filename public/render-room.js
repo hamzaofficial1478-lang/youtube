@@ -1,0 +1,152 @@
+'use strict';
+// Room 05 - Editing Room: assembly preview and style proof (P05 UI).
+// Loaded before app.js. Helpers from app.js (state, esc, badge, action, api, refresh, toast, saveForm, date, render)
+// and intelligence.js (intelMeter, intelList) are used only inside functions.
+
+let renderContentId = '';
+const RENDER_STATUS = {queued: ['Queued', 'orange'], running: ['Rendering', 'orange'], completed: ['Rendered', 'green'], failed: ['Failed', 'gray'], cancelled: ['Cancelled', 'gray'], interrupted: ['Interrupted', 'orange'], stale: ['Stale', 'gray']};
+const renderBadge = status => { const [label, color] = RENDER_STATUS[status] || [status, 'gray']; return badge(label, color); };
+function renderBusy() { const renders = state?.renders; return !!renders && (renders.checking || renders.contents.some(content => [...content.renders, ...(content.masters || [])].some(job => ['queued', 'running'].includes(job.status)))); }
+function renderPerson() { try { return localStorage.getItem('control-room-person') || ''; } catch { return ''; } }
+function renderRemember(name) { try { if (name) localStorage.setItem('control-room-person', name); } catch { /* optional */ } }
+const renderNameField = (label = 'Your name') => `<label>${label}<input name="person" required minlength="2" maxlength="80" autocomplete="name" value="${esc(renderPerson())}"></label>`;
+const renderClock = seconds => { const t = Math.round(seconds); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
+
+function editingRoomView(family) {
+  const renders = state.renders, contents = renders.contents.filter(item => item.familyId === family.id);
+  const readiness = renders.readiness, pin = renders.pin;
+  const engineReady = !!(readiness?.passed && pin && renders.pinMatchesLatest);
+  const hero = `<section class="voice-hero"><div><span class="stage-kicker">ROOM 05 · EDITING</span><h2>Editing Room</h2><p>The editing brain turns the approved visuals and narration into an edit: cuts on the spoken pauses, varied holds, purposeful camera moves, structural transitions and motion graphics where the script needs them, each with its reason. The critic flags boring, lazy or amateur choices. Change anything, render the edit with your pinned FFmpeg and record the style-proof verdict.</p></div><div class="voice-health"><span class="health-light ${engineReady ? 'ready' : ''}"></span><strong>${engineReady ? 'Render engine pinned' : 'Setup required'}</strong><small>${engineReady ? `FFmpeg ${esc(pin.version)} · ${esc(pin.ffmpegSha256.slice(0, 12))}` : readiness ? (readiness.passed ? 'Pin the checked build' : 'Readiness check failed') : 'Run the FFmpeg readiness check'}</small></div></section>`;
+  const engine = renderEngineCard(renders);
+  if (!contents.length) return `${hero}<div class="scene-cards">${engine}</div><div class="production-empty"><span class="empty-icon">▶</span><h2>No approved script yet</h2><p>Approve a script, its narration and its visual board first. The assembly preview starts from the Room 04 handoff.</p></div>`;
+  if (!contents.some(item => item.contentId === renderContentId)) renderContentId = contents[0].contentId;
+  const content = contents.find(item => item.contentId === renderContentId);
+  const picker = contents.length > 1 ? `<div class="production-toolbar scene-toolbar"><div><label for="render-content">Approved script</label><select id="render-content">${contents.map(item => `<option value="${item.contentId}" ${item.contentId === content.contentId ? 'selected' : ''}>${esc(item.title)} · v${item.contentRevision}</option>`).join('')}</select></div></div>` : '';
+  const latest = content.renders[0];
+  return `${hero}${picker}<div class="scene-cards">${engine}${renderInputsCard(content, engineReady)}</div>${editCard(content, engineReady)}${latest ? renderDetail(content, latest) : '<section class="production-card"><div class="production-empty compact"><h3>No render yet</h3><p>When the inputs and the render engine are ready, render the edit (or a plain assembly). It runs on this computer and costs nothing.</p></div></section>'}${content.renders.length > 1 ? renderHistory(content) : ''}`;
+}
+
+function renderEngineCard(renders) {
+  const readiness = renders.readiness, pin = renders.pin;
+  const chips = readiness ? `<div class="qc-checks">${renders.requiredFilters.map(name => `<span class="${readiness.filters?.[name] ? 'pass' : 'fail'}">${readiness.filters?.[name] ? '✓' : '!'} ${esc(name)}</span>`).join('')}${renders.requiredEncoders.map(name => `<span class="${readiness.encoders?.[name] ? 'pass' : 'fail'}">${readiness.encoders?.[name] ? '✓' : '!'} ${esc(name)}</span>`).join('')}<span class="${readiness.determinism?.passed ? 'pass' : 'fail'}">${readiness.determinism?.passed ? '✓' : '!'} deterministic</span>${readiness.motion ? `<span class="${readiness.motion.passed ? 'pass' : 'fail'}" title="${esc(readiness.motion.issues?.join(' ') || readiness.motion.path || '')}">${readiness.motion.passed ? '✓' : '!'} animated graphics${readiness.motion.version ? ` (${esc(readiness.motion.version)})` : ''}</span>` : ''}</div>` : '';
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">RENDER ENGINE</span><h2>FFmpeg readiness</h2></div>${badge(readiness ? (readiness.passed ? 'Checks passed' : 'Checks failed') : 'Not checked', readiness?.passed ? 'green' : 'gray')}</div>
+    ${readiness ? `<dl class="style-facts"><div><dt>FFmpeg</dt><dd>${esc(readiness.ffmpeg?.version || 'not found')}${readiness.ffmpeg?.sha256 ? ` · ${esc(readiness.ffmpeg.sha256.slice(0, 12))}` : ''}</dd></div><div><dt>ffprobe</dt><dd>${esc(readiness.ffprobe?.version || 'not found')}</dd></div><div><dt>Path</dt><dd class="mono-wrap">${esc(readiness.ffmpeg?.path || '—')}</dd></div><div><dt>Checked</dt><dd>${esc(date(readiness.checkedAt))} by ${esc(readiness.createdBy)}</dd></div></dl>${chips}${readiness.issues.length ? `<div class="checks">${intelList(readiness.issues)}</div>` : ''}` : '<p class="muted">Checks that FFmpeg and ffprobe are installed, have every filter and encoder this renderer uses, and produce byte-identical output for the same fixture.</p>'}
+    ${pin ? `<div class="handoff-rule"><strong>Pinned: FFmpeg ${esc(pin.version)} · ${esc(pin.ffmpegSha256.slice(0, 12))}</strong><p>By ${esc(pin.pinnedBy)} · ${esc(date(pin.createdAt))} · ${esc(pin.reason)}${renders.pinMatchesLatest ? '' : ' · <b>the latest check found a different binary</b>'}</p></div>` : ''}
+    <div class="card-actions">${action(renders.checking ? 'Checking…' : 'Run readiness check', 'render-check', '', 'secondary')}${readiness?.passed && !renders.pinMatchesLatest ? action('Pin this build', 'render-pin', readiness.id, 'primary') : ''}</div>
+    <p class="hint">Rendering is blocked if the FFmpeg or ffprobe file changes after pinning, so an update can never change a video silently. On Windows a full build such as Gyan.FFmpeg (winget install Gyan.FFmpeg) has everything needed.</p></section>`;
+}
+function renderInputsCard(content, engineReady) {
+  const inputs = content.inputs, style = inputs.style, active = content.renders.some(job => ['queued', 'running'].includes(job.status));
+  const row = (ok, title, detail) => `<div class="handoff-record"><span>${ok ? '✓' : '○'}</span><div><strong>${title}</strong><p>${detail}</p></div></div>`;
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">INPUTS & GATE</span><h2>${esc(content.title)}</h2></div>${badge(inputs.ready ? 'Ready' : 'Blocked', inputs.ready ? 'green' : 'gray')}</div>
+    ${row(!!inputs.visualApprovalId, 'Approved visual board', inputs.visualApprovalId ? `${inputs.shots} shots locked by checksum (Room 04)` : 'Approve the visuals in Room 04.')}
+    ${row(inputs.narrationSeconds !== null, 'Approved narration', inputs.narrationSeconds !== null ? `${renderClock(inputs.narrationSeconds)} · sets the video length` : 'Approve a narration in the Voice Room.')}
+    ${row(!!style && style.adapter === 'ffmpeg-montage', style ? `${esc(style.name)}` : 'Family style', style ? `${esc(style.adapter)} · ${esc(style.transition)} · ${style.fps} fps` : 'Assign a style in Room 03.')}
+    ${inputs.blockers.length ? `<p class="inline-warning">${esc(inputs.blockers.join(' '))}</p>` : ''}
+    <div class="card-actions">${inputs.ready && engineReady && !active ? action('Render plain assembly', 'render-start', content.contentId, 'secondary') : ''}${!engineReady && inputs.ready ? '<span class="muted">Check and pin FFmpeg first.</span>' : ''}</div></section>`;
+}
+function renderDetail(content, job) {
+  const result = job.result, progress = job.progress;
+  const head = `<div class="production-card-head"><div><span class="micro-label">${job.scope.edit ? `EDIT r${job.scope.edit.revision} RENDER` : 'ASSEMBLY PROXY'} · ${esc(date(job.createdAt))}</span><h2>${esc(job.scope.styleName)} r${job.scope.styleRevision} · ${job.scope.shots} shots · ${renderClock(job.scope.narrationSeconds)}</h2></div><div class="row-end">${renderBadge(job.status)}${!job.current && job.status === 'completed' ? badge('Out of date', 'gray') : ''}${job.review ? badge(job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested', job.review.decision === 'passed' ? 'green' : 'orange') : ''}</div></div>`;
+  if (['queued', 'running'].includes(job.status)) {
+    const pct = progress?.total ? Math.round(progress.done / progress.total * 100) : 0;
+    return `<section class="production-card">${head}<div class="cap-row"><div><strong>${esc(progress?.stage || 'Waiting for the render worker')}</strong><small>Step ${progress?.done || 0} of ${progress?.total || '—'} · attempt ${job.attempts}/3</small></div><div class="cap-meter">${intelMeter(pct, 100, false)}</div></div><div class="card-actions">${action('Cancel', 'render-cancel', job.id, 'text-button danger')}</div></section>`;
+  }
+  if (!result) return `<section class="production-card">${head}<p class="inline-warning">${esc(job.error || 'No output.')}</p>${progress?.logs?.length ? `<details class="scene-history"><summary>Last FFmpeg messages</summary>${progress.logs.map(item => `<pre class="render-log">${esc(item.step)}\n${esc(item.stderr || '(no output)')}</pre>`).join('')}</details>` : ''}<div class="card-actions">${job.attempts < 3 ? action('Retry', 'render-retry', job.id, 'secondary') : ''}</div></section>`;
+  const qc = result.qc.map(check => `<span class="${check.passed ? 'pass' : 'fail'}" title="${esc(check.detail)}">${check.passed ? '✓' : '!'} ${esc(check.name)}</span>`).join('');
+  return `<section class="production-card">${head}
+    <div class="render-player"><video controls preload="metadata" src="${esc(result.videoUrl)}"></video><div class="render-facts"><dl class="style-facts"><div><dt>Preset</dt><dd>${esc(result.preset.label)} · ${result.preset.width}×${result.preset.height} · ${result.preset.fps} fps</dd></div><div><dt>Transitions</dt><dd>${esc(result.transition.applied)}${result.transition.frames ? ` · ${result.transition.frames} frames` : ''}</dd></div><div><dt>Rendered</dt><dd>${result.renderSeconds} s · ${(result.video.sizeBytes / 1048576).toFixed(1)} MB</dd></div><div><dt>Checksum</dt><dd class="mono-wrap">${esc(result.video.sha256.slice(0, 24))}…</dd></div><div><dt>FFmpeg</dt><dd>${esc(job.scope.ffmpeg.version)} (pinned)</dd></div></dl>
+      <div class="qc-checks">${qc}</div>${result.qc.filter(check => !check.passed).map(check => `<p class="inline-warning"><b>${esc(check.name)}:</b> ${esc(check.detail)}</p>`).join('')}
+      <p class="hint">Every command, input checksum and log is in the <a href="${esc(result.manifestUrl)}" target="_blank" rel="noopener">render manifest ↗</a>.</p></div></div>
+    ${result.sheetUrl ? `<h3 class="intel-subhead">Contact sheet · one frame every ${result.sheet.everySeconds} s</h3><img class="contact-sheet" src="${esc(result.sheetUrl)}" alt="Contact sheet of the proxy">` : ''}
+    ${job.review ? `<div class="handoff-rule"><strong>${job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested'} by ${esc(job.review.reviewer)} · ${esc(date(job.review.at))}</strong><p>${esc(job.review.notes || 'No notes.')}</p></div>` : `<div class="card-actions">${job.current ? '<button class="primary" data-production-room="qc">Review and record the verdict in Room 08</button>' : '<span class="muted">The visuals or narration changed after this render. Render again to review it.</span>'}</div>`}
+  </section>`;
+}
+function renderHistory(content) {
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">HISTORY</span><h2>Earlier renders</h2></div></div><div class="history-list">${content.renders.slice(1).map(job => `<div class="history-row"><span class="job-dot ${job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${renderBadge(job.status)} ${esc(date(job.createdAt))}</strong><small>${job.scope.shots} shots · attempt ${job.attempts}/3${job.result ? ` · QC ${job.result.qcPassed ? 'passed' : 'found issues'} · ${esc(job.result.video.sha256.slice(0, 12))}` : ''}${job.review ? ` · ${esc(job.review.decision.replaceAll('_', ' '))}` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'cancelled', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry', 'render-retry', job.id, 'text-button') : ''}</div>`).join('')}</div></section>`;
+}
+
+function renderDialog(kind, title, kicker, body, submitLabel, data = {}) {
+  const form = document.getElementById('render-form');
+  form.reset();
+  form.dataset.kind = kind;
+  form.dataset.payload = JSON.stringify(data);
+  document.getElementById('render-heading').textContent = title;
+  document.getElementById('render-kicker').textContent = kicker;
+  document.getElementById('render-body').innerHTML = body;
+  form.querySelector('.form-error').hidden = true;
+  form.querySelector('[type=submit]').textContent = submitLabel;
+  document.getElementById('render-dialog').showModal();
+}
+function renderAction(command, id, button) {
+  const content = state.renders.contents.find(item => item.contentId === renderContentId);
+  if (command === 'render-check') return renderDialog('check', 'Run the FFmpeg readiness check', 'LOCAL CHECK · NO COST', '<p class="hint">Finds FFmpeg and ffprobe, records their versions and SHA-256, checks every filter and encoder the renderer uses, and renders a 2-second fixture twice to prove the output is byte-identical. Takes a few seconds.</p><div class="form-grid">' + renderNameField() + '</div>', 'Run check');
+  if (command === 'render-pin') return renderDialog('pin', 'Pin this FFmpeg build', 'REPRODUCIBLE RENDERS', `<p class="hint">Renders will only run with this exact binary (FFmpeg ${esc(state.renders.readiness.ffmpeg.version)}, ${esc(state.renders.readiness.ffmpeg.sha256.slice(0, 16))}…). If the file changes, rendering stops until you check and pin again.</p><div class="form-grid">${renderNameField()}<label>Why this build<input name="reason" required minlength="8" maxlength="500" placeholder="e.g. Gyan full build installed with winget"></label></div>`, 'Pin build', {readinessId: id});
+  if (command === 'render-start') return renderDialog('start', 'Render the assembly proxy', 'LOCAL RENDER · NO COST', `<p class="hint">Renders ${content.inputs.shots} shots at proxy resolution with ${esc(content.inputs.style.name)}: Ken Burns motion on stills, held or trimmed clips, ${esc(content.inputs.style.transition)} transitions and the approved narration. Then it checks length, frame, audio, black and frozen frames and builds a contact sheet.</p><div class="form-grid">${renderNameField()}</div>`, 'Render proxy', {contentId: id, visualApprovalId: content.inputs.visualApprovalId});
+  if (command === 'render-cancel' || command === 'render-retry') {
+    if (button) button.disabled = true;
+    return api(`/api/renders/${id}/${command === 'render-cancel' ? 'cancel' : 'retry'}`, {requestedBy: renderPerson() || 'Owner'}).then(refresh).then(() => toast(command === 'render-cancel' ? 'Render cancelled.' : 'Render requeued.')).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
+  }
+  return toast('Unknown action.', true);
+}
+document.getElementById('render-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const form = event.currentTarget, kind = form.dataset.kind, data = JSON.parse(form.dataset.payload || '{}');
+  const value = name => form.elements[name]?.value ?? '', checked = name => !!form.elements[name]?.checked, person = value('person');
+  renderRemember(person);
+  let message = null;
+  saveForm(form, async () => {
+    if (kind === 'check') { const report = await api('/api/render-readiness', {requestedBy: person}); message = report.passed ? `FFmpeg ${report.ffmpeg.version} passed every check.` : `The check found ${report.issues.length} issue(s).`; return; }
+    if (kind === 'pin') { await api('/api/render-pins', {readinessId: data.readinessId, pinnedBy: person, reason: value('reason')}); message = 'Build pinned for rendering.'; return; }
+    if (kind === 'start') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = 'Proxy render queued.'; return; }
+    if (kind === 'vd-direct') { await api(`/api/content/${data.contentId}/voice-direction`, {requestedBy: person, connector: data.connector}); message = 'Claude is directing the voice.'; return; }
+    if (kind === 'vd-retry') { await api(`/api/voice-direction-jobs/${data.jobId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Voice direction requeued.'; return; }
+    if (kind === 'vd-save') { const direction = vdFor(data.contentId), lines = vdChanges(form, direction); if (!lines.length) throw new Error('Nothing changed.'); const saved = await api(`/api/voice-directions/${data.directionId}/edit`, {editedBy: person, expectedRevision: data.expectedRevision, note: value('note'), lines}); message = `Saved as voice direction r${saved.revision}.`; return; }
+    if (kind === 'st-settings') { await api(`/api/families/${data.familyId}/soundtrack-settings`, {updatedBy: person, revision: data.revision, source: value('source') || 'library', musicModel: value('musicModel'), monthlyMusicSeconds: Number(value('monthlyMusicSeconds')), monthlySfx: Number(value('monthlySfx')), centsPerMusicMinute: Number(value('centsPerMusicMinute')), centsPerSfx: Number(value('centsPerSfx')), commercialUseConfirmed: checked('commercialUseConfirmed'), rightsNote: value('rightsNote')}); message = 'Soundtrack settings saved.'; return; }
+    if (kind === 'st-score') { const result = await api(`/api/content/${data.contentId}/score`, {requestedBy: person, mode: data.mode, ...(data.connector ? {connector: data.connector} : {})}); message = data.mode === 'rules' ? `Free score r${result.revision} made: ${result.cues.length} cue(s).` : 'Claude is scoring the video.'; return; }
+    if (kind === 'st-cue-track') {
+      const score = state.soundtrack.contents.map(item => item.score).find(item => item?.id === data.scoreId);
+      if (!score || score.revision !== data.revision) throw new Error('The score changed. Refresh and try again.');
+      const cues = score.cues.map(({id, asset, ...cue}) => (id === data.cueId ? {...cue, track: value('track'), offset: Number(value('offset')) || 0} : cue));
+      const saved = await api(`/api/scores/${score.id}/edit`, {editedBy: person, expectedRevision: score.revision, cues, note: 'Track changed'}); message = `Score r${saved.revision} saved with the new track.`; return;
+    }
+    if (kind === 'st-sfx-pick') { await api(`/api/families/${data.familyId}/sfx-pick`, {chosenBy: person, kind: data.kind, soundId: value('soundId') || null, revision: data.revision}); message = 'Effect saved.'; return; }
+    if (kind === 'snd-import') { const result = await api('/api/sounds/import', {requestedBy: person, folder: value('folder'), source: value('source'), kind: value('kind'), licence: value('licence'), attribution: value('attribution'), licenceConfirmed: checked('licenceConfirmed')}); message = `Importing ${result.progress.total} file(s); you can keep working.`; return; }
+    if (kind === 'snd-edit') { await api(`/api/sounds/${data.soundId}`, {updatedBy: person, title: value('title'), kind: value('kind'), tags: value('tags').split(',').map(tag => tag.trim()).filter(Boolean), attribution: value('attribution')}); SND.key = ''; message = 'Sound saved.'; return; }
+    if (kind === 'st-score-retry') { await api(`/api/score-jobs/${data.jobId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Music score requeued.'; return; }
+    if (kind === 'st-job-retry') { await api(`/api/audio-jobs/${data.jobId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Generation requeued.'; return; }
+    if (kind === 'st-generate' || kind === 'st-library') { const connector = intelConnectors('elevenlabs').find(item => item.id === value('connector')); if (!connector) throw new Error('Choose a tested ElevenLabs connection.'); const result = await api(kind === 'st-generate' ? `/api/scores/${data.id}/generate` : `/api/families/${data.id}/sfx-library`, {requestedBy: person, connector: {id: connector.id, revision: connector.revision}, costConfirmed: checked('costConfirmed')}); message = `${result.queued} item(s) queued, about ${result.estimatedCents}¢.`; return; }
+    if (kind === 'pkg-draft') { await api(`/api/content/${data.contentId}/package/draft`, {requestedBy: person, connector: data.connector}); message = 'Claude is drafting the package.'; return; }
+    if (kind === 'pkg-retry') { await api(`/api/package-jobs/${data.jobId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Package draft requeued.'; return; }
+    if (kind === 'pkg-save') { const rev = pkgFor(data.contentId)?.latest; const saved = await api(`/api/content/${data.contentId}/package`, {createdBy: person, expectedRevision: data.expectedRevision, note: value('note') || 'Owner edit', package: pkgFormPayload(form, rev)}); message = `Saved as package r${saved.revision}.`; return; }
+    if (kind === 'pkg-approve') { await api(`/api/package-revisions/${data.revisionId}/approve`, {approvedBy: person, notes: value('notes'), confirmations: {titleHonest: checked('titleHonest'), thumbnailChecked: checked('thumbnailChecked'), disclosureReviewed: checked('disclosureReviewed'), creditsReviewed: checked('creditsReviewed')}}); message = 'Package approved.'; return; }
+    if (kind === 'scan') { await api(`/api/renders/${data.id}/frame-scan`, {requestedBy: person, connector: data.connector, again: data.again}); message = 'Claude frame scan queued.'; return; }
+    if (kind === 'scan-retry') { await api(`/api/frame-scans/${data.scanId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Frame scan requeued.'; return; }
+    if (kind === 'scan-auto') { await api(`/api/families/${data.familyId}/frame-scan-settings`, {updatedBy: person, auto: data.auto, connector: data.connector}); message = data.auto ? 'Every new render will be scanned by Claude.' : 'Automatic scan switched off.'; return; }
+    if (kind === 'edition-draft') { await api(`/api/content/${data.contentId}/edition/draft`, {requestedBy: person, locale: data.locale, connector: data.connector}); message = 'Claude is adapting this language.'; return; }
+    if (kind === 'pub-confirm') { await api(`/api/youtube-bindings/${data.id}/confirm`, {confirmedBy: person, channelId: value('channelId'), confirmed: checked('confirmed')}); message = 'Channel confirmed for this language.'; return; }
+    if (kind === 'pub-disconnect') { await api(`/api/youtube-bindings/${data.id}/disconnect`, {requestedBy: person}); message = 'Channel disconnected.'; return; }
+    if (kind === 'pub-upload') { const kids = form.elements.madeForKids.value; await api(`/api/content/${data.contentId}/publish`, {requestedBy: person, locale: data.locale, categoryId: Number(value('categoryId')), madeForKids: kids === 'yes' ? true : kids === 'no' ? false : null}); message = 'Private upload queued.'; return; }
+    if (kind === 'pub-rules' || kind === 'pub-unattended') { const kids = form.elements.madeForKids.value; await api(`/api/families/${data.familyId}/publishing-rules`, {updatedBy: person, expectedRevision: data.expectedRevision, rules: {level: data.level, windows: parseWindows(value('windows')), timeZone: value('timeZone').trim(), minLeadHours: Number(value('minLeadHours')), maxPerDay: Number(value('maxPerDay')), maxPerWeek: Number(value('maxPerWeek')), categoryId: Number(value('categoryId')), madeForKids: kids === 'yes' ? true : kids === 'no' ? false : null}, confirmations: {rules: checked('rules'), audit: checked('audit')}}); message = data.level === 'unattended' ? 'Unattended publishing is on for this family.' : 'Rules saved.'; return; }
+    if (kind === 'pub-pause') { await api('/api/publishing/pause', {requestedBy: person, scope: data.scope, familyId: data.familyId, paused: true, reason: value('reason') || 'Paused by the owner.'}); message = 'Publishing paused.'; return; }
+    if (kind === 'pub-report') { await api(`/api/publications/${data.id}/report`, {reportedBy: person, kind: value('kind'), note: value('note')}); message = 'Problem recorded.'; return; }
+    if (kind === 'pub-schedule') { await api(`/api/publications/${data.id}/schedule`, {scheduledBy: person, local: value('local'), timeZone: value('timeZone').trim(), confirmations: {settings: checked('settings'), audit: checked('audit')}, waive: {thumbnail: checked('waive-thumbnail'), captions: checked('waive-captions')}}); message = 'Scheduled on YouTube.'; return; }
+    if (kind === 'pub-unschedule') { await api(`/api/publications/${data.id}/unschedule`, {requestedBy: person}); message = 'Schedule cancelled; the video stays private.'; return; }
+    if (kind === 'pub-discard') { await api(`/api/publications/${data.id}/discard`, {requestedBy: person}); message = 'Upload record discarded.'; return; }
+    if (kind === 'pub-choose') { await api(`/api/publications/${data.id}/choose`, {requestedBy: person, videoId: value('videoId')}); message = 'Upload matched to the video.'; return; }
+    if (kind === 'edition-render') { await api(`/api/content/${data.contentId}/edition/render`, {requestedBy: person, locale: data.locale}); message = 'Edition render queued.'; return; }
+    if (kind === 'edition-release') { await api(`/api/edition-renders/${data.id}/approve`, {approvedBy: person, notes: value('notes'), confirmations: {watched: checked('watched'), listened: checked('listened'), packageMatches: checked('packageMatches'), qcAccepted: checked('qcAccepted')}}); message = 'Edition approved for release.'; return; }
+    if (kind === 'edition-voice') { await api(`/api/families/${data.familyId}/edition-voices`, {createdBy: person, locale: data.locale, expectedRevision: data.expectedRevision, voiceId: value('voiceId'), model: value('model'), languageConfirmed: checked('languageConfirmed')}); message = 'Narrator saved.'; return; }
+    if (kind === 'edition-narrate') { await api(`/api/content/${data.contentId}/edition/narrate`, {requestedBy: person, locale: data.locale}); message = 'Narration queued.'; return; }
+    if (kind === 'edition-narration-retry') { await api(`/api/edition-narrations/${data.id}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Narration requeued.'; return; }
+    if (kind === 'edition-narration-approve') { await api(`/api/edition-narrations/${data.id}/approve`, {approvedBy: person, notes: value('notes'), confirmations: {listened: checked('listened'), pronunciation: checked('pronunciation'), syncReviewed: checked('syncReviewed'), syncAccepted: checked('syncAccepted')}}); message = 'Narration approved.'; return; }
+    if (kind === 'edition-retry') { await api(`/api/edition-jobs/${data.jobId}/retry`, {requestedBy: person, confirmInterrupted: checked('confirmInterrupted')}); message = 'Adaptation requeued.'; return; }
+    if (kind === 'edition-save') { const {item, edition} = edEdition(`${data.contentId}|${data.locale}`), src = edition.latest && !edition.sourceChanged ? edition.latest.source : item.source.full; const saved = await api(`/api/content/${data.contentId}/edition`, {createdBy: person, locale: data.locale, expectedRevision: data.expectedRevision, note: value('note') || 'Owner edit', edition: editionFormPayload(form, src)}); message = `Saved as r${saved.revision}.`; return; }
+    if (kind === 'edition-approve') { await api(`/api/edition-revisions/${data.revisionId}/approve`, {approvedBy: person, notes: value('notes'), confirmations: {meaningReviewed: checked('meaningReviewed'), factsChecked: checked('factsChecked'), visibleChecked: checked('visibleChecked'), packageHonest: checked('packageHonest')}}); message = 'Language edition approved.'; return; }
+    if (kind === 'master-start') { await api(`/api/renders/${data.id}/master`, {requestedBy: person}); message = 'Final master queued.'; return; }
+    if (kind === 'master-approve') { await api(`/api/renders/${data.id}/approve-master`, {approvedBy: person, notes: value('notes'), confirmations: {spotChecked: checked('spotChecked'), listened: checked('listened'), packageMatches: checked('packageMatches'), qcAccepted: checked('qcAccepted')}}); message = 'Final master approved.'; return; }
+    if (kind === 'review') { await api(`/api/renders/${data.id}/review`, {decision: value('decision'), reviewer: person, notes: value('notes'), confirmations: {watchedFully: checked('watchedFully'), flaggedReviewed: checked('flaggedReviewed'), styleMatches: checked('styleMatches'), syncReviewed: checked('syncReviewed'), audioReviewed: checked('audioReviewed'), qcAccepted: checked('qcAccepted'), critiqueAccepted: checked('critiqueAccepted')}}); return; }
+    throw new Error('Unknown form.');
+  }, () => message);
+});
+document.addEventListener('change', event => { if (event.target.id === 'render-content') { renderContentId = event.target.value; render(); } });

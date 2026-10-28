@@ -1,0 +1,609 @@
+[
+ {
+  "id": "hooks.five-property-score",
+  "title": "Score every hook on five properties, weighted toward the weakest",
+  "rooms": [
+   "hooks",
+   "script",
+   "qc"
+  ],
+  "tasks": [
+   "script.hooks",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "formula",
+  "when": "Whenever a hook or an opening line is written, chosen or reviewed (long-form, Shorts, or a Short cut from a long video).",
+  "summary": "A hook leaks at its dead property, so averaging hides the problem. Score specificity, direct address, stakes, open curiosity and length from 0 to 100 each; the verdict is 60% the mean plus 40% the minimum. Write five options, keep the top two and show both with their scores. The score is a reason to look again, never a promise of performance.",
+  "steps": [
+   "Write five hook options, each against a named hook formula.",
+   "Score each: specificity (numbers, names, dates up; vague hype and filler down), address ('you' in the first six words), stakes (what it costs to keep doing it the current way), curiosity (an open question; a hook that answers itself loses points), length (9-24 spoken words).",
+   "Verdict = 0.6 x mean + 0.4 x weakest property. 72+ strong, 55-71 workable, below 55 weak.",
+   "Fix the weakest property first, using the property's own fix, then rescore."
+  ],
+  "do": [
+   "Show the owner the two best hooks with their score panels, never a single hook.",
+   "Name the formula the winning hook uses and why it fits this idea."
+  ],
+  "avoid": [
+   "Treating a high score as proof that a video will perform; the heuristic separates bad hooks from real ones, not hits from misses.",
+   "Scoring a hook in a language the heuristic does not read (it is English only)."
+  ],
+  "numbers": {
+   "weights": {
+    "mean": 0.6,
+    "weakest": 0.4
+   },
+   "bands": {
+    "strong": 72,
+    "workable": 55
+   },
+   "spoken_words": [
+    9,
+    24
+   ],
+   "address_window_words": 6
+  },
+  "checks": [
+   "The chosen hook's weakest property was named and either fixed or accepted on purpose."
+  ],
+  "tags": [
+   "hooks",
+   "scoring",
+   "retention"
+  ],
+  "source": "youtube-agent-skill yt-script/hookscore.py by Jake Schincariol (MIT, a2feb21); implemented in craft.js scoreHook",
+  "priority": 60
+ },
+ {
+  "id": "hooks.twenty-one-formulas",
+  "title": "Write hooks against the 21 named formulas and classify every title",
+  "rooms": [
+   "hooks",
+   "ideas",
+   "competitors"
+  ],
+  "tasks": [
+   "script.hooks",
+   "ideas.titles",
+   "competitors.blueprint"
+  ],
+  "kind": "template",
+  "when": "When drafting hook options, naming the shape of a competitor title, or choosing which hook shape a new video uses.",
+  "summary": "Twenty-one hook shapes cover almost every working YouTube opening: statistic, someone else's result, the mistake, contrarian flip, the reveal, superlative, the clock, I tried it, the question, before/after, teardown, the stack, warning, list, receipt, insider, impossible, comparison, origin, deadline and direct address. A hook must confirm the click the title promised, open a question the viewer cannot close and prove the payoff exists.",
+  "steps": [
+   "Pick the formula from the idea, not the other way round: a number the viewer does not know is a statistic, a named outcome is someone else's result, a common belief that is wrong is a contrarian flip.",
+   "Confirm the title in the first sentence.",
+   "Carry one idea only; a hook with two promises keeps neither.",
+   "If an artifact was promised, show it inside 20 seconds."
+  ],
+  "do": [
+   "Vary the formula across a channel's videos; competitor titles are classified to learn which shapes travel in a niche, never to reuse their wording."
+  ],
+  "avoid": [
+   "Opening with who the channel is; the subscribe pitch has not been earned yet.",
+   "A hook that only proves the payoff: that is a summary, and it leaks."
+  ],
+  "numbers": {
+   "formulas": 21,
+   "artifact_within_seconds": 20,
+   "hook_window_seconds": 15
+  },
+  "checks": [
+   "The hook confirms the title, opens a question and proves a payoff exists."
+  ],
+  "tags": [
+   "hooks",
+   "titles",
+   "formulas"
+  ],
+  "source": "youtube-agent-skill yt-script/hooks.json (MIT, a2feb21), vendored in vendor/youtube-agent-skill/hooks.json",
+  "priority": 55
+ },
+ {
+  "id": "script.first-fifteen-seconds",
+  "title": "The first 15 seconds are the whole job; the turn follows by 0:45",
+  "rooms": [
+   "script",
+   "editing"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review",
+   "editing.plan"
+  ],
+  "kind": "procedure",
+  "when": "When writing or reviewing the opening and the first minute of any script.",
+  "summary": "The opening confirms the click, opens a question and proves the payoff exists. Between 0:15 and 0:45 the turn says in one sentence what the video will do and starts doing it. Channel intros, 'before we get started' and early subscribe pitches are the most common cause of the 0:30 cliff.",
+  "steps": [
+   "Hook (0:00-0:15): confirm the title's promise, open the loop, prove the payoff exists.",
+   "Turn (0:15-0:45): one sentence on what this video will do, then start doing it.",
+   "Body: one idea per beat, each with what is on screen, not only what is said.",
+   "Payoff: deliver what the hook promised, explicitly, and say that it is being delivered.",
+   "Close: one ask, not three."
+  ],
+  "avoid": [
+   "A channel intro, a 'before we get started' or a subscribe pitch before the payoff.",
+   "A beat with nothing to look at: a talking head with nothing on screen is a podcast."
+  ],
+  "numbers": {
+   "hook_seconds": 15,
+   "turn_window_seconds": [
+    15,
+    45
+   ],
+   "words_per_minute": 150,
+   "asks_at_close": 1
+  },
+  "checks": [
+   "Every beat names what is on screen.",
+   "The close carries exactly one ask."
+  ],
+  "tags": [
+   "script",
+   "structure",
+   "retention"
+  ],
+  "source": "youtube-agent-skill yt-script/SKILL.md (MIT, a2feb21), restated",
+  "priority": 50
+ },
+ {
+  "id": "script.never-invent-a-number",
+  "title": "Never invent a number, a result or a source",
+  "rooms": [
+   "script",
+   "research",
+   "packaging",
+   "qc"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review",
+   "research.brief",
+   "packaging.title",
+   "packaging.thumbnail"
+  ],
+  "kind": "principle",
+  "when": "Any time a figure, a result, a quote or a source would strengthen a script, a title or a thumbnail.",
+  "summary": "Specific beats big, but only when the specific thing is true and supplied. If a figure would help and none is in the evidence, ask for it or write the line without it. This applies equally to titles and thumbnails, where invented numbers are most tempting.",
+  "do": [
+   "Use the evidence's own numbers and say the source out loud when the number carries the hook.",
+   "Write the line without the figure when no supplied figure exists."
+  ],
+  "avoid": [
+   "Rounding up a figure for drama.",
+   "Presenting an estimate or a guess as a measured result."
+  ],
+  "checks": [
+   "Every number in the title, thumbnail and script traces to a supplied source ID or the owner's own data."
+  ],
+  "tags": [
+   "accuracy",
+   "claims",
+   "evidence"
+  ],
+  "source": "youtube-agent-skill yt-script and yt-package SKILL.md (MIT, a2feb21), restated",
+  "priority": 80
+ },
+ {
+  "id": "voice.channel-writing-voice",
+  "title": "Write in the channel's own voice: one person, its words, its refusals",
+  "rooms": [
+   "script",
+   "voice",
+   "packaging"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review",
+   "voice.direction",
+   "packaging.title"
+  ],
+  "kind": "procedure",
+  "when": "Before writing any script, title or description for a family that has a writing voice recorded.",
+  "summary": "A script in the wrong voice is worse than none, because it has to be read aloud. The family's writing voice names the one person a video talks to, the words the channel never uses, its own phrases, the claims it will not make and its format notes. Words it never uses are blocked by the quality gate; the rest guides the writer.",
+  "steps": [
+   "Read the family's writing voice before drafting.",
+   "Write to the one named person, not to 'viewers'.",
+   "Use the channel's own phrases where they fit naturally; never force them.",
+   "Refuse every claim the voice lists, even when the evidence seems to allow it."
+  ],
+  "avoid": [
+   "Generic creator vocabulary such as 'unlock', 'game-changer' or 'let's dive in' unless the channel really talks that way."
+  ],
+  "checks": [
+   "No word from the never-used list appears in the title, hook or script."
+  ],
+  "tags": [
+   "voice",
+   "style",
+   "script"
+  ],
+  "source": "youtube-agent-skill templates/voice.md (MIT, a2feb21); enforced in hermes.js assessScriptQuality",
+  "priority": 70
+ },
+ {
+  "id": "packaging.title-thumbnail-pairing",
+  "title": "Lint the title and thumbnail as one pairing",
+  "rooms": [
+   "packaging",
+   "ideas"
+  ],
+  "tasks": [
+   "packaging.title",
+   "packaging.thumbnail",
+   "ideas.titles"
+  ],
+  "kind": "ruleset",
+  "when": "Before a title or thumbnail text is approved, and whenever title options are ranked.",
+  "summary": "The pairing is the unit. A thumbnail that repeats the title wastes half the click surface. Keep the title inside the desktop cut, check what a mobile feed shows, cap shouting, swap vague hype for a number, a name or a date, front-load the subject, and keep thumbnail text to about three words that say what the title does not.",
+  "steps": [
+   "Length: under 60 characters for desktop search; check the first 40 for the mobile feed; 100 is YouTube's hard limit.",
+   "No more than two all-caps words.",
+   "Replace vague words (amazing, ultimate, secret, insane) with a number, a name or a date.",
+   "The first three words must carry the subject, not filler.",
+   "Thumbnail text: three words is the ceiling at feed size; share no meaningful word with the title."
+  ],
+  "numbers": {
+   "desktop_chars": 60,
+   "mobile_chars": 40,
+   "hard_limit_chars": 100,
+   "max_caps_words": 2,
+   "thumbnail_words_ceiling": 3
+  },
+  "checks": [
+   "Title and thumbnail share no meaningful word.",
+   "The subject survives the 40-character mobile cut."
+  ],
+  "tags": [
+   "titles",
+   "thumbnails",
+   "packaging",
+   "ctr"
+  ],
+  "source": "youtube-agent-skill yt-package/title.py and SKILL.md (MIT, a2feb21); implemented in craft.js lintPackaging",
+  "priority": 60
+ },
+ {
+  "id": "seo.query-test",
+  "title": "Search packaging: the query test, the first two lines and honest tags",
+  "rooms": [
+   "seo",
+   "packaging"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "packaging.title"
+  ],
+  "kind": "checklist",
+  "when": "When writing a title, description or tags for an evergreen, search-driven video. A video aimed at the subscriber feed spends this effort on packaging instead.",
+  "summary": "Write the three search queries the video should win and check that the title and the first two description lines contain their words; if they do not, the title is the problem, not the description. The first two lines are the only ones anyone reads: they sit above \"...more\" and are the search snippet. Tags are a weak signal used for disambiguation only.",
+  "steps": [
+   "Write the three queries this video should win.",
+   "Check the title and the first two description lines contain those query words; fix the title first if they do not.",
+   "Description order: what the video gives, in the words people type; then the resource or link; then chapters; then the long version (what is covered, who it is for, what it assumes).",
+   "Tags: spellings, tool names and abbreviations people actually type; about fifteen at most."
+  ],
+  "avoid": [
+   "Walls of tags or unrelated tags (against YouTube's terms).",
+   "Spending search effort on a video aimed at the subscriber feed."
+  ],
+  "numbers": {
+   "queries": 3,
+   "description_lines_that_matter": 2,
+   "max_tags": 15
+  },
+  "checks": [
+   "The title and the first two description lines contain the words of all three queries."
+  ],
+  "tags": [
+   "seo",
+   "search",
+   "description"
+  ],
+  "source": "youtube-agent-skill yt-seo/SKILL.md (MIT, a2feb21), restated",
+  "priority": 35
+ },
+ {
+  "id": "packaging.chapters-from-pauses",
+  "title": "Draft chapters from the pauses and topic shifts, then retitle them",
+  "rooms": [
+   "packaging",
+   "seo",
+   "editing"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "editing.review"
+  ],
+  "kind": "algorithm",
+  "when": "After a long-form edit exists, before the description is written.",
+  "summary": "Chapter boundaries come from the narration itself: score every sentence break by its pause (x1.6) and how much the topic words change across it (x3.2), add a point for a planned scene start, and take the best breaks at least 10 seconds apart. YouTube only shows chapters when the list starts at 0:00, has three or more entries and each lasts 10 seconds or more, so check instead of trusting.",
+  "steps": [
+   "Score each sentence boundary: pause seconds x 1.6 + vocabulary shift (1 - shared/union of topic words in 12 sentences either side) x 3.2 + 1 for a scene start.",
+   "Pick boundaries best-first, at least 10 s from each other and from the end; always include 0:00.",
+   "Draft a title from the section's most frequent topic words.",
+   "Rewrite every title in the channel's words before pasting."
+  ],
+  "numbers": {
+   "pause_weight": 1.6,
+   "shift_weight": 3.2,
+   "scene_start_bonus": 1,
+   "min_chapter_seconds": 10,
+   "min_chapters": 3,
+   "default_target": 7,
+   "context_sentences": 12
+  },
+  "checks": [
+   "First chapter at 0:00.",
+   "At least 3 chapters.",
+   "Every chapter at least 10 seconds."
+  ],
+  "tags": [
+   "chapters",
+   "seo",
+   "description"
+  ],
+  "source": "youtube-agent-skill yt-chapters/chapters.py (MIT, a2feb21); implemented in craft.js chapterize with the scene-start bonus added",
+  "priority": 40
+ },
+ {
+  "id": "clips.shorts-that-survive-alone",
+  "title": "A Short cut from a long video must survive without the video around it",
+  "rooms": [
+   "editing",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "editing.plan",
+   "editing.review",
+   "script.hooks"
+  ],
+  "kind": "ruleset",
+  "when": "When repurposing a long video into Shorts.",
+  "summary": "The best moment is not automatically a Short. A usable span runs 20-55 seconds, opens on a complete thought (not 'And', 'So', 'It' or 'That'), contains a turn (a claim, then something that complicates or proves it) and ends on a line, not a trail-off. Each Short then gets a new first line, on-screen text in the first two seconds with different words, a loop point and a vertical-crop check.",
+  "steps": [
+   "Find spans of 20-55 s that open on a self-contained sentence.",
+   "Keep only spans with a turn: a complication (but, however, actually, until, unless) or a proof (an example, a figure).",
+   "End on a complete line.",
+   "Rank by the opening line's hook score, the turn and how close the span is to about 38 s; show the top five with timecodes.",
+   "For each pick: write a new first line and score it, add two seconds of on-screen text in different words, plan the loop point, note what a 9:16 crop loses."
+  ],
+  "numbers": {
+   "span_seconds": [
+    20,
+    55
+   ],
+   "sweet_spot_seconds": 38,
+   "candidates_shown": 5,
+   "onscreen_text_seconds": 2
+  },
+  "avoid": [
+   "Clipping a moment that needs the previous minute to make sense.",
+   "Reusing the long video's opening line unchanged."
+  ],
+  "checks": [
+   "Candidates do not overlap.",
+   "Each candidate's first sentence makes sense alone."
+  ],
+  "tags": [
+   "shorts",
+   "repurposing",
+   "clips"
+  ],
+  "source": "youtube-agent-skill yt-shorts/SKILL.md (MIT, a2feb21); implemented in craft.js findShorts",
+  "priority": 45
+ },
+ {
+  "id": "analytics.retention-three-problems",
+  "title": "Read a retention curve as three different problems",
+  "rooms": [
+   "analytics",
+   "editing",
+   "learning"
+  ],
+  "tasks": [
+   "analytics.review",
+   "editing.review"
+  ],
+  "kind": "procedure",
+  "when": "After a video has a YouTube Studio audience-retention export.",
+  "summary": "The hook leak (what is lost in the first 30 seconds), cliffs (single steep drops at a moment) and the slide (the steady bleed through the middle) have three different fixes. A leak under 25% is healthy; a cliff needs the exact words said at that second; a flat slide is pacing, so cut the middle rather than rewriting it.",
+  "steps": [
+   "Hook leak = starting audience minus the lowest point in the first 30 seconds.",
+   "Cliffs = the five steepest drops larger than 0.8 points; map each to what the narration said within 4 seconds.",
+   "Slide = the average drop rate after the first 30 seconds.",
+   "End with ONE fix: the opening if the leak is 25% or more, else the worst cliff, else cut the middle."
+  ],
+  "numbers": {
+   "hook_window_seconds": 30,
+   "healthy_leak_below": 25,
+   "severe_leak_from": 40,
+   "cliff_min_points": 0.8,
+   "said_window_seconds": 4
+  },
+  "checks": [
+   "The report ends in one fix, not a list."
+  ],
+  "tags": [
+   "retention",
+   "analytics",
+   "audit"
+  ],
+  "source": "youtube-agent-skill yt-retention/retention.py and yt-audit/SKILL.md (MIT, a2feb21); implemented in craft.js analyseRetention",
+  "priority": 45
+ },
+ {
+  "id": "competitors.outlier-multiple",
+  "title": "Study videos that beat their own channel, not the biggest numbers",
+  "rooms": [
+   "competitors",
+   "niche",
+   "ideas"
+  ],
+  "tasks": [
+   "competitors.scan",
+   "competitors.blueprint",
+   "niche.evaluate",
+   "ideas.titles"
+  ],
+  "kind": "formula",
+  "when": "When choosing which competitor videos to study for ideas, titles or formats.",
+  "summary": "Raw views rank channel size, not ideas. Score every video as a multiple of its own channel's median views over recent uploads; a 400k video on a channel whose median is 30k is the one to study. A median needs at least four videos, and a list of known outliers must stay out of it.",
+  "steps": [
+   "Take the channel's recent uploads (four or more) as the baseline; compute the median views.",
+   "Multiple = video views / channel median.",
+   "Study videos at 1.5x or more; name the hook formula each title uses.",
+   "Learn the technique; never reuse a title's wording."
+  ],
+  "numbers": {
+   "min_videos_for_median": 4,
+   "default_threshold_multiple": 1.5
+  },
+  "avoid": [
+   "Ranking by raw views across channels of different sizes.",
+   "Computing a median from one or two videos."
+  ],
+  "checks": [
+   "Each studied video's multiple uses its own channel's median."
+  ],
+  "tags": [
+   "outliers",
+   "competitors",
+   "ideas"
+  ],
+  "source": "youtube-agent-skill yt-viral/swipe.py (MIT, a2feb21); implemented in craft.js outlierMultiples",
+  "priority": 45
+ },
+ {
+  "id": "analytics.comment-triage",
+  "title": "Triage comments into four piles before writing a reply",
+  "rooms": [
+   "analytics",
+   "ideas"
+  ],
+  "tasks": [
+   "analytics.review",
+   "ideas.titles"
+  ],
+  "kind": "checklist",
+  "when": "When the owner pastes a video's comments for replies.",
+  "summary": "Comments are a retention surface. Sort them into questions (answer them; repeats are the next topics), corrections (if right, say so plainly; never argue a fact that cannot be checked), praise (reply to a few with something specific) and bait (do not reply). Replies stay under 30 words, answer in the first sentence and are drafts for the owner; nothing is posted automatically.",
+  "steps": [
+   "Count the four piles before writing anything: questions, corrections, praise, bait.",
+   "Answer questions in the first sentence, in the channel's writing voice, under 30 words.",
+   "Thank correct corrections plainly; skip any fact that cannot be checked.",
+   "Recommend ONE comment to pin: the question most people also have, not the nicest one.",
+   "Collect repeated questions as candidate topics."
+  ],
+  "avoid": [
+   "Replying to bait or writing a comeback.",
+   "Identical \"thank you!\" replies.",
+   "Promising a video the owner has not agreed to make.",
+   "Posting any reply without the owner's approval."
+  ],
+  "numbers": {
+   "piles": 4,
+   "max_reply_words": 30,
+   "pins": 1
+  },
+  "checks": [
+   "Every draft reply is under 30 words and answers in its first sentence."
+  ],
+  "tags": [
+   "comments",
+   "community",
+   "ideas"
+  ],
+  "source": "youtube-agent-skill yt-comment/SKILL.md (MIT, a2feb21), restated",
+  "priority": 25
+ },
+ {
+  "id": "strategy.weekly-plan-anchor",
+  "title": "Plan the week as one anchor, one cheap video and three Shorts cut from the anchor",
+  "rooms": [
+   "strategy",
+   "ideas"
+  ],
+  "tasks": [
+   "ideas.titles",
+   "niche.evaluate"
+  ],
+  "kind": "template",
+  "when": "When planning a family's week of uploads.",
+  "summary": "A plan that does not fit the week is a list of regrets. Start from the hours really available and what is already half-made. One anchor gets the most time and goes out on the day the channel's own analytics say is best; one cheap video is built from something that exists; three Shorts are cut from the anchor, not written separately. Three uploads in seven days, not seven.",
+  "steps": [
+   "Ask how many hours are available and what is already half-made.",
+   "Choose the anchor and its day from the channel's own analytics, not an assumed Tuesday.",
+   "Choose a cheap video built from existing material (a clip, a follow-up to the most-replied comment).",
+   "Cut three Shorts from the anchor with the Shorts finder.",
+   "Hand back a table: day, format, working title, the one sentence it promises, what already exists; then the hours it costs and what to drop first if the week goes wrong."
+  ],
+  "numbers": {
+   "anchor_videos": 1,
+   "cheap_videos": 1,
+   "shorts_from_anchor": 3,
+   "uploads_per_week": 3
+  },
+  "avoid": [
+   "Daily-upload plans the owner cannot sustain.",
+   "Writing Shorts separately when they can be cut from the anchor."
+  ],
+  "checks": [
+   "The plan states its hour cost and what to drop first."
+  ],
+  "tags": [
+   "planning",
+   "cadence",
+   "strategy"
+  ],
+  "source": "youtube-agent-skill yt-plan/SKILL.md (MIT, a2feb21), restated",
+  "priority": 25
+ },
+ {
+  "id": "learning.audit-one-fix",
+  "title": "A channel audit ends in ONE fix and the question: ship it, or change it?",
+  "rooms": [
+   "learning",
+   "qc",
+   "analytics"
+  ],
+  "tasks": [
+   "qc.review",
+   "analytics.review",
+   "script.review"
+  ],
+  "kind": "procedure",
+  "when": "When auditing a channel or a family, and at the end of any review shown to the owner.",
+  "summary": "An audit that lists twenty problems avoids the one that matters. Look in order at the last ten titles as a set, the thumbnails at feed size, the first fifteen seconds of the three most recent videos, upload consistency and the retention shape. Hand back the single biggest fix with what to do this week, three specific things already working, and what not to do yet. The program writes and checks; the owner decides.",
+  "steps": [
+   "Read the last ten titles as a list; run them through the title linter. Every title the same shape is a format problem.",
+   "Shrink the thumbnails to feed size; if three are unreadable, that is the fix.",
+   "Score the first fifteen seconds of the three most recent videos with the hook scorer.",
+   "Check upload consistency, not frequency.",
+   "Read the retention export if there is one.",
+   "Hand back: one fix with this week's action, three things that work (specific), and what not to do yet and why."
+  ],
+  "avoid": [
+   "Opening with praise that is not meant.",
+   "Ending with a list of twenty things.",
+   "Acting on the fix without the owner's approval."
+  ],
+  "numbers": {
+   "titles_read": 10,
+   "recent_hooks_scored": 3,
+   "things_working": 3
+  },
+  "checks": [
+   "The audit names exactly one primary fix and ends with the owner's decision prompt."
+  ],
+  "tags": [
+   "audit",
+   "review",
+   "decision"
+  ],
+  "source": "youtube-agent-skill yt-audit/SKILL.md and the pack's shared gate (MIT, a2feb21), restated",
+  "priority": 30
+ }
+]

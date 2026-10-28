@@ -1,0 +1,4 @@
+HyperFrames motion rules and blueprints (Apache-2.0), copied unchanged from
+https://github.com/heygen-com/hyperframes at 5ec2dd2e121f25b45f3cc642504757970ed41027 (2026-10-09):
+skills/hyperframes-animation/rules/*.md, blueprints/*.md, rules-index.md, blueprints-index.md.
+Used as reference text inside the atelier engine's frame packets (atelier.js); no HyperFrames code is run.

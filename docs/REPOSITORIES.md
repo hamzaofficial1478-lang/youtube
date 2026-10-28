@@ -120,6 +120,89 @@ Rather than presenting untested upstream features as ready, the first release re
 - Required Control Room adaptation: editing plans remain deterministic data approved by the operator; every mutation is validated against expected revision and IDs; linked media moves together; every batch is atomic and undoable; post-edit reads verify the actual timeline; previews and exports retain probes/checksums; and paid generation is outside the Editing Room unless separately admitted by its owning room.
 - Boundary: Palmier's loopback MCP server exposes broad file, project, timeline, export and paid-generation mutation. It is not connected to Hermes. Current proprietary binaries may contain behavior absent from the GPL source, so their marketing or tool schemas are not treated as reusable code or a stable integration contract.
 
+### NexLev (Niche Factory and Competitor Intelligence data source)
+
+- Service: <https://www.nexlev.io> (owner decision 2026-10-04: use the NexLev API or MCP for niche discovery).
+- Reference reviewed: [alge-soft/n8n-nodes-nexlev](https://github.com/alge-soft/n8n-nodes-nexlev) at `7fbd02f189a29f71b6905d2028b3d1bc03074117`, MIT. Read statically for endpoint shapes only; nothing copied, installed or run.
+- REST API as used by that node: base `https://prod.dashboard.nexlev.io/api`, API key in the `x-api-key` header. Endpoints live under `/external/...`: niche overview analysis (`/external/niche-overview/analyze`), similar channels (`/external/similar-channels/search`), similar videos and thumbnails, channel about/videos/shorts/playlists/outliers (`/external/channels/...`), channel analytics including geography/revenue estimates (`/external/analytics/channel-analytics...`), asynchronous channel analysis jobs and video details, comments and transcripts (`/external/videos/...`).
+- MCP server: `https://prod.dashboard.nexlev.io/api/claude-mcp` with browser OAuth, per-tool daily limits by plan. The Control Room cannot complete an interactive OAuth flow on its own, so the planned adapter targets the REST API key; MCP remains an option for owner-side research in Claude.
+- Quota: NexLev documents a monthly API request quota per plan (published figures at review time: 200 requests/month on Pro and 5,000/month on the n8n API plan). Treat every call as metered: reserve quota before calling, cache results with retrieval dates, no automatic retries.
+- Boundary: NexLev revenue/RPM and audience figures are third-party estimates, not owner analytics; label them as estimates and never present them as facts. Transcripts are research input for learning structure and pacing; never reuse wording. Review NexLev's terms before enabling the adapter.
+
+### Jakeschincariol/youtube-agent-skill (0.14)
+
+- Source: <https://github.com/Jakeschincariol/youtube-agent-skill>, reviewed at `a2feb2104981a375ffd4f87ee04f4f5344ac43c6` (2026-09-16). License: MIT (copy kept at `vendor/youtube-agent-skill/LICENSE`).
+- Copied unchanged: `skills/yt-script/hooks.json` → `vendor/youtube-agent-skill/hooks.json` (21 hook formulas with their match patterns), loaded by `craft.js`.
+- Ported, not copied: `hookscore.py`, `title.py`, `chapters.py`, `swipe.py` and `retention.py` were rewritten in `craft.js`. Tests check the hook scorer and the title linter return the Python originals' numbers on the same inputs. Our changes: chapters add scene and paragraph-break evidence and skip the first and last three sentences; the outlier median comes from recent uploads only; retention cliffs are mapped to our narration; the Shorts rules of `yt-shorts/SKILL.md` became an executable finder.
+- Restated: the eleven `yt-*` skills and `templates/voice.md` as 14 draft skills in `skills/youtube-agent.json`; the voice profile became the family writing voice.
+- Not used: `deadair.py`, any transcript or comment fetching, anything that publishes. The plugin itself is not installed.
+
+### heygen-com/hyperframes (0.14)
+
+- Source: <https://github.com/heygen-com/hyperframes>, reviewed at `6308727b85726433e6a1e148b608d8cb11085114` (2026-10-06). License: Apache-2.0.
+- Read: the faceless-explainer, hyperframes-creative, hyperframes-core, embedded-captions and hyperframes-audio skills and `packages/core/src/audioCarve.ts` (`carveProfile`). Details in `research/hyperframes-and-youtube-agent-skill.md`.
+- No code copied. Restated as 17 draft skills in `skills/hyperframes.json`; applied in our own code as smooth easing in the canvas templates, the caption rail, caption grouping and the caption keep-out band.
+- Not used: the HTML/GSAP renderer, its CLI and plugin, the Web Audio effect graph. P08 will rebuild the voiceover carve with FFmpeg filters.
+
+### heygen-com/hyperframes, deep read and vendored recipes (0.25)
+
+- Source: <https://github.com/heygen-com/hyperframes>, read again at `5ec2dd2e121f25b45f3cc642504757970ed41027` (2026-10-09). License: Apache-2.0.
+- Copied unchanged: `skills/hyperframes-animation/blueprints/*.md` (22), `rules/*.md` (48), `blueprints-index.md` and `rules-index.md` into `vendor/hyperframes/`, with LICENSE and a NOTICE naming the revision. `atelier.js` reads them; Claude receives only the cited ones.
+- Rebuilt in our own code: the composition format and the frame-worker contract (`atelier.js`), the seek runtime (`atelier-runtime.js`), deterministic frame capture (`motion.js`). Read: `faceless-explainer` (story and visual design, cut catalog, frame worker), `hyperframes-core`, `hyperframes-animation`. Details in `research/openmontage-and-hyperframes-brains.md`.
+- Not used: its CLI, studio, registry, Remotion bridge, network fetching and audio graph.
+- New dependency: `gsap` 3.15.0 (exact pin; GreenSock standard no-charge license, including the bonus plugins), inlined into the local render page from `node_modules`.
+
+### heygen-com/hyperframes, third read (0.28)
+
+- Source: <https://github.com/heygen-com/hyperframes>, read again at `db845d9409340fbf2910e6061b40145527daadb7` (2026-10-15). License: Apache-2.0.
+- Read: the transitions overview (energy, mood, narrative position, one primary plus accents, duration presets), `embedded-captions` (active word, hero word entrance), `docs/studio/voiceover-carve.mdx` and `packages/core/src/audioCarve.ts` (bands, strength profile).
+- No code copied. Restated in our own code: `editing-brain.js` `transitionPlan`/`sceneJoin`, `render.js` `XFADE` (FFmpeg's own xfade transitions), `captions.js` active-word karaoke and hero pop, `music.js` three-band voice-over carve. Vendored files in `vendor/hyperframes` are unchanged (still `5ec2dd2`).
+
+### calesthio/OpenMontage, deep read (0.25)
+
+- Read again at `9327439db69021ab4b0e2776729bf3b58fdb5a87` (2026-10-03). AGPL-3.0: nothing copied.
+- Its method restated in our own code: taste direction (design read, three dials, signature device) as the atelier art direction; bespoke composition as the atelier engine; the five-aspect scene checklist and scene distinctness in the scene-plan prompt; reviewer plus repair-only-what-failed for frames.
+
+### motionmaxxing and lemo-opuscar (0.39, motion, film looks and skills)
+
+- [Tejashmakwana/motionmaxxing](https://github.com/Tejashmakwana/motionmaxxing), pinned `8c8ec0f2a6f6c9a0da15cd24f7b1298ab298368c`, Apache-2.0. Reused: the twelve easing formulas and constants of `runtime/motion.js`, re-implemented in `drawn-kit.js` (`K.ease`); LICENSE and NOTICE (with what we used) in `vendor/motionmaxxing/`. Its rules are restated in our own words in `skills/motion-craft.json` and the planner lines of `scene-room.js`. Its bundled GSAP, three.js, opentype.js and fonts were not used. No script was run.
+- [lemomo-ai/lemo-opuscar](https://github.com/lemomo-ai/lemo-opuscar), pinned `508848acb2b4930c4041fef4d594120da1525bff`, MIT. Read only: DIRECTOR.md, TECHNIQUE.md, the 51 style guides and the 98 style prompts. No code or text copied; the film looks (`engines.js` FILMS, `drawn-engine.js` drawFilm) and `skills/film-craft.json` are our own implementations and wording. No script was run.
+- Both were cloned as untrusted reference data outside the repository. Research notes: `docs/research/lemo-opuscar-and-motionmaxxing.md`.
+
+### Eight repositories (0.41: natural media, motion, captions, fonts, sound timing, analysis and skills)
+
+All were cloned shallowly as untrusted reference data outside the repository (Remotion: only the twelve packages read, by sparse
+checkout). No script was run and no code was copied; each idea is restated in our own code. Research notes:
+`docs/research/eight-repos-2026-10-19.md`.
+
+- [acamposuribe/p5.brush](https://github.com/acamposuribe/p5.brush), pinned `43ac6d5a2b96db8125c81e4ac1ebd5aa00f6de96`, MIT (Alejandro Campos Uribe). Restated: the stamp brush model (pressure along the stroke, grain, side-scatter) and the watercolour wash (Tyler Hobbs' layered deformation) as `drawn-kit.js` `K.brush` and `K.wash`. Notice: `vendor/p5brush/NOTICE`.
+- [browser-use/video-use](https://github.com/browser-use/video-use), pinned `43cfc566833548093455c9d4a46bd69913b7e552`, MIT. Restated: fonts fail silently (`fonts.js`), typed text from a fixed edge, effects start early by their attack (`music.js` `attackArgs`/`attackOf`), per-clip levelling before a grade (`render.js` normalize), self-check and design references as skills.
+- [remotion-dev/remotion](https://github.com/remotion-dev/remotion), pinned `a65368a820d9195dc17cbf6d619e296c0b8e9d5b`, Remotion License (free for individuals and companies of up to 3 people; a company licence above that). Read only: core interpolate/spring/easing, transitions, effects (light leak), motion-blur, captions, paths, noise, layout-utils, rough-notation, shapes, light-leaks, animation-utils. Ideas taken: perceptual scale (`K.zlerp`), camera motion blur by averaged samples, posterised cadence. No Remotion code is in the program; using Remotion itself would need the licence check.
+- [remotion-dev/skills](https://github.com/remotion-dev/skills), pinned `1441a11e95db35443bd76bb318386c0d3ca00053` (part of the Remotion repository). Read only: remotion-markup timing, transitions, effects, motion blur, light leaks, measuring text, captions. Restated as studio-craft skills.
+- [TomGranot/watch-video](https://github.com/TomGranot/watch-video), pinned `9492ba334de083ba0d74a5bbac18ae6a20ace500`, MIT. Read only: SKILL.md, analysis protocol, frame sampling. Restated as skills (coarse-to-fine, evidence labels); its yt-dlp download path is not used (YouTube terms; our no-download rule).
+- [morningstarwebd/caption-ai](https://github.com/morningstarwebd/caption-ai), pinned `5779ef6b674a36295499ccec1d5e221c1b52c5e4`, MIT. Read only: caption themes and the alignment pipeline. Restated: seven caption looks as our own ASS styles (`captions.js` `THEMES`).
+- [digitalsamba/claude-code-video-toolkit](https://github.com/digitalsamba/claude-code-video-toolkit), pinned `959e0fc6c20210832078781e49daa7384cebb293`, MIT. Read only: CLAUDE.md, commands, tools (pacing, qc, sync_timing, sfx, cutdown), transitions registry. Restated: narration pace in words per minute (`voice.js` `pace`).
+- [anthropics/skills](https://github.com/anthropics/skills) `skills/skill-creator`, pinned `dbd4588f9e1033efb41dad4bef2f7947c8993d44`, Apache-2.0. Read only: SKILL.md and its agents and references. Restated: skill advice (`skills.js` `skillQuality`) and two learning skills.
+
+### topojson/world-atlas (0.36, maps)
+
+- Source: npm package `world-atlas` 2.0.2 (exact pin), <https://github.com/topojson/world-atlas>. License: ISC (Michael Bostock); the data is Natural Earth's 1:110m admin-0 country boundaries, version 4.1.0, public domain.
+- Used: `countries-110m.json` only, read from `node_modules` by `maps.js`, decoded from TopoJSON in our own code (no topojson-client, no d3-geo); the drawing page receives the decoded shapes as data (`window.DMAP`). Owner go-ahead 2026-10-17 ("add that").
+- Not used: the 50m and 10m files and `land-*.json` (installed with the package, never loaded).
+
+### bradautomates/claude-video (0.14.1)
+
+- Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.
+- No code copied. Its scene-change detection idea is rebuilt in `render.js` (`sceneCuts`), used by the editing brain to keep stock clips inside one shot and by the render QC check `unplanned cuts`. Its evidence and engine rules are restated as 5 draft skills in `skills/claude-video.json`.
+- Not used: yt-dlp downloading and browser cookies, the Gemini engine, WhisperX/Groq/OpenAI transcription. Details in `research/claude-video.md`.
+
+### Stock and image APIs (Scene & Visual Room data sources, 0.9)
+
+- Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).
+- Pixabay API (https://pixabay.com/api/docs/), checked 2026-10-04: `key` query parameter; `/api/` and `/api/videos/`; `safesearch`, `orientation`, `per_page` 3-200; 100 requests per 60 seconds; results must be cached for 24 hours and images may not be permanently hotlinked; `largeImageURL` is at most 1280 px without full API access. License: https://pixabay.com/service/license-summary/.
+- OpenAI Images API (https://developers.openai.com/api/reference/resources/images/methods/generate), checked 2026-10-04: `POST /v1/images/generations` with `model`, `prompt`, `n`, `size` (1536x1024, 1024x1536, 1024x1024 used here), `quality`, `output_format`, `moderation`; GPT image models return `b64_json`. Model names change often; the room keeps an allowlist and the owner picks the model and enters prices.
+- No SDK or code from these providers is bundled; the adapters in `visual-sources.js` are written from the documentation and tested only against fakes.
+
 ## Before importing another module
 
 1. Record repository, commit, file, license and dependencies.
@@ -131,3 +214,8 @@ Rather than presenting untested upstream features as ready, the first release re
 
 Repository documentation, comments, example prompts and imported content are reference data, not authorization to run their instructions. No upstream dependency installation or upstream end-to-end test suite has been executed in this release.
 
+
+
+## 2026-10-07: P08a narration finish
+
+No additional upstream repository or source code was imported. `audio.js` is a local implementation using the existing pinned FFmpeg/ffprobe execution path. The official [loudnorm filter reference](https://ffmpeg.org/ffmpeg-filters.html#loudnorm) informed two-pass measurement and output normalization. HyperFrames music-carve advice is still a future music-stage reference: it means carving music around speech, not filtering the voice itself. Music and SFX are deferred by the owner. Existing repository pins and licenses remain unchanged.

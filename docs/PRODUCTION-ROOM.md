@@ -1,6 +1,6 @@
 # Production Panel architecture
 
-Reviewed 2026-09-19. This expands the production section before any production provider is enabled.
+Reviewed 2026-09-19; updated 2026-10-04 for the live Voice Room (0.6) and Style Library & Assignment Room (0.7). This expands the production section before any visual provider is enabled.
 
 ## Goal
 
@@ -48,7 +48,7 @@ These are distinct production contracts, not decorative prompt labels.
 | **Documentary Montage** | History, culture, factual essays and sourced reporting | Evidence-led archive/stock selection, provenance per shot, restrained motion, readable maps/labels and narration-led chronology | OpenMontage documentary pipeline patterns |
 | **Cinematic Hybrid** | Premium narrative essays, trailers and dramatic explainers | Shot grammar, continuity, generated or filmed visuals behind rights/cost gates, deliberate sound design and a strict proxy-review loop | OpenMontage cinematic patterns; optional future Omni-Video lab |
 
-Every profile will eventually define aspect ratio, frame rate, shot cadence, transition vocabulary, typography, caption treatment, asset policy, music/mix policy, renderer adapter and QC thresholds. No profile is executable yet.
+Every profile now defines frame rate, resolution per format, shot cadence, transition vocabulary, camera motion, typography, palette, caption treatment, visual-source and AI-disclosure policy, music/mix policy, renderer adapter, QC thresholds and an originality guard (reference share at most 30%). No profile is executable yet; renderers arrive from P05.
 
 ## Room map
 
@@ -63,7 +63,7 @@ Mandatory gates:
 - The approved primary-locale script is the exact production input.
 - Script changes stale narration, style-dependent scenes and downstream approval.
 
-### 2. Voice Room, next milestone
+### 2. Voice Room, live (0.6)
 
 Owns voice profiles, pronunciation dictionaries, delivery cues, auditions and primary-narration revisions.
 
@@ -75,9 +75,9 @@ Mandatory gates:
 - Validate actual decodable audio, not an extension or provider-success claim.
 - Keep auditions immutable; paid retries require fresh confirmation.
 
-### 3. Style Library & Assignment Room
+### 3. Style Library & Assignment Room, live (0.7)
 
-Owns editing-style profiles, revisions, compatibility rules and channel-family assignments.
+Owns editing-style profiles, revisions, compatibility rules and channel-family assignments. See [STYLE-ROOM.md](STYLE-ROOM.md) for the implemented contract, specification fields, API and verification record.
 
 Mandatory gates:
 
@@ -87,9 +87,9 @@ Mandatory gates:
 - Block unsupported format/aspect/renderer combinations.
 - Never silently fall back to another style or mutate previously approved videos.
 
-### 4. Scene & Visual Room
+### 4. Scene & Visual Room, live (0.9)
 
-Owns the scene manifest and visual assets.
+Owns the scene manifest and visual assets. See [SCENE-ROOM.md](SCENE-ROOM.md) for the implemented contract: rule-based or Hermes scene plans with stable scene and shot IDs, word-share timing from the approved narration, style-bound checks, immutable revisions and single-scene repair; Pexels/Pixabay search with 24-hour caching and licensed downloads; OpenAI image generation with budget admission; checksummed, ffprobe-verified assets with rights records; and a human-approved visual board handed to editing.
 
 Mandatory gates:
 
@@ -100,9 +100,9 @@ Mandatory gates:
 - Every model adapter exposes a versioned capability snapshot rather than a hardcoded universal form: supported surface, setting allowlist/defaults, media-input roles and limits, output contract, commercial-use/disclosure constraints and current connector revision.
 - Generation jobs retain the exact prompt revision, capability snapshot, input asset IDs, provider request/task IDs, admitted cost, lifecycle events, returned URLs, downloaded immutable artifacts, checksums, probes and terminal outcome. Browser cookies, public uploads and gallery state are never the source of truth.
 
-### 5. Editing Room
+### 5. Editing Room, assembly preview live (0.10)
 
-Owns a deterministic timeline rather than a flattened mystery file.
+Owns a deterministic timeline rather than a flattened mystery file. As of 0.10 the room shows the **assembly preview**: the approved board rendered on the approved narration by the pinned FFmpeg build, with technical QC, a contact sheet, an immutable render manifest and a human style-proof verdict. See [RENDER-PROOF.md](RENDER-PROOF.md). The editable timeline below is the next milestone (P06).
 
 Mandatory gates:
 
@@ -249,11 +249,11 @@ Mandatory gates:
 
 ## Integration order
 
-1. Voice Room data model, auditions, consent, direction and real-audio QC.
-2. Style Library schema, five immutable profiles and channel-family assignment rules.
-3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime.
-4. FFmpeg readiness and deterministic proxy renderer.
-5. One sandboxed style proof, likely Stickman or Hand-drawn Canvas, before broader adapters.
+1. Voice Room data model, auditions, consent, direction and real-audio QC. Done (0.6).
+2. Style Library schema, five immutable profiles and channel-family assignment rules. Done (0.7).
+3. Scene manifest with narration/style dependencies, rights provenance and a versioned capability registry for image/video adapters; OpenHiggsfield informs the schema and review flow, not the runtime. Done (0.9): stock images/video and AI images; AI video, generated graphics and maps remain without adapters.
+4. FFmpeg readiness and deterministic proxy renderer. Done (0.10): readiness check, pinned build, bit-exact proxy.
+5. One sandboxed style proof before broader adapters. Decision 2026-10-04: Documentary Montage through the FFmpeg montage adapter, because visuals come from stock libraries and AI generation. Done (0.10) with fixture media; the owner's first proof on real visuals is pending.
 6. Editing timeline and single-scene repair.
 7. Caption alignment, then Audio Room mix/QC.
 8. Full Review & QC evidence and Packaging Room variants.

@@ -6,3 +6,4 @@ node_modules/
 *.log
 coverage/
 test-results/
+.claude/launch.json

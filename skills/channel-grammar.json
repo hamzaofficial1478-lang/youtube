@@ -1,0 +1,755 @@
+[
+ {
+  "id": "hooks.promise-and-proof",
+  "title": "The title promises, the first seconds prove",
+  "rooms": [
+   "hooks",
+   "packaging"
+  ],
+  "tasks": [
+   "script.hooks",
+   "script.candidate",
+   "packaging.title",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When writing a title and the opening of a video.",
+  "summary": "The most viewed videos of all twelve channels promise a hidden truth (\"the real reason\", \"the disturbing history\", \"why it looks weird\") or a counted list (\"7 principles\"), and the first 5-15 seconds restate that promise as a question over the strongest picture the video has.",
+  "steps": [],
+  "do": [
+   "Restate the title's promise as a question in the first 5-15 s.",
+   "Open on the most striking picture of the story (the climax, the strangest detail, the face reacting), then rewind.",
+   "Pay the promise off visibly: the answer gets its own beat, not a passing line."
+  ],
+  "avoid": [
+   "a slow context opening",
+   "a title promise the video never pays off"
+  ],
+  "checks": [],
+  "tags": [
+   "hook",
+   "title"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 80,
+  "numbers": {
+   "promise_restated_within_s": 15
+  }
+ },
+ {
+  "id": "scene.one-visual-system",
+  "title": "One visual system per video",
+  "rooms": [
+   "scene",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt"
+  ],
+  "kind": "principle",
+  "when": "When planning the look of a whole video.",
+  "summary": "Each strong channel builds a video from one recurring visual system (an illustrated world that comes back, a parchment map with flag pins, white line art on black with one red, floating evidence on black, a dark set with matching 3D icons); cutaways share the palette of the main picture.",
+  "steps": [],
+  "do": [
+   "Decide the video's system in the plan summary: its ground, its recurring device and its one accent.",
+   "Return to the same device when the story returns to its topic (a callback).",
+   "Make cutaways and graphics in the same palette as the main shots."
+  ],
+  "avoid": [
+   "a different visual idea on every shot",
+   "graphics in colours the rest of the video never uses"
+  ],
+  "checks": [],
+  "tags": [
+   "consistency",
+   "style"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 75
+ },
+ {
+  "id": "scene.receipts-on-screen",
+  "title": "Show the receipts",
+  "rooms": [
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "In documentaries, business stories and essays that make claims.",
+  "summary": "The channels show their evidence: documents and headlines with a highlighted line, quote cards with a portrait and a name, screenshots, maps, archive photos, charts of the numbers they say.",
+  "steps": [],
+  "do": [
+   "When the script cites a source, show it: a document (with the line that matters lit), a quote card (portrait, name, words), a headline.",
+   "Use the words and numbers of the script only; label a reconstruction as such.",
+   "One piece of evidence per screen, held long enough to read."
+  ],
+  "avoid": [
+   "fake real logos or mastheads",
+   "a quote the narration never says or attributes"
+  ],
+  "checks": [],
+  "tags": [
+   "evidence",
+   "documentary"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 80
+ },
+ {
+  "id": "scene.maps-carry-geography",
+  "title": "Maps carry geography and power",
+  "rooms": [
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Whenever a line names countries, routes, borders, wars, trade or influence.",
+  "summary": "Geopolitics channels build whole chapters on maps: regions light up one at a time, routes sweep, pins drop, and networks of people and countries are drawn on the map.",
+  "steps": [],
+  "do": [
+   "Use a map for every place-driven claim, with one or two things lighting up per sentence.",
+   "Show influence as links between pins (who backs whom) or as coloured blocs.",
+   "Hold a map at least 3 s and fly the camera to the region being talked about."
+  ],
+  "avoid": [
+   "a map flashed for a second",
+   "lighting up everything at once"
+  ],
+  "checks": [],
+  "tags": [
+   "maps",
+   "geopolitics"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "numbers": {
+   "map_hold_min_s": 3
+  }
+ },
+ {
+  "id": "scene.people-as-network",
+  "title": "Who connects to whom",
+  "rooms": [
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "When a story has several people, companies or countries acting on each other.",
+  "summary": "Business and political stories become clear when the cast is drawn as a network: portraits or icons connected by labelled links that appear as the narration names each tie.",
+  "steps": [],
+  "do": [
+   "Use a network element (or pins and routes on a map) whose links draw on the words that name each relation.",
+   "Keep the same network and add to it as the story grows; return to it at the turn."
+  ],
+  "avoid": [
+   "more than six nodes at once",
+   "a new layout for the network every time it returns"
+  ],
+  "checks": [],
+  "tags": [
+   "network",
+   "clarity"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60
+ },
+ {
+  "id": "editing.cut-rate-by-format",
+  "title": "How often the picture changes, by format",
+  "rooms": [
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When setting the pace of shots for a format.",
+  "summary": "Observed picture changes on contact sheets: explainers and talking-head lists change every 3-5 s, story documentaries every 5-10 s with motion inside each shot, music-led films several times every 5 s on the beat, calm mysteries hold 6-10 s with slow motion inside.",
+  "steps": [],
+  "do": [
+   "Explainers and lists: a new shot or a new beat every 3-5 s.",
+   "Story documentaries: 5-10 s shots that each move inside (camera, arrivals, maps).",
+   "Mystery and investigation: long, quiet holds with slow pushes and evidence arriving one piece at a time.",
+   "Music-led films: cut on the beat, several cuts every 5 s."
+  ],
+  "avoid": [],
+  "checks": [],
+  "tags": [
+   "pacing"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 70,
+  "numbers": {
+   "explainer_s": "3-5",
+   "story_doc_s": "5-10",
+   "mystery_hold_s": "6-10",
+   "music_film": "several cuts per 5 s"
+  }
+ },
+ {
+  "id": "script.narration-modes",
+  "title": "Choose a narration mode on purpose",
+  "rooms": [
+   "script",
+   "voice"
+  ],
+  "tasks": [
+   "script.candidate",
+   "voice.direction"
+  ],
+  "kind": "template",
+  "when": "When writing or directing the narrator for a family.",
+  "summary": "Each successful channel keeps one narration mode; choose one per family and keep it.",
+  "steps": [],
+  "do": [
+   "Curious explainer: a question, the mechanism, the consequence; plain words, second person.",
+   "First-person investigator: \"let me show you\", the research shown, personal stakes.",
+   "Dramatic storyteller: open at the climax, then rise and fall, tension in the pauses.",
+   "Direct list coach: numbered points, each a promise, a proof and an example.",
+   "Evidence teacher: named frameworks, studies cited, friendly and calm.",
+   "Dry historian: precise facts with an understated wit.",
+   "Calm mystery narrator: measured, sparse, long pauses before evidence."
+  ],
+  "avoid": [
+   "imitating a real narrator's voice, catchphrases or name",
+   "switching mode inside a video"
+  ],
+  "checks": [],
+  "tags": [
+   "narration",
+   "voice"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 65
+ },
+ {
+  "id": "script.length-follows-format",
+  "title": "Length follows the story",
+  "rooms": [
+   "script"
+  ],
+  "tasks": [
+   "script.candidate"
+  ],
+  "kind": "ruleset",
+  "when": "When choosing a target length for a video.",
+  "summary": "Observed lengths: explainers 8-30 min, story documentaries 20-60 min, numbered lists 12-20 min, deep mysteries 30 min to over 2 h, short films 2-6 min. The story decides, never a fixed number.",
+  "steps": [],
+  "do": [
+   "Pick the target minutes from the format and the depth of the story.",
+   "Cut a long video into chapters that each re-hook."
+  ],
+  "avoid": [],
+  "checks": [],
+  "tags": [
+   "length",
+   "format"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "numbers": {
+   "explainer_min": "8-30",
+   "story_doc_min": "20-60",
+   "list_min": "12-20",
+   "mystery_min": "30-150",
+   "short_film_min": "2-6"
+  }
+ },
+ {
+  "id": "story.rise-and-fall",
+  "title": "The rise-and-fall saga",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "For business, empire and biography stories.",
+  "summary": "Cold open at the climax, then: origin, the rise, the conflict, the fall or the twist, and the legacy. Each act ends on a question.",
+  "steps": [
+   "Cold open: the most dramatic moment, then \"but how did it get here?\"",
+   "Origin: humble or strange beginnings, one vivid detail.",
+   "Rise: the clever move, with the numbers.",
+   "Conflict: the rival, the scandal, the law.",
+   "Fall or twist.",
+   "Legacy: what is left today."
+  ],
+  "do": [
+   "End every act on an open question."
+  ],
+  "avoid": [],
+  "checks": [],
+  "tags": [
+   "structure",
+   "business"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60
+ },
+ {
+  "id": "story.case-file-mystery",
+  "title": "The case file mystery",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "For unsolved cases, disappearances, codes and mysteries.",
+  "summary": "Present the case, then the evidence one piece at a time, the theories with their weaknesses, what is actually known, and an honest open ending.",
+  "steps": [
+   "The case in one striking image and one sentence.",
+   "Evidence, one piece at a time, each held and sourced.",
+   "Theories, each tested against the evidence.",
+   "What is known, plainly.",
+   "The open question."
+  ],
+  "do": [],
+  "avoid": [
+   "presenting a theory as fact",
+   "invented evidence"
+  ],
+  "checks": [],
+  "tags": [
+   "structure",
+   "mystery"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60
+ },
+ {
+  "id": "story.counted-list",
+  "title": "The counted list",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "For numbered advice, lessons and principles.",
+  "summary": "Each item is a promise, a proof and an example; a counter shows where the viewer is (item 3 of 7); the strongest item comes last or second to last.",
+  "steps": [],
+  "do": [
+   "Show the position with a dial or counter (gauge with steps).",
+   "Give each item a visual metaphor of its own.",
+   "Order items so the strongest lands late."
+  ],
+  "avoid": [
+   "items of equal length and look",
+   "the best item first and a weak one last"
+  ],
+  "checks": [],
+  "tags": [
+   "structure",
+   "list"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60
+ },
+ {
+  "id": "profile.map-investigation",
+  "title": "Profile: map investigation",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that explains geopolitics and history in the first person.",
+  "summary": "A first-person investigator walks the viewer through maps on aged paper, flag pins, networks of people drawn on the map, archive footage and documents; long chapters, personal stakes.",
+  "steps": [],
+  "do": [
+   "Ground: warm parchment maps and documents; accent: two opposed colours for the two sides.",
+   "Every claim placed on a map; networks of people and countries on the map.",
+   "Narration in the first person, showing the research."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "maps"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.business-saga",
+  "title": "Profile: cinematic business saga",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that tells business and money stories as mini movies.",
+  "summary": "Every frame is a designed, dramatic picture (painted portraits with depth, fire, smoke, warm-teal grade), with headlines, money, maps of railroads or routes, rival portraits face to face, and circled callouts.",
+  "steps": [],
+  "do": [
+   "Structure: the rise-and-fall saga.",
+   "Pictures: paid pictures for the dramatic moments; versus splits for rivals; documents and counters for the money.",
+   "Film look: technicolor or deco for wealth; noir for scandal."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "business"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.dark-mystery",
+  "title": "Profile: calm dark mystery",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that investigates mysteries, codes and disappearances.",
+  "summary": "Near-black ground, evidence floating with soft edges, red outlines on the clue, glowing numbers, monospace text, quote cards; slow, precise, long pauses.",
+  "steps": [],
+  "do": [
+   "Palette: black, white, one red; the red only on the clue.",
+   "Structure: the case file mystery; loupes on details; documents with one line lit.",
+   "Long quiet holds with slow pushes."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "mystery"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.explainer-world",
+  "title": "Profile: explainer with its own world",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of curious science and society explainers.",
+  "summary": "One illustrated world built for the video comes back to carry the idea, with equation and number cards, expert lines and macro inserts of the object.",
+  "steps": [],
+  "do": [
+   "Build one recurring illustrated place for the idea and return to it.",
+   "Turn every number into a picture (unit chart, gauge, ruler).",
+   "Curious-explainer narration."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "explainer"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.minimal-history",
+  "title": "Profile: minimal history",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of witty history and design-history videos.",
+  "summary": "Stylised dioramas with one red accent on the main character, thin white line art and route maps on black, white chapter cards and date roundels, coins and documents side by side.",
+  "steps": [],
+  "do": [
+   "Palette: black ground, white line, one red for the hero.",
+   "Chapter cards (text style chapter) and dates as roundels.",
+   "Dry historian narration."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "history"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.receipts-essay",
+  "title": "Profile: brand strategy essay",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of short business and brand-strategy essays.",
+  "summary": "A quick collage of receipts: product shots on plain grounds, articles and posts with the line highlighted, founder quotes, a market chart; kinetic captions; 3-14 minutes.",
+  "steps": [],
+  "do": [
+   "Cut every 2-5 s between pieces of evidence.",
+   "One chart of the key number per chapter.",
+   "Essayist narration that names the strategy in plain words."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "business"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.list-coach",
+  "title": "Profile: numbered self-improvement list",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a faceless family of numbered money and self-improvement advice.",
+  "summary": "Dark premium palette with one red accent; every point gets a 3D-looking icon or metaphor, a counter of the list position and one bold statement word.",
+  "steps": [],
+  "do": [
+   "Structure: the counted list with a step dial.",
+   "Statements (text style statement) for each principle, one key word lit.",
+   "Direct list-coach narration."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)",
+   "promises of guaranteed income"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "list"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.evidence-teacher",
+  "title": "Profile: evidence-based teacher",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of friendly, research-backed how-to videos.",
+  "summary": "Bright, calm, tidy; named frameworks drawn as sticky notes and diagrams; studies and books shown as documents; a concept label for each idea.",
+  "steps": [],
+  "do": [
+   "Name each framework and draw it once, then build on it.",
+   "Show the study or book as a document with the finding lit.",
+   "Evidence-teacher narration."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "education"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.music-travel-film",
+  "title": "Profile: music-led travel film",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of music-driven montage films without much narration.",
+  "summary": "Letterboxed, graded footage cut on the beat with whips, match cuts and speed ramps; drone and point-of-view shots; the music is the narrator.",
+  "steps": [],
+  "do": [
+   "Cut on the beat; carry motion across cuts (match cuts, whips in one direction).",
+   "Vary scale every few cuts (wide, detail, movement)."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "montage"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.cinematic-mini-doc",
+  "title": "Profile: personal cinematic mini documentary",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "voice.direction",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of short, cinematic documentaries about a person or a craft.",
+  "summary": "Archive moments braided with intimate close shots, a title on black, warm practical light, objects held in hands, grain; 6-20 minutes.",
+  "steps": [],
+  "do": [
+   "Braid archive and present; return to one object or gesture as a motif.",
+   "Use the album or technicolor film look for memories."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "documentary"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.kinetic-type",
+  "title": "Profile: kinetic typography edits",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family whose videos are built from moving words (lyrics, quotes, short reels).",
+  "summary": "Words are the picture: stacked and repeated words, 3D-feeling camera moves through type, a glowing accent, photos given depth with parallax.",
+  "steps": [],
+  "do": [
+   "Statements and posters as the main element, cued word by word.",
+   "Depth with back and front layers; one accent colour."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "typography"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.two-minute-film",
+  "title": "Profile: two-minute short film",
+  "rooms": [
+   "general"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family of very short story films.",
+  "summary": "One premise, escalated quickly to a punchline in about two minutes: reaction shots every couple of seconds, a growing crowd or stakes, a title card as the punch.",
+  "steps": [],
+  "do": [
+   "One premise only; escalate it three times; land the punchline on a card.",
+   "Cut to a reaction every 2 s during the escalation."
+  ],
+  "avoid": [
+   "copying this channel's look, wording, voice, characters, titles or identity (30/70: learn the technique, make it ours)"
+  ],
+  "checks": [],
+  "tags": [
+   "profile",
+   "short-film"
+  ],
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "priority": 60,
+  "pinOnly": true
+ }
+]

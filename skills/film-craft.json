@@ -1,0 +1,490 @@
+[
+ {
+  "id": "story.subject-goal-turn",
+  "title": "One subject, one goal, one turn",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "When shaping a video or a chapter.",
+  "summary": "A piece lands when one subject wants something, something changes, and it ends differently from how it began; the ending echoes the opening.",
+  "steps": [],
+  "do": [
+   "Name the subject, its goal and the turn before planning shots.",
+   "Hook within the first 3 seconds; no slow logo or establishing build first.",
+   "End by echoing the opening: the same image corrected, the scale revealed, or the thing done right the second time.",
+   "Spend one signature move, native to the look, at the emotional peak."
+  ],
+  "avoid": [
+   "three small gags where one readable one would do",
+   "a beat that needs explaining (cut it)"
+  ],
+  "checks": [],
+  "tags": [
+   "story",
+   "structure"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 80
+ },
+ {
+  "id": "story.three-structures-first",
+  "title": "Consider three structures, then choose",
+  "rooms": [
+   "scene",
+   "script"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate"
+  ],
+  "kind": "procedure",
+  "when": "Before writing a plan or an outline.",
+  "summary": "The first structure that comes to mind for a style is usually its cliche. Sketching three and choosing one lifts the result more than any rule.",
+  "steps": [
+   "Write three candidate structures in a line each (a journey, a before/after, a countdown, a case file, a list that turns).",
+   "Choose one and say why in the summary.",
+   "Pick the opening image, the ending and the shape of the music from the topic, not from habit."
+  ],
+  "do": [
+   "State the chosen structure in the plan summary."
+  ],
+  "avoid": [
+   "copying the structure of a reference video"
+  ],
+  "checks": [],
+  "tags": [
+   "structure"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "scene.every-shot-has-a-reason",
+  "title": "Every shot says why it is framed so",
+  "rooms": [
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When writing each shot of a plan.",
+  "summary": "A professional shot list names framing, angle, camera move and duration, and the reason for each.",
+  "steps": [],
+  "do": [
+   "Give each shot a framing (wide, full, medium, close, insert), a camera move and a reason in its notes or direction.",
+   "Use at least four different camera moves across the video and real changes of framing.",
+   "At key moments the subject fills at least a third of the frame height."
+  ],
+  "avoid": [
+   "a subject too small, too far or pushed against the edge",
+   "frames too dark to read or colour laid on the same colour",
+   "captions covering the subject"
+  ],
+  "checks": [],
+  "tags": [
+   "camera",
+   "framing"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 70,
+  "numbers": {
+   "subject_min_height": "1/3 frame at key moments",
+   "camera_moves_min": 4
+  }
+ },
+ {
+  "id": "audio.layers-and-silence",
+  "title": "Sound in three layers, with silences that matter",
+  "rooms": [
+   "audio",
+   "scene"
+  ],
+  "tasks": [
+   "audio.mix",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When planning or mixing the sound of a video.",
+  "summary": "Sound is half the film: an ambience bed, effects tied to actions, and music; silences placed before the turn make the next sound land.",
+  "steps": [],
+  "do": [
+   "Every visible action has a sound matched to its material (paper, wood, metal, ink, glass).",
+   "At least two real silences or near-silences before the turn or the peak; the first sound after is one of the most important.",
+   "Use sound as a transition twice or more: bring the next scene in early, or let the last one run over the cut.",
+   "A short suck-out (0.2-0.45 s, music and effects down hard) before the heaviest impact.",
+   "Voice about 10 dB over the music."
+  ],
+  "avoid": [
+   "generic piano and strings as the default score",
+   "effects landing on a spoken name"
+  ],
+  "checks": [],
+  "tags": [
+   "sound",
+   "mix"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60,
+  "numbers": {
+   "silences_min": 2,
+   "suck_out_s": "0.2-0.45",
+   "voice_over_music_db": 10
+  }
+ },
+ {
+  "id": "editing.pace-for-the-viewer",
+  "title": "Pace for the viewer, not the clock",
+  "rooms": [
+   "editing",
+   "scene",
+   "captions"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan",
+   "captions.segment"
+  ],
+  "kind": "ruleset",
+  "when": "When deciding how long words and shots stay on screen.",
+  "summary": "Fast is fine with fewer words per screen; never cut before people finish reading.",
+  "steps": [],
+  "do": [
+   "Vary the pace: one clear acceleration or deceleration and one breath per video.",
+   "Hold on-screen text for about letters / 15 + 1.5 s after it has animated in.",
+   "A title card holds at least 4 s; a comparison holds every option fully in frame for 2.5 s before the verdict.",
+   "Subtitles hold at least 1.8 s and the spoken line plus 0.6 s."
+  ],
+  "avoid": [
+   "cutting on every beat",
+   "a gag or a failure too fast to understand"
+  ],
+  "checks": [],
+  "tags": [
+   "pacing",
+   "reading-time"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 70,
+  "numbers": {
+   "text_hold_s": "letters/15 + 1.5",
+   "title_card_min_s": 4,
+   "judgement_hold_s": 2.5,
+   "subtitle_min_s": 1.8
+  }
+ },
+ {
+  "id": "visuals.colour-by-role",
+  "title": "Colour by role, one reserved accent",
+  "rooms": [
+   "visuals",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "branding.identity"
+  ],
+  "kind": "ruleset",
+  "when": "When choosing colours for a look, a scene or an image prompt.",
+  "summary": "Strong styles assign colours to jobs (ground, light, shadow, ink) and reserve one accent for the hero, the verdict or the measured reading.",
+  "steps": [],
+  "do": [
+   "Write a palette by role: ground, light, shadow, ink, and other colours mixed from these.",
+   "Reserve the accent for the one subject the story centres on; let lamps and fires stay in the ground colours.",
+   "Let colour return where the story turns (the field that greened, the water that came back)."
+  ],
+  "avoid": [
+   "extra hues with no job",
+   "colour laid on the same colour"
+  ],
+  "checks": [],
+  "tags": [
+   "colour",
+   "style"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "visuals.style-brief-anatomy",
+  "title": "How to write a style brief",
+  "rooms": [
+   "visuals",
+   "branding"
+  ],
+  "tasks": [
+   "visuals.prompt",
+   "branding.identity",
+   "scene.plan"
+  ],
+  "kind": "template",
+  "when": "When writing a style brief, an art direction or an image prompt for a look.",
+  "summary": "Precise style prompts share one anatomy, with measurable numbers instead of adjectives.",
+  "steps": [
+   "The medium in one sentence (what it is physically).",
+   "Mark sizes as fractions of the frame (lines 1/300-1/1200 of the width).",
+   "Palette by role with hex colours.",
+   "The hero rule: what keeps the accent.",
+   "Light: one direction and how lamps render.",
+   "Finish with plus-minus values (grain, misregistration, flicker).",
+   "Default composition, a signature shot and the camera moves.",
+   "Cut rhythm, a reference for grammar only, and three things to avoid."
+  ],
+  "do": [
+   "Use numbers (sizes, percentages, seconds) instead of adjectives like \"beautiful\" or \"cinematic\"."
+  ],
+  "avoid": [
+   "naming an artist, film or channel inside a prompt sent to an image model",
+   "copying a reference's characters, layouts, typefaces or music"
+  ],
+  "checks": [],
+  "tags": [
+   "style",
+   "prompting"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 55
+ },
+ {
+  "id": "scene.evidence-grammar",
+  "title": "Evidence on screen, one finding at a time",
+  "rooms": [
+   "scene",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "In documentaries, explainers and any video that makes factual claims.",
+  "summary": "Evidence films show one finding per screen, attached to what it measures, with its source; numbers come from the narration and its sources only.",
+  "steps": [],
+  "do": [
+   "One reading per screen: label above, the number, the source or method below.",
+   "Show the document, quote or photo the narration cites (document, quote card) and light up the one line that matters.",
+   "Hold a comparison still with both items in frame before the verdict; then let the verdict land (stamp, accent).",
+   "Say \"measured\", \"estimated\" or \"traced\" when the narration does."
+  ],
+  "avoid": [
+   "an invented statistic, quote or headline",
+   "a real outlet's logo or a generated image presented as evidence",
+   "numbers not spoken or cited in the script"
+  ],
+  "checks": [],
+  "tags": [
+   "evidence",
+   "documentary",
+   "honesty"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 85
+ },
+ {
+  "id": "scene.native-moves-menu",
+  "title": "Signature moves that fit the content",
+  "rooms": [
+   "scene",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "template",
+  "when": "When a beat needs a memorable, medium-native move, especially at the peak.",
+  "summary": "A menu of moves from film styles, each with the kind of content it serves. Spend one or two per video where they mean something.",
+  "steps": [],
+  "do": [
+   "The hole: light only the things that answer a question and let the absence draw the shape (a destroyed town, a flood plain).",
+   "Rising level: one level climbs everything at once and the reading rides with it (sea level, heights).",
+   "Range line: a measured line grows from A to B while its reading counts and lands (a shore that moved).",
+   "Dive and climb: one continuous zoom from far to near or back, with a scale readout.",
+   "Paired climb: two series built side by side, the crossover held before the verdict.",
+   "The feed: this period's growth arrives piece by piece on top of the last.",
+   "The last object: one heavier object lands carrying the final number.",
+   "The line lights up: in a document one line brightens while the rest dims.",
+   "Redaction: black bars lift one by one until the answer shows.",
+   "Plates as narrative: the world gains a new colour at each turning point.",
+   "Palette re-ink: the same picture in another palette is time passing.",
+   "Fold, cut, unfold: one cut becomes many (one design, mass-produced).",
+   "The lamp turns on: lights come on one by one across the place.",
+   "Colouring is an action: being coloured in is doing (a town lighting up)."
+  ],
+  "avoid": [],
+  "checks": [],
+  "tags": [
+   "signature",
+   "peak"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 65
+ },
+ {
+  "id": "qc.film-failures",
+  "title": "Failures seen most in made films",
+  "rooms": [
+   "qc"
+  ],
+  "tasks": [
+   "qc.review",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "checklist",
+  "when": "Before approving a plan or a render.",
+  "summary": "The failures that came up most when films were reviewed frame by frame.",
+  "steps": [],
+  "do": [],
+  "avoid": [],
+  "checks": [
+   "The subject is big enough and not pushed against the edge.",
+   "Nothing is too dark to read; no colour sits on the same colour.",
+   "Captions never cover the subject.",
+   "Gags and failures last long enough to understand.",
+   "No blank frames inside transitions.",
+   "Effects that follow a subject (a spotlight, a zoom) still track it after the camera moves."
+  ],
+  "tags": [
+   "qc"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "scene.differ-from-reference",
+  "title": "Not the reference again",
+  "rooms": [
+   "scene",
+   "competitors"
+  ],
+  "tasks": [
+   "scene.plan",
+   "competitors.blueprint"
+  ],
+  "kind": "ruleset",
+  "when": "When a plan follows a reference video, a competitor or a style demo.",
+  "summary": "Learn the grammar of a reference, then differ: at least four of six choices must be your own.",
+  "steps": [],
+  "do": [
+   "Compare structure, opening, signature shot, camera path, music shape and ending with the reference; at least four must differ."
+  ],
+  "avoid": [
+   "the reference's story, characters, props, shots or timeline"
+  ],
+  "checks": [],
+  "tags": [
+   "originality",
+   "thirty-seventy"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60,
+  "numbers": {
+   "must_differ": "4 of 6"
+  }
+ },
+ {
+  "id": "visuals.register-change",
+  "title": "Two registers in one film",
+  "rooms": [
+   "visuals",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "When the story moves between now and a memory, a record and a dream, a claim and the truth.",
+  "summary": "A second look used for a different kind of truth (a memory, an archive, a home video) can carry a third of a film, if each frame stays in one register.",
+  "steps": [],
+  "do": [
+   "Give the second register its own film look or palette (sketch.film) and use it only for that kind of moment.",
+   "Hide the switch inside a transition made of the world (petals, smoke, a page turn)."
+  ],
+  "avoid": [
+   "mixing both registers inside one frame",
+   "switching register on every shot"
+  ],
+  "checks": [],
+  "tags": [
+   "film-look",
+   "structure"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60,
+  "numbers": {
+   "second_register_share": "about 30%"
+  }
+ },
+ {
+  "id": "motion.medium-native-transitions",
+  "title": "Transitions native to the medium",
+  "rooms": [
+   "motion",
+   "editing"
+  ],
+  "tasks": [
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "When choosing how scenes join in a drawn or printed look.",
+  "summary": "Each medium has its own way to change scene; using it makes the film feel made, not edited.",
+  "steps": [],
+  "do": [
+   "Ink: the next scene grows inside a spreading drop.",
+   "Print: a dot wipe, a new impression with two frames off register, a page turn.",
+   "Paper: a fold, a door split down its seam, a strip lifted to reveal the layer beneath.",
+   "Light: lights out then a lamp strikes; a lens lands and the camera pushes through it.",
+   "Film: an iris that stops on a face, a tape tear as a cut."
+  ],
+  "avoid": [
+   "default fades and plain hard cuts as the only grammar"
+  ],
+  "checks": [],
+  "tags": [
+   "transitions",
+   "medium"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "scene.chart-honesty",
+  "title": "Pick the chart the data asks for",
+  "rooms": [
+   "scene",
+   "visuals"
+  ],
+  "tasks": [
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "When a beat shows numbers.",
+  "summary": "The data decides the chart; the framing can change, the numbers never.",
+  "steps": [],
+  "do": [
+   "Categories and rankings: bars. Change over time: a line or area. Parts of a whole or counts of people: a unit chart or a pie. Before and after: two values side by side. Place: a map.",
+   "Let the axis arrive when the narration first names the unit.",
+   "Leave a dashed empty slot for the value nobody knows yet."
+  ],
+  "avoid": [
+   "stretching a scale to make a change look bigger",
+   "a dashboard of many charts at once"
+  ],
+  "checks": [],
+  "tags": [
+   "data",
+   "charts",
+   "honesty"
+  ],
+  "source": "lemo-opuscar (MIT, pinned 508848a): DIRECTOR.md, TECHNIQUE.md, the 51 styles/*/STYLE.md and the 98 OPUSCAR style prompts, restated in our own words.",
+  "priority": 70
+ }
+]

@@ -5,11 +5,14 @@ Open Connections and choose **Add connector**. Give the slot a unique name, choo
 | Provider | Current test | Still not enabled |
 |---|---|---|
 | YouTube public research | Public channel lookup; card Test uses @GoogleDevelopers. The research form accepts another channel. | Owner OAuth, private analytics, uploads |
-| OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification |
+| OpenAI | GET /v1/models, checking the response shape | Script generation, model-specific access and billing verification. Since 0.9 the same slot can generate Room 04 AI images (`/v1/images/generations`) after an explicit, budget-admitted request |
 | ElevenLabs | GET /v2/voices?page_size=1, checking the response shape | Voice generation, rights verification and billing verification |
 | Hermes reasoning engine | Authenticated, size-bounded GET `/v1/capabilities` and `/v1/toolsets` on fixed loopback `127.0.0.1:8642`; requires no enabled concrete tools; manually authorized script and daily-brief jobs have live validation | Automated evidence collection, localization, voice, rendering and publishing |
 | MCP server | Reports adapter not implemented, without a network call | Protocol handshake, tools and credentials |
 | Reddit | Reports adapter not implemented, without a network call | OAuth, search and credentials |
+| Pexels stock library (0.9) | One photo search for "nature" on fixed origin `https://api.pexels.com` with the key in the `Authorization` header (uses 1 request); nothing is downloaded | Used by Room 04 searches only when you start them, within your hourly cap; see [Scene Room](SCENE-ROOM.md) |
+| Pixabay stock library (0.9) | One safe-search photo query on fixed origin `https://pixabay.com/api/` (uses 1 request). Pixabay only accepts the key as a query parameter; the URL is never logged or returned | Used by Room 04 searches only when you start them, within your hourly cap |
+| NexLev research API (0.8) | GET `/api/external/channels/about` for one public channel on fixed origin `https://prod.dashboard.nexlev.io`, `x-api-key` header, redirects refused (uses 1 NexLev request) | NexLev MCP (OAuth). Competitor scans and niche discovery use this slot only when you start them; see [Competitor Intelligence](COMPETITOR-INTELLIGENCE.md) and [Niche Factory](NICHE-FACTORY.md) |
 
 MCP and Reddit can be recorded as setup slots with notes. Their key fields are disabled and the server rejects credentials for those types. A pending adapter never receives a green test result. No custom endpoint is fetched or shell command executed from setup notes.
 
@@ -26,3 +29,21 @@ Validation: the current automated suite covers actual Windows encryption, slot i
 Next in Phase 02: verify a real restricted research key, implement per-channel OAuth state/PKCE and refresh/revocation, then collect recent public videos and source evidence for competitor analysis. Slots are a completed substep; the whole Accounts and research phase remains in progress.
 
 References checked 2026-09-09: [YouTube channels.list](https://developers.google.com/youtube/v3/docs/channels/list), [OpenAI models.list](https://developers.openai.com/api/reference/resources/models/methods/list), [ElevenLabs voice list](https://elevenlabs.io/docs/api-reference/voices/search).
+
+## Fish Audio (0.56)
+
+Owner request 2026-10-22: a second narration provider beside ElevenLabs. Connector `fish-audio` (API key from
+fish.audio, kept like every key). Its test reads the API credit balance (`GET https://api.fish.audio/wallet/self/api-credit`);
+nothing is generated. Voice profiles may use it (provider `fish-audio`, model `s1`, `s2-pro` or `s2.1-pro`, the voice
+model's ID from fish.audio as the voice ID, pace 0.5-2). Speech: `POST https://api.fish.audio/v1/tts` with the model in
+its `model` header, `reference_id`, MP3 128 kb/s and the pace as `prosody.speed`; parts of at most 3,000 characters;
+the same real-audio checks as every narration. Fish Audio returns no word timing, so captions use the estimate. Music
+and sound effects still need ElevenLabs. Not verified live (needs the owner's key).
+
+## Freesound and Jamendo (0.61)
+
+Free sound effects (Freesound, API key) and music (Jamendo, 8-character client ID), used by the Sound library
+(AUDIO-ROOM.md "Freesound and Jamendo"). Both platforms keep their free API for non-commercial use. Each connection
+needs the owner's confirmation that the platform allows their use, kept with the slot (`termsConfirmed`). The test runs
+one search and downloads nothing. The Freesound key travels in the Authorization header only. The Jamendo client ID is
+a request parameter, as its API requires.

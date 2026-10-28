@@ -1,0 +1,1599 @@
+[
+  {
+    "steps": [
+      "Timeline: startFrame (int >= 0), durationFrames (int >= 1); endFrame = start + duration is exclusive.",
+      "Source: srcInUs (integer microseconds) so variable source fps never forces rounding; derive source frames only at render time.",
+      "Source consumed by a clip = durationFrames / fps * speed (seconds); keep it derived, never stored twice.",
+      "Map a source second S to timeline: frame = start + (S*fps - trimStartFrames) / speed, rounded; return null if outside [start,end).",
+      "Map a beat/word at source second B on a clip the same way; expose this as one helper used by captions, beats, transcript and the agent.",
+      "Expose source-second inputs to the agent only where it reads from source assets (search hits, beats); everything placed on the timeline comes back in frames."
+    ],
+    "do": [
+      "Use half-open ranges everywhere (clips, gaps, markers, ripple ranges) so adjacent clips share a boundary without overlapping.",
+      "Round once, at the conversion boundary, with a documented rule (nearest frame).",
+      "Keep exact rational fps (30000/1001) in settings even if UI shows 29.97."
+    ],
+    "avoid": [
+      "Storing trims in project frames when the source fps differs from the project fps (cumulative rounding).",
+      "Letting an LLM compute frame math; give it tools that accept seconds or word indices and return frames.",
+      "Closed ranges [start,end] (creates one-frame overlaps at every cut)."
+    ],
+    "numbers": {
+      "default_fps": 30,
+      "time_unit_source": "microseconds",
+      "range_convention": "[start,end)"
+    },
+    "checks": [
+      "No clip has endFrame > next clip startFrame on the same track",
+      "Every srcInUs + consumed <= asset duration (+1 frame tolerance)"
+    ],
+    "tags": [
+      "data-model",
+      "time",
+      "frames"
+    ],
+    "id": "timeline.time-domains-frames-vs-source",
+    "title": "Two time domains: integer timeline frames vs source time",
+    "rooms": [
+      "editing",
+      "captions",
+      "audio"
+    ],
+    "kind": "principle",
+    "when": "Whenever any position, length, cut point or caption time is stored, exchanged with an AI editor, or converted.",
+    "summary": "Store timeline positions as integer frames at project fps with half-open [start,end) ranges, and source positions in exact source time; one shared helper converts between them so neither the agent nor the UI ever multiplies by fps by hand.",
+    "source": "palmier-pro Sources/PalmierPro/Models/Timeline.swift + Agent/Tools/AgentInstructions.swift (GPLv3, idea restated); capcut-cli src/time.ts (MIT)"
+  },
+  {
+    "steps": [
+      "Visual zone roles: main (A-roll, magnetic optional), overlay (B-roll / PiP), graphics (images, lower thirds, Lottie), text (titles), captions (caption groups only).",
+      "Audio zone roles: dialogue (camera audio linked to main), narration (VO), music, sfx.",
+      "Store tracks bottom-to-top for visuals (render order = array order, last renders on top) and state the rule in the schema; FFmpeg overlay chains follow the same order.",
+      "Track flags: muted (audio), hidden (visual excluded from render), locked (no edits), syncLocked (default true: ripple edits shift this track too).",
+      "When the agent omits a track, auto-create one shared track per zone: new visual track above existing visuals; new audio track appended below so linked dialogue stays on A1 and music/VO land on A2+.",
+      "Reorders must stay within the track's zone; return the new order in the receipt.",
+      "Name tracks with one short filmmaking word when the role is clear (Dialogue, VO, Music, SFX, B-roll, Titles, Captions); leave mixed tracks unnamed."
+    ],
+    "do": [
+      "Address tracks by stable trackId; indexes are context only and change after reorders.",
+      "Validate type compatibility: visual assets only on visual tracks (video/image interchangeable), audio only on audio tracks."
+    ],
+    "avoid": [
+      "Mixing per-entry explicit tracks with auto-created ones in one call (reject: ambiguous).",
+      "Removing a track that still holds clips without an explicit force flag."
+    ],
+    "numbers": {
+      "track_name_max_chars": 80,
+      "default_syncLocked": true
+    },
+    "checks": [
+      "Every clip type matches its track zone",
+      "No two clips overlap on one track",
+      "Exactly one main track per timeline"
+    ],
+    "tags": [
+      "tracks",
+      "layers",
+      "sync-lock"
+    ],
+    "id": "timeline.track-taxonomy-and-stacking",
+    "title": "Track kinds, roles, stacking order and track flags",
+    "rooms": [
+      "editing",
+      "audio",
+      "captions",
+      "motion"
+    ],
+    "kind": "ruleset",
+    "when": "When creating or reordering tracks, or deciding where an AI-placed clip lands.",
+    "summary": "Typed tracks in two zones (visual, audio) with explicit roles; clips on one track are strictly sequential, stacking comes from track order, and sync-lock decides which tracks follow ripple edits.",
+    "source": "palmier-pro Models/Timeline.swift, Agent/Tools/ToolDefinitions.swift (add_clips, manage_tracks) (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Identity: id (uuid), assetRef (asset id or timelineId for nesting), mediaType, linkGroupId?, captionGroupId?, multicamGroupId?.",
+      "Timing: startFrame, durationFrames, srcInUs, speed (>0), optional reverse=false.",
+      "Visual statics: opacity 0..1, transform {centerX, centerY, width, height in 0..1 canvas units, rotation deg clockwise, flipH, flipV}, crop insets {l,t,r,b} 0..1 of source, edgeRounding 0..1, edgeSoftness 0..1, blendMode (normal default).",
+      "Audio statics: gainDb in [-60,+15] (0 = source level, -60 = mute), pan -1..1.",
+      "Fades: fadeInFrames, fadeOutFrames (clip-relative), curve linear|smooth; visual fades multiply opacity, audio fades multiply gain.",
+      "Keyframe tracks (optional, nil when unused): opacity, position, scale, rotation, crop, blur, volumeDb.",
+      "effects: [{type, params, enabled}] rendered in a fixed canonical order regardless of insertion order.",
+      "Text clips add: content, styleRef/style, animation preset, wordTimings (clip-relative frames)."
+    ],
+    "do": [
+      "Clamp fades so fadeIn + fadeOut <= durationFrames.",
+      "Drop keyframes outside [0,duration) after any duration change; rescale keyframes proportionally on speed change.",
+      "Omit default-valued fields in agent-facing reads to save tokens (speed 1, gain 0, opacity 1, identity transform).",
+      "Decode tolerantly (missing optional fields -> defaults) but validate strictly on mutation input."
+    ],
+    "avoid": [
+      "Storing derived values (endFrame, source out) that can drift from their inputs.",
+      "Free-form effect names; use a closed catalogue of effect type ids."
+    ],
+    "numbers": {
+      "gainDb_min": -60,
+      "gainDb_max": 15,
+      "crop_min_visible_fraction": 0.05,
+      "opacity_range": [
+        0,
+        1
+      ]
+    },
+    "checks": [
+      "fadeIn+fadeOut <= duration",
+      "speed > 0 and finite",
+      "crop leaves >= 5% visible on each axis",
+      "keyframe frames within [0,duration)"
+    ],
+    "tags": [
+      "clip",
+      "schema",
+      "validation"
+    ],
+    "id": "timeline.clip-schema-and-invariants",
+    "title": "Clip record: fields, defaults and invariants",
+    "rooms": [
+      "editing",
+      "motion",
+      "audio"
+    ],
+    "kind": "ruleset",
+    "when": "When defining the clip table/JSON or validating any mutation result.",
+    "summary": "A clip is a placement of an asset (or nested timeline) with timing, retime, static visual/audio properties, optional per-property keyframe tracks, an effect stack and group memberships; defaults are omitted on output.",
+    "source": "palmier-pro Models/Timeline.swift, Models/Effect.swift, Models/BlendMode.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Keyframe = {frame (clip-relative int), value, interpOut: linear|hold|smooth}; upsert replaces same-frame keys; list kept sorted.",
+      "Sample(f): none -> static value; f <= first -> first value; f >= last -> last value; else t=(f-a)/(b-a); hold -> a; linear -> lerp; smooth -> lerp with smoothstep t*t*(3-2t).",
+      "Value layouts: position = top-left (x,y) in 0..1 canvas; scale = (width,height) in 0..1 canvas (not a multiplier); crop = (top,right,bottom,left); volume in dB; blur radius px at 1080p.",
+      "On split at offset k: right half's track = keys with frame >= k shifted by -k, plus an inserted key at 0 holding the sampled boundary value (rebase).",
+      "On speed change: multiply key frames by the duration ratio and clamp to the new duration.",
+      "Setting the static value of a property via a 'set properties' op clears that property's keyframe track (documented in the op contract).",
+      "Agent op set_keyframes replaces the whole track for one property; rows [frame, ...values, interp?]; last row wins for duplicate frames; empty array clears."
+    ],
+    "do": [
+      "Validate all values finite before storing.",
+      "Map smooth to ease-in-out when exporting to tools that only know bezier presets."
+    ],
+    "avoid": [
+      "Absolute timeline frames inside keyframes (they break when the clip moves).",
+      "Alpha keyframes when exporting to CapCut (they do not render there; use animation materials)."
+    ],
+    "numbers": {
+      "smoothstep": "t*t*(3-2t)",
+      "blur_max_px": 100
+    },
+    "checks": [
+      "Keys sorted, unique frames",
+      "No key beyond duration-1",
+      "Exactly one interpolation enum per key"
+    ],
+    "tags": [
+      "keyframes",
+      "animation",
+      "interpolation"
+    ],
+    "id": "timeline.keyframes-interpolation",
+    "title": "Per-property keyframe tracks with linear/hold/smooth interpolation",
+    "rooms": [
+      "motion",
+      "editing",
+      "audio"
+    ],
+    "kind": "formula",
+    "when": "When animating position/scale/rotation/opacity/crop/blur/volume or splitting/retiming an animated clip.",
+    "summary": "Each animatable property owns a sorted keyframe list in clip-relative frames; sampling holds the edge values, interpolates per segment by the left keyframe's out-interpolation, and active motion keyframes override the static transform.",
+    "source": "palmier-pro Models/Keyframe.swift, Agent/Tools/ToolDefinitions.swift (set_keyframes) (GPLv3, idea restated); capcut-cli skills/capcut-edit/references/pitfalls.md (MIT)"
+  },
+  {
+    "steps": [
+      "Placing a video asset with audio auto-creates a linked audio clip on an audio track (existing dialogue track if present).",
+      "Move: the named clip moves; partners receive the same start delta (preserves existing J/L offsets); tracks stay as they were for partners.",
+      "Timing edits (trim, duration, speed) propagate to partners; per-clip properties (gain, opacity, fades, transform) do not.",
+      "Split: partners split at the same frame; right halves become a new link pair.",
+      "Delete: removing any member removes the whole group.",
+      "L-cut: unlink outgoing pair, extend outgoing audio tail by N frames into the next shot (and shorten the incoming audio head by N if on the same track), relink.",
+      "J-cut: unlink incoming pair, extend incoming audio head N frames earlier under the outgoing picture, relink.",
+      "Lint linked groups whose video/audio start offsets differ from the recorded offset (out-of-sync) and report the offset in frames."
+    ],
+    "do": [
+      "Require at least two clips of different media types to link.",
+      "Check source handles exist before extending audio (srcInUs - N >= 0)."
+    ],
+    "avoid": [
+      "Independent trims on a linked side without unlinking (breaks sync silently).",
+      "Fading only the picture of a linked pair when the intent is to fade both; include both clip ids."
+    ],
+    "numbers": {
+      "recommended_L_cut_frames_at_30fps": [
+        6,
+        20
+      ],
+      "recommended_J_cut_frames_at_30fps": [
+        6,
+        15
+      ],
+      "note": "offset ranges are editorial heuristics, not from the source repos"
+    },
+    "checks": [
+      "Every link group has >= 2 members of different types",
+      "Unexpected A/V offset in a link group flagged"
+    ],
+    "tags": [
+      "link",
+      "j-cut",
+      "l-cut",
+      "sync"
+    ],
+    "id": "timeline.link-groups-jl-cuts",
+    "title": "Linked A/V groups and J/L cut offsets",
+    "rooms": [
+      "editing",
+      "audio"
+    ],
+    "kind": "procedure",
+    "when": "When a video clip with sound is placed, moved, trimmed, split, deleted, or when the editor wants audio to lead (J) or trail (L) the picture cut.",
+    "summary": "Clips sharing a linkGroupId act as one unit for select/move/trim/split/delete; to build a J or L cut, unlink, roll only one side's edit point, then relink so later moves preserve the offset.",
+    "source": "palmier-pro Editor/ViewModel/EditorViewModel+Linking.swift, ToolDefinitions.swift (move_clips, manage_clip_links, set_clip_properties) (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Skip clips with end <= rs or start >= re.",
+      "Fully inside -> remove.",
+      "Starts before rs and ends after re -> split: left duration = rs - start; right starts at re with srcIn += (re - start)*speed, duration = end - re, new id.",
+      "Starts before rs only -> trim tail: duration = rs - start.",
+      "Otherwise -> trim head: start = re, srcIn += (re - start)*speed, duration = end - re.",
+      "Apply to linked partners on their own tracks so A/V stays aligned; place the new clip; one undo/revision."
+    ],
+    "do": [
+      "Compute all actions first, validate, then apply atomically."
+    ],
+    "avoid": [
+      "Partial application when one entry in a batch fails."
+    ],
+    "numbers": {},
+    "checks": [
+      "After apply, no overlaps on the track",
+      "Source in-points remain within asset duration"
+    ],
+    "tags": [
+      "overwrite",
+      "placement",
+      "edit-op"
+    ],
+    "id": "timeline.overwrite-placement",
+    "title": "Overwrite placement: clear a region by remove / trim / split",
+    "rooms": [
+      "editing"
+    ],
+    "kind": "algorithm",
+    "when": "When a clip is placed or moved onto a track region that already holds clips (non-ripple edit).",
+    "summary": "For region [rs,re) on a track, each overlapping clip is removed (fully inside), split (straddles both edges), tail-trimmed (overlaps left) or head-trimmed (overlaps right), adjusting source in-point by overlap*speed.",
+    "source": "palmier-pro Editor/OverwriteEngine.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Validate: track exists, every range end > start; merge overlapping/adjacent ranges.",
+      "Clear set = anchor track + sync-locked tracks (minus explicitly ignored) + tracks of linked partners of any clip intersecting a range (iterate to closure).",
+      "Pre-flight each sync-locked follower that is not cleared: compute shifts; refuse if any clip would go below frame 0 or collide; name the blocking track in the refusal.",
+      "Apply: clear each range on clear-set tracks (split/trim/remove), then for each shifting track move every clip by sum(lengths of merged ranges with end <= clip.start).",
+      "Markers: point markers inside a removed range are deleted; others map frame -> frame - removed-before; range markers shrink and die if empty.",
+      "Receipt: removedFrames, clearedTracks, shiftedClips, anchor track post-cut layout (ids/frames), removedClipIds."
+    ],
+    "do": [
+      "Accept all ranges in ONE call (never loop split->remove->move).",
+      "Offer an ignoreSyncLockedTracks override that the caller must pass explicitly after a refusal."
+    ],
+    "avoid": [
+      "Cutting two unlinked dialogue tracks together (breaks alignment); require one track or one linked unit."
+    ],
+    "numbers": {},
+    "checks": [
+      "Total duration decreased by exactly removedFrames on the anchor track",
+      "No overlaps after shift on any track",
+      "Linked groups still aligned"
+    ],
+    "tags": [
+      "ripple",
+      "delete",
+      "sync-lock",
+      "markers"
+    ],
+    "id": "timeline.ripple-delete-ranges",
+    "title": "Ripple delete of frame ranges with sync-lock and partner propagation",
+    "rooms": [
+      "editing",
+      "audio",
+      "captions"
+    ],
+    "kind": "algorithm",
+    "when": "When removing spans (filler words, dead air, retakes, manual ranges) and closing the gaps.",
+    "summary": "Merge the ranges, cut them out of the anchor track plus every sync-locked track and every linked partner track, shift later clips left by the summed length of ranges ending before them, remap markers, and refuse up front if any follower cannot absorb the shift.",
+    "source": "palmier-pro Editor/RippleEngine.swift, Editor/ViewModel/EditorViewModel+Ripple.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "insert_clips(trackId, atFrame, entries): lay entries end-to-end at atFrame; push every clip with start >= atFrame by total length on target + sync-locked tracks + the track receiving auto-linked audio; requires an existing track.",
+      "lift(clipIds): remove leaving a gap (expands to link group).",
+      "ripple_delete_gap(trackId, range): close an empty gap; refuse if a sync-locked track has content inside the gap.",
+      "split(clipId, atFrame) or split(trackId, frames[]): frame strictly inside (start < f < end); multiple cuts per clip allowed; duplicates ignored; partners split too.",
+      "trim head/tail (non-ripple): change srcIn/duration; refuse beyond media handles.",
+      "ripple trim: trim and shift everything after on target + sync-locked tracks.",
+      "roll: move a shared edit point between two adjacent clips (one gets longer, other shorter; total unchanged).",
+      "slip: change srcIn only (positive delta reveals earlier material); placement unchanged.",
+      "slide: move a clip between neighbours, adjusting neighbours' edit points; total unchanged."
+    ],
+    "do": [
+      "One bad entry rejects the whole call with no partial state.",
+      "Report explicit no-op instead of success when nothing changes."
+    ],
+    "avoid": [
+      "Silent clamping of trims to available media; refuse with the available handle length."
+    ],
+    "numbers": {},
+    "checks": [
+      "Post-op: no overlaps, no negative starts, handles respected"
+    ],
+    "tags": [
+      "insert",
+      "trim",
+      "slip",
+      "roll",
+      "slide",
+      "split"
+    ],
+    "id": "timeline.insert-ripple-and-gap-ops",
+    "title": "Insert (ripple push), lift, gap delete, split, trim, slip, roll, slide",
+    "rooms": [
+      "editing"
+    ],
+    "kind": "ruleset",
+    "when": "When a human or agent splices footage in, removes without closing, or adjusts edit points.",
+    "summary": "A complete NLE op set needs both destructive (overwrite) and non-destructive (insert/ripple) variants plus the four classic trims; each has precise preconditions.",
+    "source": "palmier-pro ToolDefinitions.swift (insert_clips, split_clips), EditorViewModel+Ripple.swift, EditorViewModel+Linking.swift (slip) (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Reject unknown keys; require exact types, finite numbers, explicit bounds and existing ids; reject mixed modes (e.g. some entries with trackIndex, some without).",
+      "Resolve the whole request into a plan; refuse with an actionable message naming the blocking entity (e.g. track 'V2').",
+      "Apply plan in one transaction -> one immutable revision; validation failures, refusals and no-ops create no revision.",
+      "Receipt.clips: resulting state of changed/new clips with track index (cap ~30, then a note to re-read).",
+      "Receipt.shifted: uniform moves of >= 3 clips on one track collapse to {track, fromFrame, by, count}; smaller groups listed individually.",
+      "Receipt also has removedClipIds, markers (changed), removedMarkerIds, createdTracks, notes (e.g. 'track indices shifted - re-read'), warnings, skipped items, noop:boolean, revisionId.",
+      "Echo machine-stable values only (no localized labels); shorten UUIDs to unique prefixes (>= 8 chars) in output and accept prefixes or full ids as input."
+    ],
+    "do": [
+      "Let the agent patch its model from receipts instead of re-reading the whole timeline after each edit.",
+      "Say what was adjusted (clamped, skipped) instead of returning a success-shaped response."
+    ],
+    "avoid": [
+      "Silent clamp/retarget/fallback unless the contract promises it and reports it.",
+      "Exposing internal sub-steps as separate revisions."
+    ],
+    "numbers": {
+      "receipt_clip_cap": 30,
+      "shift_rule_min_group": 3,
+      "short_id_min_chars": 8
+    },
+    "checks": [
+      "Same domain function used by UI, agent, preview and undo",
+      "Failed op leaves revision head unchanged"
+    ],
+    "tags": [
+      "receipts",
+      "validation",
+      "agent",
+      "atomicity"
+    ],
+    "id": "timeline.operation-contract-and-receipts",
+    "title": "Mutation contract: strict validation, atomic batches, structured receipts",
+    "rooms": [
+      "editing",
+      "qc"
+    ],
+    "kind": "principle",
+    "when": "When implementing any timeline mutation that an AI agent or the UI can call.",
+    "summary": "Every op validates its full input before touching state, applies atomically as one revision, and returns a receipt in the same vocabulary as the timeline read (changed clips, compressed shift rules, removed ids, created tracks, markers, notes, warnings, explicit no-op).",
+    "source": "palmier-pro AGENTS.md (Agent tool design, Editor mutations and undo), Agent/Tools/ToolExecutor+MutationDelta.swift, ToolExecutor+ShortId.swift (GPLv3, idea restated); capcut-cli skills/capcut-edit/SKILL.md (transactional batch) (MIT)"
+  },
+  {
+    "steps": [
+      "Read: get_timeline (window, compact, defaults omitted, gaps listed, caption groups summarized), inspect_timeline (render 1..12 composited frames with 0-1 grid and frame number), get_transcript (timeline words with stable indices, or sentence segments), get_media / inspect_media / search_media.",
+      "Place: add_clips (overwrite), insert_clips (ripple), move_clips, remove_clips, swap_clip_media.",
+      "Cut: remove_silence -> remove_words -> ripple_delete_ranges -> split_clips (in that order of preference).",
+      "Shape: set_clip_properties (static), set_keyframes (animated), copy_clip_settings, apply_layout (named layouts), manage_tracks, manage_clip_links, sync_clips.",
+      "Text: add_texts, update_text (patch style, caption group restyle), add_captions.",
+      "Look/sound: apply_color + inspect_color loop, apply_effect, denoise_audio, (add) duck_music, normalize_loudness.",
+      "Music: detect_beats (beats, downbeats, bpm in source seconds).",
+      "Review: manage_markers (open/review/resolved), undo, export (queued job with id)."
+    ],
+    "do": [
+      "Write tool descriptions that say when/why to use the tool and how it interacts with others.",
+      "Read once per session, then patch from receipts; re-read after undo or failures."
+    ],
+    "avoid": [
+      "A god-tool with unrelated modes.",
+      "Making the agent chain low-level ops the app could do itself (e.g. split->remove->move)."
+    ],
+    "numbers": {
+      "inspect_timeline_max_frames": 12,
+      "inspect_default_frames": 6,
+      "transcript_word_cap": 10000
+    },
+    "checks": [
+      "Each tool maps to one undoable user intent",
+      "Every tool result is structured JSON"
+    ],
+    "tags": [
+      "agent",
+      "mcp",
+      "tools"
+    ],
+    "id": "timeline.ai-editor-tool-surface",
+    "title": "AI-editor tool surface (intent-level tools, not internal APIs)",
+    "rooms": [
+      "editing",
+      "captions",
+      "audio",
+      "qc"
+    ],
+    "kind": "checklist",
+    "when": "When designing the tool list the Editing Room exposes to an LLM editor.",
+    "summary": "One tool per coherent filmmaker action with stable ids, a compact read model, visual verification and transcript-driven cutting; a preference order tells the agent which cutting tool to reach for first.",
+    "source": "palmier-pro Agent/Tools/ToolDefinitions.swift, Agent/Tools/AgentInstructions.swift, AGENTS.md (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Revision row: id, timelineId, parentRevisionId, actor (agent|human), ops (JSON), receipt (JSON), lintSummary, createdAt, approvalState.",
+      "Undo = new revision whose content equals the parent of the undone revision (history stays append-only).",
+      "Alternate versions ('tighter cut', '9:16 version') = duplicate timeline with all-new clip/track ids, never edit over the approved original.",
+      "Markers: {id, frame, durationFrames (0 = point, half-open range otherwise), name<=120, comment<=4000, color, status open|review|resolved, kind note|chapter|beat|emphasis|todo}.",
+      "Agent may create open markers for ambiguous work, set review only after applying and verifying, never set resolved.",
+      "Ripple edits remap or remove markers; include changed/removed markers in the receipt.",
+      "Gate export on: no lint errors, all review markers resolved by a human, loudness within target."
+    ],
+    "do": [
+      "Keep generative (paid, non-undoable) actions behind explicit human confirmation with proposed prompt/model/duration."
+    ],
+    "avoid": [
+      "Mutable 'current timeline' rows without history.",
+      "Letting the agent mark its own work approved."
+    ],
+    "numbers": {
+      "marker_name_max": 120,
+      "marker_comment_max": 4000
+    },
+    "checks": [
+      "Every revision has a parent except the first",
+      "No resolved marker set by actor=agent"
+    ],
+    "tags": [
+      "revisions",
+      "approval",
+      "markers",
+      "sqlite"
+    ],
+    "id": "timeline.revisions-approval-markers",
+    "title": "Immutable revisions, versioned timelines and marker review states as approval gates",
+    "rooms": [
+      "editing",
+      "qc"
+    ],
+    "kind": "procedure",
+    "when": "When wiring the timeline into SQLite revisions and the human approval workflow.",
+    "summary": "Each op batch produces a new immutable revision; alternate cuts are duplicated timelines; agent-created markers move open -> review after the agent applies and verifies, and only a human sets resolved.",
+    "source": "palmier-pro Models/TimelineMarker.swift, ToolDefinitions.swift (manage_markers, create_timeline, undo), AgentInstructions.swift (GPLv3, idea restated); capcut-cli restore/.bak history (MIT)"
+  },
+  {
+    "steps": [
+      "Decode mono 16 kHz PCM (ffmpeg -ac 1 -ar 16000 -f s16le -); VAD in 512-sample chunks (32 ms cells). Without a neural VAD, use an energy+zero-crossing VAD as fallback.",
+      "Per-cell peak level in dB (floor -50 dB); speechLevel = median peak over speech cells.",
+      "quietFloor = clamp(speechLevel - 12 dB, -40 dB, -22 dB); if no speech found use -28 dB absolute.",
+      "A non-speech run is dead air if median(cell peaks in run) <= quietFloor (so music beds and loud ambience are never cut).",
+      "Keep runs with length >= minimumPause; shrink each by speechPadding on sides that touch speech (not on clip/file edges).",
+      "Map surviving cell ranges to source frames, then timeline frames per clip; ripple-delete on one track/linked unit in one revision.",
+      "Receipt: sectionsRemoved, removedFrames, settings used."
+    ],
+    "do": [
+      "Expose minimumPause and speechPadding as one-shot overrides.",
+      "Cache VAD results per asset keyed by size+mtime."
+    ],
+    "avoid": [
+      "A fixed -30 dB threshold on quiet recordings (cuts soft speech) or noisy rooms (cuts nothing)."
+    ],
+    "numbers": {
+      "cell_ms": 32,
+      "vad_sample_rate": 16000,
+      "speech_gap_db": 12,
+      "quiet_floor_clamp_db": [
+        -40,
+        -22
+      ],
+      "no_speech_floor_db": -28,
+      "minimum_pause_s_default": 0.5,
+      "minimum_pause_s_range": [
+        0.25,
+        3.0
+      ],
+      "speech_padding_s_default": 0.15,
+      "speech_padding_s_range": [
+        0.0,
+        0.5
+      ]
+    },
+    "checks": [
+      "No cut inside a VAD speech span",
+      "Remaining pauses >= 2*padding"
+    ],
+    "tags": [
+      "silence",
+      "dead-air",
+      "vad",
+      "auto-edit"
+    ],
+    "id": "timeline.dead-air-vad-removal",
+    "title": "Dead-air removal from VAD speech mask with adaptive quiet threshold",
+    "rooms": [
+      "editing",
+      "audio"
+    ],
+    "kind": "algorithm",
+    "when": "When tightening talking-head / narration pacing without a transcript (run before word-level cuts).",
+    "summary": "Classify 32 ms cells as speech via VAD, mark non-speech runs as dead air only if their median level sits about 12 dB below the recording's own median speech peak, keep runs at least the minimum pause long, pad speech on both sides, then ripple-delete.",
+    "source": "palmier-pro Audio/Analysis/SilenceRemovalSettings.swift, SpeechMaskStore.swift, VoiceActivity.swift, Audio/WaveformExtractor.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "ffmpeg -hide_banner -i in -vn -af silencedetect=noise=-30dB:d=0.5 -f null -  (parse stderr).",
+      "A silence_start without silence_end runs to EOF (end = duration).",
+      "Clamp leading negative starts to 0; drop spans starting at/after duration.",
+      "Pad: start += pad, end -= pad; drop spans shorter than 2*pad; EOF span only pads its start.",
+      "Keeps = complement over [0,duration]; emit seconds and microseconds.",
+      "Feed keeps to the ripple-delete op as removal ranges (the silences), never as re-encoded files."
+    ],
+    "do": [
+      "Prefer the adaptive VAD method for speech; use silencedetect for music-free screen recordings and as a fallback.",
+      "Use -60 dB / 2 s to find true dead gaps (blank sections) in recordings."
+    ],
+    "avoid": [
+      "Cutting exactly at silence_end (clips the next word's soft attack)."
+    ],
+    "numbers": {
+      "speech_threshold_db": -30,
+      "speech_min_silence_s": 0.5,
+      "pad_s": 0.1,
+      "dead_gap_threshold_db": -60,
+      "dead_gap_min_s": 2.0
+    },
+    "checks": [
+      "Keep spans non-overlapping and sorted",
+      "Sum(keeps)+sum(silences)=duration"
+    ],
+    "tags": [
+      "ffmpeg",
+      "silencedetect",
+      "auto-cut"
+    ],
+    "id": "timeline.silencedetect-keep-spans",
+    "title": "FFmpeg silencedetect -> silence spans -> padded keep segments",
+    "rooms": [
+      "editing",
+      "audio"
+    ],
+    "kind": "procedure",
+    "when": "When a quick deterministic, FFmpeg-only silence pass is enough (no VAD), or to find long digital-silence gaps between programme parts.",
+    "summary": "Run silencedetect, parse silence_start/silence_end pairs, clamp to duration, shrink each span by a pad so word attacks survive, optionally keep only the N longest, and output the complementary keep spans.",
+    "source": "capcut-cli src/silence.ts (MIT); lossless-cut src/renderer/src/ffmpegParameters.ts, src/main/ffmpeg.ts (GPL-2.0, idea restated)"
+  },
+  {
+    "steps": [
+      "Transcript from the TIMELINE (not the source): walk every clip, map words through trim/speed/position, concatenate in timeline order, give stable 0-based indices.",
+      "Selection by indices/ranges ([5, [12,18]]) or by exact normalized filler tokens (lowercase, punctuation-trimmed).",
+      "For a selected run k..l: left = prevWord.end (or clip start), right = nextWord.start (or clip end); keepBefore = min(runStart-left, half), keepAfter = min(right-runEnd, half); cut [left+keepBefore, right-keepAfter).",
+      "half = keptGap/2 where keptGap = tight 60 ms | balanced 150 ms | loose 320 ms.",
+      "Refuse if selected words span multiple unlinked tracks; linked camera+mic is one unit.",
+      "After cutting, re-read the transcript as prose and check continuity (no orphan half-thoughts, no leftover repeated take)."
+    ],
+    "do": [
+      "Use word-level edits for fillers/flubs and VAD/silence for pauses.",
+      "Verify suspected zero-width seam fragments (word start == next word start) against the word list."
+    ],
+    "avoid": [
+      "Reusing word indices after any cut.",
+      "Cutting mid-word: always cut in the inter-word gap."
+    ],
+    "numbers": {
+      "kept_gap_ms": {
+        "tight": 60,
+        "balanced": 150,
+        "loose": 320
+      },
+      "default": "balanced"
+    },
+    "checks": [
+      "Removed text echoed in receipt",
+      "Transcript after cut contains no selected tokens"
+    ],
+    "tags": [
+      "transcript",
+      "filler-words",
+      "text-based-editing"
+    ],
+    "id": "timeline.word-boundary-cuts",
+    "title": "Transcript word cuts that keep a natural pause",
+    "rooms": [
+      "editing",
+      "captions"
+    ],
+    "kind": "algorithm",
+    "when": "When removing filler words, flubs, false starts or rambles by transcript word index.",
+    "summary": "For each run of selected words, cut from the previous kept word's end plus half the kept-gap to the next kept word's start minus half the kept-gap, clamp to the clip, merge, then ripple-delete on one track; re-read the transcript before the next cut because indices shift.",
+    "source": "palmier-pro Transcription/WordCutPlanner.swift, Agent/Tools/ToolExecutor+Words.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Normalize tokens (NFKC, lowercase, letters/digits only).",
+      "For cue i, scan cues j>i while start_j - end_i <= window.",
+      "Skip cues with fewer than minWords tokens.",
+      "similarity = 2*LCS(a,b)/(|a|+|b|) on token sequences; first j clearing the floor is the retake.",
+      "Cut span = earlier cue; output cuts + keeps; feed to ripple delete after human review (show pairs side by side)."
+    ],
+    "do": [
+      "Present retake pairs as review markers before cutting."
+    ],
+    "avoid": [
+      "Unbounded windows (a failure mode once collapsed a 29-minute recording to under 2 minutes)."
+    ],
+    "numbers": {
+      "window_s": 60,
+      "similarity_floor": 0.8,
+      "min_words": 4
+    },
+    "checks": [
+      "No cut span longer than the matched later take by > 2x without review"
+    ],
+    "tags": [
+      "retakes",
+      "transcript",
+      "auto-edit"
+    ],
+    "id": "timeline.retake-detection",
+    "title": "Retake detection: windowed word-sequence similarity, later take wins",
+    "rooms": [
+      "editing"
+    ],
+    "kind": "algorithm",
+    "when": "When a talking-head recording contains repeated attempts at the same sentence.",
+    "summary": "Compare each cue with later cues that start within a window; if normalized word sequences are similar enough and long enough, cut the earlier take and keep the later one.",
+    "source": "capcut-cli src/retakes.ts (MIT)"
+  },
+  {
+    "steps": [
+      "Tokenize script by lines (line = cue boundary hint) and words; normalize both sides.",
+      "Score: exact match +2, near-miss (edit distance / longer length <= 0.4) +1, other substitution -1, gap -1.",
+      "Matched/substituted script words take the recognized word's start/end.",
+      "Inserted (missed) words: spread evenly between timed neighbours; at edges extrapolate with the median recognized word duration.",
+      "Report matched, substituted, inserted, dropped, match_ratio = matched/script_words."
+    ],
+    "do": [
+      "Use script lines as caption cue boundaries; still split long lines by max chars."
+    ],
+    "avoid": [
+      "Trusting alignment when match_ratio < 0.5 (script probably belongs to other audio)."
+    ],
+    "numbers": {
+      "match": 2,
+      "near_miss": 1,
+      "mismatch": -1,
+      "gap": -1,
+      "near_miss_edit_ratio": 0.4,
+      "min_trust_match_ratio": 0.5
+    },
+    "checks": [
+      "Timings monotonic after alignment",
+      "Every script word has start < end"
+    ],
+    "tags": [
+      "alignment",
+      "asr",
+      "whisper",
+      "captions"
+    ],
+    "id": "timeline.script-transcript-alignment",
+    "title": "Align a known script to ASR word timings (Needleman-Wunsch)",
+    "rooms": [
+      "captions",
+      "editing"
+    ],
+    "kind": "algorithm",
+    "when": "When the narration script is known (TTS or read VO) and captions/edits should use the script's exact wording with ASR timing.",
+    "summary": "Globally align normalized script tokens to recognized tokens with match/near-miss/mismatch/gap scoring; matched script words inherit timing, missed words are interpolated, and a low match ratio flags the wrong script.",
+    "source": "capcut-cli src/align.ts (MIT)"
+  },
+  {
+    "steps": [
+      "ffmpeg -i in -an -vf \"select='gt(scene,0.4)',metadata=print:file=-\" -f null -  -> parse pts_time and lavfi.scene_score.",
+      "Alternative: -vf scdet=threshold=10:sc_pass=1 (threshold in percent).",
+      "Merge chains of cuts closer than minGap into one (keep the first or strongest).",
+      "Segments = [0,c1), [c1,c2) ... [cn,duration).",
+      "Map to timeline frames and offer as split points (split_clips trackId+frames)."
+    ],
+    "do": [
+      "Use 0.3 for soft cuts / dissolves, 0.4-0.5 for hard cuts only.",
+      "Seek with -ss/-to for windows to speed up long files."
+    ],
+    "avoid": [
+      "Thresholds below 0.2 on handheld footage (camera motion triggers false cuts)."
+    ],
+    "numbers": {
+      "scene_threshold_default": 0.4,
+      "scene_threshold_sane_range": [
+        0.3,
+        0.5
+      ],
+      "min_gap_s": 2,
+      "scdet_threshold_percent": 10
+    },
+    "checks": [
+      "Cuts sorted, unique, >= minGap apart"
+    ],
+    "tags": [
+      "scene-detection",
+      "ffmpeg",
+      "shots"
+    ],
+    "id": "timeline.scene-change-detection",
+    "title": "Scene-change detection with FFmpeg and close-cut merging",
+    "rooms": [
+      "editing",
+      "qc"
+    ],
+    "kind": "algorithm",
+    "when": "When splitting long footage into shots, finding B-roll boundaries, or checking cut density in QC.",
+    "summary": "Use the scene score filter to emit candidate cut times, merge cuts closer than a minimum gap, optionally limit to the strongest N, and turn cuts into shot segments.",
+    "source": "capcut-cli src/scenes.ts (MIT); lossless-cut src/main/ffmpeg.ts, ffmpegParameters.ts (GPL-2.0, idea restated)"
+  },
+  {
+    "steps": [
+      "Black: ffmpeg -i in -an -vf blackdetect=d=2.0:pic_th=0.98:pix_th=0.10 -f null -  (parse black_start/black_end).",
+      "QC variant: d=0.1 to catch short black flashes in a rendered export.",
+      "Freeze: -vf freezedetect=n=-60dB:d=2 (parse lavfi.freezedetect.freeze_start/end).",
+      "Bounding mode -> segments equal to the detected spans; midpoint mode -> segments between successive span midpoints (good for splitting a recording into parts)."
+    ],
+    "do": [
+      "Run black/freeze on the final render as a release gate."
+    ],
+    "avoid": [
+      "Treating intentional dip-to-black transitions as defects; whitelist transition ranges from the timeline."
+    ],
+    "numbers": {
+      "black_min_duration_s": 2.0,
+      "picture_black_ratio_th": 0.98,
+      "pixel_black_th": 0.1,
+      "qc_black_min_duration_s": 0.1,
+      "freeze_noise_db": -60,
+      "freeze_min_s": 2
+    },
+    "checks": [
+      "No unexplained black span > 0.1 s in export",
+      "No freeze > 2 s outside stills"
+    ],
+    "tags": [
+      "blackdetect",
+      "freezedetect",
+      "qc",
+      "ffmpeg"
+    ],
+    "id": "timeline.black-freeze-detection",
+    "title": "Black-frame and frozen-frame detection",
+    "rooms": [
+      "qc",
+      "editing"
+    ],
+    "kind": "procedure",
+    "when": "When trimming slates/black leaders, finding accidental black gaps, or QC-ing an export for frozen or black stretches.",
+    "summary": "blackdetect and freezedetect produce interval spans; use bounding mode to cut exactly the span or midpoint mode to split programme parts at the middle of each black section.",
+    "source": "lossless-cut src/renderer/src/ffmpegParameters.ts, src/main/ffmpeg.ts (GPL-2.0, idea restated)"
+  },
+  {
+    "steps": [
+      "Decode mono 22050 Hz; frame hop 441 samples = 20 ms (50 frames/s).",
+      "With a beat model: per-frame beat and downbeat logits; a frame is a beat if sigmoid(logit) >= 0.5 and it is a local maximum.",
+      "FFmpeg-only fallback (no model): onset envelope = half-wave-rectified spectral flux (or low-pass 150 Hz energy flux for kick-driven music) at 50 fps; tempo by autocorrelation in 60-180 BPM; beat tracking by dynamic programming; downbeat phase = the beat-of-4 with highest low-band energy.",
+      "BPM = 60 / median inter-beat interval.",
+      "Cut frame on timeline = musicClip.start + (B*fps - musicClip.trimStartFrames) / musicClip.speed.",
+      "Snap: move each cut to the nearest downbeat if within tolerance; otherwise leave and report.",
+      "Text/caption entrance can lead the beat by 1-2 frames so it reads as on-beat."
+    ],
+    "do": [
+      "Cache analysis per asset (size+mtime key); window results, not work."
+    ],
+    "avoid": [
+      "Running beat detection on speech or ambience (few/no beats); report instead of guessing."
+    ],
+    "numbers": {
+      "sample_rate": 22050,
+      "hop_samples": 441,
+      "frames_per_s": 50,
+      "peak_prob_threshold": 0.5,
+      "tempo_search_bpm": [
+        60,
+        180
+      ],
+      "snap_tolerance_frames_at_30fps": 4,
+      "note": "fallback algorithm, tempo range and snap tolerance are recommendations, not from source"
+    },
+    "checks": [
+      "Snapped cuts still inside source handles",
+      "Montage shot length >= 1 beat"
+    ],
+    "tags": [
+      "beats",
+      "music",
+      "montage",
+      "snapping"
+    ],
+    "id": "timeline.beat-detection-and-snapping",
+    "title": "Beat/downbeat detection and cut snapping",
+    "rooms": [
+      "editing",
+      "audio",
+      "motion"
+    ],
+    "kind": "algorithm",
+    "when": "When cutting a montage to music or timing text entrances to the bar.",
+    "summary": "Produce beats, downbeats and BPM in source seconds from the music asset; snap cut points to downbeats (bars) for musical edits and to beats only for fast montages, converting beat times through the music clip's placement.",
+    "source": "palmier-pro Audio/Beats/BeatDetector.swift, ToolDefinitions.swift (detect_beats), AgentInstructions.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "fits(text) = rendered width <= 90% of canvas width AND words <= maxWords AND chars <= maxChars.",
+      "Break order: after . ! ? followed by space (keeps 'U.S.' and '3.14' intact), else after , ; :, else at middle word; a single over-long word is kept.",
+      "Time each phrase by consuming words by alphanumeric character count (robust to contractions/split numbers); fallback: distribute segment time by character share.",
+      "Short-form karaoke grouping: start a new cue when words > 4, chars > 28, or inter-word gap > 500 ms.",
+      "Long-form: one or two lines, <= 42 chars per line.",
+      "Resolve overlaps between consecutive captions; if the gap to the next caption <= maxGap, extend the earlier caption to touch it; extend the last caption by up to maxGap (not past the timeline end).",
+      "Map words to clip-relative frames for per-word highlight animations; group all cues under one captionGroupId for whole-group restyle.",
+      "Imported SRT/VTT: honour file timing (resolve overlaps, never close gaps)."
+    ],
+    "do": [
+      "Use CJK limits automatically (zh 16 chars, ja 13, ko 16 per cue) and join CJK words without spaces.",
+      "Default to clean captions (white, outline, lower third); only style what the user asks."
+    ],
+    "avoid": [
+      "Mid-phrase breaks that orphan one word on a cue when a clause break exists."
+    ],
+    "numbers": {
+      "max_text_width_ratio": 0.9,
+      "karaoke_max_words": 4,
+      "karaoke_max_chars": 28,
+      "line_max_chars": 42,
+      "max_gap_ms": 500,
+      "max_gap_s_range": [
+        0,
+        2
+      ],
+      "cjk_line_max": {
+        "zh": 16,
+        "ja": 13,
+        "ko": 16
+      }
+    },
+    "checks": [
+      "No caption overlaps",
+      "Every caption duration >= min duration",
+      "Caption cps within limit"
+    ],
+    "tags": [
+      "captions",
+      "subtitles",
+      "karaoke",
+      "segmentation"
+    ],
+    "id": "timeline.auto-caption-segmentation",
+    "title": "Auto-caption segmentation and timing",
+    "rooms": [
+      "captions"
+    ],
+    "kind": "algorithm",
+    "when": "When turning word timings into caption clips (long-form subtitles or short-form karaoke).",
+    "summary": "Split each transcript segment recursively at sentence punctuation, then clause punctuation, then the middle word until a phrase fits the width/word/char limits; time phrases from the words they contain; resolve overlaps; extend captions across small gaps; hold the last one briefly.",
+    "source": "palmier-pro MediaPanel/CaptionsTab/CaptionBuilder.swift, CaptionSpecBuilder.swift, CaptionGapSettings.swift (GPLv3, idea restated); capcut-cli src/caption.ts, src/script.ts (MIT)"
+  },
+  {
+    "steps": [
+      "line-too-long: any line > 42 chars (Latin) / script limit -> warning, auto-rewrap fixable.",
+      "caption-too-fast: visible chars / seconds > 20 cps (zh 9, ja 4, ko 12) -> warning, report-only (needs more time or fewer words).",
+      "cue-too-long: duration > 7 s -> warning, fixable by splitting.",
+      "caption-too-short: duration < 0.8 s (my recommendation) -> warning; never auto-shrink below 100 ms (unrenderable floor).",
+      "caption-overlap: next.start < prev.end -> error, fixable by trimming prev.",
+      "caption-outside-safe-area: on vertical canvases |y| beyond 0.85 of the half-height from centre -> warning (platform UI covers it).",
+      "max 2 lines per caption (recommendation)."
+    ],
+    "do": [
+      "Report fixable vs report-only per instance, with a suggested command."
+    ],
+    "avoid": [
+      "Auto-fixes that move every later caption (authoring decision)."
+    ],
+    "numbers": {
+      "max_chars_per_line": 42,
+      "max_cps": 20,
+      "max_cue_s": 7,
+      "min_render_floor_ms": 100,
+      "recommended_min_cue_s": 0.8,
+      "safe_area_fraction_vertical": 0.85,
+      "max_lines": 2
+    },
+    "checks": [
+      "lint exit code 0/1/2 = clean/warnings/errors"
+    ],
+    "tags": [
+      "captions",
+      "lint",
+      "readability"
+    ],
+    "id": "timeline.caption-qc-rules",
+    "title": "Caption QC: line length, reading speed, duration, overlap, safe area",
+    "rooms": [
+      "captions",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "Before approval and export of any caption track.",
+    "summary": "Lint every caption for chars per line, characters per second, maximum and minimum on-screen time, overlaps and vertical safe area; fix mechanically only when the fix cannot destroy content.",
+    "source": "capcut-cli src/lint.ts, src/script.ts (MIT)"
+  },
+  {
+    "steps": [
+      "Find seams: adjacent clips on the main track from the same asset where srcIn(next) > srcOut(prev) (a jump cut).",
+      "Alternate scale per segment: A=1.0, B=1.15 (cycle), crop anchored at anchorY 0.35-0.4 so eyes stay in the upper third.",
+      "Emphasis candidates: keywords list, words followed by '!' or '?', or words whose RMS is >= 6 dB above the sentence median.",
+      "Place the punch-in split 2 frames before the emphasized word's start (frame-accurate on the word boundary gap).",
+      "Spacing: >= 2.5 s between punch-ins; never more than 3 consecutive scale changes without a B-roll or a return to 1.0.",
+      "Implement as a split + static transform on the second piece (exact, no keyframe jitter); use a 6-10 frame eased zoom only for deliberate slow pushes.",
+      "Skip segments shorter than 1 s (invisible) and segments under overlays/B-roll."
+    ],
+    "do": [
+      "Check the source resolution: 1.2x of 1080p source on a 1080p timeline softens; prefer 4K sources or <= 1.15x."
+    ],
+    "avoid": [
+      "Punch-ins inside a single word or on every sentence.",
+      "Changing scale and position direction on the same seam (feels like a bump)."
+    ],
+    "numbers": {
+      "scale_levels": [
+        1.0,
+        1.15
+      ],
+      "max_scale_1080_source": 1.15,
+      "anchorY": [
+        0.35,
+        0.4
+      ],
+      "lead_frames": 2,
+      "min_spacing_s": 2.5,
+      "min_segment_s": 1.0,
+      "emphasis_rms_db_above_median": 6,
+      "note": "original editorial heuristics; no source repo implements this"
+    },
+    "checks": [
+      "No two punch-ins closer than min spacing",
+      "Upscale factor within source resolution budget"
+    ],
+    "tags": [
+      "punch-in",
+      "jump-cut",
+      "zoom",
+      "emphasis"
+    ],
+    "id": "timeline.punch-in-on-emphasis",
+    "title": "Punch-in (scale step) on emphasis and to hide jump cuts",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "algorithm",
+    "when": "After transcript/silence cuts create jump cuts in a single-camera talking head, or when a word deserves visual emphasis.",
+    "summary": "Alternate framing between consecutive same-source segments (1.0 vs ~1.12-1.2 scale, face-safe anchor), and add a punch-in at emphasis words, with spacing rules so it never feels twitchy.",
+    "source": "original synthesis; layout anchor concept from palmier-pro ToolDefinitions.swift apply_layout (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Slots in 0..1 canvas: full main(0,0,1,1); side_by_side left(0,0,.5,1) right(.5,0,.5,1); top_bottom; main_sidebar main(0,0,.7,1) sidebar(.7,0,.3,1); three_up; three_stack; grid NxN cells rNcN from top-left.",
+      "PiP inset size 0.28 of canvas, margin 0.035 from edges; inset placed on the top layer.",
+      "Cover crop: sourceAspect vs slotAspect (in pixels); crop the longer axis; offset = (excess) * anchor (0 keeps left/top, 0.5 centre, 1 right/bottom).",
+      "fit mode: scale to fit inside slot, keep full frame (screen recordings).",
+      "Re-layout mode changes only transform/crop of existing clips; placement mode creates one stacked track per slot."
+    ],
+    "do": [
+      "Nudge framing with small anchor steps (e.g. anchorY 0.35) instead of hand-editing transforms.",
+      "Fix stacking (inset hidden) by reordering tracks, not by transforms."
+    ],
+    "avoid": [
+      "Building layouts from free transforms/keyframes (hard to verify, breaks on aspect change)."
+    ],
+    "numbers": {
+      "pip_inset": 0.28,
+      "pip_margin": 0.035,
+      "main_sidebar_split": [
+        0.7,
+        0.3
+      ],
+      "anchor_default": 0.5
+    },
+    "checks": [
+      "Every slot filled",
+      "Inset layer above main",
+      "No stretched aspect (scaleX == scaleY in pixels)"
+    ],
+    "tags": [
+      "layout",
+      "pip",
+      "split-screen",
+      "grid"
+    ],
+    "id": "timeline.layouts-pip-split-grid",
+    "title": "Named layouts (PiP, split, grid) with cover-crop and anchors",
+    "rooms": [
+      "motion",
+      "editing"
+    ],
+    "kind": "formula",
+    "when": "When composing several videos in one frame (reaction PiP, side-by-side, grid, main+sidebar).",
+    "summary": "Pick a named layout, assign one clip per slot, and compute transform+crop so each clip fills its slot without stretching (cover), with anchorX/anchorY biasing which part of the source survives; 'fit' letterboxes instead.",
+    "source": "palmier-pro Models/VideoLayout.swift, ToolDefinitions.swift (apply_layout) (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Speech spans from VAD on narration/dialogue tracks (timeline frames).",
+      "Merge spans separated by < 0.6 s so the bed does not pump between words.",
+      "For each span write music volume keyframes: ramp down over attack (~0.2 s) before span start to duckDb, hold, ramp up over release (~0.5 s) after span end (smooth interpolation).",
+      "Render: volume='...':eval=frame or per-keyframe piecewise expression; or sidechain: [vo]asplit=2[vo][key];[music][key]sidechaincompress=threshold=0.03:ratio=8:attack=20:release=350[duck];[vo][duck]amix=inputs=2:duration=first:normalize=0.",
+      "Set music base level so music-only passages sit near programme loudness and ducked passages sit 12-18 dB under the voice."
+    ],
+    "do": [
+      "Use amix normalize=0 (otherwise amix scales each input down by the input count).",
+      "Store ducking as keyframes so a human can audit it in the timeline."
+    ],
+    "avoid": [
+      "Ducking SFX that should punch through (exclude sfx track by default)."
+    ],
+    "numbers": {
+      "duck_db": [
+        -18,
+        -12
+      ],
+      "attack_s": 0.2,
+      "release_s": 0.5,
+      "merge_gap_s": 0.6,
+      "sidechain": {
+        "threshold": 0.03,
+        "ratio": 8,
+        "attack_ms": 20,
+        "release_ms": 350
+      },
+      "note": "values are recommendations; filtergraph verified on ffmpeg 6.1.1"
+    },
+    "checks": [
+      "Voice-to-music margin >= 12 dB during speech (short-term loudness)",
+      "No pumping: no duck/unduck cycles shorter than 1 s"
+    ],
+    "tags": [
+      "ducking",
+      "sidechaincompress",
+      "music",
+      "ffmpeg"
+    ],
+    "id": "timeline.audio-ducking",
+    "title": "Music ducking under narration: computed envelope or sidechain",
+    "rooms": [
+      "audio"
+    ],
+    "kind": "procedure",
+    "when": "When music or SFX beds play under narration/dialogue.",
+    "summary": "Primary: compute volume keyframes on the music clip from the narration's VAD speech spans (reviewable, deterministic, stored on the timeline); alternative at render: sidechaincompress keyed by the narration.",
+    "source": "original synthesis (FFmpeg recipes validated locally); volume keyframes in dB from palmier-pro Models/Timeline.swift (GPLv3, idea restated)"
+  },
+  {
+    "steps": [
+      "Pass 1: ffmpeg -i mix -af loudnorm=I=-14:TP=-1.5:LRA=11:print_format=json -f null -  -> read input_i, input_tp, input_lra, input_thresh, target_offset.",
+      "Pass 2: loudnorm=I=-14:TP=-1.5:LRA=11:measured_I=..:measured_TP=..:measured_LRA=..:measured_thresh=..:offset=..:linear=true,aresample=48000.",
+      "Verify: ffmpeg -i out -af ebur128=peak=true -f null -  -> integrated within +/-1 LU of target, true peak <= -1 dBTP.",
+      "Clipping check: astats 'Number of samples clipped' == 0 and peak < -0.1 dBFS on the pre-limiter mix.",
+      "Encode AAC 192-320 kbps stereo 48 kHz."
+    ],
+    "do": [
+      "Normalize the final mix, not individual clips.",
+      "Keep dialogue-heavy content around -16 to -14 LUFS; YouTube turns louder uploads down, it does not raise quiet ones."
+    ],
+    "avoid": [
+      "Single-pass dynamic loudnorm on music-heavy mixes (audible pumping); use the measured linear pass."
+    ],
+    "numbers": {
+      "target_lufs": -14,
+      "true_peak_dbtp": -1.5,
+      "lra": 11,
+      "tolerance_lu": 1,
+      "sample_rate": 48000,
+      "aac_kbps": [
+        192,
+        320
+      ]
+    },
+    "checks": [
+      "Integrated loudness within tolerance",
+      "True peak <= -1 dBTP",
+      "Zero clipped samples"
+    ],
+    "tags": [
+      "loudness",
+      "lufs",
+      "loudnorm",
+      "youtube"
+    ],
+    "id": "timeline.loudness-youtube",
+    "title": "Loudness normalization and peak control for YouTube",
+    "rooms": [
+      "audio",
+      "qc"
+    ],
+    "kind": "procedure",
+    "when": "At final mix/export, and as a QC gate on the rendered file.",
+    "summary": "Two-pass EBU R128 loudnorm to about -14 LUFS integrated with a true-peak ceiling of -1.5 dBTP, resample to 48 kHz, then verify with ebur128 true-peak measurement.",
+    "source": "original synthesis; two-pass loudnorm and ebur128 verified on ffmpeg 6.1.1"
+  },
+  {
+    "steps": [
+      "Per video clip: trim=start=S:duration=D (source seconds), setpts=(PTS-STARTPTS)/speed, fps=FPS, scale=W:H:force_original_aspect_ratio=decrease (fit) or crop-then-scale (cover), pad, setsar=1, format=yuv420p, settb=AVTB.",
+      "Gaps on the main track: color=c=black:s=WxH:r=FPS:d=GAP (plus anullsrc for audio).",
+      "Main track: concat=n=N:v=1:a=0; transitions with xfade=transition=fade:duration=T:offset=O (both inputs need identical fps, size, pix_fmt and timebase - add settb=AVTB after concat).",
+      "Overlays: scale/crop per transform, then overlay=x=..:y=..:enable='between(t,A,B)' with setpts=PTS+A/TB on the overlay stream.",
+      "Audio per clip: atrim, asetpts, atempo chain (each factor within 0.5..2), volume (gain + keyframes with eval=frame), afade, adelay=Ams|Ams; then amix=inputs=K:normalize=0.",
+      "Crossfades between adjacent audio clips: acrossfade=d=T.",
+      "Captions: generate ASS (styles, \\k karaoke tags) and apply subtitles=captions.ass; drawtext only for simple titles.",
+      "Preview proxies at 0.5 scale with -preset ultrafast; finals at full res."
+    ],
+    "do": [
+      "Write the filtergraph to a file (-filter_complex_script) for long timelines.",
+      "Keep the graph builder pure (timeline -> args) and unit-test it without running ffmpeg."
+    ],
+    "avoid": [
+      "Mismatched timebases into xfade (fails: 'First input link main timebase ... do not match').",
+      "Passing unsanitized user text into drawtext (colons/quotes); prefer ASS files."
+    ],
+    "numbers": {
+      "atempo_per_instance": [
+        0.5,
+        2.0
+      ],
+      "proxy_scale": 0.5
+    },
+    "checks": [
+      "Rendered duration == timeline totalFrames/fps (+/- 1 frame)",
+      "Audio and video stream durations within 1 frame"
+    ],
+    "tags": [
+      "ffmpeg",
+      "render",
+      "filtergraph"
+    ],
+    "id": "timeline.ffmpeg-render-graph",
+    "title": "Compile a timeline to one FFmpeg filtergraph",
+    "rooms": [
+      "editing",
+      "motion",
+      "audio",
+      "captions"
+    ],
+    "kind": "procedure",
+    "when": "When rendering previews or finals from the timeline JSON with FFmpeg only.",
+    "summary": "Normalize every clip to the canvas (trim, setpts, fps, scale/pad, setsar, format, settb), concat the main track with gaps as color sources, overlay higher tracks with enable windows, build audio with atrim/adelay/volume/afade and amix, then burn captions via ASS.",
+    "source": "capcut-cli src/render.ts (MIT); recipe validated on ffmpeg 6.1.1 (xfade timebase fix found during validation)"
+  },
+  {
+    "steps": [
+      "Static punch-in (exact): crop=iw/Z:ih/Z:(iw-ow)*ax:(ih-oh)*ay,scale=W:H.",
+      "Animated zoom on video: scale=w='trunc(W*Z(t)/2)*2':h=-2:eval=frame,crop=W:H:(iw-W)*ax:(ih-H)*ay  where Z(t)=z0+(z1-z0)*smoothstep(clip((t-t0)/(t1-t0),0,1)).",
+      "Stills (Ken Burns): scale=4*iw:-2 (oversample) then zoompan=z='...':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=FRAMES:s=WxH:fps=FPS.",
+      "Video zoompan alternative: d=1 and z expressed in 'it' (input time seconds).",
+      "Ease: smoothstep(t)=t*t*(3-2t) matches the 'smooth' keyframe interpolation."
+    ],
+    "do": [
+      "Zoom-in 1.0->1.2 for dwell shots; zoom-out 1.5->1.0 only as a reveal; finish the motion by the cut."
+    ],
+    "avoid": [
+      "zoompan on video without oversampling (integer-pixel stepping causes visible wobble).",
+      "Ken Burns on shots shorter than ~2 s (motion invisible)."
+    ],
+    "numbers": {
+      "kb_zoom_in": [
+        1.0,
+        1.2
+      ],
+      "kb_zoom_out": [
+        1.5,
+        1.0
+      ],
+      "oversample": 4,
+      "min_shot_s": 2
+    },
+    "checks": [
+      "Output size constant WxH",
+      "No black borders at max zoom/pan"
+    ],
+    "tags": [
+      "zoom",
+      "ken-burns",
+      "ffmpeg",
+      "keyframes"
+    ],
+    "id": "timeline.keyframed-zoom-ffmpeg",
+    "title": "Keyframed zoom / Ken Burns in FFmpeg without jitter",
+    "rooms": [
+      "motion"
+    ],
+    "kind": "formula",
+    "when": "When rendering scale/position keyframes (slow push-in, Ken Burns on stills, punch-in ramps).",
+    "summary": "Static punch-ins are a crop+scale; animated zooms use either scale with eval=frame followed by a fixed-size crop (smooth, works in ffmpeg 6.1) or zoompan on an oversampled input; position pans use crop x/y expressions.",
+    "source": "capcut-cli examples/keyframe-zoom.md, skills/capcut-edit/scripts/ken-burns.sh (MIT); filter expressions original, verified on ffmpeg 6.1.1"
+  },
+  {
+    "steps": [
+      "Constant: newDuration = round(sourceConsumedFrames / speed); keyframes rescaled; check source covers durationFrames*speed.",
+      "Video render: setpts=(PTS-STARTPTS)/speed; audio: atempo chain with factors in 0.5..2 (e.g. 4x = atempo=2,atempo=2).",
+      "Ramp: define control points (timeline t -> source s); render with setpts='(piecewise expression of T)/TB', e.g. 1x until 2 s then 2x: setpts='if(lt(T,2),T,2+(T-2)/2)/TB'.",
+      "Ramp audio: mute the clip audio and add a whoosh/riser SFX, or split audio into constant-speed pieces.",
+      "Lint speed/timerange agreement: |sourceDur/targetDur - speed|/speed > 1% -> warning."
+    ],
+    "do": [
+      "Refuse timing changes on multicam members (would slip sync).",
+      "Use frame blending only on slow-mo of 30->60 fps sources; otherwise duplicate frames."
+    ],
+    "avoid": [
+      "Speeds that read past the end of the source (black tail / silence)."
+    ],
+    "numbers": {
+      "atempo_range_per_instance": [
+        0.5,
+        2.0
+      ],
+      "speed_mismatch_tolerance": 0.01
+    },
+    "checks": [
+      "srcIn + duration*speed <= asset duration",
+      "Linked partners retimed together"
+    ],
+    "tags": [
+      "speed",
+      "ramp",
+      "retime",
+      "ffmpeg"
+    ],
+    "id": "timeline.speed-and-ramps",
+    "title": "Constant speed changes and speed ramps",
+    "rooms": [
+      "editing",
+      "motion",
+      "audio"
+    ],
+    "kind": "procedure",
+    "when": "When retiming a clip (speed-ups for B-roll, slow-mo, ramps into a beat).",
+    "summary": "Constant speed rescales the clip's timeline length to keep the same source content (unless a duration is given) and propagates to linked partners; ramps are piecewise time maps rendered with a setpts expression, with audio muted or replaced.",
+    "source": "palmier-pro ToolDefinitions.swift (set_clip_properties speed) (GPLv3, idea restated); capcut-cli src/lint.ts (speed-timerange-mismatch), skills references/pitfalls.md (MIT); ramp expression verified on ffmpeg 6.1.1"
+  },
+  {
+    "steps": [
+      "ERROR clip-overlap (same track), caption-overlap, missing-asset/missing-file, source-range-exceeds-asset, keyframe-out-of-range, negative-start.",
+      "WARNING main-track-gap (unintended black), flash-frame (visual clip or gap < 3 frames), linked-av-out-of-sync, speed-timerange-mismatch, fades-exceed-duration, too-long-hold, caption rules (line, cps, duration, safe area), loudness-off-target, true-peak > -1 dBTP, clipped samples, music-not-ducked-under-speech.",
+      "INFO vfr-media (convert to CFR before editing), media-outside-project, unresolved review markers, unused assets, tiny keep fragments (< 0.3 s) left by auto cuts.",
+      "too-long-hold: same visual (no cut, zoom, overlay or text change) > 8 s long-form / > 4 s Shorts (pacing heuristic).",
+      "Each issue: {severity, code, message, fixable, suggestedOp, location{trackId, clipId, frame}}.",
+      "Exit/gate: 0 clean, 1 warnings, 2 errors."
+    ],
+    "do": [
+      "Only auto-fix when the repair cannot delete or retime user content (e.g. drop dangling refs, trim caption overlap)."
+    ],
+    "avoid": [
+      "Auto-closing main-track gaps without shifting dependent tracks in lockstep."
+    ],
+    "numbers": {
+      "flash_frame_max_frames": 3,
+      "hold_max_s_longform": 8,
+      "hold_max_s_shorts": 4,
+      "min_keep_fragment_s": 0.3,
+      "true_peak_max_dbtp": -1,
+      "note": "hold/flash/fragment thresholds are recommendations"
+    },
+    "checks": [
+      "Lint result stored with each revision",
+      "Export blocked while any ERROR exists"
+    ],
+    "tags": [
+      "lint",
+      "qc",
+      "gate"
+    ],
+    "id": "timeline.lint-rules",
+    "title": "Timeline lint rule set (structure, timing, media, audio, pacing)",
+    "rooms": [
+      "qc",
+      "editing",
+      "audio",
+      "captions"
+    ],
+    "kind": "checklist",
+    "when": "After every agent batch (as a receipt delta) and as a blocking gate before human approval and export.",
+    "summary": "Severity-graded rules with fixable flags and suggested repairs: errors block export, warnings need human acknowledgement, info is advisory.",
+    "source": "capcut-cli src/lint.ts (MIT); palmier-pro EditorViewModel+Linking.swift (linkGroupOffsets) (GPLv3, idea restated); pacing thresholds original"
+  },
+  {
+    "steps": [
+      "List keyframes near the cut: ffprobe -read_intervals T-10%T+10 -select_streams v:0 -show_entries packet=pts_time,flags -of json (K flag = keyframe); widen to 60 s if none.",
+      "If a keyframe is exactly at the in-point (|dt| < 1 us): stream copy from it.",
+      "Else: lossless part = [nextKeyframe, out) via -ss before -i, -c copy; head = [in, nextKeyframe - 1 frame) re-encoded with the same codec, bitrate = source bitrate * 1.2, same timebase, matching B-frames; concat demuxer.",
+      "If the next keyframe lies after the out-point, encode the whole segment.",
+      "Without smart cut, in-points snap to the previous keyframe; move start a few frames after the wanted keyframe; use -avoid_negative_ts make_zero when cutting the start.",
+      "Chapters: ffmetadata [CHAPTER] TIMEBASE=1/1000 START END title; mux with -map_chapters."
+    ],
+    "do": [
+      "Use this only for exports that do not need compositing; the timeline renderer re-encodes anyway."
+    ],
+    "avoid": [
+      "Smart cut on files with more than one video stream or unknown fps."
+    ],
+    "numbers": {
+      "keyframe_search_window_s": [
+        10,
+        60
+      ],
+      "smart_cut_bitrate_factor": 1.2,
+      "concat_safety_frames": 1
+    },
+    "checks": [
+      "Exported duration matches requested range +/- 1 frame",
+      "A/V sync at the joint"
+    ],
+    "tags": [
+      "lossless",
+      "smart-cut",
+      "keyframes",
+      "ffmpeg"
+    ],
+    "id": "timeline.keyframe-aware-cutting",
+    "title": "Keyframe-aware lossless cutting and smart cut",
+    "rooms": [
+      "editing",
+      "qc"
+    ],
+    "kind": "algorithm",
+    "when": "When producing fast stream-copy exports of trims (raw clip pulls, chapter splits, highlight extraction) instead of a full re-render.",
+    "summary": "Stream copy can only start on a keyframe; smart cut re-encodes just the head from the desired in-point to the next keyframe with matching codec/bitrate and stream-copies the rest, then concats.",
+    "source": "lossless-cut src/renderer/src/smartcut.ts, hooks/useFfmpegOperations.ts, src/renderer/src/ffmpeg.ts, docs/troubleshooting.md (GPL-2.0, idea restated)"
+  },
+  {
+    "steps": [
+      "Premiere: XMEML (FCP7 XML) carries placement/trims, speed (Time Remap), static+keyframed volume/opacity/motion/crop, fades as one-sided dissolves, linked A/V; drops text, flips, keyframe easing, effects.",
+      "Resolve/FCP: FCPXML (version 1.10 for widest Resolve acceptance) carries text, transforms, crop, opacity, position/scale/rotation keyframes, speed via timeMap, static volume; drops keyframed volume, audio fades, crop keyframes, text boxes, color/effects. Resolve and FCP read position/crop units differently: emit per target.",
+      "Rotation is counter-clockwise in FCP formats: negate clockwise values.",
+      "OTIO (0.14-era Timeline/Stack/Track/Clip): speed as LinearTimeWarp(time_scalar=speed); captions as Stack markers optional.",
+      "CMX3600 EDL: event, reel, track, transition, srcIn, srcOut, recIn, recOut (timecode at fps); one video track.",
+      "CSV: start,end,label per line (seconds, comma separated); TSV variant; tags as extra columns.",
+      "YouTube chapters: 'M:SS Title' lines, first at 0:00 (YouTube also requires >= 3 chapters of >= 10 s each).",
+      "Container chapters: ffmetadata TIMEBASE=1/1000; MP4 chapters must be contiguous - insert gap chapters between segments."
+    ],
+    "do": [
+      "Export the edited transcript as SRT/VTT alongside every interchange file."
+    ],
+    "avoid": [
+      "Silent drops; list skipped tracks/features in the export receipt."
+    ],
+    "numbers": {
+      "fcpxml_version": "1.10",
+      "chapter_timebase": "1/1000",
+      "youtube_min_chapters": 3,
+      "youtube_min_chapter_s": 10
+    },
+    "checks": [
+      "Round-trip import of own export reproduces clip count and total duration"
+    ],
+    "tags": [
+      "fcpxml",
+      "xmeml",
+      "otio",
+      "edl",
+      "csv",
+      "chapters"
+    ],
+    "id": "timeline.interchange-formats",
+    "title": "Interchange: FCPXML, XMEML, OTIO, EDL, CSV, chapters, SRT",
+    "rooms": [
+      "editing",
+      "captions",
+      "qc"
+    ],
+    "kind": "ruleset",
+    "when": "When handing a cut to Premiere/Resolve/FCP or exchanging segment lists with other tools.",
+    "summary": "Pick the format by target editor and know what each carries; report every dropped feature instead of losing it silently.",
+    "source": "palmier-pro Export/FCPXMLExporter.swift, Export/XMLExporter.swift (GPLv3, idea restated); capcut-cli src/interchange.ts (MIT); lossless-cut src/renderer/src/edlFormats.ts, cmx3600.ts, segments.ts (GPL-2.0, idea restated)"
+  },
+  {
+    "steps": [
+      "Times in microseconds; source_timerange.duration = target_timerange.duration * speed and the speed material must agree.",
+      "Main video track (first video track) is magnetic: gaps close on open and shift everything after; avoid gaps or shift dependent tracks in lockstep.",
+      "Source ranges past the material end make CapCut clamp the in-point to 0 (clip plays from the file start).",
+      "Audio segments have clip=null (no opacity/transform).",
+      "Alpha keyframes do not render; use intro/outro animation materials for fades. Motion keyframes (scale/position) do render; eased keyframes need bezier handles.",
+      "Text style ranges are UTF-16 code units, not bytes.",
+      "Storage moves between versions: 8.7+ template-2.tmp/draft_meta_info.json mirrors, 9.2+ nested Timelines/<id>/draft_info.json; write every readable target in one atomic save; macOS draft_info.json vs Windows draft_content.json.",
+      "Refuse writes for JianYing >= 6 (encrypted) and CapCut >= 10 unless forced; refuse if the editor is open or the file changed since load.",
+      "Keep .bak plus rolling snapshot history; support dry-run/plan mode."
+    ],
+    "do": [
+      "Seed new drafts from a real project created in the installed app version.",
+      "Ship a low-res FFmpeg proxy render next to the draft for review."
+    ],
+    "avoid": [
+      "Treating a CapCut draft as the master; the app's own timeline JSON stays the source of truth."
+    ],
+    "numbers": {
+      "time_unit": "microseconds",
+      "max_verified_capcut_major": 9,
+      "jianying_encrypted_from": 6
+    },
+    "checks": [
+      "capcut-style lint clean (no main-track gaps, no speed mismatches, no out-of-range sources)"
+    ],
+    "tags": [
+      "capcut",
+      "jianying",
+      "draft",
+      "export"
+    ],
+    "id": "timeline.capcut-draft-export-cautions",
+    "title": "CapCut / JianYing draft export cautions",
+    "rooms": [
+      "editing",
+      "qc"
+    ],
+    "kind": "checklist",
+    "when": "When exporting the timeline as a CapCut/JianYing draft for a human to finish in the app.",
+    "summary": "CapCut drafts are undocumented, versioned JSON in microseconds with a magnetic main track; write atomically with conflict checks, close the app first, and verify visually because valid JSON is not proof that an effect renders.",
+    "source": "capcut-cli skills/capcut-edit/references/pitfalls.md, docs/version-support.md, src/lint.ts, src/store.ts (MIT)"
+  },
+  {
+    "steps": [
+      "Localized edit: send only the clip's trimmed range (plus instruction and references) to a v2v model; on completion swap_clip_media keeps timing, framing, effects and keyframes.",
+      "Gap transition: capture the frame before the gap and the frame after it; first/last-frame video model; gap length <= 15 s; result placed exactly in the gap.",
+      "Extend: video-to-video extend model (4-30 s) from the clip tail; place via insert (ripple).",
+      "Swap rules: same media type, has audio if a linked audio needs it, covers the current source range.",
+      "Generation is paid and not undoable: propose prompt/model/duration/aspect first, wait for human confirmation, draft previews at 720p when available.",
+      "Never generate readable text, logos, UI or titles; those belong to text/graphics tracks."
+    ],
+    "do": [
+      "Record model, prompt, seed and source range in the asset's provenance for revision history."
+    ],
+    "avoid": [
+      "Approximating an existing frame with an image generation; capture the actual frame."
+    ],
+    "numbers": {
+      "max_ai_transition_s": 15,
+      "extend_duration_s": [
+        4,
+        30
+      ],
+      "omnivideo_default": {
+        "size": "832x480",
+        "frames": 41,
+        "fps": 8
+      }
+    },
+    "checks": [
+      "Replacement asset covers clip source range",
+      "Generation job has an approval record"
+    ],
+    "tags": [
+      "generative",
+      "v2v",
+      "first-last-frame",
+      "extend"
+    ],
+    "id": "timeline.generative-edit-continuity",
+    "title": "Generative edits on the timeline: localized v2v, gap transitions, extend",
+    "rooms": [
+      "editing",
+      "motion"
+    ],
+    "kind": "principle",
+    "when": "When an AI video model is used to fix, extend or bridge timeline footage.",
+    "summary": "Treat generations as new assets that replace or fill timeline ranges through normal ops: edit a trimmed range and swap the clip's media on completion, bridge a gap from captured first/last frames, extend from a clip's tail; all behind a cost approval gate.",
+    "source": "palmier-pro EditorViewModel+AITransition.swift, EditorViewModel+AIEdit.swift, ToolDefinitions.swift (swap_clip_media), AgentInstructions.swift (GPLv3, idea restated); open-higgsfield src/generation/catalog/seedance-2.5.ts (no license file, ideas only); Omni-Video README (no license file, ideas only)"
+  },
+  {
+    "steps": [
+      "Composited still at frame f: ffmpeg -ss T -i proxy.mp4 -frames:v 1 -vf \"drawgrid=w=iw/10:h=ih/10:t=1:c=white@0.4,drawtext=text='f%{frame_num}':start_number=F:x=10:y=10:fontsize=36:fontcolor=yellow:box=1:boxcolor=black@0.6\" f.png.",
+      "Sample up to 12 frames evenly across a range for transitions/sequences; report clip ids visible top-down per frame.",
+      "Proxy: 0.5 scale, ultrafast preset, captions burned or as a soft mov_text stream (+ sidecar SRT).",
+      "Transcript after cuts: read as prose; check no orphan half-sentences, repeated takes, or awkward jumps; undo and retry if a cut overshot.",
+      "Attach stills and transcript diff to the revision for the human reviewer."
+    ],
+    "do": [
+      "Use inspect frames to verify, not to design layouts (use named layouts)."
+    ],
+    "avoid": [
+      "Declaring an effect done because the JSON was written."
+    ],
+    "numbers": {
+      "max_sample_frames": 12,
+      "default_sample_frames": 6,
+      "proxy_scale": 0.5,
+      "grid_divisions": 10
+    },
+    "checks": [
+      "Every agent revision with visual changes has at least one verification still"
+    ],
+    "tags": [
+      "verification",
+      "qc",
+      "proxy",
+      "inspect"
+    ],
+    "id": "timeline.verify-by-render",
+    "title": "Verify edits by rendering frames and re-reading the transcript",
+    "rooms": [
+      "qc",
+      "editing",
+      "captions"
+    ],
+    "kind": "procedure",
+    "when": "After every agent batch that changes placement, layout, captions, stacking or spoken content.",
+    "summary": "Close the blind-edit loop: render composited sample frames with a 0-1 grid and burned-in frame number plus the list of visible clip ids, render a low-res proxy for review, and re-read the post-edit transcript to check continuity.",
+    "source": "palmier-pro ToolDefinitions.swift (inspect_timeline, get_transcript), AgentInstructions.swift (GPLv3, idea restated); capcut-cli src/render.ts, skills references/pitfalls.md (MIT); drawgrid/drawtext recipe verified on ffmpeg 6.1.1"
+  },
+  {
+    "steps": [
+      "Duplicate the timeline (keep the approved original).",
+      "remove_silence with defaults (0.5 s min pause, 0.15 s padding); tighter: 0.35 s / 0.1 s for Shorts.",
+      "detect retakes -> review markers -> cut confirmed earlier takes.",
+      "remove_words for fillers (um, uh, you know, like - only when filler) and false starts at balanced 150 ms kept gap.",
+      "Re-read the transcript as prose; fix continuity.",
+      "Punch-ins at jump-cut seams and emphasis; B-roll over long holds.",
+      "Captions from the final timeline transcript; caption lint.",
+      "Ducking + loudness; full lint; verification stills; mark review for the human."
+    ],
+    "do": [
+      "Ask one focused question when the goal is vague (how tight, target length)."
+    ],
+    "avoid": [
+      "Captioning before cuts are final (captions must be regenerated)."
+    ],
+    "numbers": {
+      "shorts_min_pause_s": 0.35,
+      "shorts_padding_s": 0.1,
+      "longform_min_pause_s": 0.5,
+      "longform_padding_s": 0.15,
+      "note": "shorts values are recommendations"
+    },
+    "checks": [
+      "Each stage = one revision with receipt and lint"
+    ],
+    "tags": [
+      "workflow",
+      "tighten",
+      "pacing"
+    ],
+    "id": "timeline.trim-tighten-editorial-pass",
+    "title": "Editorial tightening pass (order of operations)",
+    "rooms": [
+      "editing",
+      "audio",
+      "captions",
+      "qc"
+    ],
+    "kind": "procedure",
+    "when": "When asked to 'tighten', 'clean up' or 'make it punchier' for a talking-head or narration video.",
+    "summary": "Run cuts from coarse to fine with verification between stages: dead air, retakes, fillers/flubs, then pacing visuals (punch-ins, B-roll), captions last, then audio mix and QC.",
+    "source": "palmier-pro Agent/Tools/AgentInstructions.swift (cutting preference, trim/tighten guidance) (GPLv3, idea restated); stage order original synthesis"
+  }
+]

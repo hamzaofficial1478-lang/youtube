@@ -1,0 +1,32 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const {randomUUID, createHash} = require('node:crypto');
+const {createApp} = require('../server');
+
+test('in-memory HTTP fixtures isolate media; audio streaming verifies hashes and byte ranges', async t => {
+  const app = createApp({dataFile: ':memory:', worker: false, protector: {transform: (op, data) => data}, providerFetch: async () => { throw new Error('No external calls in this test.'); }});
+  assert.ok(app.dataRoot.startsWith(path.join(os.tmpdir(), 'control-room-memory-')));
+  assert.notEqual(app.renderRoom.dataRoot, path.resolve(__dirname, '../data'));
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => { app.server.closeAllConnections(); app.server.close(() => { fs.rmSync(app.dataRoot, {recursive: true, force: true}); resolve(); }); }));
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const family = app.store.saveFamily({name: 'Audio HTTP fixture', tier: 'A', countries: ['United States'], audience: 'Adults learning about local narration finishing.', niche: 'Audio education', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 0, cadence: 1, format: 'shorts'});
+  const content = app.store.saveContent({familyId: family.id, title: 'Narration fixture', kind: 'fiction', angle: 'A fictional story about sound.', hook: 'A voice can tell a story.', script: '', sources: [], rightsConfirmed: false});
+  const id = randomUUID(), relativePath = `renders/${id}.wav`, file = path.join(app.dataRoot, relativePath), bytes = Buffer.alloc(128, 5);
+  fs.mkdirSync(path.dirname(file), {recursive: true}); fs.writeFileSync(file, bytes);
+  const result = {audio: {relativePath, sizeBytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex')}};
+  app.store.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,result,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'fixture','proxy','completed','{}',?,1,'Tester','2026-10-07','2026-10-07')").run(id, family.id, content.id, JSON.stringify(result));
+  assert.equal((await fetch(`${base}/audio-room.js`)).status, 200);
+  const response = await fetch(`${base}/api/renders/${id}/audio`, {headers: {Range: 'bytes=4-9'}});
+  assert.equal(response.status, 206); assert.equal(response.headers.get('content-type'), 'audio/wav');
+  assert.equal(response.headers.get('content-range'), 'bytes 4-9/128');
+  assert.equal((await response.arrayBuffer()).byteLength, 6);
+  assert.equal((await fetch(`${base}/api/renders/${id}/audio`, {headers: {Range: 'bytes=500-600'}})).status, 416);
+  assert.equal((await fetch(`${base}/api/edit-revisions/${id}/ops`, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ops: [{type: 'set-audio', settings: {}}]})})).status, 403);
+  bytes[0] ^= 1; fs.writeFileSync(file, bytes);
+  assert.equal((await fetch(`${base}/api/renders/${id}/audio`)).status, 409, 'same-size corruption is refused');
+});

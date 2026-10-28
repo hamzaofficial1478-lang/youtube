@@ -1,0 +1,1672 @@
+[
+  {
+    "id": "pipeline.stage-artifact-chain",
+    "title": "One canonical artifact per room, validated before hand-off",
+    "rooms": ["general", "qc"],
+    "kind": "procedure",
+    "when": "Every time a video project moves from one production room to the next.",
+    "summary": "Each room emits exactly one schema-checked document that is the only contract the next room may read; rooms never pass loose notes or skip ahead.",
+    "steps": [
+      "Assign one canonical artifact per room: research/niche -> research_brief; concept pitch -> proposal_packet; script -> script; scene & visual -> scene_plan; asset generation -> asset_manifest; editing -> edit_decisions; render -> render_report plus final_review; publish -> publish_log.",
+      "Declare each room in a data manifest (YAML/JSON): required input artifacts, optional inputs, produced artifacts, allowed tools, review focus items, success criteria, checkpoint_required, human_approval_default.",
+      "Before a room starts, confirm every required input exists and passes its JSON schema; refuse to start otherwise.",
+      "Before a room finishes, validate its output; a schema failure is a critical finding and blocks the hand-off.",
+      "Keep media files in typed folders (images, video, audio, music, renders) and reference them from artifacts by asset id so provenance survives.",
+      "Put room-specific extra fields inside a metadata object instead of inventing new top-level fields."
+    ],
+    "do": [
+      "Let the orchestrator read the manifest instead of hard-coding stage order",
+      "Record provider, model, seed and cost on every generated asset",
+      "Create one workspace per video: artifacts/, assets/{images,video,audio,music}/, renders/, history/, snapshots/"
+    ],
+    "avoid": [
+      "Collapsing rooms (approved concept straight to bulk generation)",
+      "Writing files outside the project workspace where the dashboard cannot see them",
+      "Re-deciding upstream choices inside a downstream room (e.g. editing volumes during render)"
+    ],
+    "numbers": {
+      "canonical_artifacts_per_room": 1,
+      "artifact_chain": ["research_brief", "proposal_packet", "script", "scene_plan", "asset_manifest", "edit_decisions", "render_report", "final_review", "publish_log"],
+      "always_on_side_artifacts": ["decision_log", "review (per stage)", "checkpoint_<stage>.json"]
+    },
+    "checks": [
+      "Completed and awaiting-approval rooms always carry their canonical artifact",
+      "Every artifact validates against its schema",
+      "Every cut source in edit_decisions resolves to an asset_manifest id with a real file path"
+    ],
+    "tags": ["orchestration", "contracts", "schema", "workspace"],
+    "source": "OpenMontage AGENT_GUIDE.md; PROJECT_CONTEXT.md; schemas/pipelines/pipeline_manifest.schema.json (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "pipeline.executive-producer-loop",
+    "title": "Producer loop: pass, revise, or send back with hard limits",
+    "rooms": ["general", "qc"],
+    "kind": "procedure",
+    "when": "Running a full production where a later room can uncover a problem that was born in an earlier room.",
+    "summary": "A stateful producer wraps stateless room workers, injects cumulative context, reviews every output, and either passes it, asks for a revision, or returns work to an earlier room, with caps that stop endless loops.",
+    "steps": [
+      "Initialise producer state: pipeline, style, target duration, budget total/spent/remaining, artifact map, measured narration durations per section, style anchors, revision counts per room, issues log.",
+      "For each room run PREPARE (load the room skill, inject state and any feedback) -> RUN the worker -> REVIEW (schema, focus items, success criteria, style rules, cross-room checks) -> GATE.",
+      "Gate outcome PASS: store artifact, update totals (spend, durations, anchors).",
+      "Gate outcome REVISE: write structured feedback (reason, exact issue, constraint, what to keep, what to change, affected ids, budget left) and rerun the same room.",
+      "Gate outcome SEND_BACK: rerun an earlier room and invalidate every artifact after it; only for structural problems.",
+      "After the last room run a holistic QA (file probe, A/V sync, style consistency, budget reconciliation) and route each defect to the room able to fix it.",
+      "When any cap is reached, continue with logged warnings rather than blocking forever."
+    ],
+    "do": [
+      "Absorb small drift (around +/-10% duration) downstream instead of re-running upstream",
+      "Pass style anchors (palette, character, lighting tokens) explicitly to the asset room",
+      "Reserve budget for assets and render before early rooms spend"
+    ],
+    "avoid": [
+      "Perfectionism loops",
+      "Sending back for cosmetic issues",
+      "Trusting metadata instead of probing the actual rendered file"
+    ],
+    "numbers": {
+      "max_revisions_per_room": 3,
+      "max_send_backs_per_room_pair": 1,
+      "max_total_send_backs": 3,
+      "default_budget_usd": {"explainer": 2.0, "cinematic": 2.0, "hybrid": 2.0, "documentary_montage": 1.0, "clip_factory": 1.0},
+      "budget_share_reserved_for_assets_and_render": 0.3,
+      "budget_alert_at_share_spent": 0.9,
+      "max_wall_time_minutes": {"explainer_manifest": 20, "cinematic": 12, "hybrid": 12, "documentary_montage": 60},
+      "av_sync_tolerance_seconds": 0.5,
+      "final_duration_tolerance_ratio": 0.05
+    },
+    "checks": [
+      "Revision count per room never exceeds the cap",
+      "Every send-back is logged with reason and target room",
+      "Budget alert raised when 90% is spent with rooms still pending"
+    ],
+    "tags": ["orchestration", "feedback-loop", "budget", "limits"],
+    "source": "OpenMontage skills/pipelines/explainer/executive-producer.md; skills/pipelines/cinematic/executive-producer.md; skills/pipelines/hybrid/executive-producer.md; pipeline_defs/*.yaml orchestration blocks (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "pipeline.decision-log",
+    "title": "Append-only decision log keyed by category and subject",
+    "rooms": ["general", "learning", "qc"],
+    "kind": "ruleset",
+    "when": "Any consequential choice is made or later changed: provider, voice, music, style, render engine, fallback, concept, extension, approval policy.",
+    "summary": "Every meaningful choice is written down together with the options that lost and why; a change appends a new entry under the same key instead of editing history, giving both the user and the learning engine a truthful trail.",
+    "steps": [
+      "Write each entry with: id, room, category, subject, options_considered (label, 0-1 score, reason or rejected_because), selected, reason, user_visible, user_approved, confidence 0-1.",
+      "Treat the (category, subject) pair as the identity of a decision; the newest entry for a pair is the current truth.",
+      "On change, append a new entry with the identical pair and move the previous pick into options_considered with a rejected_because explaining the change.",
+      "Use a fixed category list: pipeline, provider, renderer_family, render_runtime, composition_mode, playbook, fallback, budget_tradeoff, downgrade_approval, music_source, motion_commitment, concept, voice, capability_extension, playbook_override, visual_accuracy_check, approval_policy."
+    ],
+    "do": [
+      "List at least two options for every decision, including unavailable ones with the reason",
+      "Write reasons tied to the brief, never filler",
+      "Calibrate confidence; provider picks usually involve trade-offs"
+    ],
+    "avoid": [
+      "Reasons like 'best option'",
+      "Every confidence at 1.0",
+      "Rewording the subject when revising (creates a phantom second decision)",
+      "Mutating old entries or only patching downstream artifacts"
+    ],
+    "numbers": {
+      "min_options_considered": 2,
+      "missing_log_severity": {"after_concept_first_time": "suggestion", "still_missing_at_edit": "critical"},
+      "confidence_range": [0, 1]
+    },
+    "checks": [
+      "Provider, style, music, voice, render engine and every downgrade each have an entry",
+      "No decision has a single option",
+      "Revised decisions reuse the exact category+subject"
+    ],
+    "tags": ["audit-trail", "governance", "learning-input"],
+    "source": "OpenMontage AGENT_GUIDE.md (Decision Communication Contract); skills/meta/reviewer.md (Decision Log Review); schemas/artifacts/decision_log.schema.json (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "pipeline.promise-and-substitution-guard",
+    "title": "Delivery promise, motion ratio and no silent substitutions",
+    "rooms": ["general", "editing", "qc"],
+    "kind": "ruleset",
+    "when": "At concept approval, before any paid call, when something breaks, and again at edit and render time.",
+    "summary": "Classify what the video promises (e.g. real motion vs stills), announce every consequential tool choice before using it, ask before any major change, escalate blockers in a fixed format, and verify at the end that the promise survived.",
+    "steps": [
+      "Record a delivery promise at concept time: promise type, motion_required, source_required, tone mode, quality floor (draft/presentable/broadcast), approved fallback (animatic, still-led, or none).",
+      "Before every paid or consequential generation, state tool, provider, model/variant, why it was chosen, and whether it is a sample or a batch.",
+      "Ask first before: switching provider or model family, moving from motion-led to still-led, changing render engine, dropping narration or music, moving from sample to batch.",
+      "On a blocker report five things: what was tried, what failed, failure class (auth / provider access / tool bug / prompt or design quality), the options, and a recommended option with reasoning; then wait.",
+      "At edit time compute motion ratio = cuts with real motion (video or animation) / total cuts and compare with the promise minimum.",
+      "At render time confirm the engine that actually ran equals the engine locked at concept and that no silent downgrade happened."
+    ],
+    "do": [
+      "When asking the user to choose: give a shortlist, short trade-offs, one recommendation, then wait",
+      "For a faceless channel decide up front if the format is motion-led (stock/generated video b-roll) or still-led (images with pan/zoom)"
+    ],
+    "avoid": [
+      "Quietly turning a motion promise into a pan-and-zoom slideshow",
+      "Running a substitute path before the user approves it",
+      "Hiding degraded paths in the final output"
+    ],
+    "numbers": {
+      "min_motion_ratio_by_promise": {"motion_led": 0.7, "avatar_presenter": 0.3, "source_led": 0.3, "hybrid": 0.2, "data_explainer": 0.0, "teacher_explainer": 0.0, "screen_demo": 0.0, "localization": 0.0},
+      "still_fallback_allowed": {"motion_led": false, "avatar_presenter": false, "others": true},
+      "still_majority_violation_share": 0.5,
+      "blocker_report_parts": 5,
+      "motion_led_flag_even_if_valid_below": 0.5
+    },
+    "checks": [
+      "Motion ratio meets the promise minimum",
+      "final_review records runtime_swap_detected=false and silent_downgrade_detected=false",
+      "Every substitution has a logged, user-approved decision"
+    ],
+    "tags": ["governance", "motion", "fallback", "communication"],
+    "source": "OpenMontage AGENT_GUIDE.md (Decision Communication Contract, Motion-Required Requests); lib/delivery_promise.py (understood only); skills/meta/reviewer.md (Delivery Promise Review); skills/pipelines/cinematic/proposal-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "audio.music-plan-first",
+    "title": "Resolve the music plan at concept time, not at asset time",
+    "rooms": ["audio", "general"],
+    "kind": "procedure",
+    "when": "During concept approval for any video that has an audio bed.",
+    "summary": "Music is surfaced as an explicit choice before anything is generated, executed exactly as approved later, and trimmed to its strongest section so a video never ends up silent or with a weak intro by surprise.",
+    "steps": [
+      "Check sources in order: the user's own music library, royalty-free search providers, music generation, bring-your-own drop folder.",
+      "Present explicit options (library track X, search, provide own, generate with named provider and cost, proceed without music) and record the choice with path or prompt seed.",
+      "If no source exists, say so at concept time, not later.",
+      "In the asset room execute exactly the recorded plan; changing source later is a major change that needs approval.",
+      "For a chosen track, analyse per-second loudness and start playback at the highest-energy window that is as long as the video, skipping quiet intros; enable looping if the remaining track is shorter than the video.",
+      "Make sure the music covers the full video duration."
+    ],
+    "do": [
+      "Treat music as a timing grid to cut to, not a sweetener added at render",
+      "Generate a short music sample before committing when using generation"
+    ],
+    "avoid": [
+      "Assuming a 'pure' silent piece will work",
+      "Generating a track because the edit 'feels thin' after the user chose none",
+      "Music at full volume under narration"
+    ],
+    "numbers": {
+      "explainer_music_volume_range": [0.05, 0.15],
+      "documentary_montage_music_volume": 0.7,
+      "typical_fade_in_seconds": [1, 2],
+      "typical_fade_out_seconds": [3, 4],
+      "montage_music_opt_out_requires": "source=none plus written opt_out_reason"
+    },
+    "checks": [
+      "Music decision present in the concept artifact",
+      "Rendered file has an audio stream with audible music unless explicitly opted out"
+    ],
+    "tags": ["music", "audio", "planning"],
+    "source": "OpenMontage AGENT_GUIDE.md (Music Plan); skills/pipelines/explainer/proposal-director.md; skills/pipelines/documentary-montage/idea-director.md; skills/pipelines/animation/compose-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "checkpoint.human-gate-protocol",
+    "title": "Human approval gates, live progress and resume",
+    "rooms": ["general", "qc"],
+    "kind": "procedure",
+    "when": "On entering, during, and on finishing any room, and on restarting an interrupted project.",
+    "summary": "Each room writes a live in-progress checkpoint, saves partial progress per scene, and, when the manifest says the room is gated, stops with a clear approval request; approval only ever covers that one gate.",
+    "steps": [
+      "Read checkpoint_required and human_approval_default for the room from the manifest; treat the flag as binding.",
+      "On entry write status in_progress; during long rooms (assets, render) refresh partial progress with completed scene ids after each unit.",
+      "When gated: write awaiting_human and present artifact summary, review results (criticals fixed, open suggestions), cost so far and projected, and the action needed; then stop all further work.",
+      "Approve -> rewrite as completed with human_approved=true; Revise -> rerun the room with the feedback, re-review, re-checkpoint (superseded version archived to history); Abort -> stop.",
+      "Count a blanket 'do everything' only if it is logged as an approval_policy decision at the moment it is given.",
+      "Hold the asset gate on a per-scene filmstrip (thumbnails, stills, waveforms), never on a rendered draft; rendering belongs to the next room.",
+      "On restart compute the next room; if it is in_progress, resume from partial progress and skip completed units; if awaiting_human, re-present."
+    ],
+    "do": [
+      "Always checkpoint expensive work even if not strictly required",
+      "Show spend and remaining budget at every approval request"
+    ],
+    "avoid": [
+      "Presenting and continuing in the same step",
+      "Treating an early 'looks great' as approval for later gates",
+      "Destroying superseded versions"
+    ],
+    "numbers": {
+      "statuses": ["in_progress", "awaiting_human", "completed", "failed"],
+      "checkpoint_policies": ["guided", "manual_all", "auto_noncreative"],
+      "typically_gated_rooms": ["concept/idea", "script", "scene_plan", "assets", "publish"],
+      "typically_auto_rooms": ["edit", "render"],
+      "exception": "documentary montage also gates edit"
+    },
+    "checks": [
+      "A gated room cannot be marked completed without human_approved=true",
+      "Every completed/awaiting checkpoint embeds the room artifact",
+      "History folder contains every superseded checkpoint"
+    ],
+    "tags": ["approval", "resume", "progress", "governance"],
+    "source": "OpenMontage skills/meta/checkpoint-protocol.md; schemas/checkpoints/checkpoint.schema.json; AGENT_GUIDE.md (Human Checkpoint Protocol) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "checkpoint.sample-before-batch",
+    "title": "Sample first, batch second",
+    "rooms": ["voice", "scene", "audio", "general"],
+    "kind": "procedure",
+    "when": "Before generating any expensive asset type in bulk, and before full production of a reference-inspired video.",
+    "summary": "Produce one cheap, representative sample per costly asset type (and a short preview clip for reference-driven work), get approval, then lock those exact settings for the batch.",
+    "steps": [
+      "For reference-driven videos build a 10-15 s preview: the opening hook plus one representative middle scene with real voice, real visuals, a music snippet and the caption style.",
+      "For narration, sample the section with the most demanding delivery (not automatically the first).",
+      "For images or clips, sample the most representative scene (in batches, the visual peak / hero scene).",
+      "For generated music, sample a short clip to confirm mood and energy.",
+      "If rejected, change the specific parameter (voice, prompt, provider) and resample; after 3 rounds escalate to the user for a decision.",
+      "Record the approved sample path and exact settings in the asset manifest; any later change of provider, voice, speed or model requires a new sample."
+    ],
+    "do": [
+      "Tell the user the sample cost against the projected full cost",
+      "Name tool, provider and model before sampling"
+    ],
+    "avoid": [
+      "Skipping the sample because the user said 'just do it' (advise once, then respect insistence)",
+      "Batching with settings that differ from the approved sample"
+    ],
+    "numbers": {
+      "preview_seconds": [10, 15],
+      "max_sample_iterations_per_asset_type": 3,
+      "typical_sample_cost_usd": [0.03, 0.08],
+      "typical_waste_avoided_usd": [1, 3],
+      "sample_file_pattern": "assets/sample/sample_v{N}.mp4"
+    },
+    "checks": [
+      "Batch settings equal approved sample settings",
+      "Sample approval recorded before batch"
+    ],
+    "tags": ["cost-control", "approval", "voice", "visuals"],
+    "source": "OpenMontage skills/meta/video-reference-analyst.md (Step 5); skills/pipelines/explainer/asset-director.md (Step 2b); skills/meta/voice-performance-director.md (Sample Gate); skills/pipelines/clip-factory/asset-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.critique-quality",
+    "title": "Critiques must be accurate, complete and constructive",
+    "rooms": ["qc", "learning"],
+    "kind": "principle",
+    "when": "Writing any review finding for any room.",
+    "summary": "A finding names a problem; a critique tells the next room exactly how to fix it. Each critique points at a concrete location, sweeps for siblings of the same mistake, and, when critical, carries a ready-to-apply fix.",
+    "steps": [
+      "Accurate: cite the artifact field, script line, timestamp or frame; if you cannot point to it, you are guessing and must not file it.",
+      "Complete: after finding one problem, scan the rest of the artifact for the same class of problem before returning.",
+      "Constructive: every critical finding carries a proposed_fix (replacement text, exact value or specific action); every suggestion carries a proposed_change.",
+      "If no concrete fix can be proposed, file it as 'investigation' instead of critical so it does not block."
+    ],
+    "do": [
+      "Good: 'Section 3 holds about 180 words in a 10 s window (~1,080 wpm); cut to about 25 words.'",
+      "Good: 'Hook asks a question without urgency; lead with the counter-intuitive stat from key point 2.'"
+    ],
+    "avoid": [
+      "Vague findings such as 'script may be too long' or 'hook is weak'",
+      "Inflating severity: a required field missing is critical, a wordy paragraph is only a suggestion, a typo is a nitpick",
+      "Reviewing the process instead of the output"
+    ],
+    "numbers": {
+      "critical_requires": "proposed_fix",
+      "suggestion_requires": "proposed_change",
+      "nitpick_requires": "nothing"
+    },
+    "checks": [
+      "Every finding has a location reference",
+      "No critical without a fix",
+      "Sibling sweep performed after each critical"
+    ],
+    "tags": ["reviewer", "critique", "feedback-quality"],
+    "source": "OpenMontage skills/meta/reviewer.md (Critique Quality, Key Principles) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.stage-review-protocol",
+    "title": "Per-room self-review and pass/revise decision",
+    "rooms": ["qc"],
+    "kind": "procedure",
+    "when": "After any room produces its artifact and before checkpointing.",
+    "summary": "Load the room's focus items, success criteria, style rules and taste dials, validate schema, grade findings by severity, then pass, revise, or pass with warnings after the round cap.",
+    "steps": [
+      "Load: manifest review_focus and success_criteria for the room, active style quality rules, taste profile, the artifact.",
+      "Validate the artifact schema; failure is critical and must be fixed immediately.",
+      "Evaluate each focus item and assign critical / suggestion / nitpick / investigation.",
+      "Cross-check style: palette colours used, transitions inside the allowed set, holds inside min/max, style cues present in asset prompts, quality rules respected; each violation is a suggestion.",
+      "Check taste dials against layout variety, pacing, callout density and prompts.",
+      "Check each success criterion (yes / no / partial); any unmet criterion is critical.",
+      "Decide: 0 critical -> PASS (note suggestions); >=1 critical -> REVISE then re-review; still critical after the round cap -> PASS_WITH_WARNINGS and log unresolved items.",
+      "Record: room, round, decision, numbered findings with description, action, status (pending/fixed/accepted/deferred), and totals (critical fixed, suggestions, nitpicks, style violations, criteria met N/M)."
+    ],
+    "do": [
+      "Use room-specific emphasis: research = source diversity and verifiability; concept = delivery promise, engine choice, music/voice plan; script = timing, arc, cue density; scene plan = coverage, variety, feasibility, slideshow risk; assets = files exist, style consistency, budget; edit = coverage, sync, subtitles, promise; render = playable, duration, audio; publish = metadata completeness"
+    ],
+    "avoid": [
+      "Blocking indefinitely",
+      "Treating style rules as optional"
+    ],
+    "numbers": {
+      "max_review_rounds_reviewer_skill": 2,
+      "max_revisions_producer": 3,
+      "decision_table": {"0_critical": "PASS", "1plus_critical": "REVISE", "critical_after_cap": "PASS_WITH_WARNINGS"}
+    },
+    "checks": [
+      "Schema validated first",
+      "All success criteria explicitly scored",
+      "Review record stored with the checkpoint"
+    ],
+    "tags": ["reviewer", "rubric", "gate"],
+    "source": "OpenMontage skills/meta/reviewer.md (Protocol, Stage-Specific Review Guidance); schemas/artifacts/review.schema.json (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.severity-ladder",
+    "title": "Severity ladder with concrete triggers",
+    "rooms": ["qc", "learning"],
+    "kind": "ruleset",
+    "when": "Assigning severity to any finding in any room.",
+    "summary": "Four levels (critical, suggestion, nitpick, investigation) with a fixed list of what always counts as critical so reviewers stay consistent across videos.",
+    "steps": [
+      "CRITICAL (must fix before proceeding): invalid schema; unmet success criterion; wrong facts about a reference video; concept is a near copy of the reference; spend over estimate by more than 30% without re-approval; render engine or creative grammar changed without a logged decision; render produced without a final review; silent motion-to-still downgrade; slideshow risk verdict fail; scene variation verdict fail; two scenes sharing the same primary visual subject (hero spine); captions duplicating on-screen text; user-supplied media not actually inspected; plan relies on content the source does not contain; publishing with a non-passing final review.",
+      "SUGGESTION (should fix, does not block): style-rule violation; weak or surface-only differentiation from a reference; something the user said they loved got dropped; slideshow verdict revise; scenes missing shot intent; decision with one option; all confidences 1.0; new assets beyond the approved plan; missing taste profile on low-stakes work; taste-dial violations that do not break the promise.",
+      "NITPICK (optional polish): small wording, minor timing nudges.",
+      "INVESTIGATION: a real concern without a concrete fix; surfaced for the next round, never blocking."
+    ],
+    "do": [
+      "Escalate repeated suggestions of the same class across videos into a learning candidate"
+    ],
+    "avoid": [
+      "Marking taste opinions as critical",
+      "Leaving style violations unflagged because the result 'looks fine'"
+    ],
+    "numbers": {
+      "cost_drift_critical_ratio": 0.3,
+      "levels": ["critical", "suggestion", "nitpick", "investigation"]
+    },
+    "checks": [
+      "Each critical maps to one of the listed triggers or a manifest success criterion"
+    ],
+    "tags": ["reviewer", "severity", "consistency"],
+    "source": "OpenMontage skills/meta/reviewer.md (Steps 3-6, Reference Alignment, Decision Log, Source Understanding, Final Self-Review, Composition Authoring Mode reviews) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.slideshow-risk-score",
+    "title": "Slideshow-risk and scene-variation scoring",
+    "rooms": ["qc", "scene", "editing"],
+    "kind": "formula",
+    "when": "After the scene plan is written and again after the edit decisions exist.",
+    "summary": "Two structural scores (0-5, lower is better) predict whether the video will feel like animated slides; the edit must never score worse than the scene plan.",
+    "steps": [
+      "Slideshow risk = mean of six dimensions, each 0-5.",
+      "Repetition: +2 if one scene type exceeds 70% of scenes; +1.5 if fewer than 60% of scene descriptions are unique (first 50 characters); +1.5 if one shot size exceeds 60%; cap 5.",
+      "Decorative visuals: share of scenes with no information role, narrative role or shot intent x 5.",
+      "Weak motion: among scenes with camera movement, share lacking shot intent x 4 (no movement at all scores 1.5).",
+      "Weak shot intent: (1 - share of scenes with shot intent) x 5.",
+      "Typography over-reliance: text/stat/KPI scene share >60% -> 4, >40% -> 2.5, >20% -> 1, else 0.",
+      "Unsupported cinematic claim (only when the style claims cinematic): +1.8 each for no hero moment, <30% scenes with camera movement, <30% scenes with a lighting key.",
+      "Verdict: average <2 strong, <3 acceptable, <4 revise (suggestion; name dimensions >=3.5), >=4 fail (critical; do not render).",
+      "Variation check (scene plan): each violation adds 0.6 (cap 5), same verdict bands. Violations: one shot size >50% of scenes; a run of >=3 identical shot sizes; >60% static or unspecified movement (aim for >=40% moving); <=1 lighting setup across >=4 scenes; no hero moment; hero shares shot size with a neighbour; >=30% of descriptions contain generic words; <30% scenes with texture keywords; <50% scenes with shot intent.",
+      "Recompute at edit time with real cuts; if the score rose versus the scene plan, flag it."
+    ],
+    "do": [
+      "Treat the generic-word list as the 'lazy description' detector: a person, a beautiful, modern, futuristic, cutting-edge, sleek, innovative, state-of-the-art, next-generation, revolutionary, dynamic, vibrant, stunning, breathtaking, amazing, incredible, powerful, seamless"
+    ],
+    "avoid": [
+      "Mixing score directions; keep lower = better everywhere (the source reviewer text and checker disagree on naming)"
+    ],
+    "numbers": {
+      "dimension_range": [0, 5],
+      "verdict_bands": {"strong": "<2.0", "acceptable": "<3.0", "revise": "<4.0", "fail": ">=4.0"},
+      "repetition_type_share": 0.7,
+      "repetition_unique_desc_share": 0.6,
+      "repetition_shot_size_share": 0.6,
+      "typography_bands": {"gt_0.6": 4.0, "gt_0.4": 2.5, "gt_0.2": 1.0},
+      "variation_points_per_violation": 0.6,
+      "min_moving_scene_share": 0.4,
+      "max_same_shot_run": 2,
+      "generic_language_share_trigger": 0.3,
+      "texture_keyword_min_share": 0.3,
+      "shot_intent_min_share": 0.5
+    },
+    "checks": [
+      "Scene-plan slideshow verdict is not fail before assets are generated",
+      "Edit-stage score <= scene-plan score"
+    ],
+    "tags": ["reviewer", "slideshow", "variety", "scoring"],
+    "source": "OpenMontage lib/slideshow_risk.py and lib/variation_checker.py (understood only); skills/meta/reviewer.md (Slideshow Risk Review, Creative Differentiation Review) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.final-render-review",
+    "title": "Inspect the actual render before anyone sees it",
+    "rooms": ["qc"],
+    "kind": "checklist",
+    "when": "Immediately after every render, before presenting or publishing.",
+    "summary": "Five mandatory checks on the real file (probe, frames, audio, promise, subtitles) plus a transcript comparison produce a pass/revise/fail status and a routed next action.",
+    "steps": [
+      "Technical probe first: valid container, duration within tolerance, resolution and fps as planned, audio stream present (if missing, stop and fix), non-trivial file size.",
+      "Visual spot-check: sample at least 4 frames (opening, middle, climax, ending) or one per cut midpoint; look for black frames, broken overlays, missing assets, unreadable or stretched content, wrong background, captions over faces, wrong CTA text.",
+      "Audio spot-check: transcribe the rendered file; zero words means silent audio (stop); fewer than 80% of script words means cut-off; last spoken word should equal last scripted word; music audible; no clipping; no unexpected silence.",
+      "Promise preservation: engine used equals engine locked; motion ratio recorded; no silent downgrade.",
+      "Subtitle check: expected vs present, coverage ratio, timing drift.",
+      "Set status pass / revise / fail and recommended_action: present_to_user, re_render, revise_edit, revise_assets, block, re_author.",
+      "Never present a revise or fail render as finished; never publish without a pass."
+    ],
+    "do": [
+      "Write a short post-render report: file facts, audio completeness (N/M words), scenes inspected, captions, issues with severity, recommendations"
+    ],
+    "avoid": [
+      "Checking frames but skipping the audio transcript (most common miss)",
+      "Fixing problems by changing edit values inside the render step"
+    ],
+    "numbers": {
+      "min_frames_sampled": 4,
+      "duration_tolerance_ratio": 0.05,
+      "montage_duration_tolerance_seconds": 0.5,
+      "min_transcribed_word_ratio": 0.8,
+      "statuses": ["pass", "revise", "fail"]
+    },
+    "checks": [
+      "final_review artifact exists next to render_report",
+      "All five checks have data",
+      "Publish room receives final_review with status pass"
+    ],
+    "tags": ["qc", "render", "audio", "verification"],
+    "source": "OpenMontage skills/pipelines/explainer/compose-director.md (Step 6); skills/meta/reviewer.md (Final Self-Review Review); schemas/artifacts/final_review.schema.json (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.distinctness-check",
+    "title": "Distinctness review: no hero spine, no recycled look",
+    "rooms": ["qc", "scene", "editing"],
+    "kind": "checklist",
+    "when": "Before approving a scene plan and before approving any flagship render.",
+    "summary": "Record one representative frame and the primary visual subject per scene, reject scenes that share a subject, keep the signature visual scarce, and ask whether the video could belong to any other channel.",
+    "steps": [
+      "Inventory each scene: primary visual subject plus a representative (mid-scene) frame.",
+      "If two or more scenes share the same primary subject (the same hero object merely re-captioned) mark critical and re-plan those scenes.",
+      "Confirm the declared signature device appears in at least one beat but only in one or two beats, not as scaffolding for most scenes.",
+      "Answer explicitly: could this video belong to any other channel or topic after swapping the title? Does it reuse a look from a previous video of ours? A yes to either means re-author the art direction.",
+      "Caption/on-screen text dedup: decide once per video whether captions add meaning (numbers, names, translations, attributions) or echo the narration for accessibility; never show the same line twice at the same moment.",
+      "A missing recorded answer is itself a critical finding."
+    ],
+    "do": [
+      "Store each video's art-direction summary so the next review can compare against past looks"
+    ],
+    "avoid": [
+      "The same striking object in every scene with different text underneath (branded slides)",
+      "Captions that repeat the headline already on screen"
+    ],
+    "numbers": {
+      "signature_device_beats": [1, 2],
+      "scenes_allowed_to_share_primary_subject": 0
+    },
+    "checks": [
+      "Scene inventory recorded",
+      "Distinctness questions answered in the review record",
+      "No caption/on-screen duplicate windows"
+    ],
+    "tags": ["reviewer", "originality", "taste", "captions"],
+    "source": "OpenMontage skills/meta/reviewer.md (Composition Authoring Mode Review); skills/meta/bespoke-composition.md (steps 1-1.5, Guardrails); skills/meta/taste-direction.md (Review Hooks) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.boring-lazy-amateur-tells",
+    "title": "Tells of boring, lazy and amateur videos (with fixes)",
+    "rooms": ["qc", "editing", "scene", "script"],
+    "kind": "checklist",
+    "when": "Any review of scene plans, edits or renders; also usable as a pre-flight checklist for each room.",
+    "summary": "A consolidated catalogue of the failure patterns the source repeatedly warns about, grouped into boring (rhythm), lazy (thinking) and amateur (craft), each paired with its standard fix.",
+    "steps": [
+      "BORING -> fix: identical hold lengths -> vary by tone table and hero status; same transition on every cut -> small vocabulary used deliberately; >3 consecutive scenes of one type -> alternate dense and breathing scenes; >60% text cards -> add visual scenes; >60% static shots -> purposeful movement in >=40%; no hero moment -> mark and protect 2-3 heroes; no dynamics -> one held silence, quiet vs impact moments; music added at the end -> cut to the music grid.",
+      "LAZY -> fix: generic adjectives in prompts -> concrete subject, light, texture, era; the same style prefix pasted into every prompt -> adapt anchors per scene; category queries like 'home' -> concrete nouns (door, key, mat); picking the top score -> judge era, motion, adjacency, register; one query per slot -> 2-3 queries; three re-titled versions of one concept -> different structures and insights; hooks built from a template first -> write in own words, then sharpen; 'read naturally' voice notes -> pace, pause and emphasis cues; 'in this video we will...' openers -> open on the most surprising finding.",
+      "AMATEUR -> fix: freeze-frame endings -> fade to black; wipes, zoom blurs, RGB splits, light leaks, glitch in a documentary register -> hard cuts and few dissolves; mixed-source footage left ungraded -> one LUT across the timeline; low-res clips upscaled -> letterbox/pillarbox; captions duplicating on-screen text or covering faces -> dedupe, lower 20% placement; AI images containing exact text (CTA, names, numbers) -> render text natively; music at full volume under narration -> ducking; cuts mid-word or audio pops -> cut on word boundaries with handles; black gaps between scenes -> continuous coverage; three different transition types in the first 15 s or a dissolve on every cut -> commit to hard cuts; loudness jumps between sections -> normalise; letterbox added only to look cinematic -> use only when it helps."
+    ],
+    "do": [
+      "Attach the matching fix text automatically when the reviewer detects a tell"
+    ],
+    "avoid": [
+      "Masking a weak edit with extra graphics, narration or transitions"
+    ],
+    "numbers": {
+      "max_consecutive_same_type": 3,
+      "max_text_card_share": 0.6,
+      "min_moving_share": 0.4,
+      "max_transition_types_documentary": 4
+    },
+    "checks": [
+      "Each tell is checked at the room where it is cheapest to fix"
+    ],
+    "tags": ["reviewer", "quality", "anti-patterns"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/edit-director.md; skills/pipelines/documentary-montage/compose-director.md; skills/pipelines/explainer/scene-director.md; skills/pipelines/explainer/edit-director.md; skills/pipelines/explainer/asset-director.md; skills/meta/taste-direction.md; lib/variation_checker.py (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "review.scene-level-redo-routing",
+    "title": "When to redo one scene versus a whole room, and where to route defects",
+    "rooms": ["qc", "editing", "scene"],
+    "kind": "ruleset",
+    "when": "A review or final QA finds a defect and the system must choose the smallest effective redo.",
+    "summary": "Most defects are fixed by redoing a single slot or scene in the room that owns it; whole-room reruns are reserved for structural failures, and every redo excludes previously rejected candidates.",
+    "steps": [
+      "Single-slot retrieval redo: best match score below 0.22 -> rewrite queries and grow the candidate pool for that slot only (max 2 growth passes), then drop the slot or ask the user for footage.",
+      "Adjacency redo: two neighbouring picks share subject and scale, or the diversity pass drops one -> re-rank that slot excluding the surviving twin.",
+      "Narration overrun for one section: if actual audio exceeds plan by more than 15% but no more than 25%, stretch that scene; above that, send only that section back to script with a word cap.",
+      "Image/clip mismatch: refine the prompt specifically (not an identical retry), max 2 retries, then escalate.",
+      "Hero frame failure: regenerate using the pre-caption / critique / post-caption method.",
+      "Clip too short for its hold: slow to 0.5-0.75x only on near-static footage, or borrow time from the next slot, or swap in the #2 candidate from the rejected list.",
+      "Weak final image: swap in a stronger candidate; the tail is remembered disproportionately.",
+      "Caption over a face or unreadable text in a frame: re-render with corrected placement.",
+      "Decorative scene (no role or intent) or shared primary subject: re-plan those scenes only.",
+      "Whole-room redo only for: schema failure, slideshow verdict fail, variation fail, structural duration miss, wrong concept.",
+      "Route by defect type: audio mix -> render; visual quality -> assets (regenerate) or scene plan (re-plan); duration -> script; A/V sync -> edit; text or diagram sharpness -> render or assets; motion or timing -> edit (re-time) or scene plan; factual error -> script then cascade forward."
+    ],
+    "do": [
+      "Keep a global exclude list so the same asset never wins two slots",
+      "Log every rejected pick with its score and reason so the next redo can reach for #2"
+    ],
+    "avoid": [
+      "Re-running the entire asset batch for one bad scene",
+      "Forcing a best-of-a-bad-bunch pick"
+    ],
+    "numbers": {
+      "retrieval_min_score": 0.22,
+      "max_growth_passes_per_slot": 2,
+      "narration_overrun_send_back_ratio": 1.15,
+      "narration_overrun_stretch_ceiling_ratio": 1.25,
+      "max_prompt_retries": 2,
+      "slow_motion_range": [0.5, 0.75]
+    },
+    "checks": [
+      "Each redo targets the smallest owning unit",
+      "Rejected candidates are excluded on rerun"
+    ],
+    "tags": ["redo", "routing", "scene", "efficiency"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/asset-director.md; skills/pipelines/documentary-montage/edit-director.md; skills/pipelines/explainer/executive-producer.md; skills/pipelines/animation/executive-producer.md; skills/pipelines/explainer/asset-director.md; skills/pipelines/talking-head/compose-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "taste.taste-profile-dials",
+    "title": "Taste profile: design read plus three 1-10 dials",
+    "rooms": ["general", "scene", "editing", "motion"],
+    "kind": "ruleset",
+    "when": "Before choosing a style, palette or composition approach for a video, and whenever a flagship episode needs its own look.",
+    "summary": "Taste is expressed as a short, specific design read plus three numeric dials (visual variance, motion intensity, information density), palette discipline, layout variation, reference strategy, anti-patterns and quality gates; every downstream room is checked against it.",
+    "steps": [
+      "Write the design read: what the video must feel like and why, tied to audience, promise, platform and subject. Adjective lists ('modern, clean, cinematic') are rejected.",
+      "Set visual_variance (low = tight repeated grammar; mid = a few purposeful scene families; high = each beat may change mode), motion_intensity (low = calm holds, small transitions; mid = clear accents and reveals; high = fast kinetic, frequent direction changes), information_density (low = one idea per frame; mid = main idea plus support; high = dense diagrams/dashboards).",
+      "Apply interactions: high motion + low density -> short kinetic beats; low motion + high density -> stable frames, chart builds, long readable holds; high variance -> add anchors (recurring type, palette, framing or sound motif).",
+      "Choose a style path: an existing preset if it honestly fits; a custom style file for a subject with its own visual world; one-off art direction for flagship work.",
+      "Plan references: a reference frame for each family of similar scenes or key moment (never a single mood board standing in for everything); inspect real product/brand surfaces before styling them.",
+      "Carry downstream: scene plan varies layouts by variance, caps text by density, picks transitions and camera moves by motion; assets include palette, texture, framing and reference in prompts; edit matches hold length and rhythm to the motion dial.",
+      "Run the anti-default checklist: stock AI-purple gradients or default corporate blue that the subject does not justify; one transition type everywhere while variance is 4+; kinetic motion that fights narration; dense callouts when density <=4; text-only slides unless typography is the concept; attractive mood boards that map to no scene family; brand videos that never show the real product."
+    ],
+    "do": [
+      "Use the 'swap the title' test: if the video could fit any topic after changing the title, the taste direction is too generic"
+    ],
+    "avoid": [
+      "Letting preset availability override the design read",
+      "Missing taste profile on flagship work (critical) — on low-stakes work it is only a suggestion"
+    ],
+    "numbers": {
+      "dial_range": [1, 10],
+      "example_premium_explainer": {"visual_variance": 4, "motion_intensity": 3, "information_density": 5},
+      "same_transition_forbidden_when_variance_at_least": 4,
+      "dense_callouts_forbidden_when_density_at_most": 4,
+      "reference_stills_per_scene_family": 1
+    },
+    "checks": [
+      "taste_profile present in concept artifact",
+      "Scene plan layout variety matches variance dial",
+      "On-screen text density within the density dial"
+    ],
+    "tags": ["taste", "style", "art-direction", "dials"],
+    "source": "OpenMontage skills/meta/taste-direction.md; styles/premium-minimalist.yaml; schemas/styles/playbook.schema.json ($defs.taste_profile) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "taste.bespoke-vs-templated",
+    "title": "Bespoke versus templated composition and the scarce signature device",
+    "rooms": ["scene", "motion", "general"],
+    "kind": "principle",
+    "when": "Deciding how a video's visuals are built: assembled from reusable scene templates or authored fresh.",
+    "summary": "Borrow technical know-how freely but never borrow a previous look; templates are right for batch/series consistency, fresh art direction is right for flagship pieces, and a single signature visual should appear only in one or two climactic beats.",
+    "steps": [
+      "Lock three separate choices at concept time: creative grammar (what kind of video), render engine, authoring mode (templated vs bespoke).",
+      "Use templated for batch output, translated variants, quick drafts and low-stakes clips; use bespoke for launches, flagship explainers, brand pieces; tell the user bespoke costs more effort.",
+      "Before building bespoke, write the art direction: palette, type personality, motion character, layout system, one signature device unique to this piece.",
+      "Plan every scene as its own composition: a primary subject different from the previous scene, a stated reason the beat exists, and a visible difference in composition, scale, motion register, palette emphasis or type treatment.",
+      "Apply motion principles (anticipation, staging, follow-through, slow in/out, arcs, timing, exaggeration, appeal) rather than stock presets; layer two to four separate motion ideas in each beat and vary easing, with three or more distinct curves per video; reserve heavy GPU-style effects for 1-3 hero beats.",
+      "Keep 'simple' for mechanics (a short spring is fine), never as an excuse to fall back to a stock design.",
+      "Make rendering deterministic: seeded randomness, scene-local timing."
+    ],
+    "do": [
+      "For a faceless channel: keep a templated series kit (intro sting, lower-thirds, stat cards, caption style) for consistency, and rotate a fresh art direction for flagship episodes",
+      "Study previous projects for process only, never to copy their look"
+    ],
+    "avoid": [
+      "Hero-component spine: one striking element reused in every scene with new text",
+      "Silently falling back to stock scene templates in a flagship piece"
+    ],
+    "numbers": {
+      "motion_rules_per_beat": [2, 4],
+      "min_distinct_easings_per_video": 3,
+      "heavy_effect_hero_beats": [1, 3],
+      "signature_device_beats": [1, 2]
+    },
+    "checks": [
+      "Art direction written before any scene is built",
+      "Per-scene plan exists as its own artifact",
+      "Distinctness review answered"
+    ],
+    "tags": ["taste", "originality", "motion", "composition"],
+    "source": "OpenMontage skills/meta/bespoke-composition.md; AGENT_GUIDE.md (Composition Authoring Mode); skills/meta/animation-runtime-selector.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "style.playbook-schema-defaults",
+    "title": "Style playbook fields and preset numeric defaults",
+    "rooms": ["general", "scene", "editing", "captions", "audio", "motion"],
+    "kind": "ruleset",
+    "when": "Defining or selecting a channel/series style that every room must obey.",
+    "summary": "A style playbook is a validated data file with identity, colour, typography, motion pacing, audio, asset-prompt anchors, overlay styling, quality rules, chart palette, colour rules, a taste profile and a capped override budget.",
+    "steps": [
+      "identity: name, category (motion-graphics, whiteboard, cinematic, minimalist, retro, custom), mood, pace (slow, deliberate, moderate, fast, rapid), best_for.",
+      "visual_language: palette {primary[], accent[], background, text, muted}, composition rule, texture rule.",
+      "typography: headings/body/code/stat_card font specs (font, weight, tracking, line_height, size_multiplier), scale_system (named ratio or number >1), weight_matrix {title, heading, body, caption}.",
+      "motion: allowed transitions[], animation_style (easing/spring feel), pacing_rules {min_scene_hold, max_scene_hold, text_card_hold, stat_card_hold, transition_duration}, entrance, exit.",
+      "audio: voice_style, music_mood, music_volume 0-1, sfx_style, ducking_threshold_db, voice_variation_allowed, hero_moment_voice_shift, transition_voice_shift.",
+      "asset_generation: image_prompt_prefix, negative prompt, diagram_style, consistency_anchors[], optional multi-image-per-scene crossfade settings, default particles/vignette.",
+      "overlays: per overlay type (stat card, key term, code block, section title, stat reveal, hero title, chip) bg/border/text/radius/shadow/highlight/accent.",
+      "quality_rules[]: hard constraints the reviewer enforces as law.",
+      "chart_palette[] (>=2 hex), color_rules {harmony_type, contrast_validation, colorblind_safe}, taste_profile, overrides {max_deviation_ratio default 0.2 (max 0.5), scene_overrides with reason}."
+    ],
+    "do": [
+      "Treat quality_rules as constraints, not suggestions",
+      "Log every intentional per-scene deviation as a playbook_override decision"
+    ],
+    "avoid": [
+      "Pasting image_prompt_prefix verbatim into every prompt; distil it into a short anchor adapted per scene"
+    ],
+    "numbers": {
+      "presets": {
+        "clean_professional": {"pace": "moderate", "transitions": ["fade", "dissolve", "slide-left"], "min_hold": 2.5, "max_hold": 12, "text_card_hold": 3.5, "stat_card_hold": 3.0, "transition_s": 0.4, "music_volume": 0.08, "ducking_db": -3, "scale": "major_third", "rules": "<=3 colours on screen, readable at 720p, >=2 s between transitions"},
+        "flat_motion_graphics": {"pace": "fast", "transitions": ["wipe-left", "zoom-in", "morph", "cut"], "min_hold": 1.5, "max_hold": 8, "text_card_hold": 2.5, "stat_card_hold": 2.0, "transition_s": 0.3, "music_volume": 0.12, "ducking_db": -4, "scale": "perfect_fourth", "stat_multiplier": 4.0, "rules": "<=4 colours, new visual element every 2-3 s, SFX on every major transition, bouncy overshoot springs"},
+        "minimalist_diagram": {"pace": "deliberate", "transitions": ["fade", "dissolve"], "min_hold": 3.0, "max_hold": 15, "text_card_hold": 4.0, "stat_card_hold": 3.5, "transition_s": 0.5, "music_volume": 0.05, "ducking_db": -2, "scale": "minor_third", "rules": "7:1 body contrast, <=2 colours, legible at 480p, progressive reveal, each diagram step >=3 s, >=30% empty frame"},
+        "premium_minimalist": {"pace": "deliberate", "transitions": ["fade", "dissolve", "slide-left"], "min_hold": 2.75, "max_hold": 12, "text_card_hold": 3.75, "stat_card_hold": 3.25, "transition_s": 0.45, "music_volume": 0.07, "ducking_db": -4, "scale": "major_third", "taste": [4, 3, 5], "rules": "<=2 accent colours, one focal object per frame, motion reveals hierarchy"},
+        "anime_storybook": {"pace": "slow", "transitions": ["crossfade", "drift", "dissolve"], "min_hold": 3.5, "max_hold": 7, "text_card_hold": 4, "stat_card_hold": 3.5, "transition_s": 1.0, "music_volume": 0.15, "ducking_db": -3, "scale": "major_third", "rules": "2-3 stills per scene crossfaded over 1-1.5 s, >=1 animated element per scene, vignette, hold 4-6 s, no text inside generated images"}
+      },
+      "override_budget_default": 0.2,
+      "override_budget_max": 0.5
+    },
+    "checks": [
+      "Playbook validates against schema",
+      "Every scene's transition is inside motion.transitions",
+      "Every cut duration inside min/max hold"
+    ],
+    "tags": ["style", "playbook", "defaults", "design-system"],
+    "source": "OpenMontage schemas/styles/playbook.schema.json; styles/clean-professional.yaml; styles/flat-motion-graphics.yaml; styles/minimalist-diagram.yaml; styles/premium-minimalist.yaml; styles/anime-ghibli.yaml (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "style.playbook-validation-math",
+    "title": "Automatic colour, contrast and type-scale validation",
+    "rooms": ["qc", "captions", "scene"],
+    "kind": "formula",
+    "when": "Creating or loading any style file, and as a pre-render accessibility gate.",
+    "summary": "Deterministic checks for text contrast, colour-blind confusion, palette harmony, type scale and weight hierarchy turn 'looks good' into pass/fail numbers.",
+    "steps": [
+      "Contrast ratio = (L_lighter + 0.05) / (L_darker + 0.05) with sRGB relative luminance (0.2126 R + 0.7152 G + 0.0722 B on linearised channels).",
+      "Body text on background must reach 4.5 (error below; info if below 7). Muted text must reach 3.0 (error below; warning if below 4.5). Overlay text vs overlay background, compositing any alpha onto the page background first.",
+      "Colour-blind check: for each pair of saturated colours (saturation >=0.15) whose lightness differs by <=0.3, flag if their hues fall into known confusion ranges for red-green (deutan/protan) or blue-yellow (tritan) vision.",
+      "Harmony generation from a base hue: complementary 0/180, analogous -30/0/+30, triadic 0/120/240, split-complementary 0/150/210.",
+      "Type scale from base size b and ratio r: caption b/r, body b, subheading b*r, heading b*r^2, display b*r^3; video base 24 px; caption under 16 px is a warning; ratio under 1.1 is too tight.",
+      "Hierarchy: heading weight above body weight, ideally by >=200; stat-card size multiplier >1 (>=2 for video); weight matrix must not increase from title -> heading -> body -> caption.",
+      "Overall pass = zero errors."
+    ],
+    "do": [
+      "Run on every custom style the Skills Engine generates before it can be used"
+    ],
+    "avoid": [
+      "Shipping captions or overlays that fail AA contrast"
+    ],
+    "numbers": {
+      "aa_normal": 4.5, "aaa_normal": 7.0, "aa_large": 3.0, "aaa_large": 4.5,
+      "cvd_min_saturation": 0.15, "cvd_lightness_escape": 0.3,
+      "type_ratios": {"minor_second": 1.067, "major_second": 1.125, "minor_third": 1.2, "major_third": 1.25, "perfect_fourth": 1.333, "golden": 1.618},
+      "video_base_px": 24, "min_caption_px": 16, "min_heading_body_weight_gap": 200, "min_stat_multiplier_video": 2.0
+    },
+    "checks": [
+      "validate_accessibility pass = true",
+      "No overlay pair under 4.5"
+    ],
+    "tags": ["style", "accessibility", "contrast", "typography"],
+    "source": "OpenMontage styles/playbook_loader.py (understood only, no code reused) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "reference.five-aspect-shot-breakdown",
+    "title": "Five-aspect shot breakdown (subject, motion, scene, framing, camera)",
+    "rooms": ["competitors", "scene", "research"],
+    "kind": "procedure",
+    "when": "Describing any shot: analysing a competitor/reference video, writing a scene plan, or writing a generation prompt.",
+    "summary": "Every shot is described along five fixed aspects in a fixed order with overlays kept as a separate layer and every non-applicable aspect explicitly marked N/A, so analysis output can be lifted straight into plans and prompts.",
+    "steps": [
+      "Subject: type, count, attributes (age, role, clothing, distinguishing marks), how to tell multiple subjects apart, and how subjects change across shots (revealed, disappearing, switching, alternating).",
+      "Subject motion: actions in time order; interactions (parallel, sequential, reactive); body locomotion vs gesture vs facial.",
+      "Scene: overlays listed separately (titles, lower-thirds, graphics, watermarks); point of view (for example aerial or drone, top-down, macro, over-the-shoulder, handheld, tripod/locked-off, FPV, dashcam); the location; the time of day; environmental dynamics such as weather, particles or crowds.",
+      "Spatial framing: how big the subject is in frame (extreme close-up through extreme wide), where it sits, which depth layers are used (front/middle/back), whether the camera is above, level with or below it, and how each of these shifts during the shot.",
+      "Camera: playback speed (real-time, slow motion, time-lapse), lens character (anamorphic, fisheye, tilt-shift), height, angle (high, low, Dutch), focus/depth of field (rack, deep, shallow), stability (tripod, gimbal, handheld), and any move (pan, tilt, push-in, pull-out, dolly, truck, crane, orbit).",
+      "Write N/A explicitly for anything absent (e.g. 'Camera: N/A, native motion-graphics scene')."
+    ],
+    "do": [
+      "Keep the five labels in output; downstream rooms parse them",
+      "For diagram/chart scenes map Subject to the highlighted data element"
+    ],
+    "avoid": [
+      "Silently omitting an aspect (the most common analyst failure)",
+      "Describing overlays as 'in the foreground'"
+    ],
+    "numbers": {
+      "aspects": 5,
+      "shot_sizes": ["ECU", "CU", "MS", "WS", "EWS"]
+    },
+    "checks": [
+      "Every scene/hero frame has all five aspects or explicit N/A",
+      "Overlays recorded in their own list"
+    ],
+    "tags": ["shot-language", "analysis", "prompting", "scene-plan"],
+    "source": "OpenMontage skills/meta/video-reference-analyst.md (5-Aspect Structured Output); skills/pipelines/explainer/scene-director.md (Step 4c); skills/pipelines/cinematic/scene-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "reference.video-dna-extraction",
+    "title": "Turn a reference video into reusable DNA without copying it",
+    "rooms": ["competitors", "research", "niche", "scene", "editing"],
+    "kind": "procedure",
+    "when": "A user pastes a competitor or inspiration video and says 'make something like this' (not 'edit this footage').",
+    "summary": "Run local analysis (transcript, scene detection, keyframes, motion measurement), add a vision pass, and store a structured DNA card covering pacing, shot types, motion class, transitions, typography, colour, narration and audio, plus what makes it work and how ours must differ.",
+    "steps": [
+      "Route correctly: 'like this' = reference analysis; 'cut this footage' = source-media review.",
+      "Ingest: download or load; use existing captions or transcribe locally; detect scenes (fallback: uniform sampling); extract up to ~20 keyframes; for style extraction sample opening (0-2 s), early (5-10 s), middle, end and mid-transition frames.",
+      "Pacing DNA: average, shortest and longest scene duration, cuts per minute, pacing class (slow contemplative, steady educational, dynamic social, rapid fire, variable), energy per scene (low, medium, high, peak).",
+      "Shot DNA per scene: visual type (talking head, b-roll, screen, animation, text card, stock, diagram, chart, product, transition), shot size, camera movement, lighting key, depth of field, dominant colours, on-screen text, narration text.",
+      "Motion class per scene from measured motion: real video clip vs animated still (pan/zoom) vs static image; never guess, because it decides the tool path.",
+      "Style DNA: primary/accent colours and mood, typography observed, transition types, music style, narration presence/speaker count/delivery/words per minute, subtitle style, production tier (amateur, prosumer, professional, broadcast), closest house style and the delta from it.",
+      "Content DNA: 2-3 sentence summary, topics, claims to verify, audience, tone, hook technique, CTA.",
+      "Vision pass: what stays constant across keyframes is the style; for motion ask snap vs ease, cut vs fade, bounce vs slide, quick vs measured rhythm.",
+      "Replication guidance: 3-5 elements that make it work, elements needing custom work, complexity, whether motion is required, 3-5 differentiation seeds, style customisations.",
+      "Present a labelled summary (content, style, structure, motion, five-aspect breakdown, what makes it work), then audit capabilities against what the reference needs and state gaps honestly.",
+      "For multiple references analyse each separately, compare, and attribute which idea came from which.",
+      "On any analysis failure tell the user what failed and how it weakens the analysis; never skip silently."
+    ],
+    "do": [
+      "Store DNA cards in a library so niche/competitor rooms can aggregate patterns across many channels",
+      "Prefer 10 s generated clips over 5 s and merge adjacent beats to cut cost and cuts"
+    ],
+    "avoid": [
+      "Copying topic + structure + treatment together",
+      "Asking the user 'how should it feel?' when the reference already answers it"
+    ],
+    "numbers": {
+      "max_keyframes": 20,
+      "style_keyframes": [4, 6],
+      "key_elements_to_replicate": [3, 5],
+      "differentiation_seeds": [3, 5],
+      "pacing_classes": ["slow_contemplative", "steady_educational", "dynamic_social", "rapid_fire", "variable"],
+      "lightweight_research_minutes": [2, 3],
+      "similar_videos_to_scan": [3, 5]
+    },
+    "checks": [
+      "DNA card has pacing, motion class per scene, style, narration and replication sections",
+      "Every downstream concept cites at least one DNA field"
+    ],
+    "tags": ["reference", "competitor-analysis", "pacing", "style-extraction"],
+    "source": "OpenMontage skills/meta/video-reference-analyst.md; schemas/artifacts/video_analysis_brief.schema.json; .agents/skills/visual-style/references/extractors/from-video.md (skimmed) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "reference.differentiate-not-copy",
+    "title": "Keep one thing, change one thing, justify the change",
+    "rooms": ["competitors", "niche", "hooks", "qc"],
+    "kind": "ruleset",
+    "when": "Proposing concepts that are inspired by a reference or competitor video.",
+    "summary": "Each pitch has to state which trait it carries over from the source video, which trait it deliberately alters, and why that alteration is an improvement; copies and misstatements about the source are blocking defects.",
+    "steps": [
+      "For each concept state: inspired by (pacing, structure, tone, hook style) and creative twist (angle, subject, visual treatment, narration approach) plus why the twist improves it.",
+      "Pick from differentiation patterns: same structure/new subject; same subject/new angle; same tone/new visual treatment; same content/new platform or length; counter-take; for mood pieces also same mood/new subject, same subject/new emotional arc, same pacing/new visual language, same colour world/new lighting.",
+      "Shift research: what did the reference miss, which of its claims can be verified or updated, how has the landscape moved since it was published.",
+      "Review every room against the reference: grounding (claims about the reference must match its DNA), differentiation, promise preservation (things the user loved stay), cost drift."
+    ],
+    "do": [
+      "Recommend one concept with a reason; do not leave equal options"
+    ],
+    "avoid": [
+      "Concepts that differ only on the surface"
+    ],
+    "numbers": {
+      "min_elements_kept": 1,
+      "min_elements_changed": 1,
+      "concepts_offered": [2, 3],
+      "severity": {"false_fact_about_reference": "critical", "carbon_copy": "critical", "surface_only_change": "suggestion", "loved_element_dropped": "suggestion", "cost_drift_over_30pct": "critical"}
+    },
+    "checks": [
+      "Each concept lists kept, changed and why",
+      "Pacing promise preserved (e.g. scene lengths not doubled when user loved the pace)"
+    ],
+    "tags": ["originality", "competitors", "concepts"],
+    "source": "OpenMontage skills/meta/video-reference-analyst.md (Step 4); skills/pipelines/explainer/proposal-director.md (Step 0); skills/pipelines/cinematic/proposal-director.md (Step 0); skills/meta/reviewer.md (Reference Alignment Review); skills/pipelines/explainer/research-director.md (Step 0) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "research.landscape-scan",
+    "title": "Research batches for landscape, trends, data, audience and angles",
+    "rooms": ["niche", "competitors", "research"],
+    "kind": "procedure",
+    "when": "Before any concept is proposed for a topic, at zero cost, using web search only.",
+    "summary": "Five parallel search batches map what exists, what is current, what is citable, what real people ask and get wrong, and then synthesise at least three angles each grounded in specific findings.",
+    "steps": [
+      "Landscape batch: top existing explainers on the target platform, articles/guides, freshest content this month, best-of lists; record what is saturated, what is missing, benchmarks, freshness.",
+      "Trending batch: announcements/launches/controversies this year, community threads from the last 6 months, tech-forum discussion, meta-commentary on why the topic is hot; if nothing, mark evergreen.",
+      "Data batch: statistics this year, studies/surveys, named-source claims, 'surprisingly / most people don't know' facts, comparison data; record exact claim, URL, credibility tier (primary, secondary, anecdotal), surprise factor, planned use (hook, stat card, script anchor, closing punch).",
+      "Audience batch: confused/ELI5 questions, Q&A sites, 'why is X so hard', myths and misconceptions, 'wish I knew' insider tips.",
+      "Optional expert batch: named voices, mainstream vs contrarian positions.",
+      "Visual reference quick pass: how others visualise the concept.",
+      "Negative-space queries: 'nobody talks about', 'overlooked', topic minus its saturated sub-topic.",
+      "Synthesise >=3 angles typed trending / evergreen / contrarian / narrative / data-driven, each with a hook and a why-now citing specific findings.",
+      "Write a one-paragraph research summary of the single most important insight first."
+    ],
+    "do": [
+      "Include the current month/year in freshness queries",
+      "Decompose compound topics into whole, mechanism and category queries",
+      "Vary audience-specific query wording (implementation vs ROI vs explained simply)"
+    ],
+    "avoid": [
+      "Vague data ('most companies use AI')",
+      "Treating forum posts and studies as equal",
+      "Ignoring negative results (no trend = evergreen; no content = gap opportunity)"
+    ],
+    "numbers": {
+      "existing_content": {"min": 3, "target": "5-8"},
+      "data_points": {"min": 3, "target": "5-8"},
+      "audience_questions": {"min": 3, "target": "5-10"},
+      "misconceptions": {"min": 1, "target": "2-3"},
+      "angles": {"min": 3, "target": "4-5"},
+      "sources": {"min": 5, "target": "10-15", "min_primary": 2},
+      "searches": {"min": 10, "target": "15-21", "max": 25},
+      "time_minutes": [3, 5],
+      "stale_source_years": 2,
+      "trend_window_months": 6
+    },
+    "checks": [
+      "Every data point has a URL and credibility tier",
+      "Every angle cites findings in grounded_in",
+      "Minimums met or the gap is explained"
+    ],
+    "tags": ["research", "niche", "competitors", "angles"],
+    "source": "OpenMontage skills/pipelines/explainer/research-director.md; skills/pipelines/cinematic/research-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "hooks.concept-diversity-gate",
+    "title": "Hooks, concept diversity and progressive reveal",
+    "rooms": ["hooks", "niche", "script", "packaging"],
+    "kind": "checklist",
+    "when": "Turning research into concept options and opening hooks for user selection.",
+    "summary": "Offer at least three concepts that differ in insight, not just title; write hooks in your own words first, keep them short and grounded, and reveal the pitch step by step so the user can redirect cheaply.",
+    "steps": [
+      "Structural diversity: no two concepts share a narrative structure or hook pattern; each is grounded in different findings.",
+      "Conceptual diversity: each offers a different insight; one takes a creative risk; with titles removed they are still distinguishable; none is interchangeable.",
+      "Informational hook patterns: surprising stat, misconception flip, recency, everyday question, contrast of two numbers, insider gap. Emotional hook patterns: sensory, scale shift, intimate detail, provocation, contrast in context.",
+      "Match structure to research signal: myth-busting needs >=2 misconceptions; problem-solution needs pain points; data narrative needs several surprising numbers; comparison, timeline, journey, analogy, debate, tutorial, story each have their own trigger.",
+      "Show a quick mood board before full concepts (3-5 reference images, 2-3 palette options, tone references, 1-2 music moods) and ask whether it feels right.",
+      "Reveal progressively: research summary -> mood board -> concepts -> invite mixing elements across concepts -> production plan with itemised cost -> approval.",
+      "Self-score each concept 1-5 on hook strength, specificity, research depth, audience fit, style fit, uniqueness; iterate if any score is under 3."
+    ],
+    "do": [
+      "Titles specific to a claim ('How X finds data in 1 ms') rather than generic ('X explained')",
+      "Show at least two production paths at different price points"
+    ],
+    "avoid": [
+      "Openers such as 'in this video we'll', 'hey guys', 'let me explain'",
+      "Front-loading jargon in the hook",
+      "Starting from a hook template instead of the research"
+    ],
+    "numbers": {
+      "min_concepts": 3,
+      "hook_max_words_concept": 20,
+      "hook_max_words_idea": 15,
+      "title_words": [5, 8],
+      "self_score_min": 3,
+      "mood_board_images": [3, 5],
+      "platform_duration_s": {"tiktok": [30, 60], "reels": [30, 90], "shorts": [30, 60], "youtube": [60, 180], "linkedin": [60, 120]}
+    },
+    "checks": [
+      "Hook cites a research finding",
+      "Concept diversity checklist fully ticked",
+      "Mix-and-match offer made"
+    ],
+    "tags": ["hooks", "concepts", "titles", "diversity"],
+    "source": "OpenMontage skills/pipelines/explainer/idea-director.md; skills/pipelines/explainer/proposal-director.md (Steps 2c-4); skills/pipelines/cinematic/proposal-director.md (Step 3a) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "script.word-budget-and-arc",
+    "title": "Word budget, narrative arc and visual cue density",
+    "rooms": ["script", "voice", "scene"],
+    "kind": "formula",
+    "when": "Writing or reviewing a narration script for a target duration.",
+    "summary": "Size the script from speaking rate and duration, structure it as hook-setup-build-climax-landing with causal links, and embed a visual cue roughly every 8-10 seconds so the scene room always knows what to show.",
+    "steps": [
+      "Choose a rate: conversational ~150 wpm, contemplative ~120, energetic ~180, technical ~130, mood/cinematic ~120, long-form YouTube 150-160.",
+      "Budget words: 30 s ~65-75, 60 s ~130-150, 90 s ~195-225, 120 s ~260-300.",
+      "Producer check: estimated minutes = words / 150; above 1.15 x target -> cut N words; below 0.7 x target -> add content; aim within +/-10%.",
+      "Leave air: narration should fill 85-90% of the video; budget 2.0-2.5 words/s for calm delivery and 2.5-3.0 for energetic; allocate words per scene by duration (a 5 s scene ~10-12 words); keep 0.5-1 s of silence at scene changes; keep the first and last scenes light.",
+      "Arc: hook 0-5 s (question, bold claim, surprising fact); setup 5-15 s (why care, open a knowledge gap); build with 'therefore' / 'but' links, one key point per section; climax a few seconds before the end delivering the hook's promise; landing in the last ~5 s with the core message and CTA, no new information.",
+      "Add at least one enhancement cue per section and about one per 8-10 s (60 s -> 6-8 cues): overlay, diagram, stat card, animation, code, b-roll, each with a timestamp.",
+      "Add pronunciation guides for jargon, acronyms and names.",
+      "Trace every factual claim to the research; never invent numbers, dates or attributions.",
+      "Self-score 1-5: hook power, word accuracy, narrative flow, cue density, voice performance, jargon handling, climax payoff, CTA relevance; revise anything under 3."
+    ],
+    "do": [
+      "After TTS, compare real audio duration to the plan and re-cut the script if it overruns by more than 1 s"
+    ],
+    "avoid": [
+      "Writing to the visuals' duration without counting words (the top failure)",
+      "'And then' sequencing",
+      "Introducing new information in the landing"
+    ],
+    "numbers": {
+      "wpm": {"conversational": 150, "contemplative": 120, "energetic": 180, "technical": 130, "cinematic": 120, "long_form": [150, 160]},
+      "word_budget": {"30s": [65, 75], "60s": [130, 150], "90s": [195, 225], "120s": [260, 300]},
+      "over_ratio_revise": 1.15,
+      "under_ratio_revise": 0.7,
+      "target_tolerance": 0.1,
+      "narration_fill_share": [0.85, 0.9],
+      "words_per_second_calm": [2.0, 2.5],
+      "words_per_second_energetic": [2.5, 3.0],
+      "cue_interval_seconds": [8, 10],
+      "scene_change_silence_s": [0.5, 1.0],
+      "arc_seconds": {"hook": [0, 5], "setup": [5, 15], "landing_last": 5}
+    },
+    "checks": [
+      "Word count within +/-10% of budget",
+      "No section's narration exceeds its time slot",
+      "Cue density met"
+    ],
+    "tags": ["script", "timing", "structure", "retention"],
+    "source": "OpenMontage skills/pipelines/explainer/script-director.md; skills/pipelines/explainer/executive-producer.md (After SCRIPT); skills/pipelines/explainer/scene-director.md (Step 4b); skills/pipelines/cinematic/executive-producer.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "voice.performance-plan",
+    "title": "Directed narration: voice performance plan and delivery cues",
+    "rooms": ["voice", "script"],
+    "kind": "ruleset",
+    "when": "Any script that will be voiced with text-to-speech.",
+    "summary": "Narration is directed, not merely read: a top-level performance plan plus at least two concrete delivery cues per section, mapped to each TTS provider's controls and proven with a sample before the batch.",
+    "steps": [
+      "Top-level plan: performance intent, pacing profile, energy curve across the video, pause policy, provider-specific notes, which section to sample.",
+      "Per-section cues: pace, energy, emphasis words, pause before (s), pause after (s), one delivery note, and provider-ready text with break tags where supported.",
+      "Write spoken language: short sentences, light contractions, clear punctuation.",
+      "Use silence as structure: insert a beat of quiet ahead of a twist, right after a surprising fact, and just before the closing point; too many breaks sounds theatrical.",
+      "One delivery idea per section; split a section that needs three emotional turns.",
+      "Map to providers: instruction-capable models get the emotional arc in an instructions field; SSML-capable voices get break tags with rate 0.25-2.0 and pitch -20..20; expressive cloned voices use lower stability for variation, moderate style, speed 0.7-1.2 and high similarity; basic offline voices rely on punctuation and shorter segments.",
+      "Generate the sample from the most performance-sensitive section; if flat, adjust the plan or settings before batching."
+    ],
+    "do": [
+      "Use style fields for hero moments (slower, lower) and transitions (brief pause then lift)",
+      "Record applied cues on every narration asset"
+    ],
+    "avoid": [
+      "Directions like 'natural', 'engaging', 'expressive' without exact cues",
+      "Generating from raw script text when provider-ready text exists",
+      "Changing voice, speed or model after sample approval without resampling"
+    ],
+    "numbers": {
+      "min_concrete_cues_per_section": 2,
+      "example_pause_after_s": [0.6, 0.7],
+      "ssml_rate_range": [0.25, 2.0],
+      "ssml_pitch_range": [-20, 20],
+      "expressive_speed_range": [0.7, 1.2],
+      "narration_duration_tolerance": 0.15
+    },
+    "checks": [
+      "voice_performance object present",
+      "Every narrated section has >=2 cues",
+      "Batch settings equal sample settings"
+    ],
+    "tags": ["voice", "tts", "narration", "delivery"],
+    "source": "OpenMontage skills/meta/voice-performance-director.md; skills/pipelines/explainer/script-director.md (Step 4); skills/pipelines/explainer/asset-director.md (Step 3); schemas/styles/playbook.schema.json (audio voice shifts) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "scene.explainer-scene-planning",
+    "title": "Explainer scene planning and visual technique library",
+    "rooms": ["scene", "motion"],
+    "kind": "procedure",
+    "when": "Converting a timed script with visual cues into a scene plan.",
+    "summary": "Break each script section into one to three distinct visual moments chosen from a technique library, keep variety and coverage rules, render any exact text natively, and specify every scene in the five-aspect form.",
+    "steps": [
+      "For each section note concept, embedded cues, emotional beat (curiosity, revelation, emphasis, humour, conclusion) and available seconds.",
+      "Research how strong creators visualise this concept, which metaphors viewers recognise, what is fresh, and what is feasible with available tools.",
+      "Split each section into 1-3 scenes; a 10 s section usually needs 2-3 to avoid stasis.",
+      "Pick techniques: progressive diagram reveal synced to narration; analogy split-screen; stat punch (big number, hold 4-5 s); data dashboard sequence (KPI overview -> breakdown -> trend -> distribution); before/after comparison; timeline progression; zoom from system to component; code walkthrough with line highlights.",
+      "Use duration guides: title 3-5 s, stat 4-6, charts 5-7, comparison 4-6, callout 4-6, text card 3-5, animation 4-10, diagram 4-8, generated image 3-6, b-roll 3-6, screen recording 5-15.",
+      "Variety: no more than 3 consecutive scenes of one type; at least 3 types per video; alternate information-heavy scenes with breathing scenes.",
+      "Coverage: first scene at 0 s, last at total duration, no gap over 1 s, every section and every cue addressed.",
+      "Any scene with exact text (CTA, names, numbers, contact details, legal lines) is a rendered text scene, never a generated image.",
+      "Specify five aspects per scene (camera may be N/A for native graphics) and list overlays separately.",
+      "Check style: allowed transitions, holds within min/max, asset descriptions carry style cues adapted to the scene; state what makes this video's look distinct.",
+      "Self-score 1-5: storytelling value, script alignment, technique variety, style fidelity, feasibility, pacing; revise anything under 3."
+    ],
+    "do": [
+      "Animate processes and transformations instead of showing a static image",
+      "Write asset descriptions specific enough to become prompts (subject, style, palette)"
+    ],
+    "avoid": [
+      "One scene per section by default",
+      "Ignoring the script's visual cues",
+      "Over-ambitious visuals no available tool can make",
+      "'Make it flat motion graphics' as the whole plan"
+    ],
+    "numbers": {
+      "scenes_per_section": [1, 3],
+      "max_consecutive_same_type": 3,
+      "min_scene_types": 3,
+      "max_gap_seconds": 1,
+      "stat_punch_hold_s": [4, 5],
+      "durations_s": {"title": [3, 5], "stat": [4, 6], "chart": [5, 7], "comparison": [4, 6], "callout": [4, 6], "text_card": [3, 5], "animation": [4, 10], "diagram": [4, 8], "generated_image": [3, 6], "broll": [3, 6], "screen": [5, 15]}
+    },
+    "checks": [
+      "Coverage and variety checks pass",
+      "No generated image carries exact text",
+      "Five aspects present per scene"
+    ],
+    "tags": ["scene-plan", "visuals", "explainer", "techniques"],
+    "source": "OpenMontage skills/pipelines/explainer/scene-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "scene.prompt-precritique-post",
+    "title": "Pre-caption, critique, post-caption prompt review",
+    "rooms": ["scene", "qc", "learning"],
+    "kind": "procedure",
+    "when": "Before sending any prompt to an image, video, diagram or styling generator, especially for hero frames.",
+    "summary": "Draft the prompt, critique it against the five aspects, then rewrite it with missing aspects filled, confusable terms fixed and mood words replaced by their visual causes; log all three versions.",
+    "steps": [
+      "Pre-caption: write a complete first draft without over-editing.",
+      "Critique: for each of the five aspects ask whether it is specified or deliberately omitted.",
+      "Resolve easily confused terms: zoom (lens) vs dolly (camera travels); truck (camera slides sideways) vs pan (camera rotates); aerial vs bird's-eye; barrel distortion vs fisheye; close-up vs full shot; for diagrams, state vs sequence vs flowchart and left-to-right vs top-down layout.",
+      "Replace mood adjectives (clean, professional, modern, epic, moody, cinematic) with visual causes (sans-serif type, generous whitespace, single accent colour, low-key light, slow push-in, deep shadows).",
+      "For recurring characters or worlds, repeat identity anchors word-for-word across prompts.",
+      "Post-caption: rewrite and send only the improved version.",
+      "Log the (pre, critique, post) triplet in asset metadata for audit and learning."
+    ],
+    "do": [
+      "Verify what real places, people or objects look like before generating them; log as a visual accuracy check"
+    ],
+    "avoid": [
+      "Retrying the same prompt unchanged",
+      "Identical style prefix on every image (feels machine-made)"
+    ],
+    "numbers": {
+      "passes": 3,
+      "max_refine_retries": 2
+    },
+    "checks": [
+      "Triplet stored for each generated asset",
+      "No unexplained mood adjectives in the post-caption"
+    ],
+    "tags": ["prompting", "generation", "quality", "learning-input"],
+    "source": "OpenMontage skills/pipelines/explainer/asset-director.md (Pre/Post Self-Review); skills/pipelines/cinematic/asset-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "editing.explainer-assembly",
+    "title": "Explainer edit assembly, captions and ducking",
+    "rooms": ["editing", "captions", "audio"],
+    "kind": "checklist",
+    "when": "Assembling assets, narration, captions and music into edit decisions for a narrated video.",
+    "summary": "Map every scene to its assets and narration, cut on actual (not planned) audio durations, keep one primary visual at a time, make captions mandatory and well placed, duck the music, and validate before rendering.",
+    "steps": [
+      "Build a timeline map: time range -> scene -> narration segment -> asset.",
+      "Define cuts with source id, in/out, layer (primary one at a time; overlay for text, stat cards, key terms; background), transform, transition in/out and duration.",
+      "Re-time visuals to measured narration durations and use absolute timestamps to prevent accumulated drift.",
+      "Captions are mandatory: word-by-word highlight or phrase chunks derived from transcription timestamps, the style's body font, bottom area, semi-transparent backing, at most 8 words per line (fallback subtitle files: max 8 words per cue, 42 characters per line).",
+      "Caption placement: never centre or upper half; in vertical video keep captions in the lower 20% of the frame (a margin of about 160 px on a 1920-tall frame); never over a face; dedupe against on-screen text.",
+      "Audio: narration segments ordered and non-overlapping; music low with ducking (example: volume 0.08, duck threshold -3 dB, reduction -8 dB, attack 200 ms, release 500 ms, 2 s fade-in, 3 s fade-out).",
+      "Clamp every cut to the style's min/max holds and text-card hold; vary transitions inside the allowed set.",
+      "Validate before render: no black gaps (e.g. scene ends 10.0 s, next starts 10.5 s = 0.5 s of black), no overlapping primaries, all sources exist, narration per scene <= visual duration, narration start within +/-0.5 s of its visual, music at least as long as the video, out > in for every cut.",
+      "Self-score 1-5: continuity, pacing, A/V sync, caption quality, transition coherence."
+    ],
+    "do": [
+      "Render captions and overlays in the same pass as the video when the engine allows",
+      "Apply caption word corrections for brand names"
+    ],
+    "avoid": [
+      "No ducking under narration",
+      "Default subtitle position from the encoder",
+      "Using planned durations after TTS returned real ones"
+    ],
+    "numbers": {
+      "caption_max_words_per_line": 8,
+      "srt_max_chars_per_line": 42,
+      "vertical_caption_zone_bottom_share": 0.2,
+      "vertical_caption_margin_px_1920": 160,
+      "duck_example": {"music_volume": 0.08, "threshold_db": -3, "reduction_db": -8, "attack_ms": 200, "release_ms": 500, "fade_in_s": 2, "fade_out_s": 3},
+      "av_start_tolerance_s": 0.5
+    },
+    "checks": [
+      "Timeline covers 0 to total duration",
+      "Captions enabled and placed safely",
+      "Ducking configured for every narration segment",
+      "Pre-render validator returns valid"
+    ],
+    "tags": ["editing", "captions", "audio", "sync"],
+    "source": "OpenMontage skills/pipelines/explainer/edit-director.md; skills/pipelines/explainer/compose-director.md (Steps 5b-5c); skills/pipelines/explainer/executive-producer.md (After EDIT); skills/pipelines/talking-head/compose-director.md (caption positioning) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "editing.retention-pacing-youtube",
+    "title": "Retention pacing for long-form YouTube and Shorts",
+    "rooms": ["editing", "script", "hooks", "audio", "captions"],
+    "kind": "ruleset",
+    "when": "Pacing a faceless YouTube long-form episode or a vertical short.",
+    "summary": "Long-form survives the first 30 seconds and the 2-3 minute valley with early payoffs, scheduled pattern interrupts and re-hooks; shorts hook within 1-2 seconds and change something every 1-3 seconds; both target -14 LUFS.",
+    "steps": [
+      "Long-form structure: intro hook + stakes + preview complete by 0:30; first real payoff before 2:00; chapters of 2-4 minutes (max 5-6 chapters in 10-15 min); a re-hook around 2:00 then every 3-4 minutes; a short palette-cleanser between heavy chapters; CTA and end screen in the last 20 s.",
+      "Long-form interrupts: minor (b-roll change, graphic, angle shift) every 20-30 s; major (music change, burst of 5-10 quick cuts over 10-15 s) every 60-90 s, with one placed around 1:45-2:00; open loops in the first 60 s resolved later.",
+      "Long-form audio: continuous bed ducked 18-20 dB below speech, crossfades of 2-3 s between sections, BPM kept within +/-10 across the video, -14 LUFS integrated, chapter-to-chapter variation under 2 LU, limiter around -1.5 dBTP.",
+      "Shorts: 9:16, universal safe zone about 900x1400 centred (bottom ~300 px is platform UI), hook in the first 1-2 s, on-screen text within 0.5 s, voice starts immediately, movement on frame 1, a visual change every 1-3 s (20-40 cuts per minute), text blocks held 2-4 s, no static hold over 3 s, captions mandatory at 42 px or larger, -14 LUFS and -1 dBTP.",
+      "Voice-over cut hygiene: trim silences over 1.5 s down to ~0.5 s; keep natural 0.3-0.8 s breath pauses and intentional emphasis pauses; use J/L cuts of ~0.5 s for smooth transitions; always cut on word boundaries; automated silence removal around -35 dB threshold, 0.5 s minimum silence, 0.08 s padding."
+    ],
+    "do": [
+      "Make frame 1 match the thumbnail promise",
+      "Use speed ramps (1.2-1.5x) on setup and 1.0x on payoff in shorts"
+    ],
+    "avoid": [
+      "Logo or blank intros",
+      "Burying the first payoff after the 2-minute mark"
+    ],
+    "numbers": {
+      "long_form_sweet_spot_min": [8, 15],
+      "hook_complete_by_s": 30,
+      "first_payoff_before_s": 120,
+      "minor_interrupt_s": [20, 30],
+      "major_interrupt_s": [60, 90],
+      "rehook_every_min": [3, 4],
+      "chapter_len_min": [2, 4],
+      "max_chapters_10_15min": 6,
+      "music_duck_db_below_speech": [18, 20],
+      "target_lufs": -14,
+      "chapter_lufs_variation_max": 2,
+      "shorts_visual_change_s": [1, 3],
+      "shorts_cuts_per_min": [20, 40],
+      "shorts_min_caption_px": 42,
+      "shorts_safe_zone_px": [900, 1400],
+      "shorts_words": {"15s": [35, 40], "30s": [70, 80], "60s": [125, 150]},
+      "dead_air_trim_over_s": 1.5,
+      "breath_pause_keep_s": [0.3, 0.8]
+    },
+    "checks": [
+      "Interrupt schedule present in edit metadata",
+      "Measured loudness within target"
+    ],
+    "tags": ["retention", "youtube", "shorts", "pacing", "loudness"],
+    "source": "OpenMontage skills/creative/long-form.md; skills/creative/short-form.md; skills/creative/video-editing.md; skills/pipelines/talking-head/edit-director.md (skimmed) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "doc.montage-beat-math",
+    "title": "Documentary montage brief and beat/hold math",
+    "rooms": ["script", "scene", "editing"],
+    "kind": "formula",
+    "when": "Planning a footage-led, music-driven montage or b-roll sequence where meaning comes from juxtaposition.",
+    "summary": "Name one thematic question, one emotional register and one shape; derive slot count and hold lengths from a tone table; protect hero slots; close with a short philosophical end tag.",
+    "steps": [
+      "Write the thematic question as one sentence that carries a feeling (not a topic, not a shot list).",
+      "Choose one register: elegiac, urgent, reverent, wry, dreamlike.",
+      "Cap beats by duration: 30-45 s -> 8-12 cuts; 60-90 s -> 15-25; 2-3 min -> 30-50.",
+      "Choose a shape: single-image expansion (one idea from many angles, best under 60 s), before/after (half, a pivot slot, half), three-act setup/turn/release (30/40/30, needs >90 s), list/catalogue (accumulation, no arc).",
+      "Slots ~= duration / base hold from the tone table; mark at least 2 hero slots (opening, turn, final image).",
+      "Hero slots get the max hold, 3 queries and bigger candidate pools; cutaways get the base hold; quick passes get the min.",
+      "Sum of target holds must land within +/-10% of the duration; if over, compress non-hero holds first, never heroes.",
+      "Music is mandatory unless the user explicitly opts out with a reason; narration is optional and off by default; generated clips are off by default.",
+      "End tag: a 3-9 word thesis line (not a summary), 5-8 s on screen, overlaid on the final footage by default; offer 3 options and recommend one."
+    ],
+    "do": [
+      "Recompute from the formula; the source's worked examples do not reconcile exactly with its own table"
+    ],
+    "avoid": [
+      "Several themes at once",
+      "45 s with 50 cuts (nausea) or 3 min with 12 cuts (slideshow)",
+      "Skipping the end tag because 'the images speak for themselves'"
+    ],
+    "numbers": {
+      "tone_holds_s": {
+        "elegiac": {"base": 4.0, "min": 2.5, "max": 7.0, "slots_per_60s": 15},
+        "reverent": {"base": 3.5, "min": 2.0, "max": 6.0, "slots_per_60s": 17},
+        "dreamlike": {"base": 3.0, "min": 1.5, "max": 5.5, "slots_per_60s": 20},
+        "wry": {"base": 2.0, "min": 1.0, "max": 4.0, "slots_per_60s": 30},
+        "urgent": {"base": 1.2, "min": 0.5, "max": 2.5, "slots_per_60s": 50}
+      },
+      "cuts_by_duration": {"30-45s": [8, 12], "60-90s": [15, 25], "120-180s": [30, 50]},
+      "three_act_split": [0.3, 0.4, 0.3],
+      "min_hero_slots": 2,
+      "duration_tolerance": 0.1,
+      "end_tag_words": [3, 9],
+      "end_tag_seconds": [5, 8]
+    },
+    "checks": [
+      "Thematic question is one sentence",
+      "Slot count matches beat math",
+      "Hold sum within +/-10%"
+    ],
+    "tags": ["documentary", "montage", "pacing", "b-roll"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/executive-producer.md; skills/pipelines/documentary-montage/idea-director.md; skills/pipelines/documentary-montage/scene-director.md; skills/pipelines/documentary-montage/edit-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "doc.slot-retrieval",
+    "title": "Slot descriptions, stock queries and retrieval-first picking",
+    "rooms": ["scene", "research", "editing"],
+    "kind": "procedure",
+    "when": "Filling b-roll slots from stock/archive footage instead of generating clips.",
+    "summary": "Describe each slot as a concrete photograph, write 2-3 short search queries, build a candidate pool 8-12 times larger than the slot count, rank by the description, pick by judgement, diversify neighbours and log every rejection.",
+    "steps": [
+      "Write each slot description like a stock tag string: subject, action/pose, environment, lighting, era/texture hint; nouns and adjectives only, no emotion words, no intentions. Test: can you picture one specific photograph?",
+      "Write 2-3 queries per slot of 2-5 words: a literal query, a lateral query (other angle or scale), and for hero slots an association query.",
+      "Assign preferred sources by era and subject (modern HD stock for people/cities/nature; public-domain archives for vintage texture; space agencies for scale; ocean agencies for underwater); for vintage briefs use period vocabulary and send >=60% of slots to archive sources.",
+      "Build the pool: de-duplicate queries, fan out per source group, 4-8 results per query per source, pool size 8-12 x slot count, filter by min duration 3 s, max 40 s, landscape, min width 1280.",
+      "Sanity-check the pool: at least 50 rows, no skew against the brief's era, average motion not near zero (otherwise you are building a slideshow).",
+      "Rank each slot on its description (not its queries), excluding already-picked ids, with a minimum motion filter; hero slots look at 30 candidates, others 12.",
+      "Pick by judgement among the top 3-5: era fit, motion fit for the hold, compositional carry next to neighbours, emotional register; score never overrides tone.",
+      "Score bands (CLIP-style cosine): >=0.30 usually usable; 0.22-0.30 needs judgement; <0.22 grow the pool (max 2 growth passes) or drop/replace the slot.",
+      "Run a diversity pass over the picks in timeline order; if one is dropped, re-rank that slot excluding its twin.",
+      "Record provider, original URL, licence, score and a one-line retrieval summary per asset; log rejected high-score picks with reasons."
+    ],
+    "do": [
+      "Fast path for <30 slots: download ~3 clips per query, inspect thumbnails, assign manually; reuse clips across episodes/acts (saved 40-50% download time in the source's experience)",
+      "Run search downloads in parallel with narration and music work"
+    ],
+    "avoid": [
+      "Category queries ('home', 'family')",
+      "Picking by score alone",
+      "Forgetting the exclude list so one great clip wins every slot",
+      "Unbounded pool growth"
+    ],
+    "numbers": {
+      "queries_per_slot": [2, 3],
+      "query_words_max": 5,
+      "pool_multiplier": [8, 12],
+      "per_source_per_query": [4, 8],
+      "min_pool_rows": 50,
+      "min_mean_motion_score": 1.0,
+      "rank_k": {"hero": 30, "normal": 12},
+      "motion_min": 1.5,
+      "tag_weight": {"default": 0.3, "strong_tags": 0.5, "prose_tags": 0.15},
+      "score_bands": {"strong": 0.3, "floor": 0.22},
+      "max_growth_passes": 2,
+      "diversity": 0.5,
+      "fast_path_clips_per_query": 3,
+      "clip_filter": {"min_s": 3, "max_s": 40, "min_width": 1280},
+      "vintage_archive_share": 0.6
+    },
+    "checks": [
+      "Exactly one asset per slot",
+      "No clip used twice",
+      "Every pick >=0.22 or user-approved",
+      "Provenance (provider, URL, licence) on every asset"
+    ],
+    "tags": ["b-roll", "stock", "retrieval", "faceless"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/scene-director.md; skills/pipelines/documentary-montage/asset-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "doc.montage-edit-rules",
+    "title": "Montage edit rules: rhythm, juxtaposition, music sync, restraint",
+    "rooms": ["editing", "audio", "motion"],
+    "kind": "ruleset",
+    "when": "Cutting a footage-led montage or a b-roll heavy segment to music.",
+    "summary": "Arrange by narrative beat not score, trim each clip to its best moment with handles, cut to the music grid with one deliberate silence, use at most four transitions, enforce adjacent diversity, weld hard transitions with L-cuts, and give every cut a written reason.",
+    "steps": [
+      "Before cutting, re-read the brief; adding narration, swapping music or stretching duration are major changes that need approval.",
+      "Set the rhythm grid from the tone table: heroes get max hold, cutaways base, quick passes min.",
+      "Keep the planned slot order; reorder only to land a hero on a downbeat, to break visual monotony, or to replace a weak final image; log every reorder with a reason.",
+      "Trim to the best sub-window (a 12 s clip usually holds one 3 s moment), end before the action finishes (on a look, not a move-off), keep 4-6 frames of handle at each end.",
+      "If a clip is too short: slow to 0.5-0.75x only for near-static shots, or borrow time from the next slot, or use the #2 candidate; never freeze the last frame.",
+      "Music sync: hero cuts on downbeats (without beat data, every 4 s at 60 bpm); one held silence of about 2 s at the emotional centre for pieces of 60 s or more; music fades under the last 3-5 s.",
+      "Transitions: hard cut by default; dissolve 0.5-1.0 s for emotionally related shots or time passing; fade to black 0.5 s at act breaks or once near the end; fade in/out 0.5-1.0 s as bookends; maximum four distinct types.",
+      "Adjacent diversity walk: no two neighbours with the same subject and scale; break same-palette runs at least every 4 cuts; flip or reorder same-direction motion.",
+      "L-cuts: carry strong ambient sound (rain, footsteps, traffic) 0.5-1.5 s under the next shot on the 3-4 hardest transitions.",
+      "End tag overlay offset = body duration - tag duration so their fade-outs align.",
+      "Write a one-line reason for every cut; if none exists, the cut is arbitrary."
+    ],
+    "do": [
+      "Commit to hard cuts; restraint is the style",
+      "Swap a weak final image for a stronger one (the last frame is remembered most)"
+    ],
+    "avoid": [
+      "Wipes, push/slide, zoom blur, RGB split, light leaks, glitch in this register",
+      "Dissolves on every cut",
+      "Three transition types in the first 15 s",
+      "Cutting by information density instead of rhythm",
+      "Freeze-frame endings"
+    ],
+    "numbers": {
+      "handle_frames": [4, 6],
+      "slow_motion_range": [0.5, 0.75],
+      "default_cut_interval_at_60bpm_s": 4,
+      "silence_window_s": 2,
+      "silence_required_from_duration_s": 60,
+      "music_tail_fade_s": [3, 5],
+      "dissolve_s": [0.5, 1.0],
+      "fade_to_black_s": 0.5,
+      "bookend_fade_s": [0.5, 1.0],
+      "max_transition_types": 4,
+      "palette_break_every_cuts": 4,
+      "l_cut_carry_s": [0.5, 1.5],
+      "l_cuts_per_piece": [3, 4],
+      "music_volume_no_narration": 0.7,
+      "music_fade_in_s": 1.0,
+      "music_fade_out_s": 4.0
+    },
+    "checks": [
+      "Cut durations sum within +/-10% of target",
+      "Heroes hold longest",
+      "No adjacent subject+scale duplicates",
+      "<=4 transition types",
+      "Silence window present when >=60 s",
+      "Every cut has a reason"
+    ],
+    "tags": ["editing", "montage", "music-sync", "transitions"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/edit-director.md; pipeline_defs/documentary-montage.yaml (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "doc.register-smoothing-render",
+    "title": "Register smoothing at render: one canvas, one grade, one mix",
+    "rooms": ["editing", "qc", "audio"],
+    "kind": "procedure",
+    "when": "Rendering a timeline built from footage of mixed sources, eras and resolutions.",
+    "summary": "Make clips from different sources feel like one film by forcing one canvas and letterbox, one colour grade across the whole timeline, and one audio mix executed exactly as the edit specified, then verify the actual file.",
+    "steps": [
+      "Resolve the canvas from the platform: vertical 1080x1920 (centre-crop 16:9), YouTube 1920x1080 (optional 2.35:1 bars = about 140 px top and bottom), professional networks 1920x1080.",
+      "Letterbox or pillarbox low-resolution clips instead of upscaling them.",
+      "Apply a single LUT at timeline level chosen by tone: warm film (elegiac, dreamlike), cool archive (urgent, wry), neutral documentary (reverent), bleach bypass (harsh, wry); fall back to neutral with a warning; never grade clip by clip.",
+      "Mix once: music at the edit's level with its fades; silence window ducked to zero with a 0.2 s hold-off on the way back; L-cut ambience at 0.5-0.7 under the music; no narration unless approved.",
+      "Encode: H.264, yuv420p, CRF 18, 24 fps without up-converting (drop frames evenly, never blend), AAC 192 kbps.",
+      "Normalise exotic source containers before the render; split very long renders and stitch.",
+      "Verify the file: duration within 0.5 s of plan, resolution equals canvas, audio stream present, first frame is the fade-in, last frame black or the end tag, silence visible in the waveform, end-tag text visible over footage (not over black)."
+    ],
+    "do": [
+      "Record canvas, letterbox, LUT and music presence in the render report",
+      "Stop and ask if a required element (music, end tag) is missing"
+    ],
+    "avoid": [
+      "Leaving mixed-era clips ungraded (looks like a slideshow of internet clips)",
+      "Adjusting edit values inside the render call",
+      "Adding ambience 'to fill the gap'"
+    ],
+    "numbers": {
+      "canvas": {"vertical": [1080, 1920], "landscape": [1920, 1080]},
+      "cinemascope_bar_px_on_1080": 140,
+      "crf": 18,
+      "fps": 24,
+      "audio_kbps": 192,
+      "silence_ramp_holdoff_s": 0.2,
+      "l_cut_ambience_volume": [0.5, 0.7],
+      "duration_tolerance_s": 0.5,
+      "brief_duration_tolerance_s": 1.0
+    },
+    "checks": [
+      "LUT applied or warning logged",
+      "Post-render verification notes recorded"
+    ],
+    "tags": ["render", "colour-grade", "audio-mix", "consistency"],
+    "source": "OpenMontage skills/pipelines/documentary-montage/compose-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "cinematic.emotional-arc-restraint",
+    "title": "Mood-led pieces: emotional arc, hero frames and restraint",
+    "rooms": ["script", "scene", "editing", "audio"],
+    "kind": "ruleset",
+    "when": "Trailers, teasers, channel intros, mood cold-opens or any segment that must make the viewer feel rather than learn.",
+    "summary": "Pick an explicit emotional arc, map it as hook-escalation-reveal-landing, define hero frames in full detail, keep text and transitions sparse, cut on emotion and music, and let sound carry momentum.",
+    "steps": [
+      "Classify what material really exists (only footage; footage with some stills; mostly stills; generated inserts supporting real footage; a mixed montage) and whether motion is a hard requirement.",
+      "Choose an arc: tension -> reveal, wonder -> scale, intimacy -> payoff, urgency -> resolution, mystery -> CTA, stillness -> eruption.",
+      "Beat map: hook, escalation, reveal, landing (+ one midpoint turn if longer); never reveal the best moment early.",
+      "Title cards: few words, high contrast, lots of space, precise timing; dialogue and title cards must not explain the same thing.",
+      "Define hero frames (opening, reveal, final, title moments) with full five-aspect specs; specify palette by hex, lighting key, dominant shot sizes and moves, texture, type restraint.",
+      "Transition set (keep it to about four): straight cuts, dips to black, slow cross-dissolves, gentle push-ins.",
+      "Edit: cut by emotional emphasis, reveal timing, musical turns and visual contrast; let a strong look or line live without extra coverage.",
+      "Sound: ambience, impacts, dropouts and music changes drive momentum; keep quiet moments and impact moments in the mix.",
+      "Use letterbox, 24 fps feel or heavy grade only if they help; never because the label says cinematic."
+    ],
+    "do": [
+      "Write ~120 wpm when narrated",
+      "Keep generated inserts as support, labelled as such"
+    ],
+    "avoid": [
+      "Black bars as a substitute for cinematography",
+      "Speed ramps or flashy transitions by default",
+      "Flattened audio dynamics",
+      "Three concepts that are all 'dark and moody'"
+    ],
+    "numbers": {
+      "arcs": 6,
+      "transition_set_size": 4,
+      "narration_wpm": 120
+    },
+    "checks": [
+      "Arc explicit in concept",
+      "Hero frames fully specified",
+      "Title cards sparse and timed"
+    ],
+    "tags": ["cinematic", "emotion", "trailer", "restraint"],
+    "source": "OpenMontage skills/pipelines/cinematic/idea-director.md; script-director.md; scene-director.md; edit-director.md; compose-director.md; proposal-director.md; executive-producer.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "hybrid.anchor-first-layering",
+    "title": "Anchor first, support layers second",
+    "rooms": ["editing", "scene", "captions"],
+    "kind": "ruleset",
+    "when": "Combining a primary medium (voice-over with b-roll, screen recording, interview) with support graphics, cards and inserts.",
+    "summary": "Name the anchor medium, make the anchor cut work on its own, then add support layers in a fixed priority with a hard cap on simultaneous overlays and quality matched to the source.",
+    "steps": [
+      "Pick one anchor: talking head, b-roll footage, screen recording, still sequence, narration-led graphics.",
+      "Justify each support layer by the problem it solves (what is not visible, what needs summarising, emphasis, platform change).",
+      "Lock the anchor cut first; if it is weak, graphics will not save it.",
+      "Add support in order: subtitles -> speaker/context labels -> diagrams or stat cards -> optional inserts -> CTA.",
+      "Never exceed two concurrent overlay layers; define a target source/support ratio (e.g. 70/30).",
+      "Build shared kits once (subtitle style, lower-third, stat card, CTA container, diagram style) and reuse them.",
+      "Match quality between source and generated material; normalise loudness between source and generated sections.",
+      "Plan safe zones for every aspect-ratio variant at scene-plan time (subtitles, labels, chart/code zones, crop-unsafe areas).",
+      "Keep strong original lines rather than rewriting them into weaker narration."
+    ],
+    "do": [
+      "For a faceless channel treat voice-over + b-roll as the anchor and stat cards/diagrams as support"
+    ],
+    "avoid": [
+      "Overlay soup",
+      "Generated inserts on every transition",
+      "Each platform variant with a different editorial philosophy"
+    ],
+    "numbers": {
+      "max_concurrent_overlays": 2,
+      "example_source_support_ratio": [70, 30]
+    },
+    "checks": [
+      "Anchor cut coherent before overlays",
+      "Overlay count per moment <=2",
+      "Variant text remains readable"
+    ],
+    "tags": ["hybrid", "overlays", "layering", "variants"],
+    "source": "OpenMontage skills/pipelines/hybrid/*.md; pipeline_defs/hybrid.yaml (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "clips.shorts-mining-batch",
+    "title": "Mining a ranked batch of standalone shorts from a long video",
+    "rooms": ["packaging", "editing", "hooks"],
+    "kind": "ruleset",
+    "when": "Cutting several vertical/short clips from a finished long-form episode.",
+    "summary": "Plan a portfolio of different clip families, rank candidates from the transcript on five dimensions, keep only clips that pass a cold-viewer test, edit with a shared template and an immediate hook, and publish by rank.",
+    "steps": [
+      "Set a realistic yield from source length; prefer fewer strong clips over a padded batch.",
+      "Mix clip families: hook (cold-open claim), insight (takeaway), story (emotional shape), proof (stat/demo/result), opinion (hot take); cover different sections and energy levels.",
+      "Transcribe first; score each candidate on hook, coherence, value, energy, platform fit; store in/out, hook text, scores, crop viability, reason selected or rejected.",
+      "Cold-viewer test: drop or extend any clip that leans on a 'he/it/this' with no referent, calls back to an earlier part of the source, takes too long to get going, or stops short of its payoff.",
+      "Frame honestly: 9:16 only when the crop works; 1:1 when subject plus context matter; 16:9 for slides, demos or wide visuals.",
+      "Edit with a shared batch template (caption style, hook timing, lower-third, watermark, fades) then per-clip overrides; open on motion or result; hook text immediately; captions from the first word; no mid-word cuts, no trailing silence, no outro unless it earns time; rebase caption timing to clip start.",
+      "Normalise loudness across the whole batch.",
+      "Render each clip x platform as its own job; if one fails, log it and continue; verify no black first frame and hook on time.",
+      "Publish strongest first, by rank not chronology, with platform-specific copy, spread over days."
+    ],
+    "do": [
+      "Sample the hero clip's visual direction before batch work"
+    ],
+    "avoid": [
+      "A highlight reel instead of independent clips",
+      "Branding that delays the hook",
+      "Hook text, captions, watermark and lower-third all fighting in one zone"
+    ],
+    "numbers": {
+      "yield_by_source_minutes": {"15-30": [3, 6], "30-60": [5, 10], "60+": [8, 15]},
+      "rule_of_thumb_minutes_per_clip": [5, 10],
+      "hook_window_s": [2, 3],
+      "score_dimensions": ["hook", "coherence", "value", "energy", "platform_fit"]
+    },
+    "checks": [
+      "Every clip passes the standalone test",
+      "Clips spread across source sections",
+      "Posting order follows rank"
+    ],
+    "tags": ["shorts", "repurposing", "batch", "packaging"],
+    "source": "OpenMontage skills/pipelines/clip-factory/*.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "packaging.publish-metadata",
+    "title": "Publish package: title, description, chapters, thumbnail concept",
+    "rooms": ["packaging"],
+    "kind": "checklist",
+    "when": "Preparing a rendered video for upload.",
+    "summary": "Generate specific, keyword-bearing metadata from the approved concept and script, derive chapters from section times, describe a high-contrast thumbnail, and export a ready-to-paste bundle.",
+    "steps": [
+      "Title up to ~60 characters with the main keyword, leading with the hook or a number; specific beats generic.",
+      "Description: first ~150 characters restate the hook and value; then topics with natural keywords, chapters, CTA, links to sources mentioned.",
+      "Tags 5-10 mixing broad and specific terms; hashtags 3-5 mixing trending and niche.",
+      "Chapters from script section start times.",
+      "Thumbnail concept: the video's core idea as an image, 3-5 words of text (hook or key stat), style accent colours, high contrast, readable when small; the opening frame should keep the thumbnail's promise.",
+      "Export bundle: video (+ captions file), metadata json, chapters, description text, tags list, thumbnail image or concept.",
+      "For pieces with derivatives, label the hero cut and each derivative by purpose.",
+      "Self-score 1-5: discoverability, description completeness, thumbnail stand-out, package completeness, platform fit."
+    ],
+    "do": [
+      "Write for humans first, search second",
+      "Tailor copy per platform"
+    ],
+    "avoid": [
+      "Generic titles",
+      "Missing chapters",
+      "Keyword stuffing"
+    ],
+    "numbers": {
+      "title_max_chars": 60,
+      "description_critical_chars": 150,
+      "tags": [5, 10],
+      "hashtags": [3, 5],
+      "thumbnail_words": [3, 5]
+    },
+    "checks": [
+      "Bundle contains video, metadata, chapters, thumbnail",
+      "Publish only with a passing final review"
+    ],
+    "tags": ["publish", "seo", "thumbnail", "chapters"],
+    "source": "OpenMontage skills/pipelines/explainer/publish-director.md; skills/pipelines/cinematic/publish-director.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "learning.skill-creator-protocol",
+    "title": "Writing a new reusable skill (with self-evaluation rubric)",
+    "rooms": ["learning", "general"],
+    "kind": "procedure",
+    "when": "A recurring need is not covered by any existing skill; never for a one-off task.",
+    "summary": "Articulate the gap, research best practice, choose the skill type and location, write it in a standard shape that teaches judgement and ends in a 1-5 self-evaluation rubric, register it in the index, then validate its references.",
+    "steps": [
+      "Identify the gap: what must be done, why it will recur, which layer and folder it belongs to.",
+      "Research: web best practice, structurally similar existing skills, docs of tools it will use.",
+      "Pick a type: room/stage skill, cross-cutting meta skill, tool/provider skill, or style file.",
+      "Write: title + context; when to use (1-2 sentences); prerequisites table (schemas, prior artifacts, tools, other skills); numbered process steps with examples; self-evaluate step with a 1-5 scoring table; submit/persist step; common pitfalls.",
+      "Write to teach thinking: include good and bad examples, name concrete resources (exact schema, exact tool, exact style field), be opinionated (do A because..., fall back to B when...), match length to task complexity.",
+      "Register it in the skills index and, if it is a room skill, reference it from the manifest.",
+      "Validate: well-formed, every referenced resource exists, numbered actionable steps, rubric present, pitfalls present, no orphan references.",
+      "Rubric pattern used by every room: score each criterion 1-5; any score under 3 means revise before submitting."
+    ],
+    "do": [
+      "Store new skills project-scoped first; promote later"
+    ],
+    "avoid": [
+      "Skills for one-offs",
+      "Vague instructions ('make it good')",
+      "No rubric",
+      "Missing prerequisites",
+      "500-line skills for 50-line tasks"
+    ],
+    "numbers": {
+      "rubric_scale": [1, 5],
+      "rubric_revise_below": 3,
+      "when_to_use_sentences": [1, 2]
+    },
+    "checks": [
+      "Index entry exists",
+      "References resolve",
+      "Rubric and pitfalls sections present"
+    ],
+    "tags": ["skills-engine", "authoring", "rubric", "learning"],
+    "source": "OpenMontage skills/meta/skill-creator.md; pattern of 'Self-Evaluate' tables across skills/pipelines/*/*.md (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "learning.capability-extension-ladder",
+    "title": "Capability extension ladder with guardrails",
+    "rooms": ["learning", "general"],
+    "kind": "ruleset",
+    "when": "A production need is not covered by any existing tool or knowledge.",
+    "summary": "Classify the gap first, then use the smallest extension that solves it (project script, custom style/component, tool wrapper, or researched technique skill), always project-scoped, logged and visible to the user, with promotion to the shared library suggested only when generally useful.",
+    "steps": [
+      "Classify: one-off transform -> project-scoped script; recurring visual need -> custom style file or component; missing provider -> minimal wrapper tool; missing knowledge -> research then write a project-scoped technique skill.",
+      "Script rules: only if no existing tool covers it, idempotent, writes one output file inside the project, logged as capability_extension, user told, no external API calls without approval.",
+      "Custom style rules: derive from the closest preset, validate against the style schema, save under a custom folder, log as playbook selection.",
+      "Technique skill rules: record provider and version, prompting patterns, best parameters for this use, quality tips and known failure modes, source URLs; log it; suggest promotion if broadly useful.",
+      "Wrapper rules: full tool contract, registered before use, user approval before the first paid call.",
+      "When unsure how to do something: search for current practice, check existing skills, then write the project-scoped skill with sources and log 'learned technique: <name>'.",
+      "Forbidden even when extending: bypassing rooms, hidden external calls, editing original tools (wrap instead), skipping the log, side effects outside the output file.",
+      "If debugging reveals that a skill and a tool disagree, update the skill afterwards so the next run does not repeat the investigation."
+    ],
+    "do": [
+      "Log each extension with the closest existing option and why it was rejected"
+    ],
+    "avoid": [
+      "Modifying shared tools in place",
+      "Silent extensions"
+    ],
+    "numbers": {
+      "gap_classes": 4,
+      "example_extension_confidence": 0.8
+    },
+    "checks": [
+      "Extension logged with >=2 options",
+      "User informed",
+      "Artifact lives in project scope until promoted"
+    ],
+    "tags": ["skills-engine", "extension", "guardrails", "learning"],
+    "source": "OpenMontage skills/meta/capability-extension.md; 'When You Do Not Know How' sections in skills/pipelines/*/asset-director.md and proposal-director.md; AGENT_GUIDE.md (Layer Map) (AGPL-3.0, idea restated)"
+  },
+  {
+    "id": "learning.lesson-to-skill-loop",
+    "title": "Lesson-to-skill loop: capture, distil, trial, promote, version, retire",
+    "rooms": ["learning", "qc"],
+    "kind": "procedure",
+    "when": "After every finished video (and after analytics arrive), to turn repeated findings and user corrections into tested, versioned skills.",
+    "summary": "OpenMontage provides the raw materials (audit logs, review findings, rejected picks, prompt triplets, project-scoped skills, promotion suggestions); this loop adds explicit thresholds, a trial phase, versioning and retirement so the engine actually improves from its own work.",
+    "steps": [
+      "CAPTURE per video: review findings with severity and disposition, producer revisions and send-backs, decision-log revisions (especially user overrides), rejected picks with reasons, sample rejections, prompt pre/critique/post triplets, final review status and issues, user free-text feedback at each gate, later channel analytics (CTR, average view duration, retention dips by timestamp).",
+      "DISTIL: cluster findings by category + room + root cause; write a lesson card: trigger condition, observed failure, fix that worked, evidence links (video ids, finding ids), measured impact.",
+      "GATE to candidate skill: same class of critical/suggestion recurs in >=3 videos, or the user overrides the same default >=2 times, or a fix verified by a passing re-review is reusable beyond one video. One-offs stay as project notes.",
+      "DRAFT with the skill-creator template (when, prerequisites, process, numbers, rubric, pitfalls, good/bad examples) and status 'candidate', scoped to the room(s) where it fires.",
+      "VALIDATE statically: references resolve, rubric and pitfalls present, numbers inside schema ranges, no conflict with an active skill (if conflict, the new one must name what it supersedes).",
+      "TRIAL in shadow mode on the next N videos: run the reviewer with and without the candidate; compare critical count, slideshow/variation scores, revision rounds, approval-on-first-try rate, user overrides, and later retention.",
+      "PROMOTE to active when it improves or holds metrics on >=2 consecutive trials with no new critical class introduced; bump version, write changelog, log as capability_extension in the decision log, add to index.",
+      "VERSION with semantic versions: patch = wording/numbers within range; minor = new step or check; major = changed default or contradicted rule; keep every prior version for rollback.",
+      "RETIRE (deprecate, never delete) when it has not fired in a long window, is contradicted by user overrides repeatedly, or a trial shows regression; record the reason and the successor.",
+      "Feed the reviewer: every active skill contributes its checks to the room's review focus so lessons become enforcement, not just documentation."
+    ],
+    "do": [
+      "Keep lesson evidence linked to concrete artifact fields (accuracy rule)",
+      "Prefer updating an existing skill over adding a near-duplicate"
+    ],
+    "avoid": [
+      "Turning a single bad video into a global rule",
+      "Learning from your own unreviewed output without user or metric confirmation",
+      "Letting skills accumulate without retirement"
+    ],
+    "numbers": {
+      "recurrence_threshold_videos": 3,
+      "user_override_threshold": 2,
+      "shadow_trial_videos": [2, 5],
+      "promotion_consecutive_wins": 2,
+      "retire_if_unfired_videos": 20,
+      "retire_if_contradicted_overrides": 3,
+      "note": "thresholds are analyst-proposed defaults, not OpenMontage values"
+    },
+    "checks": [
+      "Every active skill has version, changelog, evidence and trial results",
+      "Every retirement has a reason and successor or 'none'"
+    ],
+    "tags": ["skills-engine", "learning-loop", "versioning", "evaluation"],
+    "source": "OpenMontage skills/meta/skill-creator.md; skills/meta/capability-extension.md; AGENT_GUIDE.md (Layer Map, decision_log); skills/meta/checkpoint-protocol.md (history archive); skills/meta/bespoke-composition.md (process-not-look precedents) (AGPL-3.0, idea restated; thresholds, trial, versioning and retirement are analyst extensions not present in OpenMontage)"
+  }
+]

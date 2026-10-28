@@ -1,0 +1,1615 @@
+[
+  {
+    "id": "library.prompt-card-anatomy",
+    "title": "Every reusable prompt is described by the same eight parts",
+    "rooms": ["library"],
+    "kind": "template",
+    "when": "When adding, editing or reviewing a reusable prompt in any room.",
+    "summary": "A reusable prompt is only reusable when the thinking is locked in and only the inputs change. Describe each one with eight parts so another room, or the owner, can use it without rediscovering how it works.",
+    "steps": [
+      "WHAT IT DOES: the one-line job.",
+      "WHEN TO USE IT: its place in the pipeline and what it runs on.",
+      "THE THINKING: the psychology or strategy it encodes, so the why survives.",
+      "YOU FILL IN: the exact inputs that change per run.",
+      "THE PROMPT: the full text, with every variable marked.",
+      "WHAT YOU GET: the shape of the expected output.",
+      "PRO TIP: how it chains into the next step.",
+      "CHECKS: what makes the output acceptable."
+    ],
+    "do": ["Keep the structure and psychology fixed and let only the inputs vary."],
+    "avoid": ["Storing a prompt without its inputs list, so nobody knows what to swap."],
+    "numbers": {"parts": "8"},
+    "checks": ["All eight parts are present before the prompt is approved for reuse."],
+    "tags": ["prompting", "library"],
+    "source": "YT Empire Builders Prompt Library, how to use (owner course material, restated)",
+    "priority": 4
+  },
+  {
+    "id": "library.chaining",
+    "title": "Chain prompts: each output is the next input",
+    "rooms": ["library"],
+    "kind": "principle",
+    "when": "Whenever a room's output is going to feed another room or another prompt.",
+    "summary": "The library is built as a chain, not a pile. Trend feeds niche, niche feeds competitor decoding, decoding feeds ideas and titles, titles feed the script, the script feeds visuals, the thumbnail and the edit, and the edit feeds SEO. Shape each output so the next stage can consume it directly.",
+    "steps": [
+      "Name the next stage before producing the output.",
+      "Produce the output in the schema that stage expects.",
+      "Record the chain so the provenance of a later artifact is traceable."
+    ],
+    "do": ["Keep the intermediate artifact, because the next stage needs it verbatim."],
+    "avoid": [
+      "Running a later stage on a summary when the real artifact exists.",
+      "Skipping a stage and asking a later one to reconstruct its input."
+    ],
+    "numbers": {"chain": "niche, ideas, script, visuals, thumbnail, edit, SEO, brand, scale"},
+    "checks": ["Each artifact names the stage it came from and the stage it feeds."],
+    "tags": ["chaining", "pipeline"],
+    "source": "YT Empire Builders Prompt Library, chaining philosophy (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "qc.no-raw-placeholders",
+    "title": "No raw placeholder leaves the program",
+    "rooms": ["library"],
+    "kind": "ruleset",
+    "when": "Before any prompt is sent to a provider and before any output is shown as finished.",
+    "summary": "A square-bracket placeholder is a slot to replace, including the brackets. An example after a comma inside a placeholder is formatting guidance only and is never sent as a value. A raw placeholder in a sent prompt or a delivered artifact is a defect.",
+    "steps": [
+      "Scan the assembled text for bracketed placeholders.",
+      "Replace each one with a real value, or fail the job and say which value is missing.",
+      "Strip any \"e.g.\" example from a value before using it."
+    ],
+    "do": ["Fail closed when a required value is missing, rather than sending the placeholder."],
+    "avoid": [
+      "Sending a prompt that still contains a bracketed slot.",
+      "Using the example text from a placeholder as the value."
+    ],
+    "numbers": {},
+    "checks": ["The placeholder scan returns no findings for the assembled prompt and for the delivered artifact."],
+    "tags": ["placeholders", "qa"],
+    "source": "YT Empire Builders Prompt Library, golden placeholder rule (owner course material, restated)",
+    "priority": 22
+  },
+  {
+    "id": "library.model-routing",
+    "title": "Route the job to the capability it actually needs",
+    "rooms": ["library"],
+    "kind": "ruleset",
+    "when": "When choosing which provider or room handles a step.",
+    "summary": "Trend and live-web work needs a source of current data; scripting, analysis and structured builds need a strong reasoning model. In this program Hermes is the reasoning writer, NexLev supplies niche market data, the YouTube API supplies public channel metadata, and the stock and image providers supply media. A prompt that names an outside tool is mapped to the equivalent capability here, or reported as not implemented.",
+    "steps": [
+      "Classify the step as current-data, reasoning, media or deterministic computation.",
+      "Route to the matching capability in this program.",
+      "If no capability covers it, report it as not implemented instead of improvising."
+    ],
+    "do": ["Do deterministic arithmetic in code rather than asking a model for it."],
+    "avoid": [
+      "Asking the reasoning writer for live data it cannot see.",
+      "Claiming an outside tool named in a prompt is connected here."
+    ],
+    "numbers": {},
+    "checks": ["Every step names the capability that executed it, and unavailable capabilities are reported."],
+    "tags": ["routing", "capabilities"],
+    "source": "YT Empire Builders Prompt Library, model choice note (owner course material, restated)",
+    "priority": 6
+  },
+  {
+    "id": "library.pipeline-map",
+    "title": "The faceless pipeline in production order",
+    "rooms": ["library"],
+    "kind": "procedure",
+    "when": "When planning a whole video or checking where a job sits in the build.",
+    "summary": "The stages run in the order a video is actually built: niche research and competitor decoding, ideas and packaging, script, visuals, thumbnail, edit, SEO, branding, then scale. Each stage hands its artifact to the next.",
+    "steps": [
+      "NICHE: find the surge, lock the niche, decode a competitor.",
+      "IDEAS: turn the niche into ideas, clustered titles and packaging.",
+      "SCRIPT: hooks, structure, full script.",
+      "VISUALS: on-style prompts and stock queries mapped to the script.",
+      "THUMBNAIL: concept, sketch, render.",
+      "EDIT: the line-by-line plan and the retention treatment.",
+      "SEO: title, description, tags and the upload roadmap.",
+      "BRAND: identity that signals the niche.",
+      "SCALE: test with real data, keep what works, feed the winners back in."
+    ],
+    "do": ["Walk the stages in order the first time through a new niche."],
+    "avoid": ["Jumping to packaging or SEO before the script exists."],
+    "numbers": {"stages": "9"},
+    "checks": ["The job's stage is named and its input artifact exists."],
+    "tags": ["pipeline", "planning"],
+    "source": "YT Empire Builders Prompt Library, pipeline map (owner course material, restated)",
+    "priority": 5
+  },
+  {
+    "id": "learning.scale-winners",
+    "title": "Test with data, then scale the winners",
+    "rooms": ["learning"],
+    "kind": "principle",
+    "when": "After a video has real performance data, and when deciding what to produce next.",
+    "summary": "Decisions about what to make more of come from measured results, not taste. When a format, title shape or topic cluster performs, produce more of that shape on a steady cadence and feed what was learned back into the skills.",
+    "steps": [
+      "Identify the measured winner and the metric that says so.",
+      "Name what specifically won: the title shape, the topic, the hook, the visual treatment, the length.",
+      "Propose that as a lesson so it becomes a rule rather than a memory.",
+      "Produce more in that shape while the signal holds."
+    ],
+    "do": ["Separate the element that won from everything that merely accompanied it."],
+    "avoid": [
+      "Scaling on one video with no comparison.",
+      "Calling a result a win without the metric that measured it."
+    ],
+    "numbers": {},
+    "checks": ["Every scaling decision names the metric and the specific winning element."],
+    "tags": ["learning", "analytics"],
+    "source": "YT Empire Builders Prompt Library, test and scale note (owner course material, restated)",
+    "priority": 13
+  },
+  {
+    "id": "niche.trend-hunter",
+    "title": "Hunt surging trends, not evergreen saturation",
+    "rooms": ["niche"],
+    "kind": "procedure",
+    "when": "At the start of a niche hunt, or when a family needs fresh topic fuel.",
+    "summary": "Collect trends that are growing right now in high-revenue markets, across several categories, each with the country, a one-line reason it is rising and how it shows up on YouTube. The output is raw fuel for niche conversion, not a finished idea list.",
+    "steps": [
+      "Set the window: the last two to three months by default.",
+      "Sweep several categories: technology, health and fitness, finance, education, sports, entertainment, AI tools, lifestyle.",
+      "Keep only emerging or surging items; drop evergreen and saturated ones.",
+      "For each: country, trend, why it is rising, and the YouTube format it appears in."
+    ],
+    "do": [
+      "Prefer markets with higher advertising revenue per view when the family targets them.",
+      "Record the date of the sweep, because a trend list expires."
+    ],
+    "avoid": [
+      "Collecting trivia with no story potential.",
+      "Treating an evergreen topic as a trend.",
+      "Reporting a trend without a dated source behind it."
+    ],
+    "numbers": {"window": "last 2-3 months", "minimum_trends": "10", "markets": "United States, United Kingdom, Canada, Australia, Germany"},
+    "checks": [
+      "Every trend names a country and a reason it is rising.",
+      "Every trend carries a dated source.",
+      "No evergreen topic is listed as a trend."
+    ],
+    "tags": ["trends", "niche"],
+    "source": "YT Empire Builders Prompt Library 1.1 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "niche.trend-to-niche",
+    "title": "Convert a trend into a buildable faceless niche",
+    "rooms": ["niche"],
+    "kind": "procedure",
+    "when": "Immediately after a trend sweep, before any niche comparison.",
+    "summary": "A trend is useless until it is shaped into something a faceless channel can actually produce. Name the niche, split it into sub-niches where growth is fastest, state the production route, and test the depth by generating ten searchable video ideas per sub-niche.",
+    "steps": [
+      "Name the YouTube niche the trend can support.",
+      "Split it into sub-niches and mark which are faceless-compatible.",
+      "State the production route for each: writing, narration, visuals, editing.",
+      "Generate ten searchable, beginner-friendly video ideas per sub-niche.",
+      "Give a faceless verdict with the reason."
+    ],
+    "do": ["Treat failure to produce ten easy ideas as evidence the sub-niche is too thin."],
+    "avoid": [
+      "Declaring a niche faceless-compatible without naming how each production step would run.",
+      "Reporting a sub-niche with fewer than ten ideas as viable."
+    ],
+    "numbers": {"ideas_per_sub_niche": "10"},
+    "checks": [
+      "Each sub-niche has ten ideas or is marked too thin.",
+      "Each sub-niche has a production route and a faceless verdict with a reason."
+    ],
+    "tags": ["niche", "feasibility"],
+    "source": "YT Empire Builders Prompt Library 1.2 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "niche.compare-14-point",
+    "title": "Fourteen-point niche comparison on evidence",
+    "rooms": ["niche"],
+    "kind": "checklist",
+    "when": "When choosing between two or more candidate niches.",
+    "summary": "Compare candidates on the same fourteen points, using real competitor evidence rather than impression, then give a reasoned pick. The comparison must explain why the winner wins, not only that it won.",
+    "steps": [
+      "For each candidate, supply the top competitor, its most-viewed topics and a sample of audience comments.",
+      "Answer all fourteen points for each candidate from that evidence.",
+      "Give a final recommendation with the reasoning and the first moves."
+    ],
+    "do": ["Mark any point that could not be answered from evidence as unknown rather than estimating it."],
+    "avoid": [
+      "Deciding on preference when the fourteen points are available.",
+      "Inventing revenue-per-view ranges; label them as estimates with their basis."
+    ],
+    "numbers": {"points": "14: algorithm fit, view potential, advertiser behaviour, geography, sub-niches, revenue range, production difficulty, evergreen or trending, scalability, demo topics, beginner friendliness, first three steps, competition level, production tool stack"},
+    "checks": [
+      "All fourteen points answered or marked unknown for every candidate.",
+      "The recommendation names the deciding points."
+    ],
+    "tags": ["niche", "comparison"],
+    "source": "YT Empire Builders Prompt Library 1.3 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "niche.selection-checklist",
+    "title": "Five-pillar niche audit with a mock-create test",
+    "rooms": ["niche"],
+    "kind": "checklist",
+    "when": "As the final filter before committing to a niche.",
+    "summary": "Five pillars decide whether a niche is worth the work: production must be easy, the format must be obvious, the topic must have current or recurring demand, competitors must exist and be getting views, and the niche must be deep enough to scale. The real test is producing five titles, one sample script and one thumbnail quickly.",
+    "steps": [
+      "PRODUCTION: can nearly all of it be produced with the tools this program has.",
+      "CLARITY: is the video type, length and cadence obvious.",
+      "DEMAND: is interest current, recurring or seasonally reliable.",
+      "COMPETITION WITH VIEWS: can fifteen to twenty-five channels be found, are they getting views, and do both new and old channels succeed.",
+      "DEPTH: are there enough sub-niches and series formats to keep going.",
+      "MOCK-CREATE: produce five titles, one short script and one thumbnail concept; speed is the signal."
+    ],
+    "do": ["Run the mock-create test for real instead of predicting its result."],
+    "avoid": [
+      "Passing a niche where only old channels succeed, which usually means the door is shut.",
+      "Passing a niche on demand alone when production is not feasible here."
+    ],
+    "numbers": {"pillars": "5", "competitors_found": "15-25", "views_per_video": "10,000 or more", "scale_target": "5-10 channels", "mock_create": "5 titles, 1 script, 1 thumbnail"},
+    "checks": [
+      "Each pillar has a yes or no with a one-line reason.",
+      "The verdict is go or no-go, with reasoning.",
+      "The mock-create test was actually performed."
+    ],
+    "tags": ["niche", "audit"],
+    "source": "YT Empire Builders Prompt Library 1.4 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "competitors.channel-dna-extractor",
+    "title": "Extract a competitor's content system in eight layers",
+    "rooms": ["competitors"],
+    "kind": "procedure",
+    "when": "When a competitor channel is worth modelling and evidence has been collected.",
+    "summary": "A winning channel is a system. Read eight layers from the evidence: where ideas come from, how topics are researched, the title formula, the thumbnail system, the graphics source, the posting cadence and length, the metadata pattern and the editing style. Then compress it into a blueprint that also says how to do it better.",
+    "steps": [
+      "IDEA SOURCING: where the topics come from and the selection pattern.",
+      "TOPIC RESEARCH: how the subject is built, and on which emotion.",
+      "TITLE FORMULA: structure, length, casing, use of curiosity or controversy, keyword placement.",
+      "THUMBNAIL SYSTEM: palette, type treatment, framing devices, emotional tone.",
+      "GRAPHICS: stock, generated or original photography, reuse, overlay and motion habits.",
+      "CADENCE AND LENGTH: posting schedule, average length and growth against that schedule.",
+      "METADATA: description structure, keyword repetition, tag and hashtag habits.",
+      "EDITING STYLE: animation weight, repeated transitions and effects, narration type, static or animated.",
+      "BLUEPRINT: compress into script style, thumbnail style, title formula, visual approach, cadence and the named improvement."
+    ],
+    "do": [
+      "Record the evidence item behind each layer.",
+      "Finish with the improvement, so the result is an upgrade rather than a clone."
+    ],
+    "avoid": [
+      "Reusing the competitor's titles, wording, thumbnail composition or identity.",
+      "Filling a layer from assumption when no evidence was collected."
+    ],
+    "numbers": {"layers": "8", "evidence": "2-4 thumbnails plus channel or video references", "blend": "at most 30 percent reference-derived technique"},
+    "checks": [
+      "Every layer cites an evidence item.",
+      "The blueprint names a specific improvement.",
+      "No competitor asset or wording is carried over."
+    ],
+    "tags": ["competitors", "blueprint"],
+    "source": "YT Empire Builders Prompt Library 1.5 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "competitors.ecosystem-map",
+    "title": "Map the ecosystem and the raw-material goldmine around a channel",
+    "rooms": ["competitors"],
+    "kind": "procedure",
+    "when": "When a channel is worth modelling and the surrounding opportunity should be mapped too.",
+    "summary": "Go beyond one competitor. Decode the channel, break the niche into its building blocks, build a list of raw-material sources that can fuel the style, map the neighbouring channels, then turn that into an idea map and a set of angles.",
+    "steps": [
+      "CHANNEL DNA: content type, topic layers, format, psychological hooks, visual style, audience and why they watch.",
+      "NICHE DECONSTRUCTION: the building-block sub-topics that make it work.",
+      "GOLDMINE: fifteen to twenty-five sources of raw material (people, events, cases, works), each with category, type, why it fits and two or three content ideas.",
+      "NEIGHBOURS: ten to fifteen similar or adjacent channels with style, overlap and growth read.",
+      "IDEA MAP: ten ideas on well-known material, five on underrated material, five that blend two angles.",
+      "ANGLES: five curiosity frameworks, five high-tension angles, five overlooked-detail hooks."
+    ],
+    "do": [
+      "Require the raw material to be widely documented and rich enough to tell a story, not just list facts.",
+      "Keep the goldmine as a reusable record; it is the family's content runway."
+    ],
+    "avoid": [
+      "Generic answers that would fit any channel.",
+      "Listing a source with no available documentation behind it."
+    ],
+    "numbers": {"goldmine_items": "15-25", "neighbour_channels": "10-15", "ideas": "20", "angles": "15"},
+    "checks": [
+      "Each goldmine item carries a reason and content ideas.",
+      "Each neighbouring channel names the overlap.",
+      "No idea reuses a competitor's title or wording."
+    ],
+    "tags": ["competitors", "ideas"],
+    "source": "YT Empire Builders Prompt Library 1.6 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "ideas.master-ideas",
+    "title": "Upgrade proven titles and cross-pollinate for an idea bank",
+    "rooms": ["ideas"],
+    "kind": "procedure",
+    "when": "When competitor titles are in hand and the family needs a filled idea pipeline.",
+    "summary": "Build on titles that already proved themselves. For each competitor set produce upgraded titles with the reasoning behind each, then blend all the competitors together to produce a larger bank of fresh angles, and attach a production approach to the strongest ones.",
+    "steps": [
+      "For each competitor set, write five upgraded titles that go further on curiosity, emotion and search intent.",
+      "For each new title give the psychological trigger, the tone and the keyword use.",
+      "Record the word count of each new title.",
+      "Blend all the competitors to produce thirty further ideas.",
+      "For the strongest titles, add the approach, the format options and the storytelling or visual device that makes it stand out."
+    ],
+    "do": ["State the trigger for each title so the craft is learned, not just the output collected."],
+    "avoid": [
+      "Reusing a competitor title with a word swapped.",
+      "Producing titles with no stated trigger or keyword rationale."
+    ],
+    "numbers": {"upgrades_per_competitor": "5", "title_words": "5-10", "blended_ideas": "30"},
+    "checks": [
+      "Every title has a trigger, a tone and a keyword note.",
+      "No title matches a competitor title closely.",
+      "Word counts are recorded."
+    ],
+    "tags": ["ideas", "titles"],
+    "source": "YT Empire Builders Prompt Library 2.1 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "ideas.promise-fulfilment-thumbnail",
+    "title": "Package every title as promise, fulfilment and thumbnail",
+    "rooms": ["ideas"],
+    "kind": "template",
+    "when": "When converting a research report into topics and titles that will actually be produced.",
+    "summary": "A title is not finished when it is catchy. It carries a promise the script must keep and a thumbnail concept that sells it, so title, script and thumbnail stay locked to one emotional core from the first step.",
+    "steps": [
+      "Produce the topic list from the research report.",
+      "For each packaged title write the PROMISE: what the viewer is being promised.",
+      "Write the FULFILMENT: the structure or key message that keeps that promise.",
+      "Write the THUMBNAIL direction: the visual that sells the same promise.",
+      "Write the ENGAGEMENT plan: how retention and click-through are supported.",
+      "Keep the promise and thumbnail notes attached to the title for the later rooms."
+    ],
+    "do": ["Reuse these notes verbatim when the thumbnail and script rooms pick the work up."],
+    "avoid": [
+      "A title whose promise the planned script cannot keep.",
+      "A thumbnail direction unrelated to the title's promise."
+    ],
+    "numbers": {"topics": "30", "packaged_titles": "15"},
+    "checks": [
+      "Every title has a promise, a fulfilment plan and a thumbnail direction.",
+      "The fulfilment plan is something the script room can actually deliver."
+    ],
+    "tags": ["packaging", "titles"],
+    "source": "YT Empire Builders Prompt Library 2.2 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "research.deep-report",
+    "title": "Nine-section deep research report",
+    "rooms": ["research"],
+    "kind": "procedure",
+    "when": "At the start of a content cycle, when a topic needs full depth before ideation.",
+    "summary": "A shallow sweep produces generic videos. Cover nine sections from overview to future outlook, including what audiences feel about the subject, because the hooks are built from that feeling. Every section stays tied to dated sources.",
+    "steps": [
+      "OVERVIEW: summary, history, key concepts, current relevance, important terms.",
+      "TRENDING DATA: current angles, figures, popular search phrasing.",
+      "COMMUNITY: where it is discussed, in what tone, and which formats travel.",
+      "VIDEO AND AUDIO LANDSCAPE: the most-watched treatments and their takeaways.",
+      "ARTICLES AND RESEARCH: sources with findings and how the subject has changed over time.",
+      "PLAYERS: the main channels and figures, their most successful work and the reaction to it.",
+      "AUDIENCE SENTIMENT: how people feel, and the emotional triggers behind it.",
+      "OUTLOOK: where the subject is heading, with the evidence for that reading.",
+      "CONTENT IDEAS: ideas with audience, engagement plan and headline options."
+    ],
+    "do": [
+      "Record publisher, publication date and access date for every source.",
+      "Separate what a source states from how it is being interpreted."
+    ],
+    "avoid": [
+      "Reporting sentiment without the material it was read from.",
+      "Presenting a prediction as a finding."
+    ],
+    "numbers": {"sections": "9"},
+    "checks": [
+      "Every section cites at least one dated source.",
+      "Sentiment conclusions name the material behind them.",
+      "Predictions are labelled as outlook, not fact."
+    ],
+    "tags": ["research", "report"],
+    "source": "YT Empire Builders Prompt Library 2.3 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "ideas.clustered-titles",
+    "title": "Cluster titles into named series, not a flat list",
+    "rooms": ["ideas"],
+    "kind": "procedure",
+    "when": "When turning a research or trend report into a batch of titles for a publishing plan.",
+    "summary": "Loose titles do not build a channel; clustered ones do. Extract the topics and keywords from the report, write titles that each take a different angle, keep them inside the length that reads well on a phone, then group them into two or three named clusters that become series.",
+    "steps": [
+      "Extract main topics, sub-topics and keywords from the report.",
+      "Write the requested number of titles, each on a distinct angle.",
+      "Keep each title inside the character range and workable for narration-led video.",
+      "Group the final list into two or three named clusters.",
+      "Treat each cluster as a series with its own cadence."
+    ],
+    "do": ["Name the clusters so they can become playlists and a publishing rhythm."],
+    "avoid": [
+      "Repeating the same angle in different words.",
+      "Copying a competitor title; refine into a stronger original.",
+      "Hype wording when the family's packaging policy is authenticity-first."
+    ],
+    "numbers": {"title_length": "50-70 characters", "clusters": "2-3"},
+    "checks": [
+      "Every title is 50-70 characters.",
+      "No two titles share the same angle.",
+      "No title closely matches a competitor title.",
+      "Titles are grouped into named clusters."
+    ],
+    "tags": ["titles", "series"],
+    "source": "YT Empire Builders Prompt Library 2.4 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "ideas.similar-winner",
+    "title": "Clone the DNA of a measured winner",
+    "rooms": ["ideas"],
+    "kind": "procedure",
+    "when": "When one video has measurably outperformed the rest and the channel should double down.",
+    "summary": "When the family's own data says something worked, make more of that shape. Analyse the winner's title structure, its themes and the specific curiosity it created, then generate matching titles, topics and in-video hooks that share the same engine.",
+    "steps": [
+      "Record the winner with its measured performance.",
+      "TITLE: analyse structure, length, keywords and tone, then write five to ten with the same shape.",
+      "TOPICS: pull the themes from the transcript and propose five to ten neighbouring topics.",
+      "HOOKS: write three to five in-video hooks on the same curiosity.",
+      "STRUCTURE: keep the format that worked, and note where the strongest moments sat.",
+      "Keep the focus the audience responded to."
+    ],
+    "do": ["Name the metric that identified the winner."],
+    "avoid": [
+      "Calling a video a winner without its numbers.",
+      "Reproducing the winner's own sentences in the new titles."
+    ],
+    "numbers": {"titles": "5-10", "topics": "5-10", "hooks": "3-5"},
+    "checks": [
+      "The winner's metric is recorded.",
+      "New titles share the structure without reusing the wording."
+    ],
+    "tags": ["ideas", "analytics"],
+    "source": "YT Empire Builders Prompt Library 2.5 (owner course material, restated)",
+    "priority": 15
+  },
+  {
+    "id": "analytics.stats-strategist",
+    "title": "Read channel analytics into a prioritised plan",
+    "rooms": ["analytics"],
+    "kind": "procedure",
+    "when": "When real channel analytics exist and a concrete plan is needed instead of general advice.",
+    "summary": "Numbers without interpretation are noise. Read topics, titles, descriptions, tags, average view duration, watch time, views and impressions together, say what is working and what is not with the likely reason, then give specific changes and a short prioritised plan.",
+    "steps": [
+      "Anchor the read in the family's niche, channel age and stated goal.",
+      "Separate what is working from what is underperforming, each with the likely cause.",
+      "Give specific changes for titles, thumbnails, topics, packaging and metadata.",
+      "Give a prioritised plan for the next two to four weeks.",
+      "List the signals to watch, good and bad."
+    ],
+    "do": ["Tie each recommendation to the metric that motivated it."],
+    "avoid": [
+      "Advice that would fit any channel.",
+      "Inferring a cause from a single metric with no supporting signal."
+    ],
+    "numbers": {"plan_horizon": "2-4 weeks", "review_cadence": "every 2-3 weeks with fresh data"},
+    "checks": [
+      "Each recommendation names its metric.",
+      "The plan is ordered by priority.",
+      "Causes are labelled as likely, not certain, unless the data proves them."
+    ],
+    "tags": ["analytics", "growth"],
+    "source": "YT Empire Builders Prompt Library 2.6 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "hooks.universal-3-hook",
+    "title": "Three-hook generator with five locked criteria",
+    "rooms": ["hooks"],
+    "kind": "formula",
+    "when": "On every video, once the title and the script or outline exist.",
+    "summary": "A hook is a contract, not decoration. Each one explains the whole video in its first sentence while promising a payoff, connects to the viewer's situation, states the stakes, and opens a loop that has to be closed. Plain language at a short length forces clarity instead of cleverness.",
+    "steps": [
+      "Sentence one explains the whole video and makes the promise.",
+      "Add the context that ties it to the viewer's current situation.",
+      "State the stakes: what they learn, or what they miss.",
+      "Open the curiosity loop the body will close.",
+      "Produce three distinct hooks, varying the opening device."
+    ],
+    "do": [
+      "Keep each hook to the target length and reading level.",
+      "Vary the opening across the three so they do not sound formulaic."
+    ],
+    "avoid": [
+      "The banned filler openings: stay tuned, in this video, delve, dive into.",
+      "A hook that promises something the script does not deliver.",
+      "Clever phrasing that costs clarity."
+    ],
+    "numbers": {"hooks": "3", "length": "about 20 seconds, 3-4 sentences", "reading_level": "grade 8", "criteria": "5"},
+    "checks": [
+      "All five criteria met by each hook.",
+      "No banned phrase appears.",
+      "The script opens with the chosen hook verbatim.",
+      "The promise matches what the script delivers."
+    ],
+    "tags": ["hooks", "retention"],
+    "source": "YT Empire Builders Prompt Library 3.1 (owner course material, restated)",
+    "priority": 22
+  },
+  {
+    "id": "hooks.nine-layer-retention",
+    "title": "Nine-layer retention architecture across the whole video",
+    "rooms": ["hooks"],
+    "kind": "procedure",
+    "when": "When retention has to be engineered across a full video, not just its opening.",
+    "summary": "Retention is a chain of hooks, not one. Place a hook at every structural beat: the opening, the value statement, the anticipation builders, the story, the engagement prompts, a mini-hook at each section end, the urgency before the climax, the payoff, and the closing action.",
+    "steps": [
+      "OPENING: a provocative question, a surprising fact or a teased reveal in the first seconds.",
+      "VALUE: say what the viewer gets and why it matters.",
+      "ANTICIPATION: plant references to a later reveal.",
+      "STORY: a relatable sequence with a beginning, middle and end.",
+      "ENGAGEMENT: one specific question, or an invitation to guess before a reveal.",
+      "SECTION MINI-HOOKS: end every section by opening the next.",
+      "URGENCY: signal that the strongest part is arriving.",
+      "PAYOFF: deliver the promise in full.",
+      "CLOSE: one clear next action."
+    ],
+    "do": ["Treat the section mini-hooks as mandatory; they carry the middle of the video."],
+    "avoid": [
+      "The banned filler phrases.",
+      "An engagement prompt with no specific question.",
+      "A payoff that restates the opening instead of resolving it."
+    ],
+    "numbers": {"layers": "9", "opening_window": "5-10 seconds"},
+    "checks": [
+      "Every section ends with a mini-hook.",
+      "The payoff resolves the opening promise.",
+      "One clear closing action is present."
+    ],
+    "tags": ["retention", "structure"],
+    "source": "YT Empire Builders Prompt Library 3.2 (owner course material, restated)",
+    "priority": 21
+  },
+  {
+    "id": "script.documentary-builder",
+    "title": "Fact-driven documentary script, narration only",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "For documentary, educational or deep-dive videos where authority and information density matter.",
+    "summary": "Documentary trust is built on specifics. Open on a thought-provoking question or a surprising figure, establish quickly why the subject matters, then carry the body on verified data, real cases and documented examples, in an authoritative but plain voice, ending on a close that asks the viewer to think or act.",
+    "steps": [
+      "Open with a question or a figure strong enough to hold attention in the first half minute.",
+      "Say why it matters and what the viewer will learn.",
+      "Build the body on dated figures, documented cases and named perspectives.",
+      "Keep complex ideas in plain language, step by step.",
+      "Transition each segment into the next.",
+      "Close with a reflective, action-driven ending."
+    ],
+    "do": [
+      "Attach a source to every figure and claim.",
+      "Deliver narration only, with no scene directions inside it."
+    ],
+    "avoid": [
+      "Unsourced statistics or invented case studies.",
+      "Scene or camera instructions mixed into the narration.",
+      "An authoritative tone used to cover an unsupported claim."
+    ],
+    "numbers": {"hook_window": "first 30 seconds", "reading_level": "grade 8"},
+    "checks": [
+      "Every figure and claim carries a source.",
+      "Narration contains no stage directions.",
+      "The close gives the viewer something to think about or do."
+    ],
+    "tags": ["script", "documentary"],
+    "source": "YT Empire Builders Prompt Library 3.3 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "script.three-step-hook",
+    "title": "Three-step hook: lean in, stop the scroll, snap back",
+    "rooms": ["script"],
+    "kind": "formula",
+    "when": "When a specific voice is wanted and the opening has to be tightly engineered.",
+    "summary": "The opening works in three moves: establish the topic and common ground, break it with a short contrasting sentence, then redirect expectations with a twist that opens the loop. The body then compresses the time to value and expands from short sentences into detail.",
+    "steps": [
+      "LEAN IN: one or two sentences of common ground, a surprising statement or an image.",
+      "STOP THE SCROLL: a short contrasting sentence that pivots on but, however or yet.",
+      "SNAP BACK: redirect expectations and hint at the payoff.",
+      "Deliver value early, then expand from staccato sentences into longer detail.",
+      "Carry three main points, each with something the viewer can act on.",
+      "Mark the places where an overlay of three to five words would land.",
+      "Close with the single takeaway and one clear action."
+    ],
+    "do": [
+      "Reuse the same voice description across a family's videos so the channel sounds consistent.",
+      "Keep the overlay suggestions to a few words each."
+    ],
+    "avoid": [
+      "Holding the value back until the middle of the video.",
+      "Three points that are really one point restated.",
+      "Banned filler phrases in the opening."
+    ],
+    "numbers": {"hook_steps": "3", "main_points": "3", "overlay_words": "3-5", "short_form": "60-90 seconds", "long_form": "5-10 minutes"},
+    "checks": [
+      "All three hook moves present and in order.",
+      "The pivot sentence is genuinely shorter than its neighbours.",
+      "Each main point carries an actionable detail."
+    ],
+    "tags": ["hooks", "script"],
+    "source": "YT Empire Builders Prompt Library 3.4 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "script.open-loop-outline",
+    "title": "Outline with an open loop on every main point",
+    "rooms": ["script"],
+    "kind": "template",
+    "when": "Before writing a full script, when the skeleton should be settled first.",
+    "summary": "Structure beats inspiration. Build the outline around the owner's own angle: a hook, three to five main points each opening with a loop and then a handful of plain complete-thought bullets, and a payoff that summarises what was learned and how to apply it. Plain language, addressed to the viewer directly.",
+    "steps": [
+      "Confirm the topic, the owner's angle and any points he wants included.",
+      "Note current developments or disagreements worth using.",
+      "HOOK: a short attention-grabbing opening.",
+      "BODY: three to five main points; each opens a loop, then four to six plain bullets, with an example wherever the idea is abstract.",
+      "PAYOFF: what was learned and how to use it.",
+      "Review the outline against the owner's angle and his requested points, then offer to expand any part."
+    ],
+    "do": [
+      "Address the viewer directly: you will learn, you can.",
+      "Make every point flow into the next."
+    ],
+    "avoid": [
+      "An outline built on a generic angle when the owner supplied his own.",
+      "Main points with no open loop."
+    ],
+    "numbers": {"main_points": "3-5", "bullets_per_point": "4-6", "reading_level": "grade 8"},
+    "checks": [
+      "Each main point opens with a loop.",
+      "The owner's requested points all appear.",
+      "The payoff both summarises and applies."
+    ],
+    "tags": ["script", "outline"],
+    "source": "YT Empire Builders Prompt Library 3.5 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "script.news-to-script",
+    "title": "News or article into an original narration script",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "For fast-moving news, controversy or current-event content built from a source article or transcript.",
+    "summary": "News content lives on curiosity. The flow is fixed: ignite curiosity, lay an easy path, make several distinct points, keep the viewer ahead of the next beat, then pay off the opening promise. The source is understood and rebuilt, never reproduced.",
+    "steps": [
+      "Read the source and identify its facts, its structure and what made it work.",
+      "IGNITE: open on a surprising fact, a question or an unusual framing.",
+      "PATH: break the complex parts into plain, relatable explanations.",
+      "POINTS: several distinct points, each adding something and leading into the next.",
+      "FORWARD PULL: keep a reason to stay for what is coming.",
+      "PAYOFF: deliver the insight the opening promised.",
+      "Write narration only, in plain language, at the target length."
+    ],
+    "do": [
+      "Attribute every fact to its source record.",
+      "Keep at least seventy percent of the result original to us."
+    ],
+    "avoid": [
+      "Reproducing the source's sentences, phrasing or distinctive wording.",
+      "Carrying a claim across without its source.",
+      "Scene or voice-over instructions inside the narration."
+    ],
+    "numbers": {"default_length": "about 400 words", "reading_level": "grade 8", "blend": "at most 30 percent source-derived technique, at least 70 percent original"},
+    "checks": [
+      "No sentence matches the source closely.",
+      "Every fact cites a source record.",
+      "The five flow stages are all present.",
+      "The close answers the opening promise."
+    ],
+    "tags": ["script", "news", "originality"],
+    "source": "YT Empire Builders Prompt Library 3.6 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "script.originalize",
+    "title": "Rewrite a reference script into an original story-led version",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "When a reference script exists and an original retelling is needed.",
+    "summary": "Rewriting means rebuilding, not paraphrasing. Open on a question, build the context before the main content so the payoff lands, carry it with storytelling, and close on the family's own consistent sign-off.",
+    "steps": [
+      "Read the reference for its structure and its mechanism.",
+      "Open on a question rather than a standard introduction.",
+      "Build the context the payoff depends on.",
+      "Retell the substance in our own words and our own order.",
+      "Close on the family's recorded sign-off line."
+    ],
+    "do": [
+      "Keep the family's sign-off identical across videos so it becomes recognisable.",
+      "Change structure as well as wording, so the result is genuinely a new telling."
+    ],
+    "avoid": [
+      "Paraphrasing sentence by sentence, which is still copying.",
+      "Reusing the reference's distinctive phrases, jokes or framing lines.",
+      "Rewriting a competitor transcript without the family's recorded rights and originality review."
+    ],
+    "numbers": {"default_length": "about 5 minutes", "blend": "at most 30 percent reference-derived technique, at least 70 percent original"},
+    "checks": [
+      "No sentence closely matches the reference.",
+      "The structure differs from the reference, not only the words.",
+      "The originality review is recorded before the result is used."
+    ],
+    "tags": ["script", "originality"],
+    "source": "YT Empire Builders Prompt Library 3.7 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "script.unified-five-phase",
+    "title": "Five gated phases for a long-form script",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "For serious long-form scripts, where writing in one pass would drift.",
+    "summary": "Long scripts collapse when written at once. Five phases, each gated on a human confirmation, keep the result coherent: competitor and audience insight, framework and tone, outline, section-by-section expansion, then final review. Grounding the emotional triggers in real audience material keeps it from being generic.",
+    "steps": [
+      "PHASE 1: competitor insight and audience insight from supplied transcripts, audience description and real audience comments. Confirm before continuing.",
+      "PHASE 2: the scripting framework and the intended emotional effect and tone. Confirm before continuing.",
+      "PHASE 3: the outline, divided into sections, each with a summary, its emotional beat, its audience and its objective. Confirm before continuing.",
+      "PHASE 4: expand each section in sequence to the target length, with transitions and the planned emotional beats. Confirm before continuing.",
+      "PHASE 5: final review for tone, engagement, clarity and structure; apply the owner's adjustments before anything is called final."
+    ],
+    "do": [
+      "Keep every phase's artifact so a later phase can be redone without restarting.",
+      "Fix a weak section before confirming the phase."
+    ],
+    "avoid": [
+      "Advancing a phase without the recorded confirmation.",
+      "Writing the whole script before the outline is approved."
+    ],
+    "numbers": {"phases": "5", "section_target": "about 800 words", "audience_comments": "5-10", "competitor_transcripts": "2-3"},
+    "checks": [
+      "Each phase has a recorded confirmation before the next starts.",
+      "Each outline section has a summary, an emotional beat, an audience and an objective.",
+      "The emotional triggers are grounded in supplied audience material."
+    ],
+    "tags": ["script", "long-form"],
+    "source": "YT Empire Builders Prompt Library 3.8 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "script.evidence-first-documentary",
+    "title": "Evidence-first investigative documentary in nine phases",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "For investigative long-form where credibility decides whether the video survives scrutiny.",
+    "summary": "Every factual claim carries a date, a figure, a name or a document, and primary sources come first. The build runs from topic lock through data, evidence audit, beat sheet, scripted passes, a hard edit, a fact-check pack, data handoff and delivery. An unsupported claim is flagged, never smoothed over.",
+    "steps": [
+      "TOPIC LOCK: several options around one core conflict, each with a short hook, the parties, the stake, primary-source leads and the hypothesis to test. Pick and scope.",
+      "DATA: build a verifiable list of entities or cases with dates, figures, controversies, primary links with document type and date, and an archive link.",
+      "EVIDENCE AUDIT: turn it into a dated timeline and flag the gaps.",
+      "BEAT SHEET: a six-beat outline that includes a beat on the wider system.",
+      "SCRIPT IN PASSES: draft the beats in runs rather than one sitting, keeping the human stories intercut.",
+      "HARD EDIT: score pacing, hooks, evidence and overwriting, then apply precise fixes.",
+      "FACT-CHECK PACK: every claim mapped to source, date and document type, with the unsupported ones listed.",
+      "DATA HANDOFF: export the supporting tables.",
+      "DELIVERY: narration script, production script, and a description carrying the sources."
+    ],
+    "do": [
+      "Flag any claim without a source as needing one, and propose two ways to verify it.",
+      "Return the artifact, the list of what is missing, and the next step, every time.",
+      "Include the human cases that give the story its stakes."
+    ],
+    "avoid": [
+      "Decorative writing in place of evidence.",
+      "The banned stock phrases: in the age of, the world watched, it was a moment, the truth is, in the end.",
+      "A rhetorical question not answered by evidence immediately after it.",
+      "Narration about the making of the video."
+    ],
+    "numbers": {"phases": "9", "sentence_cap": "25 words", "beats": "6", "pass_length": "about 900 words", "human_cases": "3", "beat_sheet_target": "about 3,000 words"},
+    "checks": [
+      "Every claim carries a date, a figure, a name or a document.",
+      "No sentence exceeds 25 words.",
+      "No banned phrase appears.",
+      "The unsupported-claim list is present, even when empty.",
+      "Primary sources outnumber secondary ones on the central claims."
+    ],
+    "tags": ["script", "documentary", "evidence"],
+    "source": "YT Empire Builders Prompt Library 3.9 (owner course material, restated)",
+    "priority": 21
+  },
+  {
+    "id": "hooks.viral-hooks-extractor",
+    "title": "Extract the engagement spikes from any script",
+    "rooms": ["hooks"],
+    "kind": "procedure",
+    "when": "On a competitor script worth learning from, or on our own draft before narration.",
+    "summary": "What cannot be seen cannot be rebuilt. Read the script's structure, theme, style and format, then locate the exact engagement spikes, questions, sharp lines, unexpected comparisons and contradictions, and explain why each one works. The result is a reusable checklist, not an impression.",
+    "steps": [
+      "STRUCTURE: opening, body, close, and how it moves.",
+      "THEME: the central idea and how it is framed.",
+      "STYLE AND TONE.",
+      "FORMAT: how it is arranged for attention.",
+      "SPIKES: extract the requested number of hooks with their exact position.",
+      "AUDIENCE: who it is for and how it engages them.",
+      "BREAKDOWN: the psychological reason each spike works.",
+      "IMPROVEMENT: what would raise engagement further."
+    ],
+    "do": ["Record the mechanism of each spike so it can be rebuilt with our own material."],
+    "avoid": [
+      "Copying the extracted lines into our own script.",
+      "Listing a spike with no explanation of why it works."
+    ],
+    "numbers": {"sections": "8"},
+    "checks": [
+      "Each spike has a position and a stated mechanism.",
+      "No extracted line is reused verbatim in our work."
+    ],
+    "tags": ["hooks", "analysis"],
+    "source": "YT Empire Builders Prompt Library 3.10 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "qc.title-script-promise",
+    "title": "Check that the script keeps the title's promise",
+    "rooms": ["qc"],
+    "kind": "checklist",
+    "when": "Before a video is finalised, and before any work is spent on its thumbnail.",
+    "summary": "The title makes a promise and the script must keep it. Read the title's promise and emotional triggers, then check whether the script fulfils it, builds tension, resolves its conflict and engages, and what it leaves the viewer with. Packaging cannot rescue a broken payoff.",
+    "steps": [
+      "TITLE: what it promises, which emotions it uses, and how it creates urgency.",
+      "SCRIPT: whether the promise is fulfilled, how tension is built, whether the conflict resolves, and how it engages.",
+      "THROUGHLINE: whether curiosity is maintained, and where the emotional turns sit.",
+      "IMPACT: what the viewer is left with, and whether the close lands.",
+      "VERDICT: how well title and content align, and the specific fixes."
+    ],
+    "do": ["Fix the script before touching the thumbnail when the promise is not kept."],
+    "avoid": [
+      "Approving a video whose script does not deliver its title.",
+      "Strengthening the packaging to compensate for a weak payoff."
+    ],
+    "numbers": {"sections": "4"},
+    "checks": [
+      "The promise is identified in one sentence.",
+      "The point in the script that fulfils it is named.",
+      "Any gap is reported as a script fix, not a packaging fix."
+    ],
+    "tags": ["qa", "promise"],
+    "source": "YT Empire Builders Prompt Library 3.11 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "voice.voice-recommender",
+    "title": "Recommend the narration voice from the script itself",
+    "rooms": ["voice"],
+    "kind": "procedure",
+    "when": "Once the script is locked and before narration is generated.",
+    "summary": "The wrong voice wastes a good script. Read the script's theme, style, structure and emotional range, then prescribe the voice character, the delivery and the pacing per section, mapped to the narration provider the family actually uses, with the lines that need emphasis marked.",
+    "steps": [
+      "SCRIPT ANALYSIS: theme, style and tone, structure, emotional range and pacing, audience.",
+      "VOICE: character (warm, authoritative, calm, energetic), delivery style and pacing notes per section.",
+      "PROVIDER: the voice settings available on the family's narration connector, plus alternatives worth auditioning.",
+      "EMPHASIS: which hooks to lift, where to change inflection, and how to vary tone to hold attention."
+    ],
+    "do": [
+      "Save the chosen voice profile per family so every video sounds like the same channel.",
+      "Keep the recommendation inside what the connected provider can actually do."
+    ],
+    "avoid": [
+      "Recommending a voice the family's connector cannot produce.",
+      "One flat delivery note for a script with a changing emotional arc."
+    ],
+    "numbers": {"sections": "4"},
+    "checks": [
+      "Per-section pacing notes exist.",
+      "The recommendation matches the connected provider's capabilities.",
+      "Emphasis lines are marked."
+    ],
+    "tags": ["voice", "narration"],
+    "source": "YT Empire Builders Prompt Library 3.12 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "script.long-form-passes",
+    "title": "Write a multi-hour script in controlled passes",
+    "rooms": ["script"],
+    "kind": "procedure",
+    "when": "For very long ambient or sleep-oriented content where length and consistency are the product.",
+    "summary": "A marathon script written in one go drifts and repeats. Lock the global tone, the recurring motifs and the section map first, then write one section at a time, each continuing the previous section's tone and pacing and ending in a soft transition, pausing for confirmation after each.",
+    "steps": [
+      "Lock the global tone, the recurring motifs and the section map, flowing from opening through build to calm.",
+      "Write one section at a time at the target length, carrying tone and pacing forward.",
+      "End each section with a soft transition into the next.",
+      "Pause for confirmation before continuing.",
+      "Keep vocabulary and rhythm consistent and avoid repeating earlier sections."
+    ],
+    "do": ["Keep the section map visible so continuity can be checked against it."],
+    "avoid": [
+      "Generating the whole duration in one request.",
+      "Headings or scene directions inside narration.",
+      "Reusing a phrase across sections because the earlier text was not checked."
+    ],
+    "numbers": {"sections": "10-16", "section_length": "800-1,200 words"},
+    "checks": [
+      "A section map exists before section one is written.",
+      "Each section continues the previous tone and ends in a transition.",
+      "No sentence repeats across sections."
+    ],
+    "tags": ["script", "long-form"],
+    "source": "YT Empire Builders Prompt Library 3.13 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "visuals.word-count-prompts",
+    "title": "Size the image batch from the word count",
+    "rooms": ["visuals"],
+    "kind": "formula",
+    "when": "When converting a passage of script into a batch of image prompts.",
+    "summary": "Consistency is the whole game in faceless visuals. A locked style prefix repeated on every prompt holds one look across dozens of images, and tying the image count to the word count removes the guesswork. Fixed aspect ratio and no on-screen text keep the results editable.",
+    "steps": [
+      "Count the words in the passage.",
+      "Derive the image count from the words-per-image rate and round to a whole number.",
+      "For each image, summarise the scene or idea it carries.",
+      "Prepend the family's locked style prefix and keep the palette identical.",
+      "Add a restrained camera angle or depth note.",
+      "Keep the aspect ratio fixed and exclude any text in the image."
+    ],
+    "do": [
+      "Change the prefix once to reskin an entire family, rather than editing prompts one by one.",
+      "Compute the count in code, not by asking the model to count."
+    ],
+    "avoid": [
+      "Letting the style drift between prompts in the same batch.",
+      "Requesting text inside a generated image.",
+      "An image with no assigned passage."
+    ],
+    "numbers": {"words_per_image": "10-15, default 12", "aspect": "16:9", "text_in_image": "none"},
+    "checks": [
+      "Image count equals the computed count.",
+      "Every prompt carries the identical style prefix.",
+      "No prompt asks for text in the image."
+    ],
+    "tags": ["visuals", "prompts"],
+    "source": "YT Empire Builders Prompt Library 4.1 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "visuals.themed-editor-mapped",
+    "title": "Theme the script, distribute the images, map them for the editor",
+    "rooms": ["visuals"],
+    "kind": "procedure",
+    "when": "The main visual engine for long-form, where the editor needs to know exactly which visual goes where.",
+    "summary": "Split the script into themes, describe each theme's emotional tone and environment, then give editor notes, the paragraph range and the first and last line, so visuals snap to the right part of the script. Distribute the total image count by theme weight, and choose camera and lighting from the emotional beat.",
+    "steps": [
+      "THEMES: divide the whole script into logical themes and describe each one's emotional tone, environment and rhythm from opening through build and climax to fade.",
+      "EDITOR NOTES: for each theme, the paragraph range, the first line and the last line.",
+      "DISTRIBUTION: spread the total image count by theme; short themes get few images, climactic themes get more.",
+      "CAMERA AND LIGHT: choose per image from the beat. Wide for scale, close for emotion, overhead for control, dynamic for chaos, low for dominance. Soft light for calm, hard for conflict, warm for safety, cool for dread, glow for the fantastic.",
+      "PROMPTS: style prefix plus the scene, the emotional depth and the camera and lighting context, with no text in the image.",
+      "REVIEW: check visual consistency, logical transitions and one coherent palette across the whole set."
+    ],
+    "do": [
+      "Hand the editor notes straight to the editing room; they remove the question of which image goes where.",
+      "Let each theme's image set flow wide, close, mid, emotional rather than repeating one framing."
+    ],
+    "avoid": [
+      "An even split that gives a climax the same weight as a short linking theme.",
+      "Themes without first and last lines, which makes the mapping unusable.",
+      "Text inside generated images."
+    ],
+    "numbers": {"short_theme": "under about 300 words gets 1-3 images", "long_theme": "5-10 images", "aspect": "16:9", "theme_summary": "4 paragraphs"},
+    "checks": [
+      "Every theme has a range, a first line and a last line.",
+      "Image totals across themes equal the requested total.",
+      "Each image has a camera and a lighting choice tied to its beat.",
+      "The palette is consistent across the set."
+    ],
+    "tags": ["visuals", "editor-mapping"],
+    "source": "YT Empire Builders Prompt Library 4.2 (owner course material, restated)",
+    "priority": 21
+  },
+  {
+    "id": "visuals.confirm-before-generate",
+    "title": "Confirm the theme and image plan before spending a generation",
+    "rooms": ["visuals"],
+    "kind": "procedure",
+    "when": "When the owner wants control over visual emphasis before any paid image generation.",
+    "summary": "A checkpoint before generating stops the program over- or under-producing images and lets the owner steer the emphasis. Summarise the passage, propose the themes and the image count per theme, then wait for a decision before generating anything.",
+    "steps": [
+      "Count the words and write a short summary of the passage.",
+      "Identify the themes: the storytelling, the subject context and the emotional tone.",
+      "Propose an image count per theme, scaled to length.",
+      "Present the plan and wait for confirmation or adjustment.",
+      "Only then generate, each prompt carrying the locked prefix and a note on which part of the script it covers."
+    ],
+    "do": ["Reserve the budget for the confirmed count, not the proposed one."],
+    "avoid": [
+      "Generating before the plan is confirmed.",
+      "A prompt with no note saying which part of the script it covers."
+    ],
+    "numbers": {"scale_guide": "about 100 words supports 5-10 images", "summary": "about 300 words", "aspect": "16:9"},
+    "checks": [
+      "A recorded confirmation exists before any generation.",
+      "Every prompt names the script part it covers.",
+      "The generated count matches the confirmed count."
+    ],
+    "tags": ["visuals", "approval"],
+    "source": "YT Empire Builders Prompt Library 4.3 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "visuals.art-as-story",
+    "title": "Decode one artwork into several separate story directions",
+    "rooms": ["ideas", "visuals"],
+    "kind": "procedure",
+    "when": "For art, mystery and interpretation niches, where one work can carry several videos.",
+    "summary": "A work of art is a trigger, not the subject. Decode what it shows and what feels wrong about it, read the maker's apparent intent, the human behaviour it reflects, its symbols and its central unanswered question, then spin several distinct story directions from the same work, each on a different emotional trigger and each a separate video.",
+    "steps": [
+      "VISUAL AND EMOTIONAL DECODE: what is happening, the first emotions, and what feels strange.",
+      "MAKER'S MINDSET: the conflict, belief or obsession that may be behind it.",
+      "HUMAN LAYER: the behaviour or tension it reflects.",
+      "SYMBOLS: the religious, cultural or abstract elements, the contrasts, and the overlooked details that change the reading.",
+      "CORE MYSTERY: the central question it creates.",
+      "STORY DIRECTIONS: five to seven directions on different triggers, each with a name, the core idea, the trigger and why it holds attention.",
+      "FINAL READ: why it works for storytelling and how many pieces it can realistically carry."
+    ],
+    "do": [
+      "Offer several readings and leave the question open rather than closing it.",
+      "Check the rights status of the work and of any image of it before it is used."
+    ],
+    "avoid": [
+      "Academic explanation in place of interpretation.",
+      "A single fixed answer, which closes the curiosity loop.",
+      "Using an image of the work without a recorded rights basis."
+    ],
+    "numbers": {"story_directions": "5-7", "steps": "7"},
+    "checks": [
+      "Five to seven directions, each on a distinct trigger.",
+      "The central question is stated and left open.",
+      "Rights for the work and its image are recorded before use."
+    ],
+    "tags": ["ideas", "interpretation"],
+    "source": "YT Empire Builders Prompt Library 4.4 (owner course material, restated)",
+    "priority": 15
+  },
+  {
+    "id": "packaging.thumbnail-pick",
+    "title": "Pick the strongest thumbnail on psychology, at phone size",
+    "rooms": ["packaging"],
+    "kind": "checklist",
+    "when": "When two or three thumbnail candidates exist and one must be chosen.",
+    "summary": "A thumbnail's job is psychological. Judge the candidates on intrigue, the emotion they target and the curiosity they open, with the title hidden, because that is how a viewer meets them while scrolling. Pick one and say exactly why.",
+    "steps": [
+      "View each candidate at phone size, without its title.",
+      "Score intrigue, the emotion targeted and the curiosity opened.",
+      "Pick one and state what stops the scroll, which emotion fires and which question is left open."
+    ],
+    "do": ["Judge clarity at small size first; that is where the choice is really decided."],
+    "avoid": [
+      "Choosing on detail only visible at full size.",
+      "A pick with no stated reason, which teaches nothing for next time."
+    ],
+    "numbers": {"candidates": "2-3", "criteria": "3: intrigue, emotion, curiosity"},
+    "checks": [
+      "Each candidate was judged at phone size.",
+      "The pick names the scroll-stopper, the emotion and the open question."
+    ],
+    "tags": ["thumbnail", "selection"],
+    "source": "YT Empire Builders Prompt Library 5.1 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "packaging.thumbnail-three-layer",
+    "title": "Three-layer thumbnail with matched light and three overlay words",
+    "rooms": ["packaging"],
+    "kind": "template",
+    "when": "When a thumbnail is assembled from separate layers rather than generated in one shot.",
+    "summary": "Professional thumbnails are composited. Read the script's emotional core and symbols, then design three layers, subject, symbolic element and background, which share one light direction and colour temperature so they blend. Each renders on a flat removable background, and three short overlay words add curiosity without repeating the title.",
+    "steps": [
+      "SCRIPT ANALYSIS: emotional core, psychological triggers, dominant mood, recurring symbols, and three short overlay words that do not appear in the title.",
+      "LAYER 1: the main subject.",
+      "LAYER 2: the object or symbol.",
+      "LAYER 3: the background.",
+      "Give all three layers the same light direction and colour temperature.",
+      "Render each on a flat solid background for clean removal, with no text in the image."
+    ],
+    "do": [
+      "Write the identical lighting description into all three layer prompts; matched light is what makes the composite look real.",
+      "Keep the overlay words emotionally charged and short."
+    ],
+    "avoid": [
+      "Overlay words taken from the title.",
+      "Layers generated with different lighting and then composited.",
+      "Text baked into a generated layer."
+    ],
+    "numbers": {"layers": "3", "overlay_words": "3, none from the title", "aspect": "16:9"},
+    "checks": [
+      "All three layer prompts carry the same light direction and colour temperature.",
+      "No overlay word appears in the title.",
+      "No layer contains text."
+    ],
+    "tags": ["thumbnail", "compositing"],
+    "source": "YT Empire Builders Prompt Library 5.2 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "packaging.thumbnail-concept-director",
+    "title": "Sketch the concept before spending a render",
+    "rooms": ["packaging"],
+    "kind": "procedure",
+    "when": "The main thumbnail workflow: exploring concepts cheaply before committing to a render.",
+    "summary": "Think like an art director. Read the script's central tension, fix the character count explicitly, generate several psychologically distinct concepts, draw them as annotated rough sketches so the story is judged before a generation is spent, and only after a pick write the finished render prompts.",
+    "steps": [
+      "INPUT: title, script, any reference, and the exact number of characters in frame.",
+      "ANALYSIS: emotional core, power dynamic, conflict, symbols and the central contrast; then the angles that show the tension visually.",
+      "CHARACTER PLANNING: design exactly the stated number. One is a focused portrait, two is contrast, three or more is a group. Never add an extra.",
+      "CONCEPTS: five concepts on distinct angles, conflict, symbolic, emotional, paradox and curiosity, each with a short hook phrase that is not the title, its trigger and a one-line story.",
+      "SKETCHES: a rough annotated sketch prompt per concept, marking subject placement, background, light direction, mood and the text area, so the sketch alone tells the story.",
+      "PICK: ask which sketch to finish and in which render style.",
+      "RENDERS: for the chosen sketch, three refined prompts with layout, lighting and mood, palette and temperature, texture, and sharp clarity at small size."
+    ],
+    "do": [
+      "Always run the sketch step; judging stories as sketches is what avoids burning generations on weak ideas.",
+      "Favour contrast, curiosity and emotion over density."
+    ],
+    "avoid": [
+      "Adding characters beyond the stated count.",
+      "Using the title text literally as the overlay.",
+      "Skipping the sketch stage and rendering the first idea.",
+      "Clutter that disappears at phone size."
+    ],
+    "numbers": {"concepts": "5", "final_renders": "3", "hook_phrase": "3-5 words, not the title", "steps": "7"},
+    "checks": [
+      "Character count matches the stated number exactly.",
+      "Five distinct concepts with hook phrases that are not the title.",
+      "A sketch was reviewed before any render was generated.",
+      "The renders read clearly at phone size."
+    ],
+    "tags": ["thumbnail", "art-direction"],
+    "source": "YT Empire Builders Prompt Library 5.3 (owner course material, restated)",
+    "priority": 20
+  },
+  {
+    "id": "editing.line-by-line-blueprint",
+    "title": "Line-by-line editing blueprint, in safe chunks",
+    "rooms": ["editing"],
+    "kind": "procedure",
+    "when": "Once the script and narration exist and the edit has to be specified for an editor or a renderer.",
+    "summary": "The blueprint has to be complete enough that the editor never reads the script. Each exact script line gets its visual type, a generation prompt where needed, verified stock references, a clip duration, the effect, the camera motion, the transition, the on-screen text and a note. The work is produced in small chunks, because that is what keeps the references accurate.",
+    "steps": [
+      "Process one or two paragraphs per pass, never the whole script at once.",
+      "Carry the exact script line in the first column, unchanged.",
+      "Choose the visual type from tone, emotion, pacing, niche and realism.",
+      "Where the visual is generated, write a detailed prompt with scene, environment, emotion, lighting, camera, palette, texture, atmosphere, depth and aspect, and no text.",
+      "Give the clip duration, the effect, the camera motion and the transition for every row.",
+      "Add on-screen text, its placement and its animation only where it is needed.",
+      "Finish the pass, then continue with the next chunk."
+    ],
+    "do": [
+      "Keep the script line verbatim; rewriting it breaks the alignment with the narration.",
+      "Use only stock that came back from a provider search, with its own media host, and say plainly when nothing suitable was found so a generated visual is used instead.",
+      "Choose effect, motion and transition names from the vocabulary our renderers actually support."
+    ],
+    "avoid": [
+      "Processing the whole script in one pass, which degrades the references.",
+      "Inventing a stock URL or offering a placeholder link.",
+      "Naming an effect or transition our renderer cannot perform.",
+      "Rewriting or shortening the script line."
+    ],
+    "numbers": {"chunk": "1-2 paragraphs, about 4-6 lines per pass", "columns": "13", "podcast_clip": "7 seconds or less", "film_clip": "6 seconds or less"},
+    "checks": [
+      "Every row carries the exact script line.",
+      "Every row has a duration, a motion and a transition.",
+      "Every stock reference came from a provider search result.",
+      "Rows with no suitable stock say so and fall back to a generated visual.",
+      "Named effects exist in the renderer's vocabulary."
+    ],
+    "tags": ["editing", "blueprint"],
+    "source": "YT Empire Builders Prompt Library 6.1 (owner course material, restated)",
+    "priority": 22
+  },
+  {
+    "id": "editing.avd-visual-alignment",
+    "title": "Align the visuals to the hooks to hold watch time",
+    "rooms": ["editing"],
+    "kind": "procedure",
+    "when": "When the scripts are strong but watch time is weak, which is usually a visual problem.",
+    "summary": "Hooks in the writing do not hold attention on their own; the picture on top of them does. For each hook and each section, decide the visual treatment that reinforces it, the cut rhythm for that stretch, and where the pattern interrupts, reveals and visual payoffs belong so attention does not fall at the usual points.",
+    "steps": [
+      "Mark every hook and engagement spike in the script.",
+      "For each, choose the visual treatment that reinforces it: image style, footage, motion, a pace change or a pattern interrupt.",
+      "Set the cut rhythm for each section, slow burn or rapid, and say why it supports retention there.",
+      "Place the pattern interrupts, reveals and visual payoffs at the known fall-off points.",
+      "Match the visual format to what this niche's audience expects.",
+      "Output a section-by-section visual retention plan."
+    ],
+    "do": ["Hand this plan to the line-by-line blueprint, which turns the strategy into per-row instructions."],
+    "avoid": [
+      "One uniform cut rhythm across a whole video.",
+      "A pattern interrupt with no narrative reason, which reads as noise.",
+      "Claiming a retention figure as a target without the measurement to support it."
+    ],
+    "numbers": {"plan_scope": "every hook and every section"},
+    "checks": [
+      "Every hook has an assigned visual treatment.",
+      "Every section has a stated cut rhythm with a reason.",
+      "Pattern interrupts are placed at identified fall-off points."
+    ],
+    "tags": ["editing", "retention"],
+    "source": "YT Empire Builders Prompt Library 6.2 (owner course material, restated)",
+    "priority": 21
+  },
+  {
+    "id": "seo.keyword-position-titles",
+    "title": "Generate titles with the keyword at the start, middle and end",
+    "rooms": ["seo"],
+    "kind": "procedure",
+    "when": "A fast metadata pass when only a working title exists.",
+    "summary": "Keyword position is a real variable, so generate titles with the keyword at the beginning, in the middle and at the end, then pick the strongest with a stated reason, and complete the package with a description that leads on the keyword, hashtags and a tag set.",
+    "steps": [
+      "Produce title groups with the keyword at the beginning, in the middle and at the end.",
+      "Pick the best and explain why it wins.",
+      "Write the description with the keyword in the first sentence.",
+      "Add the hashtags.",
+      "Produce the tag set as keyword combinations relevant to the title."
+    ],
+    "do": [
+      "Prefer the script-aware pass whenever the full script exists, because it mines real search intent.",
+      "Keep the wording honest where the family's packaging policy is authenticity-first."
+    ],
+    "avoid": [
+      "Keyword stuffing that makes the title unreadable.",
+      "A claim in the title the video does not deliver.",
+      "Tags unrelated to the actual content."
+    ],
+    "numbers": {"titles": "15, five per position", "description": "about 1,000 characters", "hashtags": "10", "tags": "35"},
+    "checks": [
+      "Titles cover all three keyword positions.",
+      "The pick carries a stated reason.",
+      "The description's first sentence contains the keyword.",
+      "No title promises something the video does not deliver."
+    ],
+    "tags": ["seo", "metadata"],
+    "source": "YT Empire Builders Prompt Library 7.1 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "seo.script-aware",
+    "title": "Mine the script for the real keywords",
+    "rooms": ["seo"],
+    "kind": "procedure",
+    "when": "Once the script is finished. This is the stronger metadata pass.",
+    "summary": "Generic metadata guesses keywords; this extracts them from the actual content. Pull the long-tail phrases that carry search intent and the short-tail phrases that carry reach, then build the title, a hooked description and a tag set inside the platform's limit, all grounded in what the video really says.",
+    "steps": [
+      "Read the script for themes, phrases and emotional tone.",
+      "Extract the long-tail phrases that match search intent and the short-tail phrases for reach.",
+      "Write the title on the main theme, with the target keywords early.",
+      "Write the description: hook in the first few sentences, an overview with the key moments, the keywords woven in naturally, and a clear closing action.",
+      "Build the tag set as a mix of short and long tail, inside the character limit."
+    ],
+    "do": ["Keep the metadata consistent with what the video actually delivers."],
+    "avoid": [
+      "Keywords that do not appear in the content.",
+      "Exceeding the tag character limit.",
+      "A description whose first lines say nothing."
+    ],
+    "numbers": {"description": "150-200 words", "tags": "300 characters or fewer", "description_hook": "first 2-3 sentences"},
+    "checks": [
+      "Every keyword appears in the script.",
+      "The tag set is within the character limit.",
+      "The description opens with a hook and closes with an action."
+    ],
+    "tags": ["seo", "metadata"],
+    "source": "YT Empire Builders Prompt Library 7.2 (owner course material, restated)",
+    "priority": 18
+  },
+  {
+    "id": "seo.fifteen-video-roadmap",
+    "title": "Sequence the first fifteen uploads in three phases",
+    "rooms": ["seo"],
+    "kind": "procedure",
+    "when": "When launching a channel and the first uploads should be sequenced rather than scattered.",
+    "summary": "Early uploads have three different jobs. The first group chases search ranking with durable topics, the second builds engagement and watch time, and the third reaches for recommendation and timely hooks. Rank first, then earn watch time, then let the algorithm spread you.",
+    "steps": [
+      "Videos one to five: search ranking and durable topics.",
+      "Videos six to ten: engagement and watch time.",
+      "Videos eleven to fifteen: recommendation signals and timely hooks.",
+      "Write full metadata for the first three videos.",
+      "Supply low-competition long-tail keywords for those three.",
+      "Give thumbnail and hook directions for them.",
+      "State the retention and session practices that support the launch."
+    ],
+    "do": ["Treat the three phases as a funnel in order."],
+    "avoid": [
+      "Chasing a viral hit on video one.",
+      "Planning fifteen uploads with no keyword work on the first three."
+    ],
+    "numbers": {"videos": "15", "phases": "3", "detailed": "first 3"},
+    "checks": [
+      "Each phase has its own job stated.",
+      "The first three videos have titles, descriptions, tags, keywords and thumbnail directions."
+    ],
+    "tags": ["seo", "launch"],
+    "source": "YT Empire Builders Prompt Library 7.3 (owner course material, restated)",
+    "priority": 15
+  },
+  {
+    "id": "branding.visual-identity",
+    "title": "Build channel identity from an audit of what already works",
+    "rooms": ["branding"],
+    "kind": "procedure",
+    "when": "At channel setup, before anything is uploaded.",
+    "summary": "Branding is reverse-engineered, not guessed. Audit competitor colour, identity and description quality, then recommend a direction that fits the niche while staying distinct: exact colour codes, one consistent theme, short memorable names, and only after the name is chosen, the logo and banner prompts.",
+    "steps": [
+      "AUDIT: competitor colours, identity design, theme and description quality, and whether their branding matches the niche.",
+      "COLOUR AND THEME: recommend schemes with exact colour codes and one consistent theme across channel, logo and banner.",
+      "NAMES: propose short, memorable, distinct names, then let the owner pick.",
+      "IDENTITY PROMPTS: after the pick, generate logo and banner prompts for that specific name, at the correct sizes.",
+      "DESCRIPTION AND KEYWORDS: write the channel description and its discovery keywords."
+    ],
+    "do": [
+      "Lock the colour codes here and reuse them in every thumbnail, so the family is recognisable in a feed.",
+      "Check that a proposed name is not already a competitor's."
+    ],
+    "avoid": [
+      "Generating identity art before the name is chosen.",
+      "A palette that fails the contrast requirement for on-screen text.",
+      "A name or mark close to an existing channel's."
+    ],
+    "numbers": {"names": "10-15", "colour_codes": "exact hex values", "text_contrast": "at least 4.5:1"},
+    "checks": [
+      "Exact colour codes recorded.",
+      "Text contrast meets the minimum.",
+      "Identity prompts were generated only after the name was chosen.",
+      "The name was checked against known competitors."
+    ],
+    "tags": ["branding", "identity"],
+    "source": "YT Empire Builders Prompt Library 8.1 (owner course material, restated)",
+    "priority": 15
+  },
+  {
+    "id": "localization.creator-finder",
+    "title": "Find single-language creators worth localising for",
+    "rooms": ["localization"],
+    "kind": "procedure",
+    "when": "Research step when considering a localisation partnership. Research only; no contact is made here.",
+    "summary": "The opportunity is proven content that has never been translated. Find creators with a substantial audience in high-potential subjects who publish in one language only, and record what makes each one a fit, with current links.",
+    "steps": [
+      "Set the subjects, the languages and the audience-size threshold.",
+      "Find creators publishing in one language only, who are not already localising.",
+      "For each: name, channel, subject, country, content style, audience size, link, and any publicly listed contact.",
+      "Verify that every link resolves and the information is current.",
+      "Shortlist the ones whose visuals this program could actually produce."
+    ],
+    "do": [
+      "Record the date of the search, because audience numbers and links go stale.",
+      "Keep only publicly published contact details."
+    ],
+    "avoid": [
+      "Broken or outdated links.",
+      "Collecting private contact information.",
+      "Treating a research list as permission to contact anyone."
+    ],
+    "numbers": {"threshold": "set per search, for example 100,000 subscribers or more"},
+    "checks": [
+      "Every link resolves.",
+      "Every entry records the search date.",
+      "Only public contact details are stored.",
+      "No outreach happened at this stage."
+    ],
+    "tags": ["localization", "research"],
+    "source": "YT Empire Builders Prompt Library 9.1 (owner course material, restated)",
+    "priority": 13
+  },
+  {
+    "id": "localization.creator-outreach",
+    "title": "Draft a localisation partnership email, for the owner to send",
+    "rooms": ["localization"],
+    "kind": "template",
+    "when": "After a creator is shortlisted. The program drafts only; the owner reviews and sends.",
+    "summary": "Cold outreach fails without a clear offer. State the proposal honestly: who does which work, what the creator gains, the revenue split, and who owns the channel. Lead with the creator's upside, keep it short, and leave the sending to the owner.",
+    "steps": [
+      "Personalise it to the creator, their subject and their country.",
+      "State the opportunity: their work is only available in one language.",
+      "State plainly what we do: transcript, sync, edit, enhance and localise.",
+      "State what they gain: reach in a new language with no work on their side.",
+      "State the revenue split and who creates and owns the new channel.",
+      "Keep it warm, short and specific, and hand it to the owner to send."
+    ],
+    "do": [
+      "Lead with their benefit, not ours.",
+      "Include one concrete example of the arithmetic so the offer is unambiguous."
+    ],
+    "avoid": [
+      "Sending anything automatically; outreach is the owner's action.",
+      "Implying rights or a partnership that has not been agreed.",
+      "Overstating what the program can currently produce."
+    ],
+    "numbers": {"share": "set per deal and stated explicitly in the draft"},
+    "checks": [
+      "The draft is unsent and marked as awaiting the owner.",
+      "The split and the channel ownership are stated explicitly.",
+      "No claim exceeds what the program can produce today."
+    ],
+    "tags": ["localization", "outreach"],
+    "source": "YT Empire Builders Prompt Library 9.2 (owner course material, restated)",
+    "priority": 11
+  },
+  {
+    "id": "localization.translation-check",
+    "title": "Check a translation line for line before narration",
+    "rooms": ["localization"],
+    "kind": "procedure",
+    "when": "After a script has been translated and before narration is generated in the new language.",
+    "summary": "Machine translation drifts in wording, consistency and context. Compare the original and the translation line for line, flag the mistranslations, inconsistencies, wrong word choices, missing context and awkward phrasing, and only produce a corrected version after the owner says which document to change.",
+    "steps": [
+      "Align the two documents line for line.",
+      "Flag mistranslations, inconsistencies, incorrect word use, missing context and awkward phrasing.",
+      "Report the findings and ask which document should be corrected.",
+      "After the decision, produce the corrected version of that document."
+    ],
+    "do": [
+      "Run this before narration; fixing text is far cheaper than re-recording audio.",
+      "Protect the meaning and the emotional nuance that made the original work."
+    ],
+    "avoid": [
+      "Silently rewriting the translation without a decision.",
+      "Correcting the original when the translation was the intended target.",
+      "Narrating a translation that has not been checked."
+    ],
+    "numbers": {},
+    "checks": [
+      "Every finding names its line.",
+      "A recorded decision exists before any document is changed.",
+      "Narration is blocked until the check passes."
+    ],
+    "tags": ["localization", "qa"],
+    "source": "YT Empire Builders Prompt Library 9.3 (owner course material, restated)",
+    "priority": 16
+  },
+  {
+    "id": "os.faceless-automation-os",
+    "title": "Ten-phase forensic build, authenticity before speed",
+    "rooms": ["os"],
+    "kind": "procedure",
+    "when": "When one controller should orchestrate a whole video build instead of running separate steps by hand.",
+    "summary": "A gated controller runs the build in order and refuses to be generic. It starts from forensic competitor evidence, requires the owner's own observations, gates research on the subject type, extracts one core idea, writes honest titles, produces pure narration, and chooses the visual route from the competitor's measured visual mix. Authenticity comes before speed, because generic, inauthentic output is a monetisation risk.",
+    "steps": [
+      "FORENSICS: audience, scripting, visual and editing patterns from real evidence, how visuals relate to the script, and the inauthenticity risks. Do not continue until this is complete.",
+      "OWNER OBSERVATIONS: collect the owner's own experience and insight. This is mandatory; it is what keeps the output from being hollow.",
+      "RESEARCH GATE: subjects that depend on depth require research; pure storytelling may skip it.",
+      "RESEARCH: if required, examine the core ideas, the contradictions and the differing readings. No script is written here.",
+      "CORE IDEA: extract exactly one dominant idea from the forensics, the observations and the research.",
+      "TITLES: serious, non-hyped titles that match the subject's tone and follow no template.",
+      "SCRIPT: pure narrative at the target length, with no headings, no voice directions and no visual notes.",
+      "VISUAL ROUTE: choose the route from the measured visual mix, not from habit.",
+      "VISUAL PROMPTS: produce prompts that follow the chosen route and respect monetisation safety.",
+      "FINAL CHECK: authenticity, consistency, audience fit, visual realism and monetisation safety."
+    ],
+    "do": [
+      "Reuse each phase's output in the next phase.",
+      "Ask before assuming, and adapt to the subject rather than applying one template.",
+      "Default to this authenticity-first policy when it conflicts with a hype-led packaging prompt, unless the family's approved packaging policy says otherwise."
+    ],
+    "avoid": [
+      "Skipping ahead or running phases in parallel.",
+      "Generic prompts that ignore the measured competitor patterns.",
+      "Hype language and template titles.",
+      "Recreating a competitor's or a film's actual scenes."
+    ],
+    "numbers": {"phases": "10", "core_ideas": "1"},
+    "checks": [
+      "Phase one is complete before phase two begins.",
+      "The owner's observations are recorded.",
+      "Exactly one core idea carries the video.",
+      "The visual route is justified by the measured mix.",
+      "The final check covers authenticity and monetisation safety."
+    ],
+    "tags": ["pipeline", "authenticity"],
+    "source": "YT Empire Builders Prompt Library 10.1 (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "visuals.path-selector",
+    "title": "Choose the visual route from the measured visual mix",
+    "rooms": ["visuals"],
+    "kind": "algorithm",
+    "when": "Before writing any visual prompt, once the competitor's visual mix has been measured.",
+    "summary": "Four routes, chosen by evidence rather than habit: generated images only; generated images with restrained motion; stock plus generated images on aligned but separate queries; or film-adjacent material plus generated images, where the actual scenes are never recreated and only conceptual visuals are produced.",
+    "steps": [
+      "Measure the mix: the share of stock footage, generated images, generated animation and film or documentary clips, plus the static-to-motion ratio.",
+      "ROUTE A, mostly generated images: write image prompts only.",
+      "ROUTE B, generated images with subtle motion: write image prompts plus restrained motion notes.",
+      "ROUTE C, stock plus generated: write separate stock search queries and generated-image prompts that align on look.",
+      "ROUTE D, film-adjacent plus generated: do not recreate the scenes; write conceptual visuals only.",
+      "Record the chosen route and the measurement that justified it."
+    ],
+    "do": [
+      "Keep the stock queries and the generated prompts on the same palette and treatment under route C.",
+      "Confirm the rights basis for any film-adjacent material before it is used at all."
+    ],
+    "avoid": [
+      "Choosing a route from preference rather than the measurement.",
+      "Recreating identifiable scenes from a film or another channel.",
+      "A mixed set where stock and generated material visibly clash."
+    ],
+    "numbers": {"routes": "4"},
+    "checks": [
+      "The chosen route cites the measured mix.",
+      "Under route C the stock and generated material share one treatment.",
+      "Under route D no prompt recreates an actual scene."
+    ],
+    "tags": ["visuals", "routing"],
+    "source": "YT Empire Builders Prompt Library 10.1, prompting logic engine (owner course material, restated)",
+    "priority": 19
+  },
+  {
+    "id": "research.credible-sources",
+    "title": "Collect only working, credible sources for an exact subject",
+    "rooms": ["research"],
+    "kind": "procedure",
+    "when": "When a factual video needs real, citable references.",
+    "summary": "Research videos need receipts. Work from the exact subject wording, confirm how many references are wanted, then return only credible, current, directly relevant sources as names and working links, and nothing else.",
+    "steps": [
+      "Do not start until the exact subject wording is supplied.",
+      "Confirm how many references are wanted.",
+      "Search on that exact wording.",
+      "Keep only credible, current, directly relevant sources with resolving links.",
+      "Return names and links, with publication and access dates recorded."
+    ],
+    "do": ["Record publisher, publication date and access date with every reference."],
+    "avoid": [
+      "Inventing a link or offering one that does not resolve.",
+      "Loosely related, outdated or low-quality sources.",
+      "Padding the list to reach the requested count."
+    ],
+    "numbers": {},
+    "checks": [
+      "Every link resolves.",
+      "Every reference is directly on the stated subject.",
+      "Publication and access dates are recorded.",
+      "A short list is returned rather than padded."
+    ],
+    "tags": ["research", "sources"],
+    "source": "YT Empire Builders Prompt Library 10.2 (owner course material, restated)",
+    "priority": 17
+  },
+  {
+    "id": "niche.trend-24h-faceless",
+    "title": "Day-fresh trends, filtered for what we can actually produce",
+    "rooms": ["niche"],
+    "kind": "procedure",
+    "when": "For trend-led families that need today's surge already filtered for feasibility.",
+    "summary": "Speed only pays when the topic is producible. Take the last day's trends in the target markets, say in one line why each is rising, then judge whether it can become a narration-led video with the production route this program has, and give ideas only for the ones that pass.",
+    "steps": [
+      "Take the last twenty-four hours of trends in the target markets.",
+      "For each, one line on why it is rising, with the dated source.",
+      "Judge faceless feasibility with a reason.",
+      "For the ones that pass, give video ideas and the production route through this program's rooms.",
+      "Drop the rest rather than carrying them forward."
+    ],
+    "do": [
+      "Record the sweep timestamp, because a day-fresh list expires within a day.",
+      "Check that each production route uses capabilities that exist here."
+    ],
+    "avoid": [
+      "Surfacing a trend this program cannot produce.",
+      "A feasibility verdict with no reason.",
+      "An undated trend claim."
+    ],
+    "numbers": {"window": "last 24 hours", "markets": "United States, United Kingdom, Canada, Australia, Germany"},
+    "checks": [
+      "Every trend carries a dated source and a sweep timestamp.",
+      "Every verdict carries a reason.",
+      "Every production route uses capabilities available here."
+    ],
+    "tags": ["trends", "niche"],
+    "source": "YT Empire Builders Prompt Library 10.3 (owner course material, restated)",
+    "priority": 16
+  }
+]
