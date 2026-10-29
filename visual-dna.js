@@ -104,8 +104,8 @@ const DNA = Object.freeze({
     places: 'dark panels', objects: 'clean flat icons', people: 'none or simple icons',
     motion: 'charts, callouts and timelines build on the numbers the narration says', never: 'photos, cartoons, decoration that is not data'},
   // ---------------------------------------------------------------- Engines that do not paint
-  'atelier/designed': {name: 'Atelier · designed per shot', pictures: 'drawn',
-    medium: 'flat designed graphics in the video\'s palette and fonts', places: 'designed compositions', objects: 'designed shapes', people: 'people stay in the drawn engines',
+  'atelier/designed': {name: 'Motion Graphics · designed per shot', pictures: 'drawn',
+    medium: 'flat designed graphics in the video\'s palette and fonts; HTML render shots are cel-painted anime in the colour script', places: 'designed compositions; painted cel backgrounds in HTML render shots', objects: 'designed shapes', people: 'cel characters in HTML render shots; otherwise people stay in the drawn engines',
     motion: 'every shot designed for its beat', never: 'stock clip art, photos unless the shot is about something real'},
   'cinema/footage': {name: 'Cinematic · real footage', pictures: 'photo',
     medium: 'real moving footage graded as one film', places: 'real places', objects: 'real things', people: 'real footage only',

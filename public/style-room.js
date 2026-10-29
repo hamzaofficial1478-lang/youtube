@@ -71,7 +71,7 @@ function styleSettings(spec) {
   if (stick || board) rows.push(['Drawing hand', d.hand ? 'On' : 'Off']);
   if (d.pictureType) rows.push(['Picture type', esc(typeLabel(d.pictureType))]);
   if (d.film) rows.push(['Film look', esc(filmLabel(d.film)) + (d.films?.length ? ` from ${esc(d.films.map(filmLabel).join(', '))}` : '')]);
-  if (spec.atelier) rows.push(['Atelier finish', esc(finishLabel(spec.atelier.finish)) + (spec.atelier.finish === 'anime' ? ` · ${esc(scriptLabel(spec.atelier.script))}` : '')]);
+  if (spec.atelier) rows.push(['Finish', esc(finishLabel(spec.atelier.finish)) + (spec.atelier.finish !== 'motion' ? ` · ${esc(scriptLabel(spec.atelier.script))}` : '')]);
   if (spec.cinema) rows.push(['Colour grade', esc(gradeLabel(spec.cinema.grade)) + (spec.cinema.letterbox ? ' · cinema bars' : '') + (spec.cinema.grain ? ` · film grain ${esc(spec.cinema.grain)}` : '')]);
   rows.push(['AI design', spec.adaptive ? 'The AI designs each video (these settings are its starting point)' : 'Off: every video uses these settings']);
   const aspects = spec.formats.map(format => `${styleLabel(format)} ${state.styles.vocabulary.aspect[format]}`).join(' · ');
@@ -161,8 +161,8 @@ function styleOptions(values, selected, label = styleLabel) { return values.map(
 // Film looks (0.39): the medium every drawn shot is printed in.
 const FILM_LABELS = {none: "None (the engine's own finish)", choose: 'Claude chooses one per video', silent: '1920s silent film', noir: '1940s film noir', sepia: '19th-century photograph', selective: 'Black and white, one colour', newsprint: 'Newspaper print', riso: 'Risograph (two inks)', blueprint: 'Blueprint', woodcut: 'Woodcut print', kinescope: '1950s television', technicolor: 'Technicolor', album: 'Family album snapshot', screenprint: 'Silkscreen poster', engraving: 'Copperplate engraving', deco: 'Art deco gold'};
 const filmLabel = value => FILM_LABELS[value] || styleLabel(value);
-// The atelier finish and its colour scripts (0.68, html-anime).
-const finishLabel = value => ({motion: 'Motion design', anime: 'Anime (cel-painted)'}[value] || styleLabel(value));
+// The Motion Graphics (atelier) finish and its colour scripts (0.68, html-anime; HTML render and Mix 0.70).
+const finishLabel = value => ({motion: 'Motion graphics', anime: 'HTML render (cel anime)', mix: 'Mix: motion graphics and HTML render, chosen per scene'}[value] || styleLabel(value));
 const scriptLabel = value => ({choose: 'Claude chooses per video', indigo: 'Indigo moon', eclipse: 'Vermilion eclipse', noon: 'Paper noon', festival: 'Festival'}[value] || styleLabel(value));
 // The Cinematic engine's colour grades (0.40).
 const GRADE_LABELS = {choose: 'Claude chooses one per video', natural: 'Natural', 'teal-orange': 'Teal and orange', golden: 'Golden hour', bleach: 'Bleach bypass', cold: 'Cold thriller', noir: 'Black and white', vintage: 'Vintage film', moody: 'Moody'};
@@ -263,9 +263,9 @@ function styleEditorBody(spec) {
     ${styleNumber('s.cinemaGrain', 'Film grain (0-100)', spec.cinema?.grain ?? 30, 0, 100, 1)}
     <label class="checkbox-label"><input type="checkbox" name="s.cinemaLetterbox" ${spec.cinema?.letterbox !== false ? 'checked' : ''}>Cinema bars (2.39:1) on long videos</label>
   </div></fieldset>` : ''}
-  ${['atelier', 'story-mix'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>Atelier engine features</legend><div class="form-grid">
-    <label>Finish<select name="s.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">Motion design builds numbers, words and diagrams; anime draws cel characters and places, held on twos, with one expensive action shot per scene.</span></label>
-    <label>Colour script (anime)<select name="s.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select><span class="hint">Ten named paints and nothing else, or Claude chooses one per video.</span></label>
+  ${['atelier', 'story-mix'].includes(spec.renderer.adapter) ? `<fieldset class="editor-section"><legend>Motion Graphics engine features</legend><div class="form-grid">
+    <label>Finish<select name="s.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">Motion graphics builds numbers, words and diagrams; HTML render draws cel-anime characters and places, held on twos, with one expensive action shot per scene; Mix uses both, one per scene.</span></label>
+    <label>Colour script (HTML render)<select name="s.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select><span class="hint">Ten named paints and nothing else, or Claude chooses one per video.</span></label>
   </div></fieldset>` : ''}
   <fieldset class="editor-section"><legend>Planning brief</legend><div class="form-grid">
     <label class="full">Brief for Claude's planner <span class="hint">Optional, up to 1,200 characters. A style made from an approved style study carries what was learned here, in our own words.</span><textarea name="s.brief" rows="4" maxlength="1200">${esc(spec.brief || '')}</textarea></label>
@@ -578,8 +578,8 @@ function familyStyleBody(form) {
   // 0.64: Claude designs each video (colours, fonts, pace, energy, captions); on unless the owner said no.
   const adaptive = `<label class="checkbox-label full"><input type="checkbox" name="fs.adaptive" ${spec.adaptive !== false ? 'checked' : ''}>Let the AI design each video <span class="hint">Colours, fonts, pace, energy, transitions and caption look are chosen for every story, so no two videos are a template. This style's own settings stay the starting point.</span></label>`;
   const films = adapter === 'cinematic-hybrid' ? '' : `<div class="full"><span class="field-label">Film looks <span class="hint">None: no film look. One: every drawn shot in it. Two or more: Claude chooses one of them for each video.</span></span>${styleChecks('fs.films', (v.drawingFilms || []).filter(value => !['none', 'choose'].includes(value)), fsTicked(spec, 'films', 'film', []).filter(value => value !== 'choose'), filmLabel)}</div>`;
-  // 0.68: the Atelier engine's finish (motion design or anime) and, for anime, its colour script.
-  const finish = ['atelier', 'story-mix'].includes(adapter) ? `<label>Atelier finish<select name="fs.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">Anime draws cel characters and places, held on twos, with one expensive action shot per scene.</span></label><label>Colour script (anime)<select name="fs.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select></label>` : '';
+  // 0.68: the Motion Graphics (atelier) engine's finish (motion graphics, HTML render or a mix, 0.70) and its colour script.
+  const finish = ['atelier', 'story-mix'].includes(adapter) ? `<label>Motion Graphics finish<select name="fs.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">HTML render draws cel-anime characters and places; Mix uses motion graphics and HTML render, one per scene.</span></label><label>Colour script (HTML render)<select name="fs.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select></label>` : '';
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
   $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${types}${finish}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }

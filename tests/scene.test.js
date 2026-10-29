@@ -1125,7 +1125,7 @@ test('anime atelier: the planner hears the finish, the frame worker gets the col
   await room.processNextPlan();
   assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
   const system = network.calls.find(call => call.path === '/v1/messages').body.system;
-  assert.match(system, /ATELIER SHOTS, ANIME FINISH[\s\S]*style's Festival/, 'the planner reads the anime guide with the style\'s colour script');
+  assert.match(system, /ATELIER SHOTS, HTML RENDER[\s\S]*style's Festival/, 'the planner reads the anime guide with the style\'s colour script');
   assert.match(system, /ANIME ATELIER: the atelier shots draw the people themselves/);
   const manifest = latestManifest(room, content.id), list = shots(manifest);
   assert.deepEqual([manifest.plan.direction.finish, manifest.plan.direction.script.name, manifest.plan.direction.palette.canvas], ['anime', 'Festival', '#24143A'], 'the style\'s script wins over Claude\'s indigo');

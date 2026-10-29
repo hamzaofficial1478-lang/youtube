@@ -60,8 +60,8 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   atelier: {
-    features: ['Every shot designed by Claude for this video', 'Finish: designed motion graphics, or anime (0.68): cel-painted characters and places in a closed colour script, drawings held on twos with one expensive action shot per scene, a locked camera and the colour-dip cut'],
-    name: 'Atelier compositions', milestone: 'P06h', status: 'built',
+    features: ['Every shot designed by Claude for this video as an HTML animation (it was called Atelier)', 'Finish: Motion graphics (kinetic type, numbers, diagrams, metaphors), HTML render (cel-painted anime: characters and places in a closed colour script, drawings held on twos, one expensive action shot per scene, a locked camera and the colour-dip cut), or Mix of both chosen per scene', 'Not the old motion graphics engine: that one became the Documentary engine\'s designed looks and the motion layer of every engine (0.37)'],
+    name: 'Motion Graphics (HTML compositions)', milestone: 'P06h', status: 'built',
     note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
@@ -88,7 +88,7 @@ const STANDARD_PROHIBITED = [
 
 // The launch library's current version. Profiles the owner has not revised follow it: a newer launch spec is
 // added as a draft revision (never approved or assigned automatically).
-const LAUNCH_VERSION = 'Launch library v12';
+const LAUNCH_VERSION = 'Launch library v13';
 // 'mix' (0.34): the video uses every look of the engine; Claude picks the look per scene.
 const DRAWING_LOOKS = Object.freeze(['classic', 'whiteboard', 'storybook', 'doodle', 'illustrated', 'mix']);
 // The hand-drawn engine's whiteboard looks (0.32).
@@ -105,7 +105,7 @@ const CINEMA_GRADES = Object.freeze(['choose', ...Object.keys(require('./engines
 const PICTURE_TYPES = Object.freeze(['cartoon', 'natural', 'mix']);
 const PICTURE_TYPE_ADAPTERS = Object.freeze(['ffmpeg-sketch', 'canvas-frames', 'ffmpeg-montage', 'motion-graphics', 'story-mix']);
 // The atelier's finish (0.68, html-anime): designed motion graphics, or cel-painted anime in a closed colour script.
-const ATELIER_FINISHES = Object.freeze(['motion', 'anime']);
+const ATELIER_FINISHES = Object.freeze(['motion', 'anime', 'mix']);
 const ATELIER_SCRIPTS = Object.freeze(['choose', 'indigo', 'eclipse', 'noon', 'festival']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
@@ -178,9 +178,9 @@ const LAUNCH_PROFILES = [
     qc: {maxBlackSeconds: 0.5, maxFrozenSeconds: 6, minSceneSeconds: 1.5, maxSceneSeconds: 14, contactSheetEverySeconds: 3},
     originality: {referenceSharePercent: 30, prohibited: STANDARD_PROHIBITED},
   }},
-  {key: 'atelier', upgrade: 'Launch library v4 (0.25): new. Every shot is designed for its video by Claude (HyperFrames method), so no two videos share a look.', spec: {
-    name: 'Atelier · designed per video',
-    summary: 'Every shot is designed from scratch for its video: an art direction made for the topic, then kinetic type, diagrams, charts and visual metaphors built on the narrator\'s words.',
+  {key: 'atelier', upgrade: 'Launch library v13 (0.70): renamed Motion Graphics (it was Atelier, owner review 2026-10-29). Its finishes are motion graphics, HTML render (cel anime) and a mix of both chosen per scene. Launch library v4 (0.25): new. Every shot is designed for its video by Claude (HyperFrames method), so no two videos share a look.', spec: {
+    name: 'Motion Graphics · designed per video',
+    summary: 'Every shot is designed from scratch for its video as an HTML animation: motion graphics (kinetic type, numbers, diagrams and visual metaphors), an HTML render of cel anime with its characters, or a mix of both, built on the narrator\'s words.',
     bestFit: ['Explainers on any topic', 'Data and concept stories', 'Fast hooks and Shorts', 'Brand-free, distinctive channels'],
     formats: ['long-form', 'shorts'],
     canvas: {frameRate: 30, longFormResolution: '1920x1080', shortsResolution: '1080x1920'},
