@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.66.0: the Windows installer and updater, on top of 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.66.1: tidier family cards, Style Library and Competitors page, on top of 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,24 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - Tidier family cards, Style Library and Competitors page (0.66.1)
+
+- **Owner review (2026-10-29, with screenshots):** the Delete button sat outside the family card; the Style Library
+  should show the engines side by side with Approved / Not approved tabs, each engine's settings listed, and its
+  description and abilities only on hover; the Competitors page looked messy for new users. Screen only, no feature
+  removed.
+- **Built:** family card buttons, languages and figures wrap inside the card. Style Library: tabs Approved (a style
+  with an approved revision) and Not approved (it opens there while nothing is approved), style tiles in a row, the
+  chosen tile's settings one per row (engine, looks, hand, picture type, film, grade, AI design, canvas, pacing,
+  transitions, captions, fonts, visuals, audio) with the visual rules folded, and the summary, best-fit and engine
+  abilities in a hover box. Competitors: a four-step road (channels, read, blueprint, approve), each channel as its
+  own card with a folded "Learn from this channel" chooser (picked subjects shown in its summary, the 14 subjects
+  grouped in Voice, Script, Editing, Visuals and Packaging inside), a short blend (what is learned from whom, then
+  one "100% your own" line), and the approved guidance, watch and data budget in the side column.
+- **Tests:** `npm run check` passes; `npm test` 378 tests, 375 passed, 0 failed, 3 skipped (Windows only). A Playwright
+  check on a throwaway workspace passed 16 checks (every card button inside the card, tabs, tiles in a row, settings
+  per row, hover box, chooser grouped and kept open while ticking, blend lines, the save button) with no page errors.
 
 ### 2026-10-29 - The program on other Windows PCs; the Gemini question (0.66.0)
 

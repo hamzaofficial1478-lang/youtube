@@ -42,12 +42,26 @@ function intelAreas() {
   for (const info of Object.values(state.intelligence.competitors.traits)) areas.set(info.area, [...(areas.get(info.area) || []), info.label]);
   return [...areas].map(([area, labels]) => [area, labels.join(', ')]);
 }
+// The blend in short (owner review 2026-10-29): what is learned from whom, then what stays fully your own.
 function blendRecipe(family, names) {
-  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id);
-  return `<div class="blend-recipe">${Object.entries(traits).map(([trait, info]) => {
+  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id), learned = [], own = [];
+  for (const [trait, info] of Object.entries(traits)) {
     const from = family.competitors.filter(item => (picks[competitorKeyOf(item)] || []).includes(trait)).map(item => names.get(competitorKeyOf(item)));
-    return `<div class="blend-slot ${from.length ? '' : 'own'}"><b>${esc(info.label)}</b><span>${from.length ? `Learn from ${esc(from.join(' + '))}` : '100% your own'}</span><small>→ ${esc(info.route)}</small></div>`;
-  }).join('')}</div>`;
+    if (from.length) learned.push(`<div class="blend-line"><b>${esc(info.label)}</b><span>from ${esc(from.join(' + '))}</span><small>→ ${esc(info.route)}</small></div>`); else own.push(info.label);
+  }
+  return `<div class="blend-summary">${learned.join('')}${own.length ? `<p class="blend-own"><b>${learned.length ? '100% your own' : 'Everything is learned from every channel until you pick'}</b>${learned.length ? `<span>${esc(own.join(' · '))}</span>` : ''}</p>` : ''}</div>`;
+}
+const AREA_LABELS = {voice: 'Voice', script: 'Script', editing: 'Editing', visuals: 'Visuals', packaging: 'Packaging'};
+// Which "what to learn" choosers are open, so a pick does not fold them shut (page state only).
+const keepOpen = new Set();
+// One channel's chooser: the picked subjects in the summary, every subject grouped by its area inside.
+function keepPicker(family, key) {
+  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id), mine = picks[key] || [], any = Object.keys(picks).length;
+  const groups = new Map();
+  for (const [trait, info] of Object.entries(traits)) groups.set(info.area, [...(groups.get(info.area) || []), [trait, info]]);
+  const summary = mine.length ? `<span class="keep-picked">${mine.map(trait => `<span class="chip green">${esc(traits[trait].label)}</span>`).join('')}</span>` : `<span class="muted">${any ? 'Nothing taken from this channel' : 'Nothing picked yet: Claude learns from all of it'}</span>`;
+  return `<details class="keep-pick" data-keep-open="${esc(key)}" ${keepOpen.has(key) ? 'open' : ''}><summary><span class="keep-label">Learn from this channel</span>${summary}<span class="keep-toggle">${mine.length ? `${mine.length} of ${Object.keys(traits).length} · change` : 'Choose'}</span></summary>
+    <div class="keep-groups">${[...groups].map(([area, list]) => `<div class="keep-group"><span>${esc(AREA_LABELS[area] || area)}</span><div>${list.map(([trait, info]) => { const on = mine.includes(trait); return `<button type="button" class="keep-chip ${on ? 'on' : ''}" data-keep="${esc(key)}" data-trait="${trait}" aria-pressed="${on}" title="Goes to: ${esc(info.route)}">${on ? '✓ ' : ''}${esc(info.label)}</button>`; }).join('')}</div></div>`).join('')}</div></details>`;
 }
 
 // ---------------------------------------------------------------- shared pieces
@@ -86,7 +100,7 @@ function competitorsView() {
   const latestScan = data.scans.find(scan => scan.result?.channels?.[0]?.nexlev !== undefined || scan.result?.channels?.some(channel => channel.youtube)) || null;
   const notesByKey = new Map();
   for (const note of data.notes) notesByKey.set(note.competitorKey, note);
-  const traits = state.intelligence.competitors.traits, picks = picksFor(family.id), names = new Map();
+  const names = new Map();
   for (const item of family.competitors) {
     const channel = latestScan?.result?.channels?.find(entry => entry.competitorKey === competitorKeyOf(item));
     names.set(competitorKeyOf(item), channel?.nexlev?.about?.title || (channel?.youtube && !channel.youtube.purged ? channel.youtube.title : null) || competitorLabel(item));
@@ -99,7 +113,7 @@ function competitorsView() {
       <div class="competitor-main"><span class="room-number">${esc(channel?.ref || '—')}</span><div><strong><a href="${esc(item.url)}" target="_blank" rel="noopener noreferrer">${esc(name)}</a></strong><small>${esc(competitorLabel(item))}${channel ? ` · ${esc(channel.status)}` : ' · not scanned yet'}</small></div></div>
       <div class="competitor-stats">${stats ? `<span><b>${intelDuration(stats.medianDurationSeconds)}</b>median length</span><span><b>${stats.uploadsPerWeek ?? '—'}</b>uploads/week</span><span><b>${stats.shortsShare ?? '—'}%</b>Shorts</span><span><b>${stats.wordsPerMinute ?? '—'}</b>words/min</span><span><b>${stats.topOutlierScore ? `${stats.topOutlierScore}×` : '—'}</b>top outlier</span>` : '<span class="muted">Statistics appear after a scan with NexLev data.</span>'}</div>
       <div class="competitor-notes">${note ? `<small>Observations r${note.revision} · ${esc(note.createdBy)}</small><p>${esc([note.editingStyle, note.voice, note.visuals].filter(Boolean).join(' · ').slice(0, 160))}</p>` : '<small class="muted">No observations yet</small>'}${action(note ? 'Update observations' : 'Add observations', 'intel-note', key, 'text-button')}</div>
-      <div class="keep-row"><span>Keep from this channel</span>${Object.entries(traits).map(([trait, info]) => { const on = (picks[key] || []).includes(trait); return `<button type="button" class="keep-chip ${on ? 'on' : ''}" data-keep="${esc(key)}" data-trait="${trait}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(info.label)}</button>`; }).join('')}</div>
+      ${keepPicker(family, key)}
       ${channel?.errors?.length ? `<p class="inline-warning">${esc(channel.errors.join(' · '))}</p>` : ''}
     </article>`;
   }).join('');
@@ -109,19 +123,25 @@ function competitorsView() {
   const analysis = analyses.find(item => item.id === selectedAnalysis);
   return heading('Competitor intelligence', 'Study each family\'s 3-10 competitors to learn techniques — at most 30% reference patterns, at least 70% original work. Nothing changes your channels until you approve it.', action('Scan settings', 'intel-settings', family.id, 'secondary'))
     + `<div class="production-toolbar"><div><label for="competitor-family">Channel family</label><select id="competitor-family">${families.map(item => `<option value="${item.id}" ${item.id === family.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div><div class="production-context"><span>${family.competitors.length} competitor${family.competitors.length === 1 ? '' : 's'}</span><span>${esc(localeName(family.primaryLocale))}</span><span>${esc(family.format)}</span>${data.guidanceActive ? '<span class="good">Script guidance active</span>' : ''}</div></div>`
-    + competitorWatchCard(family, data)
+    + intelSteps(family, data, latestScan)
     + `<div class="intel-grid"><div>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels</h2></div><div class="row-end">${changes ? action('Discard', 'intel-picks-discard', family.id, 'text-button') + action(`Save blend (${changes} change${changes === 1 ? '' : 's'})`, 'intel-picks-save', family.id, 'primary') : ''}${action('Edit family list', 'edit-family', family.id, 'secondary')}</div></div>
+      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels and what to learn</h2></div><div class="row-end">${changes ? action('Discard', 'intel-picks-discard', family.id, 'text-button') + action(`Save blend (${changes} change${changes === 1 ? '' : 's'})`, 'intel-picks-save', family.id, 'primary') : ''}${action('Edit family list', 'edit-family', family.id, 'secondary')}</div></div>
         ${family.competitors.length < 3 ? `<p class="inline-warning">Add ${family.competitors.length ? `${3 - family.competitors.length} more` : '3-10'} competitor channel${family.competitors.length === 2 ? '' : 's'} for a reliable comparison.</p>` : ''}
         ${rows || '<p class="muted">No competitors listed for this family yet.</p>'}
-        <p class="hint">Your own observations (editing style, voice, visuals, thumbnails) are the strongest evidence: no API watches the videos for you.</p>
-        ${family.competitors.length ? `<h3 class="intel-subhead">Your blend recipe ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : '<small class="muted">nothing picked yet: Claude learns from every channel</small>'}</h3>${blendRecipe(family, names)}<p class="hint">Pick what you like on each link; several picks per link are fine. Each area learns only from the channels you picked for it, keeps at most 30% reference, and areas without picks stay 100% your own. Saving new picks makes an approved blueprint outdated until you analyze again.</p>` : ''}</section>
+        ${family.competitors.length ? `<h3 class="intel-subhead">Your blend ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : ''}</h3>${blendRecipe(family, names)}<p class="hint">Open "Learn from this channel" on each link and tick what you like; several per link are fine. Each subject learns only from the channels you ticked for it, keeps at most 30% reference, and the rest stays 100% your own. Saving new picks makes an approved blueprint outdated until you analyse again. Your own observations are the strongest evidence: no API watches the videos for you.</p>` : ''}</section>
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Read competitors', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Claude for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
         ${analysis ? blueprintView(analysis, family, data) : ''}</section>
       ${studiesCard(family)}
-    </div><div>${dataCapsCard()}${guidanceCard(family, data)}</div></div>`;
+    </div><div>${guidanceCard(family, data)}${competitorWatchCard(family, data)}${dataCapsCard()}</div></div>`;
+}
+// Where this family is on the road: channels listed, read, blueprint made, blueprint approved.
+function intelSteps(family, data, latestScan) {
+  const n = family.competitors.length, current = data.current;
+  const steps = [['Add 3-10 channels', n >= 3, `${n} listed`], ['Read them', Boolean(latestScan), latestScan ? `read ${date(latestScan.createdAt)}` : 'not yet'], ['Claude\'s blueprint', data.analyses.some(item => item.status === 'completed'), data.analyses.length ? `${data.analyses.length} made` : 'not yet'], ['You approve', Boolean(current && !current.outdated), current ? (current.outdated ? 'outdated' : 'approved') : 'not yet']];
+  const next = steps.findIndex(([, done]) => !done);
+  return `<ol class="intel-steps">${steps.map(([label, done, note], k) => `<li class="${done ? 'done' : k === next ? 'next' : ''}"><span>${done ? '✓' : k + 1}</span><div><strong>${label}</strong><small>${esc(note)}</small></div></li>`).join('')}</ol>`;
 }
 
 // R05c: the program learns a look from a reference (a video file or screenshots on this PC).
@@ -663,6 +683,10 @@ document.addEventListener('change', event => {
   const filter = {'trend-keyword': 'keyword', 'trend-maxsubs': 'maxSubs', 'trend-format': 'format'}[event.target.id];
   if (filter) { trendFilter[filter] = event.target.value; render(); }
 });
+document.addEventListener('toggle', event => {
+  const key = event.target.dataset?.keepOpen;
+  if (key) { if (event.target.open) keepOpen.add(key); else keepOpen.delete(key); }
+}, true);
 document.addEventListener('click', event => {
   const tab = event.target.closest('[data-select-analysis]');
   if (tab) { selectedAnalysis = tab.dataset.selectAnalysis; render(); return; }
