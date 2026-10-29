@@ -308,14 +308,43 @@ class Store {
     const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(row=>row.name);
     return tables.filter(name=>this.db.prepare(`PRAGMA table_info("${name}")`).all().some(column=>column.name==='family_id')).map(name=>({table:name,count:this.db.prepare(`SELECT COUNT(*) AS n FROM "${name}" WHERE family_id=?`).get(id).n})).filter(item=>item.count);
   }
+  // Owner request 2026-10-29: a family with work is deleted too, after a warning that lists the work and the owner's
+  // tick (deleteWork); otherwise it can only be archived.
   deleteFamily(id, input) {
     object(input);return this.transaction(()=>{
       const f=this.family(id);this.version(f,input.revision);
       requireValue(typeof input.confirmName==='string'&&input.confirmName.trim()===f.name,'Type the family\'s name exactly to delete it.');
       const work=this.familyWork(id);
-      requireValue(!work.length,`${f.name} already has work (${work.map(item=>`${item.count} ${item.table.replace(/_/g,' ')}`).join(', ')}), so it cannot be deleted: archive it instead. Archived families keep their videos and history and leave the portfolio.`,409);
-      this.db.prepare('DELETE FROM families WHERE id=?').run(id);this.event(`Deleted family: ${f.name}`);return {deleted:true,name:f.name};
+      requireValue(!work.length||input.deleteWork===true,`${f.name} has work (${work.map(item=>`${item.count} ${item.table.replace(/_/g,' ')}`).join(', ')}). Tick "Delete all of this too" to delete it with the family for good, or archive the family to keep it.`,409);
+      const rows=work.length?this.familyRows(id):new Map();
+      const busy=[...rows].filter(([table,ids])=>this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='status')&&this.db.prepare(`SELECT 1 FROM "${table}" WHERE status IN ('queued','running','uploading') AND rowid IN (SELECT value FROM json_each(?)) LIMIT 1`).get(JSON.stringify([...ids])));
+      requireValue(!busy.length,`${f.name} has work waiting or running (${busy.map(([table])=>table.replace(/_/g,' ')).join(', ')}). Let it finish or cancel it, then delete the family.`,409);
+      // History tables refuse deletes; their guard is lifted for this transaction only and comes back from its own SQL.
+      this.db.exec('PRAGMA defer_foreign_keys=ON');
+      for(const [table,ids] of rows){
+        const guards=this.db.prepare("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND sql LIKE '%BEFORE DELETE%'").all(table);
+        for(const guard of guards)this.db.exec(`DROP TRIGGER "${guard.name}"`);
+        this.db.prepare(`DELETE FROM "${table}" WHERE rowid IN (SELECT value FROM json_each(?))`).run(JSON.stringify([...ids]));
+        for(const guard of guards)this.db.exec(guard.sql);
+      }
+      this.db.prepare('DELETE FROM families WHERE id=?').run(id);
+      const removed=[...rows.values()].reduce((sum,ids)=>sum+ids.size,0);
+      this.event(`Deleted family: ${f.name}${removed?` and all its work (${removed} records)`:''}`);return {deleted:true,name:f.name,...(removed?{removed}:{})};
     });
+  }
+  // Every row that belongs to a family: rows with its family_id, then every row hanging off those through a foreign key.
+  // shortcut: files in the data folder (renders, drawings, pictures) stay; a later clean-up can remove unreferenced ones.
+  familyRows(id) {
+    const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'families'").all().map(row=>row.name),children={},rows=new Map();
+    for(const table of tables)for(const key of this.db.prepare(`PRAGMA foreign_key_list("${table}")`).all())(children[key.table]||=[]).push({table,from:key.from,to:key.to||'id'});
+    const mark=(table,column,values)=>{
+      const seen=rows.get(table)||new Set(),fresh=[],keys=[...new Set((children[table]||[]).map(child=>child.to))];rows.set(table,seen);
+      for(const row of this.db.prepare(`SELECT rowid AS _r${keys.map(key=>`, "${key}"`).join('')} FROM "${table}" WHERE "${column}" IN (SELECT value FROM json_each(?))`).all(JSON.stringify(values)))if(!seen.has(row._r)){seen.add(row._r);fresh.push(row);}
+      for(const child of fresh.length?children[table]||[]:[])mark(child.table,child.from,fresh.map(row=>row[child.to]).filter(value=>value!==null));
+    };
+    for(const table of tables)if(this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='family_id'))mark(table,'family_id',[id]);
+    for(const [table,ids] of rows)if(!ids.size)rows.delete(table);
+    return rows;
   }
   archiveFamily(id, input) {
     object(input);return this.transaction(()=>{
