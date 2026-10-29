@@ -355,6 +355,7 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/studio-craft.json', label: 'Studio craft 2026-10-19 (p5.brush, video-use, Remotion, Remotion skills, watch-video, caption-ai, video toolkit, skill-creator)'},
   {file: 'skills/retention-craft.json', label: 'Retention craft 2026-10-21 (owner screenshots: Kallaway script structure, HOOK/VALUE/SOLUTION/CTA, Paul Hilse prompts 1-5; viewer model)'},
   {file: 'skills/whiteboard-craft.json', label: 'whiteboard-animation-vi (CC0): line order, colour after line, brush lanes, the hand, pictures that draw well'},
+  {file: 'skills/anime-craft.json', label: 'html-anime (MIT): the anime sequence, drawing budgets, twos, the expensive shot, camera, cel paint, colour scripts, the colour-dip cut'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},

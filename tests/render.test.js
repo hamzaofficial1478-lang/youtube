@@ -200,8 +200,9 @@ test('HTTP routes serve render state, need the local token and stream video rang
 
 test('the FFmpeg here draws every transition of the catalogue', {skip}, () => {
   const T = require('../transitions');
-  for (const fade of new Set(Object.values(T.CATALOG).map(item => item.xfade))) {
-    const out = ffmpeg(['-f', 'lavfi', '-i', 'color=c=red:s=64x36:d=1:r=10', '-f', 'lavfi', '-i', 'color=c=blue:s=64x36:d=1:r=10', '-filter_complex', `xfade=transition=${fade}:duration=0.4:offset=0.5,format=gray`, '-f', 'rawvideo', '-']);
+  // The colour dip (0.68) is a custom expression, so every transition goes through the render's own xfade options.
+  for (const fade of new Set(Object.keys(T.CATALOG).map(name => T.xfadeArgs(name, '#E23B4A')))) {
+    const out = ffmpeg(['-f', 'lavfi', '-i', 'color=c=red:s=64x36:d=1:r=10', '-f', 'lavfi', '-i', 'color=c=blue:s=64x36:d=1:r=10', '-filter_complex', `xfade=${fade}:duration=0.4:offset=0.5,format=gray`, '-f', 'rawvideo', '-']);
     assert.equal(out.length, 64 * 36 * 15, `${fade} draws 1.5 s`);
   }
 });
@@ -247,14 +248,14 @@ test('the cinematic finish grades every clip, adds grain and bars, and stays fra
   assert.doesNotMatch(R.lookFilters({grade: 'natural', grain: 0, letterbox: true}, {width: 360, height: 640}, 0), /drawbox/, 'no bars on a vertical short');
 });
 
-test('crossfade and dip-to-black assemblies stay frame-exact against the narration', {skip}, async t => {
+test('crossfade, dip-to-black and colour-dip assemblies stay frame-exact against the narration', {skip}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'render-xfade-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   ffmpeg(['-f', 'lavfi', '-i', 'testsrc=size=1920x1280', '-frames:v', '1', '-y', path.join(dir, 'a.jpg')]);
   ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1920x1080:rate=25', '-t', '2', '-c:v', 'mpeg4', '-y', path.join(dir, 'b.mp4')]);
   ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=220:sample_rate=48000', '-t', '10', '-c:a', 'pcm_s16le', '-y', path.join(dir, 'n.wav')]);
-  for (const transition of ['crossfade', 'dip-to-black']) {
-    const spec = {canvas: {frameRate: 30}, transitions: {default: transition, maxDurationMs: 500}, motion: {intensity: 35}};
+  for (const transition of ['crossfade', 'dip-to-black', 'dip-colour']) {
+    const spec = {canvas: {frameRate: 30}, transitions: {default: transition, maxDurationMs: 500}, motion: {intensity: 35}, palette: {accent: '#E23B4A'}};
     const shots = [{shotId: 'a', label: 'S01A', mediaType: 'image', motion: 'ken-burns', startSeconds: 0, file: path.join(dir, 'a.jpg')}, {shotId: 'b', label: 'S01B', mediaType: 'video', motion: 'static', startSeconds: 3.4, clipSeconds: 2, file: path.join(dir, 'b.mp4')}, {shotId: 'c', label: 'S02A', mediaType: 'image', motion: 'zoom', startSeconds: 6.8, file: path.join(dir, 'a.jpg')}];
     const out = path.join(dir, `${transition}.mp4`);
     const plan = R.planProxy({shots, narration: {file: path.join(dir, 'n.wav'), durationSeconds: 10}, spec, format: 'long-form', workDir: dir, outFile: out});
@@ -264,6 +265,11 @@ test('crossfade and dip-to-black assemblies stay frame-exact against the narrati
     assert.equal(frames, 300, `${transition} keeps 300 frames for 10 s`);
     const probe = await VS.probeMedia(out);
     assert.ok(Math.abs(probe.durationSeconds - 10) < 0.05);
+    // 0.68: the anime cut passes through the accent colour at its middle (html-anime's #dip).
+    if (transition === 'dip-colour') {
+      const [r, g, b] = execFileSync('ffmpeg', ['-v', 'error', '-ss', '3.63', '-i', out, '-frames:v', '1', '-vf', 'scale=1:1:flags=area,format=rgb24', '-f', 'rawvideo', '-']);
+      assert.ok(Math.abs(r - 0xE2) < 30 && Math.abs(g - 0x3B) < 30 && Math.abs(b - 0x4A) < 30, `the dip shows the accent (got ${r},${g},${b})`);
+    }
   }
 });
 

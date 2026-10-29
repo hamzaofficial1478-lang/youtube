@@ -452,7 +452,7 @@ function sceneJoin(previous, next, budget, spec, fps) {
 }
 
 // The auto edit. `variants` (sceneId -> n) lets single-scene repair produce a different take of one scene.
-function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null}) {
+function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null, accent = null}) {
   const totalFrames = Math.max(1, Math.round(narrationSeconds * fps));
   const {pacing} = spec;
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
@@ -616,6 +616,8 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     const shorter = Math.min(a.frames, b.frames);
     if (join.type !== 'cut') join.frames = Math.max(2, Math.min(join.frames, Math.floor(shorter / 3)));
     if (join.type !== 'cut') budget.left--;
+    // The anime cut (0.68) dips through the video's accent: the colour script's when an atelier plan has one.
+    if (join.type === 'dip-colour') join.colour = accent || spec.palette.accent;
     joins.push(join);
   }
   const scenesOut = sceneRows.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, register: scene.register, startFrame: scene.startFrame, endFrame: scene.endFrame, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, variant: scene.variant}));
@@ -662,6 +664,7 @@ function validateTimeline(timeline) {
   if (timeline.joins.length !== timeline.clips.length - 1) problems.push('Every pair of neighbouring clips needs exactly one join.');
   timeline.joins.forEach((join, index) => {
     if (!TRANSITIONS.includes(join.type)) problems.push(`Join ${index + 1} uses an unknown transition.`);
+    else if (join.colour !== undefined && !/^#[0-9A-Fa-f]{6}$/.test(join.colour)) problems.push(`Join ${index + 1} has a dip colour that is not a #RRGGBB colour.`);
     else if (join.type !== 'cut' && (join.frames < 2 || join.frames > Math.floor(Math.min(timeline.clips[index].frames, timeline.clips[index + 1].frames) / 2))) problems.push(`Join ${index + 1} is too long for its neighbouring clips.`);
   });
   for (const clipId of Object.keys(timeline.drawings || {})) {
@@ -869,7 +872,9 @@ function applyOp(source, op, {spec, checkDrawing = null} = {}) {
       const most = Math.floor(Math.min(timeline.clips[index].frames, timeline.clips[index + 1].frames) / 2);
       if (frames < 2 || frames > most) throw opError(`That transition must be between ${(2 / fps).toFixed(2)} and ${(most / fps).toFixed(2)} s for these clips.`);
     }
-    timeline.joins[index] = {type: op.transition, frames, reason: `Set by the owner.`, skill: null};
+    // A colour dip keeps the video's dip colour (the one already in the edit, else the style's accent).
+    const colour = T.resolve(op.transition) === 'dip-colour' ? {colour: timeline.joins.find(join => join.colour)?.colour || spec?.palette?.accent || '#E23B4A'} : {};
+    timeline.joins[index] = {type: op.transition, frames, reason: `Set by the owner.`, skill: null, ...colour};
     receipt.changed.push(`join-after:${op.clipId}`);
   } else if (op.type === 'set-move') {
     const index = findClip(timeline, op.clipId), clip = timeline.clips[index];

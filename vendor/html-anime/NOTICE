@@ -1,0 +1,6 @@
+The anime finish of the Atelier engine (0.68: atelier.js, the dip-colour transition in transitions.js and
+skills/anime-craft.json) restates the method of html-anime (https://github.com/blixvip/html-anime, pinned
+6c7edafc858860edacba97dc099816d51f242153): skills/html-anime-direct, -cel, -timing, -camera and -render, harness/compile.js
+and films/roof/index.html. The four colour scripts (Indigo moon, Vermilion eclipse, Paper noon, Festival) are its data,
+reused with their names and hex values in atelier.js SCRIPTS under the MIT licence kept in LICENSE beside this notice.
+No other file is included: not its film, site, media or the Shippori Mincho font (SIL Open Font License).

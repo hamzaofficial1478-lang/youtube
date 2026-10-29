@@ -700,3 +700,31 @@ hand-drawn engine; take its brain. Read in research/whiteboard-animation-vi.md; 
 - **Honest limits:** the subject rule is weaker than the original's segmentation model on crowded pictures; pictures
   with textures or gradients give scratchier lines (ChatGPT is asked for whiteboard pictures by the visual rules);
   the first frame of a shot with a new picture waits about 1-2.5 s while the plan is made.
+
+## 33. The Atelier anime finish (0.68.0)
+
+Owner request 2026-10-29: put html-anime's features and skills into the Atelier engine where it was missing or not
+delivering. Read in research/html-anime.md; restated in `atelier.js` (MIT notice in vendor/html-anime).
+
+- **Finish:** a style on the Atelier or Story Mix engine may carry `atelier: {finish: 'motion' | 'anime', script:
+  'choose' | 'indigo' | 'eclipse' | 'noon' | 'festival'}` (absent = motion design, as before). Chosen in the channel's
+  style window ("Atelier finish", "Colour script") and the style editor ("Atelier engine features").
+- **Anime direction:** `validateDirection(..., {finish: 'anime', script})` adds `finish` and `script` (the style's named
+  script wins; with `choose`, Claude names one or gives ten own paints, the line at least 3:1 on the sky); the palette
+  is the script's.
+- **Anime frames:** `validateFrame(..., {finish: 'anime'})` adds `shot` (establish, approach, turn, sakuga, aftermath,
+  button) and `drawings` (3, up to 8 for sakuga); `sakugaBudget` keeps one sakuga shot per scene (the next becomes a
+  turn with 3 drawings, named).
+- **Frame worker:** `contract('anime')` (cel paint, depth, drawings not tweens on twos, the expensive shot, a locked
+  camera with one 106% push on holds, the hero frame from t=0, one short line at most, no exit); the packet carries
+  `finish`, `fps`, `oneFrameSeconds`, `colourScript` and `drawingBudget`. `validateComposition(..., {script})` sends
+  back an anime shot without drawing swaps or with more than two colours outside the script.
+- **Cut:** the `dip-colour` transition (every engine): an FFmpeg xfade custom expression through one colour
+  (`T.dipExpr`, 8-bit BT.709 TV range): in 0.25 s, a short hold, out 0.3 s. The editing brain gives a colour-dip join
+  the colour of the plan's direction accent (else the style's); owner joins keep the edit's dip colour; a dip colour
+  must be #RRGGBB.
+- **Planner:** `At.promptGuide({finish: 'anime'})` and `E.promptGuide(..., {atelier})` (people are drawn in the anime
+  shots, never stick figures); the director hears it too.
+- Tested in tests/atelier.test.js (scripts, budgets, contract, checks, style), tests/scene.test.js ("anime atelier",
+  a fake Claude plan end to end), tests/render.test.js (the colour dip shows the accent mid-transition) and
+  tests/editing.test.js (owner dip colour, the colour guard); clicked through in a real browser.

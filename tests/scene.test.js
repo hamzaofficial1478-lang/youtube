@@ -1106,3 +1106,32 @@ test('0.39: approved skills travel with every scene plan and are logged; a style
   assert.match(planMessages({...plain, style: {...plain.style, film: 'silent'}})[0].content, /FILM LOOK: 1920s silent film/);
   assert.match(planMessages({...plain, style: {...plain.style, film: 'choose'}})[0].content, /FILM LOOK: choose one film look for this whole video[\s\S]*deco \(art deco gold\)/);
 });
+
+// 0.68 (html-anime): the anime finish reaches the planner, the frame worker and the checks; one expensive shot per scene.
+test('anime atelier: the planner hears the finish, the frame worker gets the colour script and budget, extra sakuga shots are demoted', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
+  const packets = [];
+  const anime = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-sky" class="clip" data-start="0" data-duration="30"></div><svg id="${id}-a" width="400" height="400"><circle cx="200" cy="200" r="120" fill="#FFD7A1"/></svg><svg id="${id}-b" width="400" height="400"><circle cx="210" cy="190" r="120" fill="#FFD7A1"/></svg><style>#${id}-sky{position:absolute;inset:0;background:#24143A}#${id}-a,#${id}-b{position:absolute;left:760px;top:240px}#${id}-b{opacity:0}</style><script>const tl = gsap.timeline({paused: true}); tl.set('#${id}-a', {opacity: 0}, 0.5); tl.set('#${id}-b', {opacity: 1}, 0.5); window.__timelines["${id}"] = tl;</script></div></template>`;
+  const frame = shot => ({blueprint: 'compose', shot, drawings: shot === 'sakuga' ? 8 : 3, focal: 'the moon', roles: 'moon = light', beats: [{show: 'the moon over the roofs'}], type: 'hook', beat: 'calm'});
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw) { const packet = JSON.parse(input.raw.split('\n\n')[0]); packets.push(packet); return anime(packet.frameId); }
+    const all = input.sentences, half = Math.ceil(all.length / 2);
+    const scenes = [[all[0].n, all[half - 1].n], [all[half].n, all.at(-1).n]].map(([start, end], k) => ({sentenceStart: start, sentenceEnd: end, purpose: k ? 'explain' : 'hook', direction: 'Night and rain.', onScreenText: '', ...(k ? {transition: 'dip-colour'} : {}),
+      shots: (k ? ['sakuga', 'sakuga'] : ['establish', 'button']).map(shot => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', frame: frame(shot)}))}));
+    return {summary: 'A night story.', cast: [], scenes, direction: {read: 'A quiet night where the light carries the story and nothing is rushed.', dials: {variance: 3, motion: 4, density: 3}, fonts: {display: 'Georgia', body: 'Segoe UI'}, script: 'indigo', motion: 'drawings on twos', signature: 'the moon', avoid: []}};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false, storyMap: false, revise: {atelier: {finish: 'anime', script: 'festival'}}});
+  narrate(24);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const system = network.calls.find(call => call.path === '/v1/messages').body.system;
+  assert.match(system, /ATELIER SHOTS, ANIME FINISH[\s\S]*style's Festival/, 'the planner reads the anime guide with the style\'s colour script');
+  assert.match(system, /ANIME ATELIER: the atelier shots draw the people themselves/);
+  const manifest = latestManifest(room, content.id), list = shots(manifest);
+  assert.deepEqual([manifest.plan.direction.finish, manifest.plan.direction.script.name, manifest.plan.direction.palette.canvas], ['anime', 'Festival', '#24143A'], 'the style\'s script wins over Claude\'s indigo');
+  for (const scene of manifest.plan.scenes) assert.ok(scene.shots.filter(shot => shot.frame.shot === 'sakuga').length <= 1, 'one expensive shot per scene');
+  assert.deepEqual(manifest.plan.scenes[1].shots.map(shot => shot.frame.shot), ['sakuga', 'turn'], 'a second sakuga shot becomes a turn');
+  assert.ok(manifest.warnings.some(item => /S02B: one expensive \(sakuga\) shot per scene/.test(item)));
+  assert.deepEqual([packets[0].finish, packets[0].fps, packets[0].colourScript.sky, packets.find(item => item.drawingBudget.shot === 'sakuga').drawingBudget.uniqueDrawings], ['anime', 30, '#24143A', 8], 'the frame worker gets the finish, frame rate, script and budget');
+  assert.ok(list.every(shot => shot.frame.html), 'compositions in the script that swap drawings pass');
+});

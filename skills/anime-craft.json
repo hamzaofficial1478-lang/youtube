@@ -1,0 +1,191 @@
+[
+  {
+    "id": "anime.shot-sheet",
+    "title": "Build an anime sequence around its verb",
+    "rooms": ["scene", "motion"],
+    "tasks": ["scene.plan", "motion.template"],
+    "kind": "template",
+    "when": "Planning a scene of anime shots (the Atelier engine's anime finish).",
+    "summary": "An anime sequence is written before it is drawn: the beat's verb is the one expensive shot, and every other shot is the place, the approach or the button. Shot times add up to the scene, so nothing is padded with a prologue or a second action.",
+    "steps": [
+      "Find the verb of the beat (what happens); that is the sakuga shot.",
+      "Open wide on the place (establish), cut closer to who is there (approach), and in a longer scene hold the moment before the verb (turn).",
+      "Play the verb (sakuga), let the result settle (aftermath) in a longer scene, and close on the button with at most one short line.",
+      "Make the shot lengths add up to the scene's length; drop shots rather than squeeze them."
+    ],
+    "numbers": {"8s": "establish 2.4, sakuga 3.6, button 2", "12s": "establish 2.5, approach 2.5, sakuga 4, button 3", "20s": "establish 3, approach 3, turn 3, sakuga 5, aftermath 3.5, button 2.5"},
+    "tags": ["anime", "atelier", "structure"],
+    "source": "html-anime (MIT), pinned 6c7edaf: harness/compile.js (shot plans and directions) and skills/html-anime-direct/SKILL.md, restated.",
+    "priority": 70
+  },
+  {
+    "id": "anime.drawing-budget",
+    "title": "Spend drawings like an animation studio",
+    "rooms": ["motion", "scene"],
+    "tasks": ["motion.template", "scene.plan"],
+    "kind": "ruleset",
+    "when": "Deciding how many unique drawings an anime shot gets.",
+    "summary": "Limited animation reads as anime because the still drawing does the acting. Most shots get three drawings, the one expensive shot of a scene gets up to eight, and after an action the pose holds.",
+    "do": [
+      "Give every shot 3 unique drawings and the scene's sakuga shot up to 8.",
+      "Keep one sakuga shot per scene; a second one becomes a turn with 3 drawings.",
+      "Hold at least 12 frames after an action settles; inside a hold only a 2-frame blink or a hair follow-through."
+    ],
+    "avoid": ["a pose that keeps tweening through a hold", "two expensive shots fighting for attention in one scene"],
+    "numbers": {"drawingsPerShot": 3, "sakugaDrawings": 8, "holdFrames": 12},
+    "tags": ["anime", "timing", "budget"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-timing/SKILL.md, restated; enforced by atelier.js validateFrame and sakugaBudget.",
+    "priority": 68
+  },
+  {
+    "id": "anime.on-twos",
+    "title": "Animate on twos with drawing swaps, not tweens",
+    "rooms": ["motion"],
+    "tasks": ["motion.template"],
+    "kind": "ruleset",
+    "when": "Animating characters in an anime shot.",
+    "summary": "A character that glides on a smooth ease moves like a web page. Anime swaps whole drawings on frame boundaries: acting on twos (each drawing held two frames), effects on ones.",
+    "do": [
+      "Draw each pose as its own group and switch poses with stepped opacity at exact frame times (one frame is 1/fps).",
+      "Keep character acting on twos; rain, sparks and a blade trail on ones.",
+      "Let a character be in the first frame or arrive on a drawing swap; never fade one in from nothing."
+    ],
+    "avoid": ["easing a pose from one position to another", "a character fading up from opacity 0"],
+    "tags": ["anime", "timing", "twos"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-timing/SKILL.md and html-anime-render/SKILL.md, restated; checked by atelier.js validateComposition (anime shots must swap drawings).",
+    "priority": 66
+  },
+  {
+    "id": "anime.expensive-shot",
+    "title": "Anticipation, action, smear, settle",
+    "rooms": ["motion"],
+    "tasks": ["motion.template"],
+    "kind": "procedure",
+    "when": "Drawing the sakuga (expensive) shot of an anime scene.",
+    "summary": "The action shot reads as fast and heavy when it follows the animator's order: a short move the other way first, the action as swapped drawings, a stretched smear drawing on the fastest frame, then the settled pose held.",
+    "steps": [
+      "Four frames of anticipation the other way, on the silhouette.",
+      "The action as drawing swaps, not one long ease.",
+      "One or two smear drawings: the silhouette stretched along the travel (never a blur filter).",
+      "The settled drawing, then a hold of at least 12 frames."
+    ],
+    "avoid": ["a CSS blur standing in for a smear", "speed lines outside the action shot"],
+    "tags": ["anime", "sakuga", "action"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-timing/SKILL.md (The expensive shot) and html-anime-cel/SKILL.md (Effects), restated.",
+    "priority": 64
+  },
+  {
+    "id": "anime.locked-camera",
+    "title": "Get closer by cutting; lock the camera",
+    "rooms": ["motion", "editing"],
+    "tasks": ["motion.template", "editing.plan"],
+    "kind": "ruleset",
+    "when": "Framing and moving the camera in anime shots.",
+    "summary": "In anime the drawings move and the camera mostly does not. Shot sizes change by cutting; only a held shot may push in slightly, which keeps the action readable and the look hand-made.",
+    "do": [
+      "Establish wide (the world is the subject), play the action as a medium or tight shot that reads in silhouette, close on a close-up or a return to the wide.",
+      "Lock the camera on action shots; a held shot may scale once from 100% to 106% with a gentle in-out ease.",
+      "Cut on the action: the settle is the first frames of the next shot.",
+      "Put the eyes on a third with room in front of the gaze; in 9:16 the head sits in the upper half."
+    ],
+    "avoid": ["zooming instead of cutting", "a second camera move in a shot", "every face centred"],
+    "numbers": {"pushPercent": 106},
+    "tags": ["anime", "camera", "framing"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-camera/SKILL.md and html-anime-timing/SKILL.md (Camera on a hold), restated.",
+    "priority": 62
+  },
+  {
+    "id": "anime.cel-paint",
+    "title": "Paint flat cels with one hard shadow",
+    "rooms": ["motion", "visuals"],
+    "tasks": ["motion.template", "visuals.prompt"],
+    "kind": "checklist",
+    "when": "Drawing a character, place or object in the anime finish.",
+    "summary": "Cel animation is flat paint plus a line: local colour, one hard-edged shadow, line work on top. Soft airbrush and glows read as illustration, not anime.",
+    "checks": [
+      "Flat local colour; one hard shadow shape per character in the darkest paint at about 20% opacity.",
+      "Outer contours about 6px and inner lines about 3px at 1080 high, tapered by the shape itself.",
+      "Eyes: whites, iris and pupil in their own paints; at most two window-shaped catchlights.",
+      "Hair in two or three masses with chunky bangs and one hard sheen band.",
+      "Wide shots are silhouettes; detail belongs to close shots."
+    ],
+    "avoid": ["airbrushed skin", "hair drawn as strands or a glow", "a blur filter used for soft edges"],
+    "tags": ["anime", "cel", "paint"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-cel/SKILL.md, restated.",
+    "priority": 60
+  },
+  {
+    "id": "anime.depth-and-light",
+    "title": "Layer the picture back to front, with one light",
+    "rooms": ["motion"],
+    "tasks": ["motion.template"],
+    "kind": "ruleset",
+    "when": "Composing an anime frame.",
+    "summary": "Depth in cel animation comes from layers in a fixed order and one practical light, not from blur. The brightest shape tells the viewer where to look.",
+    "do": [
+      "Layer sky, far silhouette (lighter, few lit windows), ground and the wide figure, weather on its own layer, the close figure, then type.",
+      "Put weather between the world and a close figure so the close-up feels nearer than the rain.",
+      "Give each shot one practical light (a window, the moon rim, a blade) as a flat shape; the brightest shape is that light, the moon or the blade.",
+      "Write rain positions out or derive them from a seeded series, so every render is the same."
+    ],
+    "avoid": ["several competing light sources", "random rain that changes between renders"],
+    "tags": ["anime", "composition", "light"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-cel/SKILL.md (Depth, Effects) and html-anime-camera/SKILL.md (Depth), restated.",
+    "priority": 58
+  },
+  {
+    "id": "anime.colour-script",
+    "title": "A closed colour script of ten paints",
+    "rooms": ["motion", "scene"],
+    "tasks": ["motion.template", "scene.plan"],
+    "kind": "principle",
+    "when": "Choosing the colours of an anime video.",
+    "summary": "A colour script is a fixed set of named paints (sky, ink, moon, accent, practical, iris, skin, hair, sclera, line), so every shot of the film shares one light. Highlights are one of the paints, never a new colour; a mood the story did not ask for is not added.",
+    "do": [
+      "Choose one script for the video (Indigo moon, Vermilion eclipse, Paper noon, Festival, or ten own paints chosen for the story's light).",
+      "Paint every fill and stroke from the script; a highlight is the line, moon or practical paint.",
+      "Keep the line readable on the sky (at least 3:1)."
+    ],
+    "avoid": ["a new colour for one highlight", "a different palette per shot"],
+    "tags": ["anime", "colour"],
+    "source": "html-anime (MIT), pinned 6c7edaf: harness/compile.js (SCRIPTS) and skills/html-anime-cel/SKILL.md (Paint); the four scripts are in atelier.js SCRIPTS.",
+    "priority": 56
+  },
+  {
+    "id": "anime.colour-dip-cut",
+    "title": "Cut between scenes with a colour dip",
+    "rooms": ["editing", "motion"],
+    "tasks": ["editing.plan", "motion.template"],
+    "kind": "formula",
+    "when": "Joining two scenes of an anime video.",
+    "summary": "Characters do not fade up; the cut between scenes is a quick dip through one colour of the script. The outgoing shot is still fully drawn when the colour covers it and the next one is already in place underneath, so the change feels like one breath.",
+    "steps": [
+      "Dip into the accent over about 0.25 s, easing in.",
+      "Hold the colour for a moment at the cut.",
+      "Come out over about 0.3 s, easing out, onto the next shot's first drawing."
+    ],
+    "avoid": ["fading characters in and out", "a dip on every cut inside a scene (those cut on the action)"],
+    "numbers": {"inSeconds": 0.25, "outSeconds": 0.3, "transition": "dip-colour"},
+    "tags": ["anime", "transition", "cut"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-render/SKILL.md (How a cut works) and films/roof/index.html, restated; built as the dip-colour transition (transitions.js dipExpr).",
+    "priority": 54
+  },
+  {
+    "id": "anime.type-and-line",
+    "title": "One short line, in the clear",
+    "rooms": ["motion", "editing"],
+    "tasks": ["motion.template", "editing.plan"],
+    "kind": "ruleset",
+    "when": "Putting words on an anime shot.",
+    "summary": "Anime shots carry the picture, not text. Captions already show the narration, so a shot holds at most one short line, on the closing shot, placed where it never covers eyes or the action.",
+    "do": [
+      "No title, logo or credit on an anime shot.",
+      "At most one short line, on the button shot, in the bottom third but clear of the captions, off the eyes and the blade.",
+      "Let the line rise about 24px while it fades in over 0.4 s; it is the only thing that fades."
+    ],
+    "avoid": ["the narration repeated on screen", "a line over a face"],
+    "tags": ["anime", "type"],
+    "source": "html-anime (MIT), pinned 6c7edaf: skills/html-anime-cel/SKILL.md (Type) and html-anime-timing/SKILL.md (What not to ease), restated.",
+    "priority": 52
+  }
+]

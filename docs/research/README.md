@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## html-anime.md (2026-10-29)
+
+The deep read of blixvip/html-anime: anime drawn as HyperFrames compositions (shot sheet, colour scripts, cel paint, drawings on twos, one expensive shot, locked camera, colour-dip cut). It became the Atelier engine's anime finish (0.68) and 10 draft skills in `skills/anime-craft.json`.
+
 ## whiteboard-animation-vi.md (2026-10-29)
 
 The deep read of letuandat131/whiteboard-animation-vi: how it turns one picture into a hand-drawn whiteboard video (line map, line order, colour regions, brush route and timing). Its brain is ported in `drawn-reveal.js` (the sketch reveal, 0.67); 7 draft skills in `skills/whiteboard-craft.json`.

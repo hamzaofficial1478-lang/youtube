@@ -88,3 +88,57 @@ test('the local browser renders a composition identically twice, follows the war
   await renderer.loadComposition({...base, html: dark});
   assert.deepEqual(await renderer.blackMoments([0, 0.5, 2]), [0, 0.5]);
 });
+
+// 0.68 (owner request 2026-10-29, html-anime): the anime finish - a closed colour script, shots with a drawing budget,
+// one expensive shot per scene, drawings swapped instead of eased, and the colour-dip cut.
+test('the anime finish: colour scripts, shot budgets, its own contract and checks', () => {
+  const read = 'A quiet duel on a rooftop told through rain and one blade of light';
+  const named = A.validateDirection({read, dials: {variance: 4, motion: 5, density: 3}, fonts: {display: 'Georgia', body: 'Segoe UI'}, script: 'eclipse', palette: {canvas: '#FFFFFF'}}, {finish: 'anime'});
+  assert.equal(named.finish, 'anime');
+  assert.equal(named.script.name, 'Vermilion eclipse');
+  assert.equal(named.palette.canvas, A.SCRIPTS.eclipse.colors.sky, 'the palette is the colour script\'s, not Claude\'s');
+  assert.equal(A.validateDirection({read, script: 'eclipse'}, {finish: 'anime', script: 'noon'}).script.name, 'Paper noon', 'the style\'s script wins over Claude\'s');
+  const own = {name: 'Dusk', colors: {...A.SCRIPTS.indigo.colors, line: '#1C2C6A'}}, warnings = [];
+  assert.equal(A.validateDirection({read, script: own}, {finish: 'anime', warn: m => warnings.push(m)}).script.name, 'Indigo moon');
+  assert.match(warnings.join(' '), /line does not stand out/, 'a line lost in its sky is refused');
+  assert.throws(() => A.validateDirection({read, dials: {variance: 4, motion: 5, density: 3}, fonts: {display: 'Georgia', body: 'Segoe UI'}, script: 'neon'}, {finish: 'anime', lenient: false}), /not one of/);
+  assert.equal(A.validateDirection({read, dials: {variance: 4, motion: 5, density: 3}}).finish, undefined, 'motion directions are unchanged');
+
+  const beats = [{show: 'the blade crosses the moon'}];
+  const sakuga = A.validateFrame({blueprint: 'compose', shot: 'sakuga', drawings: 12, beats}, {finish: 'anime'});
+  assert.deepEqual([sakuga.shot, sakuga.drawings], ['sakuga', 8]);
+  assert.deepEqual([A.validateFrame({blueprint: 'compose', beats}, {finish: 'anime'}).shot, A.validateFrame({blueprint: 'compose', beats}, {finish: 'anime'}).drawings], ['approach', 3]);
+  assert.equal(A.validateFrame({blueprint: 'compose', shot: 'sakuga', beats}).shot, undefined, 'motion frames carry no shot');
+  const second = A.validateFrame({blueprint: 'compose', shot: 'sakuga', drawings: 6, beats}, {finish: 'anime'}), notes = [];
+  A.sakugaBudget([{frame: sakuga, label: 'S01C'}, {frame: second, label: 'S01D'}], m => notes.push(m));
+  assert.deepEqual([sakuga.shot, second.shot, second.drawings], ['sakuga', 'turn', 3], 'one expensive shot per scene');
+  assert.match(notes[0], /^S01D: one expensive/);
+
+  const [system, user] = A.composeMessages({frameId, width: 1920, height: 1080, duration: 3, frame: sakuga, direction: named, words: [{text: 'rain', start: 0.2}], fps: 24});
+  assert.match(system.content, /CEL PAINT/);
+  assert.match(system.content, /DRAWINGS, NOT TWEENS/);
+  assert.doesNotMatch(system.content, /MOTION DOCTRINE/, 'the anime contract replaces the motion doctrine');
+  const packet = JSON.parse(user.content.split('\n\n')[0]);
+  assert.deepEqual([packet.finish, packet.fps, packet.drawingBudget.uniqueDrawings, packet.colourScript.accent], ['anime', 24, 8, '#FF3B3B']);
+  assert.match(A.composeMessages({frameId, width: 1920, height: 1080, duration: 3, frame: A.validateFrame({blueprint: 'compose', beats}), direction: A.validateDirection({read}), words: []})[0].content, /MOTION DOCTRINE/);
+
+  const size = {frameId, width: 1920, height: 1080, duration: 3, script: named.script};
+  const eased = A.validateComposition(composition(timeline), size);
+  assert.ok(eased.issues.some(item => /swaps drawings/.test(item)), 'an anime shot that only eases is sent back');
+  const swapped = `const tl = gsap.timeline({paused: true}); tl.set('#${frameId}-hero', {opacity: 1}, 0.5); window.__timelines["${frameId}"] = tl;`;
+  assert.ok(A.validateComposition(composition(swapped), size).warnings.some(item => /outside the colour script: #10131A, #F7F4EE/.test(item)), 'two stray colours are named');
+  assert.ok(A.validateComposition(composition(swapped, '<svg><rect fill="#00FF00"/></svg>'), size).issues.some(item => /outside the colour script/.test(item)), 'more stray colours send the shot back');
+  const inScript = composition(swapped).replace('#10131A', named.script.colors.sky).replace('#F7F4EE', named.script.colors.line);
+  assert.deepEqual(A.validateComposition(inScript, size).issues, [], 'a shot in the script that swaps drawings passes');
+  assert.match(A.promptGuide({finish: 'anime'}), /ANIME FINISH[\s\S]*"sakuga"[\s\S]*dip-colour/);
+  assert.match(A.promptGuide({finish: 'anime', script: 'festival'}), /style's Festival/);
+});
+
+test('the style keeps the atelier finish only for the Atelier and Story Mix engines', () => {
+  const St = require('../style'), launch = key => structuredClone(St.LAUNCH_PROFILES.find(item => item.key === key).spec);
+  assert.deepEqual(St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'anime', script: 'indigo'}}).atelier, {finish: 'anime', script: 'indigo'});
+  assert.equal(St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'anime'}}).atelier.script, 'choose');
+  assert.equal(St.validateStyleSpec(launch('atelier')).atelier, undefined, 'no finish means motion design, and older specs hash the same');
+  assert.throws(() => St.validateStyleSpec({...launch('cinematic-hybrid'), atelier: {finish: 'anime'}}), /no atelier finish/);
+  assert.throws(() => St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'watercolour'}}), /atelier finish/);
+});

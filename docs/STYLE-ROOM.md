@@ -114,6 +114,12 @@ drawings and paintings, the Editing Room, captions and the render (`RenderRoom.i
 video follows its design. Room 04 shows the design under the plan's summary. A style without the switch behaves as
 before.
 
+## Atelier finish (0.68)
+
+A style on the Atelier or Story Mix engine may choose its Atelier finish: motion design (the default) or anime, with a
+colour script (Indigo moon, Vermilion eclipse, Paper noon, Festival, or Claude chooses per video). It is set in the
+channel's style window and in the editor; the other engines refuse it. DRAWN-SCENES.md section 33 has the details.
+
 ## Competitor learning (30 / 70)
 
 The owner supplies 3-10 competitor channels per family (milestone F07, done). Milestone R05 (Competitor Intelligence) will study them and may propose a **derived style revision** as a draft. Such a draft still needs the normal human review, keeps the reference share at or below 30%, and must not copy another channel's wording, footage, thumbnails, characters or signature look.

@@ -47,6 +47,8 @@ const CATALOG = Object.freeze({
   flash: {xfade: 'fadewhite', seconds: 0.15, use: 'a hit, a shock, a camera flash'},
   glitch: {xfade: 'pixelize', seconds: 0.2, use: 'something breaks, an error, a twist'},
   'zoom-cut': {xfade: 'zoomin', seconds: 0.18, use: 'punch into the next shot on a strong word'},
+  // 0.68 (html-anime): the anime cut, a quick dip through one colour of the video (its accent) into the next drawing.
+  'dip-colour': {xfade: 'custom', seconds: 0.6, use: 'the anime cut: a quick dip through the accent colour into the next drawing'},
 });
 // Older names kept so saved edits and styles still work.
 const ALIASES = Object.freeze({push: 'push-left', slide: 'slide-left', zoom: 'zoom-in', wipe: 'wipe-left'});
@@ -54,7 +56,18 @@ const resolve = name => ALIASES[name] || name;
 const NAMES = Object.freeze([...Object.keys(CATALOG), ...Object.keys(ALIASES)]);
 const xfadeOf = name => CATALOG[resolve(name)]?.xfade || null;
 const secondsOf = name => CATALOG[resolve(name)]?.seconds ?? 0.5;
+// The colour dip as an xfade expression on 8-bit BT.709 TV-range YUV (the segments' format): in over 0.25 s
+// (power2.in), a 0.05 s hold of the colour, out over 0.3 s (power2.out), like html-anime's #dip. In xfade P runs
+// from 1 to 0, so 1-P is the time through the transition.
+function dipExpr(hex = '#E23B4A') {
+  const [r, g, b] = [1, 3, 5].map(k => parseInt(/^#[0-9a-f]{6}$/i.test(hex) ? hex.slice(k, k + 2) : 'E2', 16) / 255);
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b, Y = Math.round(16 + 219 * y), U = Math.round(128 + 224 * (b - y) / 1.8556), V = Math.round(128 + 224 * (r - y) / 1.5748);
+  const C = `if(eq(PLANE,0),${Y},if(eq(PLANE,1),${U},${V}))`, t = '(1-P)';
+  return `if(lt(${t},0.4167),A+(${C}-A)*pow(${t}/0.4167,2),if(lt(${t},0.5),${C},${C}+(B-${C})*(1-pow(1-(${t}-0.5)/0.5,2))))`;
+}
+// The xfade options for a transition (the colour dip needs its colour).
+const xfadeArgs = (name, colour) => (xfadeOf(name) === 'custom' ? `transition=custom:expr='${dipExpr(colour)}'` : `transition=${xfadeOf(name) || 'fade'}`);
 // For Claude: the transitions a style allows (all by default) with what each says, in one compact line each.
 const guide = (names = Object.keys(CATALOG)) => [...new Set(names.map(resolve))].filter(name => CATALOG[name]).map(name => `${name} (${CATALOG[name].use})`).join('; ');
 
-module.exports = {CATALOG, ALIASES, NAMES, resolve, xfadeOf, secondsOf, guide};
+module.exports = {CATALOG, ALIASES, NAMES, resolve, xfadeOf, xfadeArgs, dipExpr, secondsOf, guide};
