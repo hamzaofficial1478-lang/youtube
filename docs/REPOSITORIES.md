@@ -190,6 +190,12 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - Used: `countries-110m.json` only, read from `node_modules` by `maps.js`, decoded from TopoJSON in our own code (no topojson-client, no d3-geo); the drawing page receives the decoded shapes as data (`window.DMAP`). Owner go-ahead 2026-10-17 ("add that").
 - Not used: the 50m and 10m files and `land-*.json` (installed with the package, never loaded).
 
+### letuandat131/whiteboard-animation-vi (0.67, the sketch reveal)
+
+- Source: <https://github.com/letuandat131/whiteboard-animation-vi>, read in full at `c689bf7fd75fb4cb84f6ae2880a4dac6f40b92d0` (2026-10-13). Licence: CC0 1.0 for its own code; `handdraw/grid_stream.py` derives from SRT Whiteboard (MIT, kept in `vendor/whiteboard-animation/LICENSE` with a NOTICE).
+- Ported to JavaScript in `drawn-reveal.js`: the line map (`build_v181d_ink_map`), the grid line order (`grid_stream.py`, `grid.py`), the colour regions and palette (`_region_ids`, `v181d_cluster.py`, `v181d_palette.py`), the colour route and contact timeline (`v181d_subject_fill.py`), the left-to-right background (`v181e_background_fill.py`) and the frame composite (`pixels.py`). Changes: a border rule instead of the ISNet subject model, white paper left clear, seeded k-means on a sample, the pen computed for any moment.
+- Not used: ISNet and its weights (Apache-2.0, SkyTNT), NVENC/CUDA, the Gradio app, the hand images and demo pictures (no licence). Details in `research/whiteboard-animation-vi.md`; 7 draft skills in `skills/whiteboard-craft.json`.
+
 ### bradautomates/claude-video (0.14.1)
 
 - Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.

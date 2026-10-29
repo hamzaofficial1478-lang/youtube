@@ -55,7 +55,11 @@
   // just before the cut, and a picture cued on a later word only finished as the shot ended).
   // A painted picture (ChatGPT, 2026-10-22) is decoded on the page before drawing (window.DIMG, by its SHA-256).
   const painted = el => (el?.image && window.DIMG?.[el.image]?.naturalWidth ? window.DIMG[el.image] : null);
-  const pictureSeconds = (el, ts = 0) => (painted(el) ? (el.backdrop ? 0.4 : 1.1) : el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
+  // 0.67: on the whiteboard, and wherever the drawing hand is on, a painted picture is drawn the whiteboard way
+  // (drawn-reveal.js): its lines, then its colours brushed in, in up to 60% of its time on screen (at most 5 s). A
+  // painted place the shot before already showed is not drawn again.
+  const sketches = el => !!(window.DREVEAL && painted(el) && (K.FIN === 'wb' || HAND) && !(el.backdrop && D.holdBackdrop));
+  const pictureSeconds = (el, ts = 0) => (painted(el) ? (sketches(el) ? Math.min(5, Math.max(1.2, 0.6 * (P.duration - ts))) : el.backdrop ? 0.4 : 1.1) : el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
     // A map (0.36) at size xl is the whole frame; smaller maps are panels like charts.
     if (el.kind === 'map' && (el.size || 'xl') === 'xl') return {box: [0, 0, K.W, K.H], center: [K.W / 2, K.H / 2], r: K.H / 2, w: K.W, h: K.H};
@@ -1170,22 +1174,40 @@
   // show an edge, and fades in only when it opens a place; a painted picture is a card that wipes in (hand-made
   // looks) or lands (motion design).
   function drawPainted(el, i, local, enter) {
-    const image = painted(el), {ctx, u, W, H} = K;
+    const image = painted(el), {ctx, u, W, H} = K, sketch = enter === 'draw' && sketches(el), seconds = pictureSeconds(el, LAYOUT.el[i].ts);
     if (el.backdrop) {
       const s = Math.max(W / image.naturalWidth, H / image.naturalHeight) * 1.06, w = image.naturalWidth * s, h = image.naturalHeight * s;
+      if (sketch) return sketchImage(el, image, (W - w) / 2, (H - h) / 2, w, h, local / seconds);
       ctx.save(); if (enter === 'draw' || enter === 'fade') ctx.globalAlpha *= ease.inOutSine(clamp01(local / 0.4)); ctx.drawImage(image, (W - w) / 2, (H - h) / 2, w, h); ctx.restore();
       return;
     }
-    const est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, w = x1 - x0, h = y1 - y0, q = ease.inOutSine(clamp01(local / pictureSeconds(el, LAYOUT.el[i].ts))), pad = 7 * u;
+    const est = LAYOUT.est[i], [x0, y0, x1, y1] = est.box, w = x1 - x0, h = y1 - y0, q = ease.inOutSine(clamp01(local / seconds)), pad = 7 * u;
+    // Drawn on the whiteboard itself (its pictures are line art on white); in other looks on a card that is there first.
+    if (sketch && K.FIN === 'wb') return sketchImage(el, image, x0, y0, w, h, local / seconds);
     ctx.save();
     if (['flat', 'info'].includes(K.FIN)) { const z = 0.88 + 0.12 * ease.outBack(q); ctx.globalAlpha *= clamp01(q * 1.6); ctx.translate(est.center[0], est.center[1]); ctx.scale(z, z); ctx.translate(-est.center[0], -est.center[1]); }
-    else { ctx.beginPath(); ctx.rect(x0 - 30 * u, y0 - 30 * u, (w + 60 * u) * q, h + 60 * u); ctx.clip(); }
+    else if (!sketch) { ctx.beginPath(); ctx.rect(x0 - 30 * u, y0 - 30 * u, (w + 60 * u) * q, h + 60 * u); ctx.clip(); }
     ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = 20 * u; ctx.shadowOffsetY = 7 * u;
     ctx.fillStyle = '#FFFFFF'; ctx.beginPath(); ctx.roundRect(x0, y0, w, h, 16 * u); ctx.fill();
     ctx.shadowColor = 'transparent';
     ctx.beginPath(); ctx.roundRect(x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad, 11 * u); ctx.clip();
-    ctx.drawImage(image, x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad);
+    if (sketch) sketchImage(el, image, x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad, local / seconds);
+    else ctx.drawImage(image, x0 + pad, y0 + pad, w - 2 * pad, h - 2 * pad);
     ctx.restore();
+  }
+  // One moment (q, 0-1) of a sketch reveal in the box x, y, w, h: ink where the pen has drawn, colour where the brush
+  // has passed, the picture's white paper left clear. The hand holds the reveal's own pen, lifted on its hops and
+  // carrying the colour it lays. The composite is kept per picture, so a held picture costs nothing per frame.
+  function sketchImage(el, image, x, y, w, h, q) {
+    const R = window.DREVEAL, plan = R.cached(el.image, image, !!el.backdrop), at = Math.min(1, Math.max(0, q));
+    if (!K.DRY) {
+      const ink = K.DARK ? [242, 242, 242] : K.FIN === 'wb' && K.WB === 'pencil' ? [100, 100, 100] : [30, 30, 30], key = `${at}|${ink}`;
+      if (!plan.canvas) { plan.canvas = new OffscreenCanvas(plan.w, plan.h); plan.pixels = new ImageData(plan.w, plan.h); }
+      if (plan.drawn !== key) { R.frame(plan, at, plan.pixels.data, ink); plan.canvas.getContext('2d').putImageData(plan.pixels, 0, 0); plan.drawn = key; }
+      K.ctx.drawImage(plan.canvas, x, y, w, h);
+    }
+    const tip = at < 1 ? R.pen(plan, at) : null;
+    if (tip) { K.penAt(x + (tip.x + 0.5) * w / plan.w, y + (tip.y + 0.5) * h / plan.h); if (K.PEN) { K.TIPLIFT = tip.lift; K.TIPINK = tip.colour; } }
   }
   function drawPicture(el, i, local, enter) {
     if (painted(el)) return drawPainted(el, i, local, enter);
@@ -1270,6 +1292,7 @@
   // samples a second and the pen's tip is kept. A pure function of the shot, so every frame agrees on it.
   function penTrack(context) {
     const dry = new OffscreenCanvas(4, 4).getContext('2d'), main = K.ctx, step = 1 / 15, tips = [];
+    K.DRY = true;
     for (let k = 0; k * step <= P.duration + 1e-6; k++) {
       const tt = k * step;
       K.ctx = dry; dry.setTransform(context.scale, 0, 0, context.scale, 0, 0); K.TIP = null; K.T = tt; LAYOUT.anchors = [];
@@ -1278,14 +1301,14 @@
       dry.restore();
       tips.push(K.TIP);
     }
-    K.ctx = main; K.TIP = null;
+    K.ctx = main; K.TIP = null; K.DRY = false; K.TIPLIFT = 0; K.TIPINK = null;
     return {step, tips};
   }
   // The hand between strokes: it comes in from the corner before the first line, lifts and travels on an arc to
   // the next stroke, steps back to rest during a long pause, and leaves when the drawing is done.
   function handAt(t, now, context) {
     const {tips, step} = LAYOUT.track, n = tips.length, Wd = context.ctx.canvas.width, Hd = context.ctx.canvas.height;
-    if (now) return {at: now, lift: 0, tilt: 0};
+    if (now) return {at: now, lift: K.TIPLIFT || 0, tilt: 0};
     const k = Math.max(0, Math.min(n - 1, Math.floor(t / step)));
     let a = k; while (a >= 0 && !tips[a]) a--;
     let b = k + 1; while (b < n && !tips[b]) b++;
@@ -1334,7 +1357,9 @@
     ctx.translate(pose.at[0], pose.at[1]); ctx.rotate(angle); ctx.scale(s, s); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.save(); ctx.translate(10 + 16 * pose.lift, 12 + 18 * pose.lift); ctx.globalAlpha = 0.15 - 0.05 * pose.lift; ctx.fillStyle = '#000000'; ctx.fill(H.shadow); ctx.restore();
     const pencil = K.FIN === 'wb' && K.WB === 'pencil';
-    shape(H.nib, pencil ? '#5A5A5A' : '#1E1E1E', 2); shape(H.collar, pencil ? '#E8C9A0' : K.PAL.ink === '#1F1F1F' ? K.PAL.accent : K.PAL.ink, 2.4); shape(H.barrel, pencil ? '#F2C14E' : '#F4F4F2', 2.4);
+    // While a painted picture is coloured in, the marker is the colour being laid (0.67).
+    const laying = !pencil && K.TIPINK;
+    shape(H.nib, pencil ? '#5A5A5A' : laying || '#1E1E1E', 2); shape(H.collar, pencil ? '#E8C9A0' : laying || (K.PAL.ink === '#1F1F1F' ? K.PAL.accent : K.PAL.ink), 2.4); shape(H.barrel, pencil ? '#F2C14E' : '#F4F4F2', 2.4);
     shape(H.sleeve, '#3D5A80'); shape(H.cuff, '#2F4766');
     shape(H.back, SKIN, 0);
     ctx.save(); ctx.clip(H.back); ctx.fillStyle = '#E7AE8C'; ctx.fill(H.shade); ctx.fillStyle = '#FBE0CB'; ctx.fill(H.light); ctx.restore();
@@ -1852,7 +1877,7 @@
   function drawOnce(t, context) {
     P = context.P; D = P.data;
     K.KIT = D.kit || {};
-    K.TIP = null;
+    K.TIP = null; K.TIPLIFT = 0; K.TIPINK = null;
     // A stickman shot may name its own look (videos that mix the looks); the style's look otherwise. A motion shot its
     // design (0.35), the same way.
     const own = value => (value && value !== 'mix' && value !== 'footage' ? value : null);

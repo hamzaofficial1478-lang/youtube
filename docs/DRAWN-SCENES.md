@@ -666,3 +666,37 @@ photos; ChatGPT paints all of it; in a Mix the AI decides per scene. The style k
 Tested in tests/scene.test.js ("picture type (0.63) ...", a mixed plan end to end with fake ChatGPT) and
 tests/engines.test.js ("picture type (0.63) ..."); the channel window was clicked through in a real browser.
 
+
+## 32. The sketch reveal: painted pictures drawn by hand (0.67.0)
+
+Owner request 2026-10-29: whiteboard-animation-vi draws a picture by hand more accurately and more steadily than our
+hand-drawn engine; take its brain. Read in research/whiteboard-animation-vi.md; ported in `drawn-reveal.js`
+(`window.DREVEAL` in the drawing page, also loaded by the Node tests).
+
+- **Where:** on the whiteboard (finish `wb`, every board look) and wherever the drawing hand is on (Stickman with
+  `drawing.hand`), a painted picture (`picture.image`) whose entrance is `draw` is no longer a card that wipes in: the
+  hand draws it. Cards in the hand-drawn engine are drawn straight onto the board (its pictures are line art on
+  white); Stickman looks keep their white card, which is there first. A painted backdrop is drawn in quick mode (the
+  background region by region from left to right after the subject); the same painted place as the shot before is
+  held (`Sk.carry` sets `holdBackdrop`) and only new places are drawn.
+- **How:** `DREVEAL.plan` makes, once per picture and size (cached by SHA-256, analysed at up to 1280 pixels):
+  the line map (bilateral, CLAHE, adaptive threshold, multiscale support, speck cleanup), the line order on a grid
+  (subject, lettering left to right, contours; regions finished before the pen moves on; bridges split; fragments
+  merged), colour regions bounded by the lines and up to eight palette colours, the subject by a border rule, and the
+  colour route (slanted lanes, three routes compacted, least travel wins) with one eased timeline for the pen and
+  the colour. `DREVEAL.frame` composites a moment (ink where the line time has passed, colour where the brush has
+  passed, the picture's white paper left clear); `DREVEAL.pen` gives the pen, its lift and the colour being laid.
+- **Timing:** lines 45% and colour 55% of the reveal, which takes up to 60% of the picture's time on screen (1.2-5
+  s); the finished picture holds. One pen draws one thing at a time, as before (`pictureSeconds` counts the reveal).
+- **The hand** takes the reveal's pen: down while it draws, lifted on the hops between strokes (`K.TIPLIFT`), the
+  marker in the colour being laid (`K.TIPINK`).
+- **Planner:** for engines with the whiteboard, the PAINTED PICTURES line says the hand draws a picture in up to 60%
+  of its time on screen, asks for a beat of about 3-6 s with the thing named while its lines appear, and to keep the
+  same painted place on the next shot of that place.
+- `drawn-scene/28`. Tested in tests/reveal.test.js (the plan: repeatable, lines only on lines, paper left clear,
+  subject first, lettering left to right, every pixel coloured when the brush is there; the engine: a painted picture
+  drawn over time on the whiteboard under the hand, frames pure functions of time, the finished picture holds) and
+  by eye on contact sheets of the whiteboard card, a whiteboard backdrop and a Stickman card.
+- **Honest limits:** the subject rule is weaker than the original's segmentation model on crowded pictures; pictures
+  with textures or gradients give scratchier lines (ChatGPT is asked for whiteboard pictures by the visual rules);
+  the first frame of a shot with a new picture waits about 1-2.5 s while the plan is made.

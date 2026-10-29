@@ -1,0 +1,8 @@
+The sketch reveal in drawn-reveal.js (0.67) is a JavaScript port of the planning code of whiteboard-animation-vi
+(https://github.com/letuandat131/whiteboard-animation-vi, pinned c689bf7fd75fb4cb84f6ae2880a4dac6f40b92d0):
+handdraw/v181d_plan.py, grid.py, grid_stream.py, v181d_cluster.py, v181d_palette.py, v181d_subject_fill.py,
+v181e_background_fill.py and pixels.py. Its original code is dedicated to the public domain under CC0 1.0 Universal.
+Its grid routing (handdraw/grid_stream.py) derives from SRT Whiteboard, whose MIT licence is kept in LICENSE beside this
+notice. No source file of the repository is included, and none of its hand images, model weights or demo art is used:
+the program draws its own hand, and the repository's ISNet subject model (SkyTNT Anime Segmentation) is replaced by a
+border rule in our port.

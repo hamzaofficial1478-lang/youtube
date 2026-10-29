@@ -77,21 +77,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 436, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 160 editing-brain skills');
+  assert.equal(loaded.length, 443, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 7 whiteboard craft + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 436);
+  assert.equal(ids.size, 443);
   const state = skills.state();
-  assert.equal(state.counts.total, 436);
-  assert.equal(state.counts.draft, 436);
+  assert.equal(state.counts.total, 443);
+  assert.equal(state.counts.draft, 443);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 436);
+  assert.equal(state.counts.builtin, 443);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root});
-  assert.equal(second.skills().length, 436);
+  assert.equal(second.skills().length, 443);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -473,7 +473,7 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.skills.counts.total, 436);
+  assert.equal(state.skills.counts.total, 443);
   assert.equal(state.skills.counts.approved, 0);
   assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
