@@ -1,7 +1,7 @@
 {
-  "version": "0.65.0",
+  "version": "0.66.0",
   "updated": "2026-10-29",
-  "nextAction": "The owner's 2026-10-28 list is built (0.62-0.65). Next, by the owner's plan: open each channel's editing-style window and save it (the AI-design tick and the picture type are there), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end to see what needs improving. The owner may still send a reference image of the natural look.",
+  "nextAction": "Try the installer on another Windows PC (docs/INSTALL.md) and report anything that stops it. Then, by the owner's plan: save each channel's editing style (AI design and picture type), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -652,7 +652,8 @@
     "2026-10-23: Freesound and Jamendo APIs are used for free sounds and music on the owner's request. Only CC0 and CC BY material is admitted. Both platforms reserve commercial API use, so each connection records the owner's confirmation that the platform allows their use.",
     "2026-10-28: The picture type (Cartoon, Natural, Mix) belongs to the engine and covers every look it uses. Natural is realistic scenes painted by ChatGPT, people included, never photos or real people; Mix is chosen by the AI per scene. It is set in the channel's editing-style window together with the engine, looks and film looks.",
     "2026-10-28: No template videos. A style may let the AI design each video (colours, fonts, pace, energy, caption look) inside its engine and looks; the style's own settings are the channel's starting point and the fallback, and every design is checked for readability.",
-    "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval."
+    "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval.",
+    "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image."
   ],
-  "milestone": "0.65.0: competitors read in one click with finer subjects to keep from each channel"
+  "milestone": "0.66.0: a one-click installer and updater for other Windows PCs"
 }
