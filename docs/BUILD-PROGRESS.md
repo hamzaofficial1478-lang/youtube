@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.65.0: competitors read in one click with finer subjects, on top of 0.64 (the AI designs each video, with more fonts, caption looks and animations, 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.65.0: competitors read in one click with finer subjects, on top of 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
