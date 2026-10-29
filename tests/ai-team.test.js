@@ -190,7 +190,7 @@ test('visual rules (0.56): every look of every engine has its own rules, planner
   assert.equal(check[1].content[0].type, 'image');
   assert.deepEqual(Dna.readCheck('{"fits": false, "problems": ["Looks like a photo."]}'), {fits: false, problems: ['Looks like a photo.']});
   assert.equal(Dna.readCheck('Looks great!').fits, false, 'no readable verdict is no pass');
-  assert.equal(Dna.summary().length, Object.keys(Dna.DNA).length);
+  assert.equal(Dna.summary().length, Object.keys(Dna.DNA).length + 1, 'every look, and natural for any look');
 });
 
 test('a Claude model per kind of job (owner request 2026-10-22: stronger models use more tokens)', t => {

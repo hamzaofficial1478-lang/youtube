@@ -344,7 +344,7 @@ class EditingRoom {
   // operations, the program checks every one, and nothing changes until the owner applies them.
   drawingRules(state) {
     const spec = state.inputs.spec, scope = E.engineScope(spec), payload = state.inputs.payload;
-    return {primary: payload.engine || E.primaryEngine(spec), cast: payload.cast || [], kit: payload.kit || null, engines: scope.drawn, films: scope.films, looks: scope.looks, boards: scope.boards, designs: scope.designs};
+    return {primary: payload.engine || E.primaryEngine(spec), cast: payload.cast || [], kit: payload.kit || null, engines: scope.drawn, films: scope.films, looks: scope.looks, boards: scope.boards, designs: scope.designs, types: scope.types || ['cartoon']};
   }
   // The strict check of a changed drawing (owner edits); Claude's proposals are checked leniently with named repairs.
   checkDrawingFor(state, {lenient = false, warn = () => {}} = {}) {

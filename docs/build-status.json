@@ -1,7 +1,7 @@
 {
-  "version": "0.62.0",
-  "updated": "2026-10-28",
-  "nextAction": "Next build (owner request 2026-10-28, point 5): the Cartoon / Natural / Mix picture type (natural = realistic pictures painted by ChatGPT, never real photos; Mix chosen by the AI per scene within rules). The owner sends a reference image of the natural look first. Still open for the owner from 0.61: add Fish Audio, Freesound (API key) and Jamendo (client ID) on Connections, confirming each platform allows your use. Then fill the sound library (Find free sounds online, or import Pixabay downloads), and a real video is made with real voice, music and effects to see what needs improving.",
+  "version": "0.63.0",
+  "updated": "2026-10-29",
+  "nextAction": "Next builds (owner requests 2026-10-28): (1) engines choose their own colours, effects, transitions and pace per video instead of fixed look presets; (2) more fonts, caption looks and caption animations; (3) competitor reading: per-competitor picks of what the owner liked, read and adopted under the 30/70 rule. The owner may still send a reference image of the natural look to tune the natural rules. Still open from 0.61: add Fish Audio, Freesound and Jamendo on Connections, fill the sound library and make one real video end to end (a natural video also needs ChatGPT connected for pictures).",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -649,7 +649,8 @@
     "2026-10-22: Every picture is made in its engine's and style's look (visual rules per look); photos belong to footage documentaries, never to stickman cartoons. A family is deleted only while nothing was made for it.",
     "2026-10-22: Real images come from licensed sources only (stock libraries, Wikimedia Commons public domain/CC0/CC BY with credits, AI); never unlicensed images from websites, social media or YouTube. Reddit is read through the owner's own app, as topic signals only.",
     "2026-10-23: Music and sound effects come from the owner's free sound library (hand downloads from Pixabay or the YouTube Audio Library, imported from a folder), not ElevenLabs generation. The Pexels and Pixabay APIs have no audio; Freesound's API needs a negotiated commercial agreement and is not used.",
-    "2026-10-23: Freesound and Jamendo APIs are used for free sounds and music on the owner's request. Only CC0 and CC BY material is admitted. Both platforms reserve commercial API use, so each connection records the owner's confirmation that the platform allows their use."
+    "2026-10-23: Freesound and Jamendo APIs are used for free sounds and music on the owner's request. Only CC0 and CC BY material is admitted. Both platforms reserve commercial API use, so each connection records the owner's confirmation that the platform allows their use.",
+    "2026-10-28: The picture type (Cartoon, Natural, Mix) belongs to the engine and covers every look it uses. Natural is realistic scenes painted by ChatGPT, people included, never photos or real people; Mix is chosen by the AI per scene. It is set in the channel's editing-style window together with the engine, looks and film looks."
   ],
-  "milestone": "0.62.0: channel pages with their setup road, the editing style chosen from the channel page, and mixes of the looks the owner ticks"
+  "milestone": "0.63.0: the Cartoon / Natural / Mix picture type for every look of an engine, chosen in the channel window"
 }

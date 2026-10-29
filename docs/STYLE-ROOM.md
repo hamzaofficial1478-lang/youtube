@@ -65,7 +65,7 @@ are part of the immutable revision, so they need the same named approval.
 Owner request 2026-10-28: set a channel's engine and looks without walking through the rooms. The channel page's
 "Editing style" step (and a new family, right after it is created) opens one window: the editing engine (every
 style of the library, the channel's own copies included), that engine's looks to tick (one = that look, two or
-more = a mix of only those), the film looks (none, one, or two or more for Claude to choose from) and "All
+more = a mix of only those), the picture type (0.63, below), the film looks (none, one, or two or more for Claude to choose from) and "All
 settings" (the full style editor). It saves:
 
 - **For this channel only:** the channel's own copy, named "<channel> · <style>" (a derived profile of the chosen
@@ -76,6 +76,24 @@ settings" (the full style editor). It saves:
 Then it approves the revision under the owner's name with the same three confirmations as Room 03, and assigns it
 as the family default, through Room 03's own routes. An unchanged spec is not revised again; a revision made by a
 failed try is reused.
+
+## Picture type: Cartoon, Natural or Mix (0.63)
+
+Owner request 2026-10-28: the type belongs to the engine, not to one look ("if the user selects the stickman engine
+and marks cartoonish, all the styles of the stickman engine craft the video in cartoonish"), and it is chosen in the
+same window as the engine, looks and film looks. The style's `drawing.pictureType` is `natural` or `mix`; absent
+means cartoon. It applies to every look the style uses and is offered for the Stickman, Hand-drawn, Documentary and
+Story Mix engines (Cinematic keeps real footage and Atelier designs every shot, so both refuse it).
+
+- **Cartoon:** the engine's own drawings, as before.
+- **Natural:** every drawn shot is one realistic painting by ChatGPT - the whole scene, people included, like a more
+  realistic version of a cartoon (true proportions, natural light, real materials), never a photograph and never a
+  real person or landmark. The program moves the camera through it and lays the motion layer over it.
+- **Mix:** Claude chooses per scene: natural for real places, history, evidence and drama; cartoon for explanations,
+  diagrams, humour and characters who act a process. One type per scene, with the reason in its first shot's notes.
+
+The channel window shows two tick boxes, Cartoon and Natural (both = Mix); the style editor has a "Picture type"
+menu. How it is planned, painted and checked is in DRAWN-SCENES.md section 31.
 
 ## Competitor learning (30 / 70)
 

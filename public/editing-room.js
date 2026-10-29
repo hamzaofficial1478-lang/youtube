@@ -250,7 +250,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
 // revision, checked like any other.
 const TL = {rev: null, zoom: 1, at: 0, sel: null, drawings: null, loading: false, drafts: {}, frame: null, command: '', scope: 'clip', proposal: null, busy: false};
 const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['audio', 'Audio', 18]];
-const TL_SHOT_KEYS = ['set', 'mood', 'camera', 'transition', 'film', 'texture', 'look', 'board', 'design'];
+const TL_SHOT_KEYS = ['type', 'set', 'mood', 'camera', 'transition', 'film', 'texture', 'look', 'board', 'design'];
 const TL_ADD = {text: {kind: 'text', text: 'New words', style: 'title'}, figure: {kind: 'figure', pose: 'stand', expression: 'happy'}, prop: {kind: 'prop', prop: 'coin'}, fx: {kind: 'fx', effect: 'sparkle'}, arrow: {kind: 'arrow', from: [0.3, 0.6], to: [0.6, 0.4]}, bubble: {kind: 'bubble', text: 'Words', of: 0}};
 const tlSeconds = (frames, fps) => frames / fps;
 const tlClock = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed(2).padStart(5, '0')}`;

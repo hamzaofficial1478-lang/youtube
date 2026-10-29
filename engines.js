@@ -109,13 +109,19 @@ function engineScope(spec) {
   // Film looks (0.39) a shot may name: any when the style has one or lets Claude choose; none otherwise.
   // 0.62: a mix of ticked looks limits a shot's look, board, design and Claude's film choice to them (null: any).
   const d = spec?.drawing || {}, films = d.film && d.film !== 'none' ? (d.film === 'choose' && d.films?.length ? d.films : null) : [];
-  const picks = Object.fromEntries(Object.entries({looks: d.look === 'mix' && d.looks, boards: d.board === 'mix' && d.boards, designs: d.design === 'mix' && d.designs}).filter(([, list]) => list?.length));
+  const picks = Object.fromEntries(Object.entries({looks: d.look === 'mix' && d.looks, boards: d.board === 'mix' && d.boards, designs: d.design === 'mix' && d.designs, types: PICTURE_TYPES[d.pictureType]}).filter(([, list]) => list?.length));
   if (isMix(spec) || primary === 'atelier') return {mix: isMix(spec), drawn: [...DRAW_ENGINES], footage: true, frames: true, films, ...picks};
   if (primary === 'montage') return {mix: false, drawn: ['motion'], footage: true, frames: false, films, ...picks};
   // The Cinematic engine draws nothing: footage and images only (its titles come from the editing brain).
   if (primary === 'cinema') return {mix: false, drawn: [], footage: true, frames: false, films: []};
   return {mix: false, drawn: [primary], footage: false, frames: false, films, ...picks};
 }
+// The picture type of a drawing engine (0.63, owner request 2026-10-28: "the type is the engine's type, not each
+// style's"): cartoon draws as today; natural paints every shot as one realistic scene (ChatGPT, never a photo); mix lets
+// Claude choose per scene. It applies to every look of the engine. The types a shot may have:
+const PICTURE_TYPES = Object.freeze({natural: ['natural'], mix: ['cartoon', 'natural']});
+const NATURAL = 'Natural shots ("type": "natural") are one realistic painting each, made by ChatGPT: the whole scene of the moment - the place, the light, the people and things the words name - painted like a more realistic version of a cartoon (true proportions, natural light and shadow, real materials, depth), never a photograph and never a real person or a real, recognisable place. Give the shot one picture with "backdrop": true whose "describe" says the place, the time of day, who is there and what they do, and "who": the cast ids painted in it. A natural shot has no drawn figures, props, crowds or bubbles (people and things are painted); over the painting you direct the camera ("camera", "focus" on the words) and the motion layer (kinetic words, numbers, charts, timelines, maps, arrows, effects), kept clear of faces. Shots of one scene in the same place repeat its backdrop "describe" word for word, so it is painted once and framed differently; paint a new one when the place, the moment or the action changes.';
+const TYPE_RULE = 'You choose the type per scene for the story: natural for real places, history, real-world evidence and dramatic or emotional moments; cartoon for explanations, diagrams, comparisons, humour, abstract ideas and characters who act a process. Every shot of one scene has the same type, the first shot\'s notes say why its scene has that type, and the video switches type only where the story changes, never on every scene.';
 // Film looks (0.39): how a medium prints the finished frame, for the drawn shots of every engine (drawn-engine.js
 // drawFilm). After lemo-opuscar's film styles (MIT), restated in our own words: what each suits and how to plan for it.
 const FILMS = Object.freeze({
@@ -154,7 +160,7 @@ const CINEMA = 'CINEMATIC ENGINE. This video uses one engine: Cinematic - real m
 ].join('\n');
 const FILM_RULE = 'Drawn shots are printed in it automatically (footage keeps its own grade). A shot may name another film look in sketch.film, or "none", only for a change of register (a flashback, an archive memory, a dream) and says why in its notes; the video must still feel like one film.';
 const MIX_RULE ='Change look where the story changes (a new chapter, a flashback, a story inside the story, a change of mood or place), keep one look for a whole scene, and say why in the shot\'s notes; the video must still feel like one film, never a different look on every shot.';
-function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null, grade = null, painted = false, looks = null, boards = null, designs = null, films = null} = {}) {
+function promptGuide(primary, {mix = false, look = null, board = null, design = null, brief = null, sources = null, film = null, grade = null, painted = false, looks = null, boards = null, designs = null, films = null, pictureType = null} = {}) {
   // The Cinematic engine (0.40) has its own guide: footage only, no drawing vocabulary or motion layer.
   if (primary === 'cinema') return [CINEMA, ...(GRADES[grade] ? [`GRADE: ${GRADES[grade].name}. ${GRADES[grade].plan} Every clip is graded alike, so choose footage whose light suits it.`] : []), ...(grade === 'choose' ? [`GRADE: choose one grade for the whole video and put its key in the plan's "grade" field: ${Object.entries(GRADES).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}`] : []), 'TASTE: references are ideas, never rules. Choose shots, light and rhythm that make each moment feel like a film for this audience, and say why when it matters.', ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : [])].join('\n');
   // One engine (0.37): every shot comes from it; documentary means its footage and its drawn shots.
@@ -189,6 +195,8 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
     ...(design === 'mix' && motionMain ? [`DOCUMENTARY LOOKS (mix): ${uses(designs, 'documentary looks')}. Give each drawn shot its look in sketch.design, chosen for what its scene needs: ${only(DESIGNS, designs).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')}${footage && footageMix ? ` Footage shots (stock or image sources): ${FOOTAGE.plan}` : ''}${painted && footageMix ? ` footage (${FOOTAGE.name}, painted): a drawn shot with "design": "footage" whose place is a photo-real picture with "backdrop": true (${PAINTED_FOOTAGE}), with motion graphics over it.` : ''} ${MIX_RULE}`] : []),
     ...(boardMix ? [`WHITEBOARD LOOKS (mix): ${uses(boards, 'whiteboard looks')}. Give each hand-drawn shot its look in sketch.board, chosen for what its scene needs: ${only(BOARDS, boards).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} ${MIX_RULE}`] : []),
     ...(FILMS[film] ? [`FILM LOOK: ${FILMS[film].name}. ${FILMS[film].plan} ${FILM_RULE}`] : []),
+    ...(pictureType === 'natural' ? [`PICTURE TYPE: natural. Every drawn shot of this video is natural, in every look. ${NATURAL}`] : []),
+    ...(pictureType === 'mix' ? [`PICTURE TYPE: mix of cartoon and natural, in every look. Cartoon shots are the engine's own drawings (leave "type" out). ${NATURAL} ${TYPE_RULE}`] : []),
     ...(film === 'choose' ? [`FILM LOOK: choose one film look for this whole video, or none, and set it on every drawn shot as sketch.film${films?.length ? ' (only from the film looks the owner ticked)' : ''}: ${only(FILMS, films).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} A second look only for a change of register (a flashback, an archive memory), with the reason in notes.`] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
@@ -196,4 +204,4 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
   ].join('\n');
 }
 
-module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FILMS, FILM_RULE, GRADES, CINEMA, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};
+module.exports = {ENGINES, COMBINATIONS, PRIMARY_BY_ADAPTER, DRAW_ENGINES, LOOKS, BOARDS, DESIGNS, FILMS, PICTURE_TYPES, FILM_RULE, GRADES, CINEMA, FOOTAGE, MOTION_LAYER, primaryEngine, isMix, engineScope, drawEngines, plannerSources, promptGuide};

@@ -67,6 +67,9 @@ const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 const VERSION = 'drawn-scene/27';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
+// Picture types of a drawn shot (0.63, engines.js PICTURE_TYPES) and what a natural shot paints instead of drawing.
+const PICTURE_TYPES = Object.freeze(['cartoon', 'natural']);
+const NOT_NATURAL = Object.freeze(['figure', 'prop', 'crowd', 'bubble']);
 const BOARDS = Object.freeze(Object.keys(E.BOARDS));
 // 0.34: a stickman shot's own look, for videos that mix the stickman looks.
 const STICK_LOOKS = Object.freeze(Object.keys(E.LOOKS));
@@ -154,9 +157,21 @@ const propName = value => {
 
 // validate(raw, {primary, cast, lenient, warn}): the normalised drawing. `primary` is the video's primary engine,
 // which decides the engines this shot may use; `cast` resolves each figure's `who` into its look.
-function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}, kit = null, engines: allowed = null, films = null, looks = null, boards = null, designs = null} = {}) {
+function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn = () => {}, kit = null, engines: allowed = null, films = null, looks = null, boards = null, designs = null, types = null} = {}) {
   const c = checker({lenient, warn});
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) fail('A drawn scene must be an object.');
+  // The picture type (0.63): a natural shot is one realistic painting with the motion layer over it; its people and
+  // things are painted, so drawn figures, props, crowds and bubbles have no place in it. Absent = cartoon.
+  let type = raw.type === undefined || raw.type === 'cartoon' ? 'cartoon' : (types || PICTURE_TYPES).includes(raw.type) ? raw.type : c.problem(PICTURE_TYPES.includes(raw.type) ? `The picture type ${raw.type} is not this style's.` : `Picture type must be one of: ${PICTURE_TYPES.join(', ')}.`, 'cartoon');
+  if (type === 'natural' && Array.isArray(raw.elements)) {
+    const pictures = raw.elements.filter(item => item?.kind === 'picture');
+    if (!pictures.length) { if (!lenient) fail('A natural shot needs its painted scene: a picture with "backdrop": true.'); warn('A natural shot without a painted scene is drawn as a cartoon shot.'); type = 'cartoon'; }
+    else {
+      if (!pictures.some(item => item.backdrop === true)) { if (!lenient) fail('A natural shot needs its painted scene: a picture with "backdrop": true.'); warn('The picture of a natural shot became its painted scene ("backdrop": true).'); raw = {...raw, elements: raw.elements.map(item => (item === pictures[0] ? {...item, backdrop: true} : item))}; }
+      const drawn = raw.elements.filter(item => NOT_NATURAL.includes(item?.kind));
+      if (drawn.length) { if (!lenient) fail(`A natural shot paints its people and things: remove its ${[...new Set(drawn.map(item => item.kind))].join(', ')} elements.`); warn(`A natural shot paints its people and things, so its drawn ${[...new Set(drawn.map(item => item.kind))].join(', ')} ${drawn.length === 1 ? 'was' : 'were'} left out.`); raw = {...raw, elements: raw.elements.filter(item => !drawn.includes(item))}; }
+    }
+  }
   // The video's world kit, and the kit a stored drawing already carries (checked again).
   const kits = {...Kit.embedded(raw.kit), ...(kit || {})}, kitRef = kitRefOf(kits);
   if (!Array.isArray(raw.elements) || !raw.elements.length) fail(`A drawn scene needs 1-${MAX_ELEMENTS} elements.`);
@@ -308,7 +323,9 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
       if (item.art !== undefined) { const checked = Il.validateArt(item.art, {outlines: false}); art = checked.art; if (!art) { if (!lenient) fail(`${label} picture: ${checked.issues[0]}`); warn(`${label}: its picture did not pass its checks (${checked.issues[0]}), so it will be drawn again.`); } }
       // A painted picture (ChatGPT, 2026-10-22) is a checked image file named by its SHA-256; a backdrop fills the frame behind the scene.
       const image = typeof item.image === 'string' && /^[a-f0-9]{64}$/.test(item.image) ? item.image : null;
-      elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...(image ? {image} : {}), ...(item.backdrop === true ? {backdrop: true} : {}), ...base});
+      // The cast painted in it (0.63), so every painting of a character is matched to the first one.
+      const who = [...new Set((Array.isArray(item.who) ? item.who : item.who === undefined ? [] : [item.who]).map(id => clean(id, 12).toLowerCase()).filter(id => castMap.has(id) || (c.problem(`${label} who "${clean(id, 12)}" is not in the cast.`), false)))].slice(0, 3);
+      elements.push({kind: 'picture', describe, x: c.coord(item.x, `${label} x`, 0.15, 0.85, 0.5), y: c.coord(item.y, `${label} y`, 0.2, 0.75, 0.46), size: c.pick(item.size, SIZES, `${label} size`, 'l'), ...(art ? {art} : {}), ...(image ? {image} : {}), ...(item.backdrop === true ? {backdrop: true} : {}), ...(who.length ? {who} : {}), ...base});
       return;
     }
     // 0.39 evidence and measuring tools: the words and numbers are the narration's own.
@@ -368,7 +385,7 @@ function validate(raw, {primary = 'stickman', cast = [], lenient = false, warn =
   const set = kitRef(raw.set, 'set') || c.pick(raw.set, SETS, 'Set', 'none');
   const used = [set, ...elements.flatMap(item => [item.prop, item.holds, item.look?.outfit])].filter(value => typeof value === 'string' && value.startsWith('kit:'));
   const carried = Object.fromEntries([...new Set(used)].map(ref => [ref.slice(4), kits[ref.slice(4)]]));
-  return {...(used.length ? {kit: carried} : {}), engine, set, ...(raw.board !== undefined ? {board: c.pick(raw.board, boards || BOARDS, 'Whiteboard look', boards?.[0] || 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, looks || STICK_LOOKS, 'Stickman look', looks?.[0] || 'classic')} : {}), ...(raw.design !== undefined ? {design: c.pick(raw.design, designs || [...DESIGNS, 'footage'], 'Motion design', designs?.find(design => design !== 'footage') || 'vector')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), ...(raw.texture !== undefined && raw.texture !== 'none' ? {texture: c.pick(raw.texture, TEXTURES, 'Texture', 'none')} : {}), ...(raw.film !== undefined && raw.film !== null ? (film => (film ? {film} : {}))(raw.film === 'none' ? 'none' : (films || FILMS).includes(raw.film) ? raw.film : c.problem(FILMS.includes(raw.film) ? `The film look ${raw.film} is not this style's.` : `Film look must be one of: ${FILMS.join(', ')}.`, null)) : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
+  return {...(used.length ? {kit: carried} : {}), engine, ...(type === 'natural' ? {type} : {}), set, ...(raw.board !== undefined ? {board: c.pick(raw.board, boards || BOARDS, 'Whiteboard look', boards?.[0] || 'cartoon')} : {}), ...(raw.look !== undefined ? {look: c.pick(raw.look, looks || STICK_LOOKS, 'Stickman look', looks?.[0] || 'classic')} : {}), ...(raw.design !== undefined ? {design: c.pick(raw.design, designs || [...DESIGNS, 'footage'], 'Motion design', designs?.find(design => design !== 'footage') || 'vector')} : {}), ...(raw.holdSet === true ? {holdSet: true} : {}), ...(raw.texture !== undefined && raw.texture !== 'none' ? {texture: c.pick(raw.texture, TEXTURES, 'Texture', 'none')} : {}), ...(raw.film !== undefined && raw.film !== null ? (film => (film ? {film} : {}))(raw.film === 'none' ? 'none' : (films || FILMS).includes(raw.film) ? raw.film : c.problem(FILMS.includes(raw.film) ? `The film look ${raw.film} is not this style's.` : `Film look must be one of: ${FILMS.join(', ')}.`, null)) : {}), mood: c.pick(raw.mood, MOODS, 'Mood', 'normal'), camera: c.pick(raw.camera, CAMERAS, 'Camera', 'push'), transition: c.pick(raw.transition, TRANSITIONS, 'Transition', 'cut'), ...(focus.length ? {focus} : {}), elements};
 }
 
 // A scene's setting: the place and feeling its drawn shots share unless a shot names another.
@@ -618,7 +635,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
 // ---------------------------------------------------------------- Claude's guide
 
 const list = values => values.join('|');
-function promptGuide(primary = 'stickman', {pictures = false, painted = false, looks = false, boards = false, designs = false, engines: allowed = null} = {}) {
+function promptGuide(primary = 'stickman', {pictures = false, painted = false, looks = false, boards = false, designs = false, engines: allowed = null, types = null} = {}) {
   const engines = allowed?.length ? allowed : E.drawEngines(primary);
   return [
     'DRAWN SHOTS (source "generated-graphics"): the program animates them from your description. You are the director, the character designer and the motion designer.',
@@ -626,7 +643,7 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
     'Design looks that tell the viewer who someone is at a glance: the narrator or "you" (an everyman), experts (glasses, lab-coat), rich people (suit, top-hat), workers (hard-hat), villains or a problem personified (body "creature": a dark blob with red eyes), machines (body "robot"). Give every character a distinct hair, colour or accessory. Never copy a real person or another channel\'s characters.',
     'Each scene may give a "setting": {"set", "mood"} - the place and feeling of that part of the story. Its drawn shots stay there unless their own sketch names another set.',
     'For each drawn shot return "cue": the first words spoken when this shot starts (the picture changes on them), and "sketch":',
-    `{"engine": ${list(engines)}, "set": ${list(SETS)}, "mood": ${list(MOODS)}, "camera": ${list(CAMERAS)}, "transition": ${list(TRANSITIONS)}, "focus"?: [{"at": words, "x": 0-1, "y": 0-1, "zoom": 1-2.5}] (max ${MAX_FOCUS}), "elements": [1-${MAX_ELEMENTS}, back to front]}`,
+    `{"engine": ${list(engines)}, ${types?.includes('natural') ? `"type"?: ${list(types)} (see PICTURE TYPE), ` : ''}"set": ${list(SETS)}, "mood": ${list(MOODS)}, "camera": ${list(CAMERAS)}, "transition": ${list(TRANSITIONS)}, "focus"?: [{"at": words, "x": 0-1, "y": 0-1, "zoom": 1-2.5}] (max ${MAX_FOCUS}), "elements": [1-${MAX_ELEMENTS}, back to front]}`,
     'Sets that are easy to misread: ocean is under water (light rays, seaweed, the sea floor), for divers and sea life; ships, sailors and the sea surface go on beach (sky, sea and sand) or storm with ship and waves props. space is outer space, night is a city at night, abstract and none are plain backdrops.',
     ...(looks ? [`A stickman shot of a video that mixes the stickman looks names its look: "look": ${list(Array.isArray(looks) ? looks : STICK_LOOKS)}.`] : []),
     ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(Array.isArray(boards) ? boards : BOARDS)}.`] : []),
@@ -640,6 +657,7 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
     `- {"kind": "fx", "effect": ${list(FX)}, "on"?: element number it targets (circle, cross, check, glow, burst, sparkles, spotlight, underline, scan, impact, lightning, explosion, fire, dust, spiral, crack), "x"?, "y"?, "size"?, "value"?: 0-100 for progress}`,
     ...(painted ? ['PAINTED PICTURES: ChatGPT paints the pictures of this video (real images, not line drawings). A picture may be a backdrop: "backdrop": true makes it the painted place behind the whole shot (describe the place only: no people, no words; the program draws the characters, words and effects on top). Give the story\'s important places a painted backdrop, list it first in the shot\'s elements and keep its shots in that place; other pictures are one subject on a card.'] : []),
     ...(pictures ? [`- {"kind": "picture", "describe": what the picture shows (10-${Il.LIMITS.describe} characters: the subject, what happens, the place, the feeling; no words in it), "x"?: centre 0.15-0.85, "y"?: centre 0.2-0.75, "size"?: s|m|l|xl (l), "at"?} - a detailed illustration drawn for this shot by an illustrator and traced by the hand (PAID: see PICTURES; at most ${MAX_PICTURES} per shot). Other elements (labels, arrows, words, effects, characters) may sit around it.`] : []),
+    ...(types?.includes('natural') ? [`- natural shots: {"kind": "picture", "backdrop": true, "describe": the whole scene (10-${Il.LIMITS.describe} characters: the place, the time of day and light, who is there and what they do, the feeling; no words in it), "who"?: [cast ids painted in it, up to 3]} first, then only motion-layer elements (text, chart, timeline, network, map, quote, document, gauge, ruler, loupe, arrow, fx). Painted by ChatGPT; it is the paid part of a natural shot.`] : []),
     `- {"kind": "chart", "type": ${list(CHART_TYPES)}, "values": 1-${MAX_SERIES} numbers, "labels"?: one short label per value, "title"?: what it shows, "unit"?: e.g. "$", "%", "M", "highlight"?: the index of the value that matters, "x"?, "y"?, "size"?, "at"?} - builds on its words (bars grow, a line draws, a pie sweeps, stars fill: rating is one value 0-5; units is a unit chart of identical marks with the part lit: values [part, whole], e.g. [1, 100] for "the top 1%", "icon": "person" for people). Use only numbers the narration says; never invent data.`,
     `- {"kind": "timeline", "events": 2-${MAX_EVENTS} [{"label": up to 18 chars, "when"?: a year or date}], "now"?: the index of the current event, "y"?, "at"?} - a bar with a medallion for each event, drawn left to right.`,
     '- A text with style "statement" is a whole sentence of up to 90 characters (key words between *stars* light up): kinetic type that builds word by word; give it the frame or most of it. Style "poster" is one or two giant words across the frame; list it before a picture or figure so it sits behind them.',
@@ -671,4 +689,4 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
   ].join('\n');
 }
 
-module.exports = {TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, PICTURE_TYPES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

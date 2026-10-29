@@ -97,7 +97,7 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
   return {fetch: fetchImpl, calls};
 }
 
-function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage', storyMap = true} = {}) {
+function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage', storyMap = true, drawing = null} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'scene-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
@@ -117,7 +117,9 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
   content = store.reviewContent(content.id, {revision: content.revision, action: 'approve'});
   let approval = null;
   if (withStyle) {
-    const montage = styles.profiles().find(item => item.key === styleKey).revisions.at(-1);
+    const profile = styles.profiles().find(item => item.key === styleKey), latest = profile.revisions.at(-1);
+    // A fixture may change the style's drawing settings (picture type, looks) in a revision of its own.
+    const montage = drawing ? styles.createRevision(profile.id, {spec: {...latest.spec, drawing}, createdBy: 'Owner', changeNote: 'Fixture drawing settings.', expectedRevision: latest.revision}) : latest;
     styles.approveRevision(montage.id, {approvedBy: 'Owner', notes: 'Fixture.', confirmations: {specReviewed: true, rightsReviewed: true, originalityReviewed: true}});
     styles.assign(family.id, {familyRevision: store.family(family.id).revision, assignedBy: 'Owner', reason: 'Stock and AI visuals suit this family.', revisionId: montage.id, expectedAssignmentId: null});
   }
@@ -328,6 +330,79 @@ test('pictures (paid): Claude spends the video\'s picture budget, the illustrato
   room.saveSettings(family.id, {...room.settings(family.id), picturesPerMinute: 0, revision: room.settings(family.id).revision});
   const input = {family: {}, style: {name: 'S', summary: '', engine: 'handdrawn', sources: ['generated-graphics'], primarySource: 'generated-graphics', cameraMoves: ['static'], sceneSeconds: {min: 1, max: 9}, shotSeconds: {min: 1, max: 6}, maxWordsOnScreen: 6}, narrationSeconds: 10, sentences: []};
   assert.doesNotMatch(planMessages(input)[0].content, /PICTURES \(paid\)|"kind": "picture"/);
+});
+
+test('picture type (0.63): a mix of cartoon and natural scenes; natural scenes are painted once per place with the cast matched, drawn people left out, and a failed one falls back', async t => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const checked = [];
+  const network = fakeNetwork({claudePlan: input => {
+    if (Array.isArray(input.raw)) { checked.push(input.raw.find(block => block.type === 'text').text); return {fits: true, problems: []}; }
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) {
+      // Plans come in parts, so the kind follows the sentence number.
+      const end = Math.min(last, start + 7), kind = Math.floor((start - 1) / 8) % 3;
+      // Scene kinds: a natural market (two shots share one painting, a drawn figure that must go), a cartoon scene, a
+      // natural scene with the trader painted in (his first painting is his portrait); the second market cannot be painted.
+      const market = `A busy river market at dawn, scene ${start}`;
+      const shotsOf = kind === 0 ? [0, 1].map(n => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: n ? '' : 'A real place: natural.', sketch: {engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe: market, backdrop: true}, {kind: 'figure', pose: 'point'}, {kind: 'text', style: 'keyword', text: `Part ${start}`}]}}))
+        : kind === 1 ? [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'An idea explained: cartoon.', sketch: {engine: 'stickman', elements: [{kind: 'figure', who: 'c1', pose: 'think'}, {kind: 'text', style: 'keyword', text: 'Trust'}]}}]
+        : [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A dramatic moment: natural.', sketch: {engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe: `The trader counting coins by lamplight, scene ${start}`, who: ['c1', 'nobody'], size: 'l'}, {kind: 'text', style: 'counter', text: '300 coins'}]}}];
+      scenes.push({sentenceStart: start, sentenceEnd: end, purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: shotsOf});
+    }
+    return {summary: 'Natural where it is real, cartoon where it explains.', cast: [{id: 'c1', name: 'Tarek', role: 'a young trader in the story', look: {hair: 'short'}}], scenes};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false, drawing: {look: 'mix', hand: false, looks: ['classic', 'storybook'], pictureType: 'mix'}});
+  narrate(40);
+  // Without ChatGPT painting, a natural or mixed style is refused before anything is spent.
+  room.ai.team = () => ({painted: false, pictures: {id: ids.claude.id, provider: 'claude'}});
+  assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude}), /picture type is Mix: its natural scenes are painted by ChatGPT/);
+  const painted = [], references = [];
+  room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}});
+  room.ai.image = async ({prompt, outFile, references: attached = [], onStart}) => {
+    onStart(); painted.push(prompt); references.push(attached);
+    if (/river market at dawn, scene 25\b/.test(prompt)) throw new Error('lost');
+    fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(60, 160))]));
+    return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}};
+  };
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed', JSON.stringify(room.publicPlanJob(room.planJobRow(queued.job.id))));
+  const plans = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
+  const reviews = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /continuity supervisor/.test(text));
+  assert.ok(reviews.length && reviews.every(text => /PICTURE TYPE: mix of cartoon and natural/.test(text) && /only the stickman looks the owner ticked/.test(text)), 'the continuity review knows the types and the ticked looks too');
+  assert.ok(plans.every(text => /PICTURE TYPE: mix of cartoon and natural, in every look/.test(text) && /NATURAL PAINTINGS \(paid, ChatGPT\): up to \d+ paintings/.test(text) && /"type"\?: cartoon\|natural/.test(text) && /VISUAL RULES \(Stickman · storybook · natural\)/.test(text)), 'the planner knows the types, the budget and the natural rules');
+  const manifest = latestManifest(room, content.id), all = shots(manifest);
+  const scenes = manifest.plan.scenes;
+  // The natural market: both shots natural, one shared painting, the drawn figure left out.
+  const market = scenes[0].shots;
+  assert.deepEqual(market.map(shot => shot.sketch.type), ['natural', 'natural']);
+  assert.ok(market.every(shot => !shot.sketch.elements.some(el => el.kind === 'figure')), 'a natural shot draws no figures');
+  assert.ok(market[0].sketch.elements[0].image && market[0].sketch.elements[0].image === market[1].sketch.elements[0].image, 'one painting for the place');
+  assert.equal(painted.filter(prompt => /river market at dawn, scene 1\b/.test(prompt)).length, 1, 'painted once, not once per shot');
+  assert.ok(manifest.warnings.some(item => /A natural shot paints its people and things, so its drawn figure was left out/.test(item)));
+  // The cartoon scene keeps its drawn character.
+  assert.ok(!scenes[1].shots[0].sketch.type && scenes[1].shots[0].sketch.elements.some(el => el.kind === 'figure'));
+  // The trader scene: the picture became the painted scene; unknown cast left out; the trader is matched later.
+  const trader = scenes[2].shots[0].sketch;
+  assert.deepEqual([trader.type, trader.elements[0].backdrop, trader.elements[0].who], ['natural', true, ['c1']]);
+  const traderPrompts = painted.filter(prompt => /trader counting coins/.test(prompt));
+  assert.ok(traderPrompts.every(prompt => /realistic painting[\s\S]*whole scene of this moment[\s\S]*People in it: Tarek \(a young trader in the story\)/.test(prompt) && /Never: photographs/.test(prompt)));
+  assert.equal(traderPrompts.length, 2);
+  assert.ok(/attached pictures of people/.test(traderPrompts[1]) && references[painted.indexOf(traderPrompts[1])].length === 2, 'the next painting of the trader carries the style key and his first painting');
+  // The second market could not be painted and its scene has no other painting: both shots are drawn as cartoon
+  // shots, and ChatGPT was asked once, not once per shot.
+  const lost = scenes[3].shots;
+  assert.equal(painted.filter(prompt => /river market at dawn, scene 25\b/.test(prompt)).length, 1);
+  assert.ok(lost.length === 2 && lost.every(shot => !shot.sketch.type && !shot.sketch.elements.some(el => el.kind === 'picture')), 'a failed natural scene becomes cartoon shots');
+  assert.ok(manifest.plan.pictures.notes.some(item => /ChatGPT could not paint its natural scene \(ChatGPT did not answer\); the program draws this shot itself/.test(item)) && manifest.plan.pictures.notes.some(item => /drawn as a cartoon shot instead of natural/.test(item)));
+  assert.ok(checked.every(text => /REALISTIC PAINTING/.test(text) && /whole scene of a natural shot/.test(text)), 'the art director checks natural scenes by the natural rules');
+  // Owner edits stay strict: no drawn people in a natural shot, and only the style's types.
+  assert.throws(() => Sk.validate({engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe: 'A quiet harbour at night', backdrop: true}, {kind: 'figure', pose: 'stand'}]}, {types: ['cartoon', 'natural']}), /remove its figure elements/);
+  assert.throws(() => Sk.validate({engine: 'stickman', type: 'natural', elements: [{kind: 'text', text: 'Hi'}]}), /needs its painted scene/);
+  assert.throws(() => Sk.validate({engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe: 'A quiet harbour at night', backdrop: true}]}, {types: ['cartoon']}), /picture type natural is not this style's/);
+  const again = Sk.validate(trader, {cast: [{id: 'c1', name: 'Tarek', role: '', look: Sk.DEFAULT_LOOK}], types: ['cartoon', 'natural']});
+  assert.deepEqual(again, trader, 'checking a checked natural drawing again gives the same drawing');
 });
 
 test('painted pictures (0.53, 0.56): ChatGPT paints in the look\'s visual rules with one style key, the art director checks each, kept by checksum; a failed painting falls back or is left out', async t => {

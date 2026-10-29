@@ -630,3 +630,39 @@ drawing engine and redrawn from the test's own plan (`drawn-scene/27`):
 Not fixed here: the painted-story scene of the test stays drawn, because ChatGPT's image generation stopped answering
 during that run; it is painted when a plan is made again with ChatGPT answering. Tested in tests/drawn.test.js
 ("0.58 words fit as drawn ...").
+
+## 31. Picture type: Cartoon, Natural or Mix (0.63.0)
+
+Owner request 2026-10-28: next to the engine, its looks and the film look, the owner chooses the picture type for
+the whole engine. Natural means "real looking but made by GPT ... the more realistic version of cartoon", never real
+photos; ChatGPT paints all of it; in a Mix the AI decides per scene. The style keeps it as `drawing.pictureType`
+(STYLE-ROOM.md); `engineScope` carries the allowed shot types as `types`.
+
+- **A natural shot** (`sketch.type: 'natural'`) is one painted scene (a picture with `backdrop: true`) with only the
+  motion layer over it: words, numbers, charts, timelines, maps, quotes, documents, gauges, arrows and effects. People
+  and things are painted, so `Sk.validate` leaves drawn figures, props, crowds and bubbles out of it (named warning
+  for Claude, refusal for owner edits), promotes a natural shot's only picture to its scene, and turns a natural shot
+  without any picture into a cartoon shot. A picture may name the cast painted in it (`who`, up to 3 cast ids).
+- **Rules:** `visual-dna.js` NATURAL is the medium, place, people, motion and never list of a natural painting; each
+  look keeps its own mood in it (`MOODS`: storybook stays warm and soft, data stays dark and precise). `Dna.key` with
+  `type: 'natural'` gives `natural/<look>`; the planner gets those VISUAL RULES lines, `Il.paintPrompt` paints by
+  them, and the art director checks natural paintings as "the whole scene of a natural shot".
+- **Planning:** `E.promptGuide` adds PICTURE TYPE (natural or mix with its rule), `Sk.promptGuide` the `type` field
+  and the natural shot's shape, the planner a NATURAL PAINTINGS budget (visual setting "Natural paintings per
+  minute", default 8, 0-30). A natural or mixed plan is refused before anything is spent when ChatGPT does not have
+  the pictures or the budget is 0. The story director hears the type too.
+- **Painting (`scene-room.illustrate`):** natural paintings have their own budget, spread one per scene first. Shots
+  of one scene that repeat a backdrop's describe word for word share one painting (keyed by scene and words, not
+  shot), so a place is paid once and framed differently by each shot. Natural paintings keep their own style key
+  (`paint:style-key:natural`), and the first painting of each character becomes that character's portrait
+  (`paint:cast:<id>`), attached with the style key to that character's later paintings so faces, hair and clothes
+  stay the same. A natural painting is never traced as Claude's line drawing: when it cannot be painted (no answer,
+  twice rejected, past the budget) the shot shares another painting of its scene; with none, it is drawn as a
+  cartoon shot and the plan's picture notes say so. A shared painting that failed once is not asked for again.
+- **Honest limits:** natural scenes are still paintings brought to life by the camera and the motion layer (no AI
+  video, so painted people do not walk or talk); a natural video needs many paintings, each reserving about 42,000
+  family tokens (painting and check) until it settles, and ChatGPT's own plan limits may stop a long one early.
+
+Tested in tests/scene.test.js ("picture type (0.63) ...", a mixed plan end to end with fake ChatGPT) and
+tests/engines.test.js ("picture type (0.63) ..."); the channel window was clicked through in a real browser.
+
