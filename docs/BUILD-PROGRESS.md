@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.63.0: the Cartoon / Natural / Mix picture type on top of 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.64.0: the AI designs each video, with more fonts, caption looks and animations, on top of 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next builds (owner requests 2026-10-28, in this order): engines choose their own colours, effects, transitions and pace per video instead of fixed look presets; more fonts, caption looks and caption animations; competitor reading with per-competitor picks of what the owner liked. Still open for the owner from 0.61: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
+Next build (owner request 2026-10-28): competitor reading with per-competitor picks of what the owner liked, read and adopted under the 30/70 rule. Still open for the owner from 0.61: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,32 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - The AI designs each video; more fonts, caption looks and animations (0.64.0)
+
+- **Owner requests (2026-10-28):** "the engines are hardcoded with the dedicated styles, effects, transitions, speed
+  ... I want the engine to adopt the style, effects, transitions and all the other things on its own intelligence ...
+  limited settings make template type videos"; and "limited selections and styles for the fonts, captions and the
+  captions animation - add more fonts, more caption animation styles".
+- **Built** (STYLE-ROOM.md "The AI designs each video", CAPTIONS-AND-CRAFT.md "More caption looks ... (0.64)"):
+  - `adaptive` styles ("Let the AI design each video", on by default in the channel window and the editor): Claude
+    designs every video's palette, fonts, pace, energy and caption look in the scene plan, from the channel's usual
+    look as a starting point, with every transition and camera move; `validateDesign` checks it part by part
+    (readable contrast, offered fonts, pace range) and `designedSpec` carries it into Room 04, the Editing Room,
+    captions and the render. Room 04 shows the chosen design.
+  - 18 caption looks (11 new), 11 caption animations (whole caption or word by word on the narrator's times), an
+    optional caption font, and 59 fonts offered in every font field with their look-alike when not installed.
+- **Found and fixed while testing:** buttons made by the page's `action()` had no type, so "All settings" inside the
+  channel's editing-style window also submitted that window (with the name and ticks filled in it would have saved
+  and approved it); they are plain buttons now.
+- **Tests:** `npm run check` passes; `npm test` with Chromium 376 tests, 373 passed, 0 failed, 3 skipped (Windows
+  only). New: an adaptive plan end to end in tests/scene.test.js (design asked once, followed by later parts, a bad
+  font refused with a warning, the render's spec in the design), tests/style.test.js, tests/captions.test.js and
+  tests/fonts.test.js. Every new caption look and animation was burned with FFmpeg's subtitles filter; the window
+  and the editor were clicked through in a real browser (switch on by default, 59 fonts, 18 looks, 11 animations,
+  the draft keeps them) with no page errors.
+- **Not tested:** a live Claude design on a real script; the owner's Windows laptop (fonts there are read from the
+  Windows font folder).
 
 ### 2026-10-29 - The Cartoon / Natural / Mix picture type (0.63.0)
 

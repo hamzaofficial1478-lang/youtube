@@ -24,7 +24,7 @@ async function api(url,body,method='POST'){
 }
 async function refresh(){const response=await reach('/api/state');if(!response.ok)throw new Error('The local program is unavailable. Restart it and refresh.');state=await response.json();render();}
 function badge(label,color='gray'){return `<span class="chip ${color}">${esc(label)}</span>`;}
-function action(label,command,id='',className='secondary'){return `<button class="button ${className}" data-action="${command}" data-id="${esc(id)}">${label}</button>`;}
+function action(label,command,id='',className='secondary'){return `<button type="button" class="button ${className}" data-action="${command}" data-id="${esc(id)}">${label}</button>`;}
 // Craft check (youtube-agent-skill heuristics, English only). Advice beside a draft; it never blocks approval.
 const HOOK_LABELS={specificity:'Specific',address:'Says "you"',stakes:'Stakes',curiosity:'Open question',brevity:'Length'};
 function hookPanel(hook){if(!hook?.applicable)return hook?.reason?`<p class="hint">${esc(hook.reason)}</p>`:'';return `<div class="craft-score"><span class="craft-verdict ${esc(hook.band)}">${hook.verdict}</span><div><strong>Hook ${esc(hook.band)}</strong> · ${hook.formula?esc(hook.formula.name):'no formula matched'}<div class="craft-bars">${Object.entries(hook.properties).map(([key,value])=>`<label>${esc(HOOK_LABELS[key]||key)}<meter min="0" max="100" low="45" high="70" optimum="100" value="${value}">${value}</meter><b>${value}</b></label>`).join('')}</div><p class="hint">Weakest: ${esc(HOOK_LABELS[hook.weakest]||hook.weakest)}. ${esc(hook.fix)}${hook.note?` ${esc(hook.note)}`:''}</p></div></div>`;}

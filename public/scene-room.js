@@ -51,6 +51,12 @@ const SCENE_PROVIDER = {pexels: 'Pexels', pixabay: 'Pixabay', openai: 'OpenAI', 
 const sceneProvider = value => SCENE_PROVIDER[value] || value;
 const sceneClock = seconds => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 const sceneSeconds = seconds => `${Number(seconds).toFixed(1)} s`;
+// The video's own design an adaptive style asked Claude for (0.64): colours, fonts, pace, energy and captions.
+function sceneDesignLine(design) {
+  const swatch = hex => `<span class="swatch" data-swatch="${esc(hex)}" title="${esc(hex)}"></span>`;
+  const parts = [design.palette ? `Colours ${['background', 'primary', 'accent', 'text'].map(key => swatch(design.palette[key])).join('')}` : '', design.fonts ? `fonts ${esc(design.fonts.heading)} / ${esc(design.fonts.body)}` : '', design.pace ? `shots ${design.pace.shotMinSeconds}-${design.pace.shotMaxSeconds} s (hook ≤ ${design.pace.hookShotMaxSeconds} s)` : '', Number.isInteger(design.energy) ? `energy ${design.energy}` : '', design.captions ? `captions ${esc([design.captions.theme, design.captions.animation].filter(Boolean).join(', '))}${design.captions.highlight ? ', word highlight' : ''}` : ''].filter(Boolean);
+  return `<p class="hint design-line"><strong>This video's design (chosen by the AI):</strong> ${parts.join(' · ')}${design.reason ? ` - ${esc(design.reason)}` : ''}</p>`;
+}
 function scenePerson() { try { return localStorage.getItem('control-room-person') || ''; } catch { return ''; } }
 function sceneRemember(name) { try { if (name) localStorage.setItem('control-room-person', name); } catch { /* storage is optional */ } }
 const scenePersonField = (label = 'Your name', name = 'person') => `<label>${label}<input name="${name}" required minlength="2" maxlength="80" autocomplete="name" value="${esc(scenePerson())}"></label>`;
@@ -115,6 +121,7 @@ function scenePlanCard(content, manifest) {
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
     ${sceneStory(manifest.plan)}${sceneUndesigned(manifest)}${sceneDirection(manifest.plan)}${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
+    ${manifest.plan.design ? sceneDesignLine(manifest.plan.design) : ''}
     ${manifest.plan.cast?.length ? `<p class="muted"><strong>Cast:</strong> ${manifest.plan.cast.map(member => esc(`${member.name}${member.role ? ` (${member.role})` : ''}`)).join(' · ')}</p>` : ''}
     <p class="hint">${esc(manifest.plan.timing.note)} Every edit creates a new revision; untouched shots keep their IDs and visuals.</p>
     <div class="card-actions">${actions}</div>

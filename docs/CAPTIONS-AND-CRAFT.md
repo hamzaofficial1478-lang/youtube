@@ -66,6 +66,20 @@ edge), `boxed` (an opaque box behind the words), `cinematic` (spaced capitals, w
 the key word stays white and glows wider), `comic` (yellow Impact capitals, thick outline, popping in) and `pop` (each caption
 pops in). Sidecar captions are drawn by the player and keep no look.
 
+### More caption looks, caption animations and a caption font (0.64)
+
+Owner request 2026-10-28: "limited selections and styles for the fonts, captions and the captions animation; add more".
+Eleven more looks join the seven of 0.41 (`THEMES`, named for the Style Library in `THEME_NAMES`): classic subtitle
+(thick black outline), soft shadow, minimal, headline (big heavy capitals), neon (accent glow), highlighter (dark
+words on an accent box), newsroom (capitals on a dark bar), handwritten, typewriter, retro and karaoke (each word
+lights up as it is said). `captions.animation` (`ANIMATIONS`) is how each caption arrives: fade (default), pop,
+slide up, drop in, zoom in, focus in from a blur, bounce, swing, or word by word on the narrator's own word times
+(typewriter, word pop, word rise). A word-by-word caption whose words were corrected by the owner shows them all at
+once, as karaoke does. `captions.font` is an optional caption face that wins over a look's own font and is resolved
+to a look-alike when this PC lacks it (`fonts.js` `withFonts`). Every look and animation was burned with FFmpeg's
+subtitles filter in a test render. The font fields of the style editor offer `fonts.js` `CHOICES`: 36 families every
+Windows 10/11 PC has and 23 free (OFL) ones, each marked with the look-alike drawn when it is not installed.
+
 ### On screen (skills `captions.keep-out-band`, `editing.caption-spec`)
 
 - Burned in as the **top ASS layer** (above graphics and canvas overlays), white bold sans with a dark

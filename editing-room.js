@@ -16,6 +16,7 @@ const Audio = require('./audio');
 const Sk = require('./sketch');
 const T = require('./transitions');
 const E = require('./engines');
+const {designedSpec} = require('./style');
 const {MotionRenderer} = require('./motion');
 const {messageTokenUpperBound} = require('./writer');
 
@@ -242,7 +243,8 @@ class EditingRoom {
   revisionRow(id) { const row = this.db.prepare('SELECT * FROM edit_revisions WHERE id=?').get(id); requireValue(row, 'Edit revision not found.', 404); return row; }
   latestRow(timelineId) { return this.db.prepare('SELECT * FROM edit_revisions WHERE timeline_id=? ORDER BY revision DESC LIMIT 1').get(timelineId); }
   insertRevision({timeline, payload, parent = null, actor, ops = [], receipt = {}, note, createdBy, meta}) {
-    const spec = JSON.parse(this.styles.revisionRow(JSON.parse(timeline.scope).style.revisionId).spec);
+    // An adaptive style is checked in the video's own design (0.64).
+    const scope = JSON.parse(timeline.scope), spec = designedSpec(JSON.parse(this.styles.revisionRow(scope.style.revisionId).spec), JSON.parse(this.scenes.manifestRow(scope.manifestId).payload).design || null);
     const stored = {...payload, meta};
     const review = B.critique(payload, spec);
     const id = randomUUID(), revision = parent ? parent.revision + 1 : 1;

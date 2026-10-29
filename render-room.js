@@ -18,6 +18,7 @@ const Sk = require('./sketch');
 const M = require('./music');
 const At = require('./atelier');
 const E = require('./engines');
+const {designedSpec} = require('./style');
 const {requireValue, now, round, object, text, person} = R;
 
 const ACTIVE = ['queued', 'running'];
@@ -142,7 +143,8 @@ class RenderRoom {
     if (visual.ready) {
       manifestRow = this.scenes.manifestRow(visual.manifestId);
       approvalRow = this.db.prepare('SELECT * FROM visual_approvals WHERE id=?').get(visual.approvalId);
-      spec = JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec);
+      // An adaptive style is made in the video's own design from its plan (0.64).
+      spec = designedSpec(JSON.parse(this.styles.revisionRow(manifestRow.style_revision_id).spec), JSON.parse(manifestRow.payload).design || null);
       // Drawn styles (P06c) render through the montage assembler: their shots are clips the program drew itself.
       if (!['ffmpeg-montage', 'ffmpeg-sketch', 'canvas-frames', 'motion-graphics', 'atelier', 'story-mix', 'cinematic-hybrid'].includes(spec.renderer.adapter)) blockers.push(`${spec.name} needs the ${spec.renderer.adapter} renderer, which is not built yet.`);
       if (voice?.ready && manifestRow.voice_approval_id !== voice.approvalId) blockers.push('The approved narration differs from the one the scene plan was timed with.');

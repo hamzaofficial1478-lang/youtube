@@ -95,6 +95,25 @@ Story Mix engines (Cinematic keeps real footage and Atelier designs every shot, 
 The channel window shows two tick boxes, Cartoon and Natural (both = Mix); the style editor has a "Picture type"
 menu. How it is planned, painted and checked is in DRAWN-SCENES.md section 31.
 
+## The AI designs each video (0.64)
+
+Owner request 2026-10-28: "the engines are hardcoded with dedicated styles, effects, transitions, speed ... I want the
+engine to adopt the style, effects, transitions and all the other things on its own intelligence ... limited settings
+make template videos." A style with `adaptive: true` ("Let the AI design each video", ticked by default in the
+channel window and the style editor; an owner's "no" is stored as `false`) asks Claude, in the scene plan, for the
+video's own `design`: palette (background, ink, accent, text), heading and body fonts from the offered list, pace
+(shortest, longest and hook shot, 0.8-10 s), energy (0-100, the strength of cuts, camera moves and transitions),
+caption look, caption animation, word highlight and a one-sentence reason. The planner gets the channel's usual look
+as `startingPoint` (stay recognisable, change what the story needs), every transition and camera move, and a pace
+range of 0.8-10 s; a multi-part plan designs once and later parts follow it.
+
+`style.js` `validateDesign` checks each part on its own: text on the background at least 4.5:1, ink at least 3:1,
+fonts from the offered list, pace in range; a part that fails keeps the style's own value with a named plan warning
+(strict for owner edits). `designedSpec(spec, design)` is the spec a video is made with: the plan check, Room 04's
+drawings and paintings, the Editing Room, captions and the render (`RenderRoom.inputs`) all use it, so the whole
+video follows its design. Room 04 shows the design under the plan's summary. A style without the switch behaves as
+before.
+
 ## Competitor learning (30 / 70)
 
 The owner supplies 3-10 competitor channels per family (milestone F07, done). Milestone R05 (Competitor Intelligence) will study them and may propose a **derived style revision** as a draft. Such a draft still needs the normal human review, keeps the reference share at or below 30%, and must not copy another channel's wording, footage, thumbnails, characters or signature look.
