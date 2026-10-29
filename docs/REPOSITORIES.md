@@ -196,6 +196,12 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - Ported to JavaScript in `drawn-reveal.js`: the line map (`build_v181d_ink_map`), the grid line order (`grid_stream.py`, `grid.py`), the colour regions and palette (`_region_ids`, `v181d_cluster.py`, `v181d_palette.py`), the colour route and contact timeline (`v181d_subject_fill.py`), the left-to-right background (`v181e_background_fill.py`) and the frame composite (`pixels.py`). Changes: a border rule instead of the ISNet subject model, white paper left clear, seeded k-means on a sample, the pen computed for any moment.
 - Not used: ISNet and its weights (Apache-2.0, SkyTNT), NVENC/CUDA, the Gradio app, the hand images and demo pictures (no licence). Details in `research/whiteboard-animation-vi.md`; 7 draft skills in `skills/whiteboard-craft.json`.
 
+### blixvip/html-anime (0.68, the Atelier anime finish)
+
+- Source: <https://github.com/blixvip/html-anime>, read in full at `6c7edafc858860edacba97dc099816d51f242153` (2026-10-26). Licence: MIT (blixvip); its font Shippori Mincho is SIL OFL and is not used.
+- Restated in our own words in `atelier.js` (the anime contract, shot roles and drawing budgets, checks), `transitions.js` (`dip-colour`) and `skills/anime-craft.json` (10 drafts); its four colour scripts are reused as data in `atelier.js` SCRIPTS (MIT notice in `vendor/html-anime`).
+- Not used: the fixed 8/12/20 s sheets, its site, film, media and font, local woff2 fonts. Details in `research/html-anime.md`.
+
 ### bradautomates/claude-video (0.14.1)
 
 - Source: <https://github.com/bradautomates/claude-video>, reviewed at `03ceb42f7fa2c4439aca01752118044baabffb8f` (release 0.3.2). License: MIT.

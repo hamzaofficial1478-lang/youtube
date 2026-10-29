@@ -1,7 +1,7 @@
 {
-  "version": "0.67.0",
+  "version": "0.68.0",
   "updated": "2026-10-29",
-  "nextAction": "Try the installer on another Windows PC (docs/INSTALL.md) and report anything that stops it. Then, by the owner's plan: save each channel's editing style (AI design and picture type), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
+  "nextAction": "Try the new whiteboard drawing of painted pictures and the Atelier anime finish on a real video (pick Anime in the channel window for an Atelier channel). Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -655,5 +655,5 @@
     "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval.",
     "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image."
   ],
-  "milestone": "0.67.0: painted pictures drawn by the whiteboard hand (the whiteboard-animation-vi brain)"
+  "milestone": "0.68.0: the Atelier anime finish and the colour-dip cut (the html-anime method)"
 }

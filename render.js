@@ -225,7 +225,7 @@ function planProxy({shots, narration, spec, format, preset = PRESETS.proxy, work
     let label = '0:v';
     for (let k = 1; k < segments.length; k++) {
       const next = k === segments.length - 1 ? 'vout' : `v${k}`;
-      parts.push(`[${label}][${k}:v]xfade=transition=${fade}:duration=${td}:offset=${round(segments[k].startFrame / fps, 6)}[${next}]`);
+      parts.push(`[${label}][${k}:v]xfade=${T.xfadeArgs(transition, spec.palette?.accent)}:duration=${td}:offset=${round(segments[k].startFrame / fps, 6)}[${next}]`);
       label = next;
     }
     final = {mode: 'xfade', transition: fade, transitionSeconds: td,
@@ -301,8 +301,8 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
   const parts = chunks.map((chunk, index) => `[${index}:v]settb=AVTB,setpts=PTS-STARTPTS[c${index}]`);
   let label = 'c0', length = chunks[0].frames;
   for (let k = 1; k < chunks.length; k++) {
-    const join = chunks[k].join, fade = T.xfadeOf(join.type) || 'fade';
-    parts.push(`[${label}][c${k}]xfade=transition=${fade}:duration=${round(join.frames / fps, 6)}:offset=${round((length - join.frames) / fps, 6)}[x${k}]`);
+    const join = chunks[k].join;
+    parts.push(`[${label}][c${k}]xfade=${T.xfadeArgs(join.type, join.colour)}:duration=${round(join.frames / fps, 6)}:offset=${round((length - join.frames) / fps, 6)}[x${k}]`);
     length += chunks[k].frames - join.frames;
     label = `x${k}`;
   }

@@ -225,7 +225,7 @@ class EditingRoom {
     }));
     return {
       alignment,
-      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
+      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, ...(inputs.payload.direction?.palette?.accent ? {accent: inputs.payload.direction.palette.accent} : {}), pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
         scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, ...(scene.transition ? {transition: scene.transition} : {}), onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
     };
   }

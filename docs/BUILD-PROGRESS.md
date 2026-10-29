@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.67.0: painted pictures drawn by the whiteboard hand, on top of 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.68.0: the Atelier anime finish and the colour-dip cut, on top of 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,25 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - The Atelier anime finish and the colour-dip cut (0.68.0)
+
+- **Owner request (2026-10-29):** deeply analyse blixvip/html-anime (anime made with HTML code) and add its features
+  and skills to the Atelier engine wherever the engine is missing something or not delivering, with some finishes.
+- **Read:** the whole repository at `6c7edaf` (research/html-anime.md): the shot sheet, the closed colour scripts, the
+  cel, timing, camera and render skills and the example film's colour-dip cut. What Atelier lacked: no people, smooth
+  tweens instead of drawings, no shot roles, budgets or closed palette, no cut of its own.
+- **Built** (DRAWN-SCENES.md section 33): the Atelier anime finish (style choice with a colour script; anime direction,
+  shots with drawing budgets and one sakuga shot per scene; the anime frame-worker contract; checks for drawing swaps
+  and colours outside the script; people drawn in anime shots), and the `dip-colour` transition for every engine
+  (through the colour script's accent). 10 draft skills (skills/anime-craft.json, 453 builtin skills); MIT notice in
+  vendor/html-anime.
+- **Tests:** `npm run check` passes; `npm test` 383 tests, 380 passed, 0 failed, 3 skipped (Windows only). New:
+  tests/atelier.test.js (2), tests/scene.test.js ("anime atelier", end to end with a fake Claude),
+  tests/render.test.js (the colour dip renders through the accent), tests/editing.test.js (owner dip colour and its
+  guard); the channel window, the library and the editor clicked through in a real browser; a hand-written test shot
+  rendered in the browser to prove drawings on twos, a rain layer and the push work. Not tested: a live Claude frame
+  worker drawing an anime shot (no Claude key here).
 
 ### 2026-10-29 - Painted pictures drawn by the whiteboard hand (0.67.0)
 

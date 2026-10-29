@@ -248,6 +248,10 @@ test('owner edits are checked before anything changes, and scene repair touches 
   assert.throws(() => B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'dip-to-black'}, {spec: {...SPEC, transitions: {...SPEC.transitions, allowed: ['cut', 'crossfade']}}}), /does not allow/);
   const faded = B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'crossfade', seconds: 0.5}, {spec: SPEC}).timeline;
   assert.deepEqual([faded.joins[0].type, faded.joins[0].frames], ['crossfade', 15]);
+  // 0.68: the owner's colour dip takes the video's dip colour, and a dip colour must be a real colour.
+  const dipped = B.applyOp(edit, {type: 'set-transition', clipId: first.id, transition: 'dip-colour', seconds: 0.6}, {spec: {...SPEC, transitions: {...SPEC.transitions, allowed: [...SPEC.transitions.allowed, 'dip-colour']}}}).timeline;
+  assert.deepEqual([dipped.joins[0].type, dipped.joins[0].colour], ['dip-colour', '#C9A227']);
+  assert.throws(() => B.validateTimeline({...dipped, joins: dipped.joins.map((join, k) => (k ? join : {...join, colour: "red'; drawtext"}))}), /dip colour/);
   assert.throws(() => B.applyOp(edit, {type: 'set-move', clipId: 'cl_b', kind: 'pan-left'}, {spec: SPEC}), /stills/);
   assert.equal(B.applyOp(edit, {type: 'set-move', clipId: first.id, kind: 'static'}, {spec: SPEC}).timeline.clips[0].move.kind, 'static');
   assert.throws(() => B.applyOp(edit, {type: 'set-in', clipId: 'cl_b', seconds: 9.9}, {spec: SPEC}), /in-point/);
