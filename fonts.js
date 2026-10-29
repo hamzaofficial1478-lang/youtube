@@ -14,6 +14,21 @@ const STANDIN = Object.freeze({
   'patrick hand': 'Segoe Print', 'caveat': 'Segoe Print', 'kalam': 'Segoe Print', 'indie flower': 'Segoe Print', 'permanent marker': 'Segoe Print',
 });
 const SERIF = /serif|garamond|baskerville|times|georgia|playfair|lora|merriweather|crimson/i;
+// Fonts to choose from (0.64, owner request 2026-10-28: "add more fonts"): the families every Windows 10/11 PC has,
+// then free (OFL) families that look great once installed; a missing one is drawn in its look-alike above.
+const CHOICES = Object.freeze([
+  ...['Segoe UI', 'Segoe UI Semibold', 'Segoe UI Black', 'Arial', 'Arial Black', 'Calibri', 'Candara', 'Corbel', 'Tahoma', 'Verdana', 'Trebuchet MS', 'Franklin Gothic Medium', 'Gadugi', 'Leelawadee UI', 'Nirmala UI', 'Ebrima', 'Microsoft Sans Serif'].map(name => ({name, group: 'sans', windows: true})),
+  ...['Georgia', 'Cambria', 'Constantia', 'Palatino Linotype', 'Times New Roman', 'Sitka Heading', 'Sitka Text', 'Sylfaen'].map(name => ({name, group: 'serif', windows: true})),
+  ...['Impact', 'Bahnschrift', 'Gabriola'].map(name => ({name, group: 'display', windows: true})),
+  ...['Segoe Print', 'Segoe Script', 'Ink Free', 'Comic Sans MS', 'MV Boli'].map(name => ({name, group: 'hand', windows: true})),
+  ...['Consolas', 'Courier New', 'Lucida Console'].map(name => ({name, group: 'mono', windows: true})),
+  ...['Inter', 'Roboto', 'Open Sans', 'Lato', 'Poppins', 'Montserrat', 'Karla'].map(name => ({name, group: 'sans', windows: false})),
+  ...['Playfair Display', 'Merriweather', 'Lora', 'Source Serif 4', 'EB Garamond', 'Libre Baskerville', 'Crimson Text'].map(name => ({name, group: 'serif', windows: false})),
+  ...['Bebas Neue', 'Anton', 'Oswald', 'League Gothic'].map(name => ({name, group: 'display', windows: false})),
+  ...['Patrick Hand', 'Caveat', 'Kalam', 'Indie Flower', 'Permanent Marker'].map(name => ({name, group: 'hand', windows: false})),
+]);
+// The choices with whether this PC has each one (every name counts as installed where no font folder is readable).
+const choices = (names = installed()) => CHOICES.map(item => ({...item, installed: has(item.name, names), ...(has(item.name, names) ? {} : {instead: resolve(item.name, names)})}));
 
 function familyNames(file) {
   const names = new Set();
@@ -64,8 +79,8 @@ function resolve(name, names = installed()) {
   return STANDIN[value.toLowerCase()] || (SERIF.test(value) ? 'Georgia' : 'Segoe UI');
 }
 // A style's fonts that this PC does not have, each with the face that will be used instead.
-const missing = (typography, names = installed()) => ['headingFont', 'bodyFont'].map(key => typography?.[key]).filter((name, k, all) => name && all.indexOf(name) === k && !has(name, names)).map(name => ({font: name, instead: resolve(name, names)}));
+const missing = (typography, names = installed(), extra = []) => [...['headingFont', 'bodyFont'].map(key => typography?.[key]), ...extra].filter((name, k, all) => name && all.indexOf(name) === k && !has(name, names)).map(name => ({font: name, instead: resolve(name, names)}));
 // A copy of a spec whose fonts are the ones that will really be drawn.
-const withFonts = (spec, names = installed()) => (spec?.typography ? {...spec, typography: {...spec.typography, headingFont: resolve(spec.typography.headingFont, names), bodyFont: resolve(spec.typography.bodyFont, names)}} : spec);
+const withFonts = (spec, names = installed()) => (spec?.typography ? {...spec, typography: {...spec.typography, headingFont: resolve(spec.typography.headingFont, names), bodyFont: resolve(spec.typography.bodyFont, names)}, ...(spec.captions?.font ? {captions: {...spec.captions, font: resolve(spec.captions.font, names)}} : {})} : spec);
 
-module.exports = {STANDIN, familyNames, installed, has, resolve, missing, withFonts};
+module.exports = {STANDIN, CHOICES, choices, familyNames, installed, has, resolve, missing, withFonts};

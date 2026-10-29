@@ -227,7 +227,7 @@ test('caption themes change how burned-in captions look; the style checks the na
   const spec = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec);
   assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, theme: 'bold'}}).captions.theme, 'bold');
   assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, theme: 'clean'}}).captions.theme, undefined);
-  assert.throws(() => validateStyleSpec({...spec, captions: {...spec.captions, theme: 'neon'}}), /caption theme/);
+  assert.throws(() => validateStyleSpec({...spec, captions: {...spec.captions, theme: 'sparkly'}}), /caption theme/);
 });
 
 // 2026-10-21: a voice whose word clock does not fit its audio (85 s of words for 63 s of sound) stopped the edit on its
@@ -241,4 +241,32 @@ test('measured word times that run past the narration fall back to the estimate;
   assert.equal(trimmed.at(-1).end, 2, 'a 0.3 s overshoot is trimmed to the narration');
   const captions = Cap.buildCaptions({sentences, narrationSeconds: 1.5, measured: words});
   assert.ok(captions.groups.every(group => group.end <= 1.5 + 1e-6), 'the estimate keeps every caption inside the narration');
+});
+
+test('0.64 caption looks and animations: more looks, captions that arrive their own way, word by word on the narrator\'s times, and a caption font', () => {
+  const words = 'money is a promise'.split(' ').map((text, k) => ({text, start: 1 + k * 0.4, end: 1 + k * 0.4 + 0.3}));
+  const timeline = {format: 'long-form', captions: {enabled: true, groups: [{id: 'g1', start: 1, end: 3, text: 'money is a promise', lines: ['money is a promise'], words, emphasis: 3}]}};
+  const parts = captions => Cap.assParts(timeline, {palette: {background: '#101418', primary: '#F2F4F5', accent: '#37C2A0'}, typography: {bodyFont: 'Segoe UI'}, captions}, []);
+  assert.ok(Object.keys(Cap.THEMES).length >= 18 && Object.keys(Cap.THEMES).every(key => Cap.THEME_NAMES[key]), 'every look has a name for the Style Library');
+  assert.ok(Object.keys(Cap.ANIMATIONS).length >= 11);
+  assert.match(parts({theme: 'highlighter'}).styles[0], /,&H00A0C237,-1,0,0,0,100,100,0,0,3,/, 'dark words on an accent box');
+  assert.match(parts({theme: 'headline'}).styles[0], /^Style: Caption,Impact,60,/);
+  assert.match(parts({theme: 'headline', font: 'Georgia'}).styles[0], /^Style: Caption,Georgia,/, 'the owner\'s caption font wins over the look\'s own');
+  assert.match(parts({animation: 'slide'}).events[0], /\\move\(960,1064,960,1018,0,240\)/, 'slides up into its place');
+  assert.match(parts({animation: 'zoom'}).events[0], /\\fscx135\\fscy135\\t\(0,220,\\fscx100\\fscy100\)/);
+  assert.match(parts({theme: 'neon', animation: 'blur'}).events[0], /\\blur12\\t\(0,280,\\blur6\)/, 'focuses in to the look\'s own glow');
+  // Word by word: each word appears on its own spoken time, measured from the caption's start.
+  const typed = parts({animation: 'typewriter'}).events[0];
+  assert.match(typed, /\{\\alpha&HFF&\\t\(0,1,\\alpha&H00&\)\}money \{\\alpha&HFF&\\t\(400,401,\\alpha&H00&\)\}is /);
+  assert.match(typed, /\\fad\(0,/, 'a word-by-word caption does not fade in as a whole');
+  assert.match(parts({animation: 'word-pop'}).events[0], /\\t\(1200,1320,\\fscx110\\fscy110\)/, 'the fourth word pops at 1.2 s');
+  // A corrected caption whose words no longer match the narration shows them all at once.
+  const corrected = structuredClone(timeline); corrected.captions.groups[0].lines = ['money was only ever a promise'];
+  assert.doesNotMatch(Cap.assParts(corrected, {palette: {background: '#101418'}, typography: {bodyFont: 'Segoe UI'}, captions: {animation: 'typewriter'}}, []).events[0], /\\alpha&HFF&/);
+  assert.match(parts({theme: 'karaoke'}).events[0], /\\k\d+/, 'the karaoke look lights each word as it is said');
+  const {LAUNCH_PROFILES, validateStyleSpec} = require('../style');
+  const spec = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'documentary-montage').spec);
+  assert.deepEqual(['animation', 'font'].map(key => validateStyleSpec({...spec, captions: {...spec.captions, animation: 'word-rise', font: 'Bebas Neue'}}).captions[key]), ['word-rise', 'Bebas Neue']);
+  assert.equal(validateStyleSpec({...spec, captions: {...spec.captions, animation: 'fade'}}).captions.animation, undefined);
+  assert.throws(() => validateStyleSpec({...spec, captions: {...spec.captions, animation: 'spin'}}), /caption animation/);
 });

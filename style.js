@@ -343,6 +343,9 @@ function validateStyleSpec(input) {
     safeAreaPercent: integer(captionsIn.safeAreaPercent, 5, 20, 'Caption safe area'),
     // 0.41: how burned-in captions look (captions.js THEMES); without one they are clean.
     ...(captionsIn.theme === undefined || captionsIn.theme === 'clean' ? {} : {theme: choice(captionsIn.theme, Object.keys(require('./captions').THEMES), 'caption theme')}),
+    // 0.64: how each caption arrives (captions.js ANIMATIONS; without one it fades) and a caption font of its own.
+    ...(captionsIn.animation === undefined || captionsIn.animation === 'fade' ? {} : {animation: choice(captionsIn.animation, Object.keys(require('./captions').ANIMATIONS), 'caption animation')}),
+    ...(captionsIn.font === undefined || captionsIn.font === null || captionsIn.font === '' ? {} : {font: fontName(captionsIn.font, 'Caption font')}),
   };
 
   const visualsIn = object(input.visuals, 'Visual sources');
@@ -430,6 +433,59 @@ function validateStyleSpec(input) {
     ...(drawing ? {drawing} : {}),
     ...(cinema ? {cinema} : {}),
     ...(brief ? {brief} : {}),
+    // 0.64 (owner request 2026-10-28: no template videos): Claude designs each video's own colours, fonts, pace,
+    // energy and caption look; the style's values are the starting point and the fallback.
+    // Stored as the owner set it (false too), so the screens can tell "not decided yet" (absent) from "no".
+    ...(input.adaptive === undefined ? {} : {adaptive: bool(input.adaptive, 'AI designs each video')}),
+  };
+}
+// A video's own design (0.64), from Claude's scene plan for an adaptive style. Each part is checked on its own; for
+// Claude a part that fails keeps the style's own value (named), for the owner it is refused. Readable by rule: text
+// on the background at least 4.5:1, the drawing ink at least 3:1.
+const DESIGN_PACE = Object.freeze({shotMinSeconds: [0.8, 4], shotMaxSeconds: [2, 10], hookShotMaxSeconds: [0.8, 4]});
+function validateDesign(raw, spec, {lenient = true, warn = () => {}} = {}) {
+  const problem = message => { if (!lenient) throw new InputError(message); warn(`${message} The style's own setting is used.`); };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { problem('The video design must be an object.'); return null; }
+  const out = {}, part = (name, check) => { if (raw[name] === undefined) return; try { out[name] = check(raw[name]); } catch (error) { problem(`Design ${name}: ${error.message}`); } };
+  part('palette', value => {
+    const palette = {background: hex(value?.background, 'Background'), primary: hex(value?.primary, 'Ink'), accent: hex(value?.accent, 'Accent'), text: hex(value?.text, 'Text')};
+    requireValue(contrastRatio(palette.text, palette.background) >= 4.5, `text ${palette.text} on ${palette.background} is ${contrastRatio(palette.text, palette.background).toFixed(2)}:1; it needs 4.5:1.`);
+    requireValue(contrastRatio(palette.primary, palette.background) >= 3, `ink ${palette.primary} on ${palette.background} is ${contrastRatio(palette.primary, palette.background).toFixed(2)}:1; it needs 3:1.`);
+    return palette;
+  });
+  part('fonts', value => {
+    const offered = new Set([...require('./fonts').CHOICES.map(item => item.name), spec.typography.headingFont, spec.typography.bodyFont].map(name => name.toLowerCase()));
+    const fonts = {heading: fontName(value?.heading, 'Heading font'), body: fontName(value?.body, 'Body font')};
+    for (const name of [fonts.heading, fonts.body]) requireValue(offered.has(name.toLowerCase()), `${name} is not one of the offered fonts.`);
+    return fonts;
+  });
+  part('pace', value => {
+    requireValue(value && typeof value === 'object', 'pace must be an object.');
+    const pace = Object.fromEntries(Object.entries(DESIGN_PACE).map(([key, [min, max]]) => [key, number(Math.round(Number(value[key]) * 10) / 10, min, max, key)]));
+    requireValue(pace.shotMinSeconds <= pace.shotMaxSeconds, 'the shortest shot is longer than the longest.');
+    return pace;
+  });
+  part('energy', value => integer(value, 0, 100, 'energy'));
+  part('captions', value => {
+    const Cap = require('./captions');
+    requireValue(value && typeof value === 'object', 'captions must be an object.');
+    return {...(value.theme !== undefined ? {theme: choice(value.theme, Object.keys(Cap.THEMES), 'caption look')} : {}), ...(value.animation !== undefined ? {animation: choice(value.animation, Object.keys(Cap.ANIMATIONS), 'caption animation')} : {}), ...(value.highlight !== undefined ? {highlight: bool(value.highlight, 'highlight')} : {})};
+  });
+  part('reason', value => text(value, 'reason', 3, 300));
+  return Object.keys(out).length ? out : null;
+}
+// The spec a video is made with: an adaptive style takes the video's design over its own values and offers every
+// transition and camera move; any other style is unchanged.
+function designedSpec(spec, design = null) {
+  if (!spec?.adaptive) return spec;
+  const d = design || {};
+  return {...spec,
+    palette: d.palette || spec.palette,
+    typography: {...spec.typography, ...(d.fonts ? {headingFont: d.fonts.heading, bodyFont: d.fonts.body} : {})},
+    pacing: {...spec.pacing, ...(d.pace || {})},
+    transitions: {...spec.transitions, allowed: [...new Set([...ALL_TRANSITIONS(), ...spec.transitions.allowed])]},
+    motion: {...spec.motion, cameraMoves: [...CAMERA_MOVES], ...(Number.isInteger(d.energy) ? {intensity: d.energy} : {})},
+    captions: {...spec.captions, ...(d.captions?.theme ? {theme: d.captions.theme} : {}), ...(d.captions?.animation ? {animation: d.captions.animation} : {}), ...(typeof d.captions?.highlight === 'boolean' ? {activeWordHighlight: d.captions.highlight} : {})},
   };
 }
 function bool(value, label) {
@@ -646,7 +702,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, pictureTypes: PICTURE_TYPES, pictureTypeAdapters: PICTURE_TYPE_ADAPTERS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, pictureTypes: PICTURE_TYPES, pictureTypeAdapters: PICTURE_TYPE_ADAPTERS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, captionThemes: require('./captions').THEME_NAMES, captionAnimations: require('./captions').ANIMATIONS, fonts: require('./fonts').choices(), visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -657,7 +713,7 @@ class StyleLibrary {
       renderers: Object.fromEntries(Object.entries(RENDERERS).map(([key, value]) => [key, {...value}])),
       profiles,
       // Fonts a style names that this PC does not have, with the face drawn instead (0.41, fonts.js).
-      missingFonts: Object.fromEntries(profiles.flatMap(profile => profile.revisions.flatMap(revision => require('./fonts').missing(revision.spec?.typography))).map(item => [item.font, item.instead])),
+      missingFonts: Object.fromEntries(profiles.flatMap(profile => profile.revisions.flatMap(revision => require('./fonts').missing(revision.spec?.typography, undefined, [revision.spec?.captions?.font]))).map(item => [item.font, item.instead])),
       assignments: this.assignments(),
       handoffs: this.handoffs(),
     };
@@ -837,4 +893,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES, PICTURE_TYPES};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES, PICTURE_TYPES, validateDesign, designedSpec};

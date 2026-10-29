@@ -28,3 +28,14 @@ test('family names are read from the font files themselves', {skip: fs.existsSyn
   const {LAUNCH_PROFILES} = require('../style');
   for (const profile of LAUNCH_PROFILES) assert.deepEqual(F.missing(profile.spec.typography, installed).filter(item => !['Patrick Hand', 'Caveat'].includes(item.font)), [], `${profile.key} uses fonts Windows ships with`);
 });
+
+test('0.64 fonts to choose from: Windows families, free ones with their look-alike, and the caption font resolved like the others', () => {
+  const names = new Set(['segoe ui', 'georgia', 'impact', 'arial']);
+  const choices = F.choices(names);
+  assert.ok(choices.length >= 50 && new Set(choices.map(item => item.name)).size === choices.length, 'many fonts, each once');
+  assert.ok(['sans', 'serif', 'display', 'hand', 'mono'].every(group => choices.some(item => item.group === group)));
+  assert.deepEqual(choices.find(item => item.name === 'Georgia'), {name: 'Georgia', group: 'serif', windows: true, installed: true});
+  assert.deepEqual(choices.find(item => item.name === 'Playfair Display'), {name: 'Playfair Display', group: 'serif', windows: false, installed: false, instead: 'Georgia'});
+  assert.equal(F.withFonts({typography: {headingFont: 'Georgia', bodyFont: 'Arial'}, captions: {font: 'Bebas Neue'}}, names).captions.font, 'Bahnschrift');
+  assert.deepEqual(F.missing({headingFont: 'Georgia', bodyFont: 'Arial'}, names, ['Caveat']), [{font: 'Caveat', instead: 'Segoe Print'}]);
+});

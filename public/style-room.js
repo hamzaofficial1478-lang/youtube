@@ -64,6 +64,7 @@ function styleVisualRules(spec) {
 function styleFeatures(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
   const chosen = stick || board || design ? `<p class="hint">${adapter === 'story-mix' ? '<strong>Mix of all engines.</strong> ' : ''}${design ? `Documentary look: <strong>${esc(docLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
+  const adaptive = spec.adaptive ? '<p class="hint"><strong>The AI designs each video:</strong> colours, fonts, pace, energy and caption look per story; the settings below are the starting point.</p>' : '';
   const type = spec.drawing?.pictureType ? `<p class="hint">Picture type: <strong>${esc(typeLabel(spec.drawing.pictureType))}</strong></p>` : '';
   const film = spec.drawing?.film ? `<p class="hint">Film look: <strong>${esc(filmLabel(spec.drawing.film))}</strong>${spec.drawing.films?.length ? ` from ${esc(spec.drawing.films.map(filmLabel).join(', '))}` : ''}</p>` : '';
   const ticked = [['Stickman looks mixed', spec.drawing?.looks, styleLabel], ['Whiteboard looks mixed', spec.drawing?.boards, styleLabel], ['Documentary looks mixed', spec.drawing?.designs, docLabel]].filter(([, list]) => list?.length).map(([label, list, name]) => `<p class="hint">${label}: <strong>${esc(list.map(name).join(', '))}</strong></p>`).join('');
@@ -71,7 +72,7 @@ function styleFeatures(spec) {
   // A font this PC does not have is drawn in a look-alike (0.41): say so, so the owner is never surprised.
   const lacking = [spec.typography.headingFont, spec.typography.bodyFont].filter((name, k, all) => all.indexOf(name) === k && state.styles.missingFonts?.[name]);
   const fonts = lacking.length ? `<p class="inline-warning">${lacking.map(name => `${esc(name)} is not installed on this PC, so ${esc(state.styles.missingFonts[name])} is used`).join('; ')}. Install the font or choose another.</p>` : '';
-  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + ticked + type + film + grade + fonts + styleVisualRules(spec);
+  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + ticked + adaptive + type + film + grade + fonts + styleVisualRules(spec);
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
 function transitionList(spec) {
@@ -161,6 +162,11 @@ const filmLabel = value => FILM_LABELS[value] || styleLabel(value);
 const GRADE_LABELS = {choose: 'Claude chooses one per video', natural: 'Natural', 'teal-orange': 'Teal and orange', golden: 'Golden hour', bleach: 'Bleach bypass', cold: 'Cold thriller', noir: 'Black and white', vintage: 'Vintage film', moody: 'Moody'};
 const gradeLabel = value => GRADE_LABELS[value] || styleLabel(value);
 const docLabel = value => (value === 'cartoon' ? 'Cartoon documentary' : value === 'mix' ? 'Mix: every documentary look, chosen per scene' : styleLabel(value));
+// The fonts offered in every font field (0.64): Windows' own families first, then free ones a look-alike stands in for.
+const FONT_GROUPS = {sans: 'clean sans', serif: 'serif', display: 'display', hand: 'handwritten', mono: 'typewriter'};
+function styleFontList(v) {
+  return `<datalist id="style-font-list">${(v.fonts || []).map(item => `<option value="${esc(item.name)}">${esc(`${FONT_GROUPS[item.group] || item.group}${item.installed ? '' : ` · not on this PC, drawn as ${item.instead}`}`)}</option>`).join('')}</datalist>`;
+}
 function styleChecks(name, values, selected, label = styleLabel) {
   return `<div class="check-grid">${values.map(value => `<label class="check-chip"><input type="checkbox" name="${name}" value="${esc(value)}" ${selected.includes(value) ? 'checked' : ''}> ${esc(label(value))}</label>`).join('')}</div>`;
 }
@@ -180,7 +186,9 @@ function styleEditorBody(spec) {
     <label class="full">Summary<textarea name="s.summary" required minlength="10" maxlength="400" rows="2">${esc(spec.summary)}</textarea></label>
     <label class="full">Best fit <span class="hint">1-6 entries, separated by commas.</span><input name="s.bestFit" required value="${esc(spec.bestFit.join(', '))}"></label>
     <div class="full"><span class="field-label">Supported formats</span>${styleChecks('s.formats', v.formats, spec.formats)}</div>
+    <label class="checkbox-label full"><input type="checkbox" name="s.adaptive" ${spec.adaptive !== false ? 'checked' : ''}>Let the AI design each video <span class="hint">Claude chooses every video's own colours, fonts, pace, energy and caption look for its story, and may use every transition and camera move. The settings below become the channel's starting point and the fallback.</span></label>
   </div></fieldset>
+  ${styleFontList(v)}
   <fieldset class="editor-section"><legend>Canvas &amp; pacing</legend><div class="form-grid">
     <label>Frame rate<select name="s.frameRate">${styleOptions(v.frameRates, spec.canvas.frameRate)}</select></label>
     <label>Long-form resolution<select name="s.longFormResolution">${styleOptions(v.resolutions['long-form'], spec.canvas.longFormResolution || '1920x1080')}</select></label>
@@ -199,8 +207,8 @@ function styleEditorBody(spec) {
     <label>Easing<select name="s.easing">${styleOptions(v.easing, spec.motion.easing)}</select></label>
   </div></fieldset>
   <fieldset class="editor-section"><legend>Typography &amp; palette</legend><div class="form-grid">
-    <label>Heading font<input name="s.headingFont" required maxlength="60" value="${esc(spec.typography.headingFont)}"><span class="hint">Use a font you are licensed to use (for example an OFL font).</span></label>
-    <label>Body font<input name="s.bodyFont" required maxlength="60" value="${esc(spec.typography.bodyFont)}"></label>
+    <label>Heading font<input name="s.headingFont" list="style-font-list" required maxlength="60" value="${esc(spec.typography.headingFont)}"><span class="hint">Pick from the list (${(v.fonts || []).length} fonts) or type one you are licensed to use; a font this PC lacks is drawn in a look-alike.</span></label>
+    <label>Body font<input name="s.bodyFont" list="style-font-list" required maxlength="60" value="${esc(spec.typography.bodyFont)}"></label>
     ${styleNumber('s.maxWordsOnScreen', 'Most words on screen', spec.typography.maxWordsOnScreen, 1, 40, 1)}
     <label>Text case<select name="s.textCase">${styleOptions(v.textCase, spec.typography.textCase)}</select></label>
     ${styleNumber('s.minTextHeightPercent', 'Minimum text height (% of frame)', spec.typography.minTextHeightPercent, 2, 15, 0.5)}
@@ -214,7 +222,9 @@ function styleEditorBody(spec) {
     ${styleNumber('s.maxLines', 'Lines', spec.captions.maxLines, 1, 3, 1)}
     ${styleNumber('s.safeAreaPercent', 'Safe area (%)', spec.captions.safeAreaPercent, 5, 20, 1)}
     <label class="checkbox-label"><input type="checkbox" name="s.activeWordHighlight" ${spec.captions.activeWordHighlight ? 'checked' : ''}>Highlight the active word</label>
-    <label>Caption look<select name="s.captionTheme">${styleOptions(['clean', 'bold', 'boxed', 'cinematic', 'glow', 'comic', 'pop'], spec.captions.theme || 'clean', value => ({clean: 'Clean (white with a soft edge)', bold: 'Bold capitals', boxed: 'Words on a dark box', cinematic: 'Cinematic (spaced capitals, warm)', glow: 'Glow in the accent colour', comic: 'Comic (yellow, thick outline)', pop: 'Pop in caption by caption'}[value]))}</select><span class="hint">How burned-in captions look. Sidecar captions (SRT, WebVTT) are drawn by the player.</span></label>
+    <label>Caption look<select name="s.captionTheme">${styleOptions(Object.keys(v.captionThemes || {clean: ''}), spec.captions.theme || 'clean', value => v.captionThemes?.[value] || value)}</select><span class="hint">How burned-in captions look. Sidecar captions (SRT, WebVTT) are drawn by the player.</span></label>
+    <label>Caption animation<select name="s.captionAnimation">${styleOptions(Object.keys(v.captionAnimations || {fade: ''}), spec.captions.animation || 'fade', value => v.captionAnimations?.[value] || value)}</select><span class="hint">How each caption arrives: all at once, or word by word on the narrator's words.</span></label>
+    <label>Caption font <span class="hint">(optional)</span><input name="s.captionFont" list="style-font-list" maxlength="60" value="${esc(spec.captions.font || '')}" placeholder="the look's own font"></label>
   </div></fieldset>
   <fieldset class="editor-section"><legend>Visual sources</legend><div class="form-grid">
     <div class="full"><span class="field-label">Allowed sources <span class="hint">Stock and AI only; every asset still needs licence evidence.</span></span>${styleChecks('s.sources', v.visualSources, spec.visuals.sources)}</div>
@@ -277,13 +287,14 @@ function collectStyleSpec(form) {
     motion: {cameraMoves: checked('s.cameraMoves'), intensity: num('s.motionIntensity'), easing: value('s.easing')},
     typography: {headingFont: value('s.headingFont'), bodyFont: value('s.bodyFont'), maxWordsOnScreen: num('s.maxWordsOnScreen'), textCase: value('s.textCase'), minTextHeightPercent: num('s.minTextHeightPercent')},
     palette: Object.fromEntries(['background', 'primary', 'accent', 'text'].map(key => [key, value(`s.palette.${key}`).toUpperCase()])),
-    captions: {mode: value('s.captionMode'), maxCharsPerLine: num('s.maxCharsPerLine'), maxLines: num('s.maxLines'), position: value('s.captionPosition'), activeWordHighlight: form.elements['s.activeWordHighlight'].checked, safeAreaPercent: num('s.safeAreaPercent'), ...(form.elements['s.captionTheme'] && value('s.captionTheme') !== 'clean' ? {theme: value('s.captionTheme')} : {})},
+    captions: {mode: value('s.captionMode'), maxCharsPerLine: num('s.maxCharsPerLine'), maxLines: num('s.maxLines'), position: value('s.captionPosition'), activeWordHighlight: form.elements['s.activeWordHighlight'].checked, safeAreaPercent: num('s.safeAreaPercent'), ...(form.elements['s.captionTheme'] && value('s.captionTheme') !== 'clean' ? {theme: value('s.captionTheme')} : {}), ...(form.elements['s.captionAnimation'] && value('s.captionAnimation') !== 'fade' ? {animation: value('s.captionAnimation')} : {}), ...(form.elements['s.captionFont']?.value.trim() ? {font: value('s.captionFont').trim()} : {})},
     visuals: {sources: checked('s.sources'), primarySource: value('s.primarySource'), aiDisclosure: value('s.aiDisclosure'), characterConsistency: form.elements['s.characterConsistency'].checked},
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
     ...(form.elements['s.drawingHand'] ? {drawing: {look: form.elements['s.drawingLook'] ? value('s.drawingLook') : 'classic', hand: form.elements['s.drawingHand'].checked === true, ...(form.elements['s.drawingBoard'] ? {board: value('s.drawingBoard')} : {}), ...(form.elements['s.drawingDesign'] ? {design: value('s.drawingDesign')} : {}), ...(form.elements['s.drawingFilm'] && value('s.drawingFilm') !== 'none' ? {film: value('s.drawingFilm')} : {}), ...(form.elements['s.drawingPictureType'] && value('s.drawingPictureType') !== 'cartoon' ? {pictureType: value('s.drawingPictureType')} : {}), ...Object.fromEntries([['looks', 's.drawingLook', 'mix'], ['boards', 's.drawingBoard', 'mix'], ['designs', 's.drawingDesign', 'mix'], ['films', 's.drawingFilm', 'choose']].filter(([, menu, when]) => form.elements[menu] && value(menu) === when && checked(`${menu}s`).length).map(([field, menu]) => [field, checked(`${menu}s`)])), ...(form.elements['s.drawingCadence'] && value('s.drawingCadence') !== 'full' ? {cadence: value('s.drawingCadence')} : {}), ...(form.elements['s.drawingMotionBlur'] ? {motionBlur: form.elements['s.drawingMotionBlur'].checked} : {})}} : {}),
     ...(form.elements['s.cinemaGrade'] ? {cinema: {grade: value('s.cinemaGrade'), grain: num('s.cinemaGrain'), letterbox: form.elements['s.cinemaLetterbox'].checked}} : {}),
     ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
+    ...(form.elements['s.adaptive'] ? {adaptive: form.elements['s.adaptive'].checked} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
     originality: {referenceSharePercent: num('s.referenceSharePercent'), prohibited: list('s.prohibited', /\r?\n/)},
   };
@@ -543,9 +554,11 @@ function familyStyleBody(form) {
   }).join('');
   // 0.63: the engine's picture type, for every look it uses: tick Cartoon, Natural, or both for a mix chosen per scene.
   const types = (v.pictureTypeAdapters || []).includes(adapter) ? `<div class="full"><span class="field-label">Picture type <span class="hint">For every look of this engine. Cartoon: drawn pictures. Natural: realistic scenes painted by ChatGPT (not photos). Both: the AI chooses per scene.</span></span>${styleChecks('fs.types', ['cartoon', 'natural'], fsTypes(spec), typeLabel)}</div>` : '';
+  // 0.64: Claude designs each video (colours, fonts, pace, energy, captions); on unless the owner said no.
+  const adaptive = `<label class="checkbox-label full"><input type="checkbox" name="fs.adaptive" ${spec.adaptive !== false ? 'checked' : ''}>Let the AI design each video <span class="hint">Colours, fonts, pace, energy, transitions and caption look are chosen for every story, so no two videos are a template. This style's own settings stay the starting point.</span></label>`;
   const films = adapter === 'cinematic-hybrid' ? '' : `<div class="full"><span class="field-label">Film looks <span class="hint">None: no film look. One: every drawn shot in it. Two or more: Claude chooses one of them for each video.</span></span>${styleChecks('fs.films', (v.drawingFilms || []).filter(value => !['none', 'choose'].includes(value)), fsTicked(spec, 'films', 'film', []).filter(value => value !== 'choose'), filmLabel)}</div>`;
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
-  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${types}${films}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
+  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${types}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }
 function familyStyleDialog(familyId) {
   const form = $('#family-style-form'), current = styleActive(familyId), found = current && styleRevisionById(current.revisionId);
@@ -567,6 +580,8 @@ function familyStyleSpec(form, base) {
     if (ticked.length === 1) spec.drawing[single] = ticked[0];
     else { spec.drawing[single] = 'mix'; spec.drawing[field] = ticked; }
   }
+  const adaptive = form.querySelector('input[name="fs.adaptive"]');
+  if (adaptive) spec.adaptive = adaptive.checked;
   const types = boxes('fs.types');
   if (types.length && (state.styles.vocabulary.pictureTypeAdapters || []).includes(spec.renderer.adapter)) {
     spec.drawing ||= {look: 'classic', hand: false};

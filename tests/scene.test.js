@@ -97,7 +97,7 @@ function fakeNetwork({claudePlan = null, claudeUsage = {prompt_tokens: 9000, com
   return {fetch: fetchImpl, calls};
 }
 
-function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage', storyMap = true, drawing = null} = {}) {
+function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = true, withStyle = true, scriptText = script, targetMinutes = null, styleKey = 'documentary-montage', storyMap = true, drawing = null, revise = null} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'scene-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
@@ -119,7 +119,7 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
   if (withStyle) {
     const profile = styles.profiles().find(item => item.key === styleKey), latest = profile.revisions.at(-1);
     // A fixture may change the style's drawing settings (picture type, looks) in a revision of its own.
-    const montage = drawing ? styles.createRevision(profile.id, {spec: {...latest.spec, drawing}, createdBy: 'Owner', changeNote: 'Fixture drawing settings.', expectedRevision: latest.revision}) : latest;
+    const montage = drawing || revise ? styles.createRevision(profile.id, {spec: {...latest.spec, ...(drawing ? {drawing} : {}), ...(revise || {})}, createdBy: 'Owner', changeNote: 'Fixture drawing settings.', expectedRevision: latest.revision}) : latest;
     styles.approveRevision(montage.id, {approvedBy: 'Owner', notes: 'Fixture.', confirmations: {specReviewed: true, rightsReviewed: true, originalityReviewed: true}});
     styles.assign(family.id, {familyRevision: store.family(family.id).revision, assignedBy: 'Owner', reason: 'Stock and AI visuals suit this family.', revisionId: montage.id, expectedAssignmentId: null});
   }
@@ -143,6 +143,7 @@ function setup(t, network = fakeNetwork(), {format = 'long-form', withVoice = tr
 const latestManifest = (room, contentId) => room.state().contents.find(item => item.contentId === contentId).manifests.find(item => item.latest);
 const approvePlan = (room, manifest) => room.reviewManifest(manifest.id, {decision: 'approve', reviewer: 'Owner', notes: '', confirmations: {coverageReviewed: true, directionReviewed: true}});
 const shots = manifest => manifest.plan.scenes.flatMap(scene => scene.shots);
+const latestManifestRow = (room, contentId) => room.manifestRow(latestManifest(room, contentId).id);
 async function drain(room) { for (let i = 0; i < 200; i++) { const busy = room.db.prepare("SELECT 1 FROM visual_jobs WHERE status='queued'").get(); if (!busy) return; await room.processNextVisual(); } }
 
 test('a new plan uses only the sources the program can fetch now: no stock shots without a tested stock connection', t => {
@@ -403,6 +404,46 @@ test('picture type (0.63): a mix of cartoon and natural scenes; natural scenes a
   assert.throws(() => Sk.validate({engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe: 'A quiet harbour at night', backdrop: true}]}, {types: ['cartoon']}), /picture type natural is not this style's/);
   const again = Sk.validate(trader, {cast: [{id: 'c1', name: 'Tarek', role: '', look: Sk.DEFAULT_LOOK}], types: ['cartoon', 'natural']});
   assert.deepEqual(again, trader, 'checking a checked natural drawing again gives the same drawing');
+});
+
+test('AI designs each video (0.64): an adaptive style asks Claude for the video\'s own colours, fonts, pace, energy and captions; checked, kept with the plan, followed by later parts and the render', async t => {
+  const designs = [], packets = [];
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    packets.push(input);
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', transition: 'whip-pan', shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: {engine: 'stickman', elements: [{kind: 'figure', pose: 'point'}, {kind: 'text', style: 'keyword', text: `Part ${start}`}]}}]});
+    // The first part designs the video (with one unreadable colour pair); later parts receive it.
+    const design = input.design ? undefined : {palette: {background: '#0F1A2B', primary: '#F4EBDD', accent: '#E8A33D', text: '#FFFFFF'}, fonts: {heading: 'Playfair Display', body: 'Wingdings'}, pace: {shotMinSeconds: 1.5, shotMaxSeconds: 6, hookShotMaxSeconds: 2.5}, energy: 30, captions: {theme: 'cinematic', animation: 'word-pop', highlight: true}, reason: 'A slow, warm night story.'};
+    designs.push(design);
+    return {summary: 'A designed video.', cast: [], ...(design ? {design} : {}), scenes};
+  }});
+  const {room, content, ids, narrate, store, styles} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false, revise: {adaptive: true}});
+  narrate(40);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed', JSON.stringify(room.publicPlanJob(room.planJobRow(queued.job.id))));
+  const plans = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
+  assert.ok(plans.length > 1, 'the script is planned in parts');
+  assert.match(plans[0], /"design": the video design \(see DESIGN THIS VIDEO\)/);
+  assert.match(plans[0], /DESIGN THIS VIDEO: this channel lets you design every video's own look/);
+  assert.ok(plans.slice(1).every(text => /the video already has its design \(input "design"/.test(text) && !/"design": the video design/.test(text)), 'later parts follow the first design');
+  assert.ok(packets[0].style.adaptive && packets[0].style.fonts.some(item => /^Georgia \(serif/.test(item)) && packets[0].style.startingPoint.palette.background === '#FFFFFF', 'the planner gets the fonts and the channel\'s usual look');
+  assert.deepEqual(packets[0].style.shotSeconds, {min: 0.8, max: 10}, 'the pace is the planner\'s to choose');
+  assert.ok(packets[0].style.transitions.length > 30, 'every transition is offered');
+  assert.deepEqual(packets[1].design, designs[0]);
+  const manifest = latestManifest(room, content.id), design = manifest.plan.design;
+  assert.deepEqual(design.palette, designs[0].palette);
+  assert.equal(design.fonts, undefined, 'an unknown font is not used');
+  assert.ok(manifest.warnings.some(item => /Design fonts: Wingdings is not one of the offered fonts\. The style's own setting is used\./.test(item)));
+  assert.deepEqual([design.pace.shotMaxSeconds, design.energy, design.captions.animation], [6, 30, 'word-pop']);
+  // The render works in the video's design: colours, pace, captions, every camera move.
+  const revision = styles.revisionRow(latestManifestRow(room, content.id).style_revision_id);
+  const renders = new RenderRoom(store, styles, {handoff: () => ({ready: true, manifestId: 'm', approvalId: 'a'}), manifestRow: () => latestManifestRow(room, content.id)}, {});
+  const spec = renders.inputs(store.content(content.id)).spec;
+  assert.equal(revision.id, latestManifestRow(room, content.id).style_revision_id);
+  assert.deepEqual([spec.palette.background, spec.pacing.shotMaxSeconds, spec.motion.intensity, spec.captions.theme, spec.captions.animation, spec.captions.activeWordHighlight], ['#0F1A2B', 6, 30, 'cinematic', 'word-pop', true]);
+  assert.equal(spec.typography.headingFont, JSON.parse(revision.spec).typography.headingFont, 'a refused part keeps the style\'s own');
 });
 
 test('painted pictures (0.53, 0.56): ChatGPT paints in the look\'s visual rules with one style key, the art director checks each, kept by checksum; a failed painting falls back or is left out', async t => {

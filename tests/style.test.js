@@ -341,3 +341,25 @@ test('launch profiles follow the launch library: a newer built-in spec arrives a
   new StyleLibrary(store);
   assert.equal(profile(reopened, 'stickman-sketch-explainer').revisions.length, 3, 'opening again adds nothing');
 });
+
+test('0.64 the AI designs each video: the switch is kept as the owner set it; a design is checked part by part and only an adaptive style takes it', () => {
+  const {validateDesign, designedSpec} = require('../style');
+  const base = structuredClone(LAUNCH_PROFILES.find(item => item.key === 'stickman-sketch-explainer').spec);
+  assert.equal(validateStyleSpec(base).adaptive, undefined, 'not decided yet');
+  assert.equal(validateStyleSpec({...base, adaptive: false}).adaptive, false, 'an owner\'s "no" is kept');
+  const spec = validateStyleSpec({...base, adaptive: true});
+  const good = {palette: {background: '#F3E7D7', primary: '#4E3E35', accent: '#B5473A', text: '#3B2F28'}, fonts: {heading: 'Georgia', body: 'Segoe UI'}, pace: {shotMinSeconds: 2, shotMaxSeconds: 7, hookShotMaxSeconds: 3}, energy: 20, captions: {theme: 'handwritten', animation: 'fade', highlight: false}, reason: 'A calm storybook tale.'};
+  assert.deepEqual(validateDesign(good, spec, {lenient: false}), good);
+  assert.throws(() => validateDesign({...good, palette: {...good.palette, text: '#E9E0D0'}}, spec, {lenient: false}), /text #E9E0D0 on #F3E7D7 is .*:1; it needs 4\.5:1/);
+  assert.throws(() => validateDesign({...good, pace: {shotMinSeconds: 0.2, shotMaxSeconds: 7, hookShotMaxSeconds: 3}}, spec, {lenient: false}), /shotMinSeconds must be a number from 0\.8 to 4/);
+  assert.throws(() => validateDesign({...good, captions: {theme: 'rainbow'}}, spec, {lenient: false}), /caption look/);
+  const warned = [];
+  assert.deepEqual(validateDesign({energy: 140, reason: 'Loud.'}, spec, {warn: message => warned.push(message)}), {reason: 'Loud.'});
+  assert.match(warned[0], /Design energy: energy must be a whole number from 0 to 100\. The style's own setting is used\./);
+  const made = designedSpec(spec, good);
+  assert.deepEqual([made.palette, made.typography.headingFont, made.pacing.shotMaxSeconds, made.pacing.maxStaticHoldSeconds, made.motion.intensity, made.captions.theme, made.captions.activeWordHighlight], [good.palette, 'Georgia', 7, spec.pacing.maxStaticHoldSeconds, 20, 'handwritten', false]);
+  assert.ok(made.transitions.allowed.length >= spec.transitions.allowed.length && made.motion.cameraMoves.length === 7, 'every transition and camera move');
+  const plain = validateStyleSpec(base);
+  assert.equal(designedSpec(plain, good), plain, 'an ordinary style is unchanged');
+  assert.deepEqual(designedSpec(spec, null).palette, spec.palette, 'without a design the style\'s own look, with every transition');
+});
