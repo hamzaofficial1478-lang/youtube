@@ -418,6 +418,27 @@ test('HTTP routes for intelligence require the local token and expose state', as
   assert.match((await discovery.json()).error, /NexLev/);
 });
 
+test('0.65 read in one go: finer subjects per channel, and one click scans then asks Claude for the blueprint', async t => {
+  const original = (area, count) => Array.from({length: count}, (_, index) => ({area, contribution: `Our own ${area} idea number ${index + 1} for this family`}));
+  const network = fakeNetwork({claudeContent: blueprint({adopt: [{area: 'editing', pattern: 'Cut on the beat of each list item', refs: ['C1']}], original: [...original('script', 3), ...original('visuals', 3), ...original('editing', 3), ...original('voice', 1), ...original('packaging', 1)]})});
+  const {intel, family, ids} = setup(t, network);
+  const a = `channel_id:${channelIds[0].toLowerCase()}`;
+  const saved = intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['captions', 'pacing', 'look', 'hooks']}});
+  assert.deepEqual(saved.picks[a], ['hooks', 'pacing', 'captions', 'look'], 'subjects keep their fixed order');
+  assert.throws(() => intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, claudeConnector: {id: ids.claude.id, revision: ids.claude.revision + 7}}), /Claude connector is missing, changed or not tested/);
+  const scan = intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, claudeConnector: ids.claude});
+  assert.deepEqual(scan.scope.then, {id: ids.claude.id, revision: ids.claude.revision});
+  await intel.processNextScan();
+  // The scan's end queued Claude's analysis by itself, inside its own token reservation.
+  const queued = intel.state().families[family.id].analyses[0];
+  assert.ok(queued && queued.scanId === scan.id && queued.createdBy === 'Owner', JSON.stringify(intel.state().families[family.id].analyses));
+  assert.deepEqual(queued.blend.areaSources, {script: ['C1'], voice: [], editing: ['C1'], visuals: ['C1'], packaging: []}, 'a channel counts once per area, however many subjects');
+  await intel.processNextAnalysis();
+  const sent = JSON.parse(network.calls.find(call => call.path === '/v1/messages').body.messages[0].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
+  assert.deepEqual(sent.channels.find(item => item.ref === 'C1').ownerWantsToLearn, ['Hooks and openings', 'Pacing and cuts', 'Captions and on-screen words', 'Colours and look'], 'Claude hears each subject the owner liked');
+  assert.equal(intel.publicAnalysis(intel.analysisRow(queued.id)).status, 'completed');
+});
+
 test('blend picks: each competitor link chooses what to learn, every area learns only from its picks and keeps 30/70', async t => {
   const original = (area, count) => Array.from({length: count}, (_, index) => ({area, contribution: `Our own ${area} idea number ${index + 1} for this family`}));
   const blended = () => blueprint({
@@ -428,7 +449,7 @@ test('blend picks: each competitor link chooses what to learn, every area learns
   const {intel, family, ids} = setup(t, network);
   const [a, b] = [`channel_id:${channelIds[0].toLowerCase()}`, `channel_id:${channelIds[1].toLowerCase()}`];
   assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {'handle:@stranger': ['voice']}}), /not in this family/);
-  assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['music']}}), /Choose voice, narration/);
+  assert.throws(() => intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['sparkle']}}), /Choose from: Voice-over, Narration, Hooks and openings/);
   const saved = intel.savePicks(family.id, {expectedRevision: 0, createdBy: 'Owner', picks: {[a]: ['visuals', 'narration'], [b]: ['editing']}});
   assert.equal(saved.revision, 1);
   assert.deepEqual(saved.picks[a], ['narration', 'visuals'], 'traits are stored in a fixed order');

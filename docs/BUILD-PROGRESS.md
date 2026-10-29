@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.64.0: the AI designs each video, with more fonts, caption looks and animations, on top of 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.65.0: competitors read in one click with finer subjects, on top of 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next build (owner request 2026-10-28): competitor reading with per-competitor picks of what the owner liked, read and adopted under the 30/70 rule. Still open for the owner from 0.61: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
+The owner's 2026-10-28 list is built (0.62-0.65). Next, by the owner's plan: save each channel's editing style (AI design and picture type), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,24 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - Competitors read in one go, finer subjects to keep (0.65.0)
+
+- **Owner request (2026-10-28):** "analyzing and reading the competitors as the links will be added and then for each
+  competitor the desired subject will be chosen like what user liked from each competitor and program should be able
+  to read that competitor and to adopt the style".
+- **What already existed:** competitor links per family, scans (NexLev, YouTube), Claude's blueprint under the 30/70
+  rule, per-channel picks (5 subjects), style drafts from the Editing picks, style studies of local files, the watch.
+- **Built** (COMPETITOR-INTELLIGENCE.md "Read in one go"): 14 subjects per channel (9 new) mapped onto the five areas
+  and sent to Claude as what the owner wants to learn; "Read competitors" scans and then asks Claude for the
+  blueprint in one click (the analysis is queued when the scan finishes, in its own reservation); the button is on
+  the channel page too, as soon as links are saved; the AI design of each video weighs the approved techniques.
+- **Tests:** `npm run check` passes; `npm test` with Chromium 377 tests, 374 passed, 0 failed, 3 skipped (Windows
+  only); new test "0.65 read in one go ..." in tests/intelligence.test.js; the Competitors page and the channel page
+  button were clicked through in a real browser (14 subjects per channel, the Claude choice in the read dialog), no
+  page errors.
+- **Not tested:** live NexLev, YouTube and Claude reads; the owner's Windows laptop. Videos are never downloaded from
+  links: frames for a competitor's look still come from style studies of files on the PC.
 
 ### 2026-10-29 - The AI designs each video; more fonts, caption looks and animations (0.64.0)
 
