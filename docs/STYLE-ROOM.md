@@ -125,11 +125,13 @@ drawings and paintings, the Editing Room, captions and the render (`RenderRoom.i
 video follows its design. Room 04 shows the design under the plan's summary. A style without the switch behaves as
 before.
 
-## Atelier finish (0.68)
+## Motion Graphics finish (0.68, renamed 0.70)
 
-A style on the Atelier or Story Mix engine may choose its Atelier finish: motion design (the default) or anime, with a
-colour script (Indigo moon, Vermilion eclipse, Paper noon, Festival, or Claude chooses per video). It is set in the
-channel's style window and in the editor; the other engines refuse it. DRAWN-SCENES.md section 33 has the details.
+A style on the Motion Graphics engine (called Atelier before 0.70) or the Story Mix engine may choose its finish:
+motion graphics (the default), HTML render (cel anime, 0.68) or a mix of both chosen per scene (0.70), with a colour
+script for HTML render and mix (Indigo moon, Vermilion eclipse, Paper noon, Festival, or Claude chooses per video). It
+is set in the channel's style window and in the editor; the other engines refuse it. DRAWN-SCENES.md sections 33 and 34
+have the details.
 
 ## Competitor learning (30 / 70)
 

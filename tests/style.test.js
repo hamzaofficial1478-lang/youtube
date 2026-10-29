@@ -110,7 +110,7 @@ test('the Cinematic style: footage first, a grade or Claude chooses, film grain 
   assert.throws(() => validateStyleSpec({...structuredClone(cinema), cinema: {grade: 'natural', grain: 30, letterbox: 'yes'}}), /Cinema bars/);
   assert.equal(RENDERERS['cinematic-hybrid'].name, 'Cinematic');
   assert.ok(RENDERERS['cinematic-hybrid'].features.some(item => /One colour grade for the whole video/.test(item)));
-  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v12');
+  assert.equal(require('../style').LAUNCH_VERSION, 'Launch library v13');
 });
 
 test('the separate stickman-look styles of 0.29 leave the library unless the owner used them', t => {

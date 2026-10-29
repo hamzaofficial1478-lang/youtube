@@ -1,7 +1,7 @@
 {
-  "version": "0.69.0",
+  "version": "0.70.0",
   "updated": "2026-10-29",
-  "nextAction": "Try the new whiteboard drawing of painted pictures and the Atelier anime finish on a real video (pick Anime in the channel window for an Atelier channel). Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
+  "nextAction": "Try a niche suggestion (Niche Factory, \"Suggest niches\") after a Reddit or YouTube scan, and the Motion Graphics engine's Mix finish on a real video. Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -239,7 +239,7 @@
           "id": "R08",
           "title": "Niche intake (links, screenshots), rising competitors and the go/no-go",
           "status": "testing",
-          "evidence": "0.50.0 (2026-10-21): niche ideas from video links (channel found with one YouTube call) and screenshots read by Claude (type checked, kept in the data folder, a click inside a token reservation; the page prefills the idea form); the top candidate channels measured over 90 days and up to 10 rising competitors (NexLev data); the go/no-go answer adds the viewers, 3-8 gaps competitors miss with how we fill them, how we win, competitor notes and ways to earn beyond AdSense, with evidence checks and the copy guard; approval prefills the family with the recommended (rising) competitors. Tested in tests/niche-intake.test.js and the updated tests/intelligence.test.js (stand-in providers) and in the browser on a throwaway workspace. npm test (334 tests, 334 passing) passed.",
+          "evidence": "0.50.0 (2026-10-21): niche ideas from video links (channel found with one YouTube call) and screenshots read by Claude (type checked, kept in the data folder, a click inside a token reservation; the page prefills the idea form); the top candidate channels measured over 90 days and up to 10 rising competitors (NexLev data); the go/no-go answer adds the viewers, 3-8 gaps competitors miss with how we fill them, how we win, competitor notes and ways to earn beyond AdSense, with evidence checks and the copy guard; approval prefills the family with the recommended (rising) competitors. Tested in tests/niche-intake.test.js and the updated tests/intelligence.test.js (stand-in providers) and in the browser on a throwaway workspace. npm test (334 tests, 334 passing) passed. 0.70.0 (2026-10-29): niche suggestions - sub-niches of a channel from its competitor scan and hit keywords, or new niches on the rise - from the stored Reddit, YouTube (with the derived-use approval), NexLev and screenshot evidence; one Claude answer per click inside a Niche Factory reservation, refs and copy guard checked; tests/niche-intake.test.js and a browser check (prefilled idea form).",
           "remaining": "Live runs with the owner's NexLev, YouTube and Claude connections (they spend quota and tokens; the owner's go-ahead is needed)."
         },
         {
@@ -364,7 +364,7 @@
           "title": "Atelier engine: Claude designs shots from scratch (HyperFrames and OpenMontage method), redesign of one shot",
           "status": "testing",
           "remaining": "Not yet judged by the owner. Shorts (vertical) atelier shots untested. Room 04 Redesign button covered by API tests only. ElevenLabs word timestamps not yet tested live.",
-          "evidence": "0.25.0/0.25.1 (2026-10-10): live Claude runs on the demo. Atelier plan 19,006 tokens; 9 designed shots, 167,486 tokens (2 retries: one false alarm of the audit, fixed; one real). Two near-black openings failed the render check; each was redesigned alone (about 14k tokens) and the re-render passed all 9 checks. Stickman with two atelier shots, hand-drawn and motion-graphics plans rendered with all checks passing. 45,147 tokens with frame design off (the review moved six arrows and one heart onto their words and kept one storm layout). 18 shots drawn; render passed all 9 checks. Frame review: faces on the dark palette were dark, and a burst stayed behind while its counter moved to the top edge; fixed (light faces, effects follow what they were placed on, big words keep headroom); the re-render passed all 9 checks. Full suite 238/238."
+          "evidence": "0.25.0/0.25.1 (2026-10-10): live Claude runs on the demo. Atelier plan 19,006 tokens; 9 designed shots, 167,486 tokens (2 retries: one false alarm of the audit, fixed; one real). Two near-black openings failed the render check; each was redesigned alone (about 14k tokens) and the re-render passed all 9 checks. Stickman with two atelier shots, hand-drawn and motion-graphics plans rendered with all checks passing. 45,147 tokens with frame design off (the review moved six arrows and one heart onto their words and kept one storm layout). 18 shots drawn; render passed all 9 checks. Frame review: faces on the dark palette were dark, and a burst stayed behind while its counter moved to the top edge; fixed (light faces, effects follow what they were placed on, big words keep headroom); the re-render passed all 9 checks. Full suite 238/238. 0.70.0 (2026-10-29): shown as the Motion Graphics engine; finishes motion graphics, HTML render (cel anime) and Mix (each frame names its finish, one colour script); tests/atelier.test.js."
         },
         {
           "id": "P06i",
@@ -653,7 +653,8 @@
     "2026-10-28: The picture type (Cartoon, Natural, Mix) belongs to the engine and covers every look it uses. Natural is realistic scenes painted by ChatGPT, people included, never photos or real people; Mix is chosen by the AI per scene. It is set in the channel's editing-style window together with the engine, looks and film looks.",
     "2026-10-28: No template videos. A style may let the AI design each video (colours, fonts, pace, energy, caption look) inside its engine and looks; the style's own settings are the channel's starting point and the fallback, and every design is checked for readability.",
     "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval.",
-    "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image."
+    "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image.",
+    "2026-10-29: The Atelier engine is called Motion Graphics; its anime finish is called HTML render and a Mix finish uses both, one per scene. Niche suggestions (sub-niches of a channel or new niches on the rise) learn only from scans the owner already ran; YouTube data only with the recorded derived-use approval."
   ],
-  "milestone": "0.69.0: Editing Engines (engines only), channel styles on the channel page, competitors added and deleted on their page, the ChatGPT sign-in"
+  "milestone": "0.70.0: the Motion Graphics engine (was Atelier) with motion graphics, HTML render and mix finishes; niche suggestions (sub-niches from competitors, new niches on the rise)"
 }

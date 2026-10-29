@@ -17,7 +17,7 @@ const sceneDirection = plan => {
 };
 // The story director's map and how the engines take turns along the video (P06i). The page forbids inline
 // styles, so the strip is SVG with presentation attributes.
-const SCENE_ENGINE = {stickman: ['Stickman', '#E0753E'], handdrawn: ['Hand-drawn', '#8C6D46'], atelier: ['Atelier', '#5B6CFF'], motion: ['Motion graphics', '#2FB38E'], montage: ['Footage', '#8A8F98']};
+const SCENE_ENGINE = {stickman: ['Stickman', '#E0753E'], handdrawn: ['Hand-drawn', '#8C6D46'], atelier: ['Motion Graphics (HTML)', '#5B6CFF'], motion: ['Documentary drawing', '#2FB38E'], montage: ['Footage', '#8A8F98']};
 const sceneEngine = key => SCENE_ENGINE[key] || [key, '#999999'];
 const sceneStory = plan => {
   const mix = plan.mix;
@@ -151,9 +151,9 @@ function sceneShotCard(content, manifest, scene, shot) {
       <div class="shot-actions">${editable ? action(asset ? 'Change' : 'Find visual', 'scene-shot-open', shot.id, asset ? 'secondary' : 'primary') + action('Edit', 'scene-shot-edit', shot.id, 'text-button') + (shot.frame && shot.source === 'generated-graphics' ? action('Redesign', 'scene-frame-redesign', shot.id, 'text-button') : '') + (shot.sketch && shot.source === 'generated-graphics' ? action(shot.sketch.elements.some(item => item.kind === 'picture' && item.art) ? 'New picture' : 'Paid picture', 'scene-shot-picture', shot.id, 'text-button') : '') + (scene.shots.length > 1 ? action('Remove', 'scene-shot-remove', shot.id, 'text-button danger') : '') : ''}${count ? `<small class="muted">${count} result${count === 1 ? '' : 's'}</small>` : ''}</div></div></div>`;
 }
 
-// What an atelier shot (designed by Claude) shows, in words: "Atelier · dataviz-countup · the number · 3 beats".
+// What an atelier shot (designed by Claude) shows, in words: "Motion graphics · dataviz-countup · the number · 3 beats".
 function sceneFrameSummary(frame) {
-  return ['Atelier', frame.blueprint !== 'compose' ? `${frame.blueprint} (${frame.posture})` : 'composed freely', frame.focal, `${frame.beats.length} beat${frame.beats.length === 1 ? '' : 's'}`, frame.html ? 'designed' : 'not designed yet: drawn from its words'].filter(Boolean).join(' · ');
+  return [frame.shot ? `HTML render (${frame.shot})` : 'Motion graphics', frame.blueprint !== 'compose' ? `${frame.blueprint} (${frame.posture})` : 'composed freely', frame.focal, `${frame.beats.length} beat${frame.beats.length === 1 ? '' : 's'}`, frame.html ? 'designed' : 'not designed yet: drawn from its words'].filter(Boolean).join(' · ');
 }
 // What a drawn shot shows, in words: "Stickman · storm set · Max (scared, cower) · bolt · “5x hotter” · flash".
 function sceneSketchSummary(sketch, cast = []) {
@@ -238,8 +238,8 @@ function sceneAction(command, id, button) {
       <label>Scene planner token limit<input name="plannerTokenLimit" type="number" min="8000" max="120000" step="1000" required value="${settings.plannerTokenLimit}"></label>
       <label class="check"><input name="continuityReview" type="checkbox" ${settings.continuityReview !== false ? 'checked' : ''}> Continuity review: Claude checks every drawn shot against its own words and its neighbours, and redraws what does not fit (one more answer per part)</label>
       <label>Continuity review token limit (per answer)<input name="reviewTokenLimit" type="number" min="20000" max="200000" step="1000" required value="${settings.reviewTokenLimit || 70000}"></label>
-      <label class="check"><input name="composeFrames" type="checkbox" ${settings.composeFrames !== false ? 'checked' : ''}> Atelier shots: Claude designs the shots the plan marks as atelier (kinetic type, numbers, diagrams, metaphors), one answer per shot, each reserved on its own</label>
-      <label>Atelier shot token limit (per shot)<input name="composeTokenLimit" type="number" min="12000" max="150000" step="1000" required value="${settings.composeTokenLimit || 40000}"></label>
+      <label class="check"><input name="composeFrames" type="checkbox" ${settings.composeFrames !== false ? 'checked' : ''}> Motion Graphics shots: Claude designs the shots the plan marks for the Motion Graphics engine (kinetic type, numbers, diagrams, metaphors, or the HTML render of anime), one answer per shot, each reserved on its own</label>
+      <label>Motion Graphics shot token limit (per shot)<input name="composeTokenLimit" type="number" min="12000" max="150000" step="1000" required value="${settings.composeTokenLimit || 40000}"></label>
       <label>Designed shots per minute <span class="hint">When atelier is not the main look; each costs about 15,000 tokens; 0 turns them off</span><input name="designedPerMinute" type="number" min="0" max="10" step="1" required value="${settings.designedPerMinute ?? 2}"></label>
       <label>Pictures per minute <span class="hint">Shots where Claude draws a detailed picture for the hand to trace (paid in tokens, about 15,000-30,000 each); the program draws everything else free; 0 turns them off</span><input name="picturesPerMinute" type="number" min="0" max="20" step="1" required value="${settings.picturesPerMinute ?? 3}"></label>
       <label>Picture token limit (per picture)<input name="pictureTokenLimit" type="number" min="12000" max="120000" step="1000" required value="${settings.pictureTokenLimit || 40000}"></label>

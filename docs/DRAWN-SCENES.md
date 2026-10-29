@@ -728,3 +728,27 @@ delivering. Read in research/html-anime.md; restated in `atelier.js` (MIT notice
 - Tested in tests/atelier.test.js (scripts, budgets, contract, checks, style), tests/scene.test.js ("anime atelier",
   a fake Claude plan end to end), tests/render.test.js (the colour dip shows the accent mid-transition) and
   tests/editing.test.js (owner dip colour, the colour guard); clicked through in a real browser.
+
+## 34. The Motion Graphics engine: motion graphics, HTML render or a mix (0.70.0)
+
+Owner review 2026-10-29: "what is mainly atelier engine? ... if it is motion engine then rename it with motion graphics
+engine ... name the anime as html render and also make this too so user can also mix motion graphics and html engine".
+
+- **Name:** the Atelier engine (adapter `atelier`, unchanged inside the code) is called **Motion Graphics** wherever the
+  owner sees it: the engine card ("Motion Graphics (HTML compositions)"), the launch style ("Motion Graphics ·
+  designed per video", launch library v13 adds it as a draft to unrevised launch profiles), the editor and the channel
+  window ("Motion Graphics finish"), Room 04 ("Motion Graphics (HTML)" shots, the shot summary names the finish). It is
+  not the old motion graphics engine: that one was retired in 0.37 (its designs became the Documentary engine's
+  designed looks and motion graphics became the layer of every engine); nothing was merged.
+- **Finishes:** `atelier.finish` is `motion` (motion graphics, as before), `anime` (shown as **HTML render**, the cel
+  anime of section 33) or **`mix`**. In a mix each atelier frame names its `finish` (`validateFrame`: `anime` or
+  `motion`, a wrong name becomes motion graphics with a named note, strict for the owner); `At.frameFinish(direction,
+  frame)` decides per frame. The direction carries the one colour script for both (the palette follows it), anime
+  frames get the anime contract, budget and colour-script checks, motion frames the motion doctrine and no script check
+  (`scene-room.atelierFrame`, `composeFrames`); `sakugaBudget` still keeps one expensive shot per scene.
+- **Planner:** `At.promptGuide({finish: 'mix'})` explains both frame kinds and asks for one finish per scene, chosen by
+  the scene's job (story, people and feelings as HTML render; numbers, comparisons and explanations as motion
+  graphics), with the reason in the first shot's notes; `E.promptGuide` keeps people in the HTML render shots, never
+  stick figures.
+- Tested in tests/atelier.test.js (mix direction, frames, `frameFinish`, the contract per frame, the guide, the style);
+  the channel window offers the three finishes in a real browser.

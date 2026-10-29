@@ -27,8 +27,11 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 
 // ---------------------------------------------------------------- the anime finish (0.68, from html-anime)
-// motion: designed motion graphics (HyperFrames); anime: cel-painted anime drawn in the page, people included.
-const FINISHES = Object.freeze(['motion', 'anime']);
+// motion: designed motion graphics (HyperFrames); anime: the HTML render of cel-painted anime, people included; mix
+// (owner request 2026-10-29): each scene of the video takes one of the two, chosen for its job.
+const FINISHES = Object.freeze(['motion', 'anime', 'mix']);
+// A frame's own finish: in an anime video every frame is anime; in a mixed one each frame names its own.
+const frameFinish = (direction, frame) => (direction?.finish === 'anime' || (direction?.finish === 'mix' && frame?.finish === 'anime') ? 'anime' : 'motion');
 // A colour script is closed: ten named paints and nothing else (html-anime harness/compile.js SCRIPTS).
 const ROLES = Object.freeze(['sky', 'ink', 'moon', 'accent', 'practical', 'iris', 'skin', 'hair', 'sclera', 'line']);
 const SCRIPTS = Object.freeze({
@@ -109,9 +112,9 @@ function validateDirection(raw, {lenient = true, warn = () => {}, fallback = {},
   const read = clean(raw.read, 220);
   if (read.split(' ').length < 4) problem('Direction read must say what the video should feel like and why, not only adjectives.');
   // Anime (0.68): the style's colour script, or Claude's when the style lets it choose; the palette defaults to it.
-  const script = finish === 'anime' ? colourScript(SCRIPTS[scriptChoice] ? scriptChoice : raw.script, {lenient, warn, fallback: SCRIPTS[scriptChoice] ? scriptChoice : 'indigo'}) : null;
+  const script = finish === 'anime' || finish === 'mix' ? colourScript(SCRIPTS[scriptChoice] ? scriptChoice : raw.script, {lenient, warn, fallback: SCRIPTS[scriptChoice] ? scriptChoice : 'indigo'}) : null;
   return {
-    ...(script ? {finish: 'anime', script} : {}),
+    ...(script ? {finish, script} : {}),
     read, signature: clean(raw.signature, 180), motion: clean(raw.motion, 220),
     dials: {variance: dial(raw.dials?.variance, 'variance'), motion: dial(raw.dials?.motion, 'motion'), density: dial(raw.dials?.density, 'density')},
     // An anime palette is the colour script's (the script is closed; Claude's palette is not used).
@@ -133,11 +136,13 @@ function validateFrame(raw, {lenient = true, warn = () => {}, label = 'Shot', fi
   const known = ruleIds(), motions = [];
   for (const id of (Array.isArray(raw.motions) ? raw.motions : []).slice(0, 6)) { if (known.has(id)) { if (!motions.includes(id)) motions.push(id); } else problem(`${label} motion "${clean(id, 40)}" is not a known rule; left out.`); }
   const out = {blueprint, posture, focal: clean(raw.focal, 160), roles: clean(raw.roles, 320), beats, motions: motions.slice(0, 4), type: clean(raw.type, 40), persuasion: clean(raw.persuasion, 80), beat: clean(raw.beat, 60)};
-  if (finish !== 'anime') return out;
+  // In a mixed video a frame names its finish (motion graphics unless it says anime).
+  const own = finish === 'mix' ? (raw.finish === 'anime' ? 'anime' : raw.finish === undefined || raw.finish === 'motion' ? 'motion' : problem(`${label} finish "${clean(raw.finish, 20)}" is motion or anime; it is motion graphics.`, 'motion')) : finish;
+  if (own !== 'anime') return finish === 'mix' ? {...out, finish: 'motion'} : out;
   const shot = SHOTS.includes(raw.shot) ? raw.shot : problem(`${label} anime shot "${clean(raw.shot, 30)}" is not one of ${SHOTS.join(', ')}; it is an approach.`, 'approach');
   const cap = shot === 'sakuga' ? DRAWINGS.sakuga : DRAWINGS.other, asked = Number(raw.drawings ?? cap);
   const drawings = Number.isInteger(asked) && asked >= 1 && asked <= cap ? asked : problem(`${label} may use 1-${cap} drawings as a ${shot} shot; ${cap} are used.`, cap);
-  return {...out, shot, drawings};
+  return {...out, ...(finish === 'mix' ? {finish: 'anime'} : {}), shot, drawings};
 }
 
 // ---------------------------------------------------------------- the frame worker (HyperFrames frame-worker role, restated)
@@ -174,7 +179,7 @@ const CONTRACT = contract('motion');
 // The user turn: this shot's packet (the frame block, the art direction, the words with their times, the
 // selected blueprint and motion recipes), plus findings from a failed attempt.
 function composeMessages({frameId, width, height, duration, frame, direction, words, neighbours = {}, notes = '', findings = [], ask = '', fps = 30}) {
-  const anime = direction?.finish === 'anime';
+  const anime = frameFinish(direction, frame) === 'anime';
   const packet = {
     frameId, canvas: `${width}x${height}`, durationSeconds: round(duration, 2),
     ...(anime ? {finish: 'anime', fps, oneFrameSeconds: round(1 / fps, 5), colourScript: direction.script.colors, drawingBudget: {shot: frame.shot, uniqueDrawings: frame.drawings}} : {}),
@@ -272,21 +277,37 @@ function warpAt(anchors, t) {
 // The planner's view of the engine: how to ask for an atelier shot, and the catalog (ids + one line each).
 function promptGuide({finish = 'motion', script = 'choose'} = {}) {
   const {blueprints, rules} = loadCatalog();
-  if (finish === 'anime') return [
-    'ATELIER SHOTS, ANIME FINISH (html-anime method): the atelier shots of this video are cel-painted anime drawn as animated pages, people included (cel characters with eyes, hair and clothes, never stick figures). Plan each as {"source": "generated-graphics", "frame": {...}}; a frame worker then draws it in the colour script.',
+  const animeFrame = [
     'frame = {"blueprint": "compose", "shot": "establish" (the place, wide, figures small or absent) | "approach" (a cut closer: who is there) | "turn" (the moment before the action) | "sakuga" (the action itself, the one expensive shot of its scene, up to 8 drawings) | "aftermath" (the result, settled and held) | "button" (the closing image, with one short line at most), "drawings": unique drawings (3; up to 8 for sakuga), "focal": the hero of the shot, "roles", "beats": [{"at": the narrator\'s words that trigger it, "show": what is drawn, which pose follows which}], "type", "persuasion", "beat"}.',
     'A scene builds around its verb: establish, approach, perhaps a turn, the sakuga shot, perhaps an aftermath, then a button; at most one sakuga shot per scene. Get closer by cutting: shots inside a scene cut on the action (the settle is the first frames of the next shot); the camera is locked except a 106% push on a held shot. A new scene opens with the transition "dip-colour" (a quick dip through the accent, the anime cut).',
-    `Also give the plan ONE "direction": {"read", "dials", "fonts", "motion", "signature", "avoid"} as for any atelier video${SCRIPTS[script] ? ` (the colour script is the style's ${SCRIPTS[script].name})` : `, plus "script": one of ${Object.keys(SCRIPTS).join(', ')} or ten own paints {"name", "colors": {${ROLES.join(', ')}}} as #RRGGBB, chosen for the story's light and mood`}. Installed fonts: ${FONTS.join(', ')}.`,
-  ].join('\n');
-  return [
+  ];
+  const scriptLine = `Also give the plan ONE "direction": {"read", "dials", "fonts", "motion", "signature", "avoid"} as for any atelier video${SCRIPTS[script] ? ` (the colour script is the style's ${SCRIPTS[script].name})` : `, plus "script": one of ${Object.keys(SCRIPTS).join(', ')} or ten own paints {"name", "colors": {${ROLES.join(', ')}}} as #RRGGBB, chosen for the story's light and mood`}. Installed fonts: ${FONTS.join(', ')}.`;
+  const motion = [
     'ATELIER SHOTS (designed from scratch for this video; HyperFrames method). For a beat no drawing vocabulary serves well (kinetic typography, a number that must hit, a diagram or chart assembling, an abstract metaphor, a comparison, a list, a typographic title), plan the shot as {"source": "generated-graphics", "frame": {...}} instead of a sketch. A frame worker then builds it as an animated page in the video\'s art direction.',
     'frame = {"blueprint": a blueprint id or "compose", "posture": "reproduce"|"adapt"|"compose", "focal": the invented hero element, "roles": "element = role · ...", "beats": [{"at": the narrator\'s words that trigger it, "show": what appears, moves or changes and where it sits}], "motions": up to 4 motion rule ids, "type": the beat\'s job (hook, pain, concept, step, evidence, implication, takeaway, cta), "persuasion": a named clarity technique (analogy, progressive disclosure, before/after, rule of three, worked example, causal chain, callback...), "beat": the feeling}.',
     'Beats follow the voice: the first beat shows only what is said at the start; each further piece arrives on its own words, spread across the shot. The hero fills 40-60% of the frame; on-screen copy is short (a word, a number, a label), never the narration.',
-    'Also give the plan ONE "direction" (the art direction every atelier shot follows): {"read": what the video must feel like and why (not adjectives), "dials": {"variance": 1-10, "motion": 1-10, "density": 1-10}, "palette": {"canvas", "ink", "accent", "support"} as #RRGGBB, "fonts": {"display", "body"} from the installed fonts, "motion": the motion grammar in one line, "signature": one signature device used in at most two beats, "avoid": [anti-patterns]}. Installed fonts: ' + FONTS.join(', ') + '.',
+  ];
+  const catalogue = [
     'Distinctness: no two neighbouring atelier shots share their primary visual subject or framing; use at least three framings across the video (centered, rule-of-thirds, split, layered depth, asymmetric 60/40, triptych, full-width strip).',
     'Blueprints (proven shot shapes): ' + blueprints.map(item => `${item.id} [${item.roles}]: ${item.line}`).join(' | '),
     'Motion rules (ids): ' + rules.map(item => item.id).join(', '),
+  ];
+  if (finish === 'anime') return [
+    'ATELIER SHOTS, HTML RENDER (cel anime, html-anime method): the atelier shots of this video are cel-painted anime drawn as animated pages, people included (cel characters with eyes, hair and clothes, never stick figures). Plan each as {"source": "generated-graphics", "frame": {...}}; a frame worker then draws it in the colour script.',
+    ...animeFrame, scriptLine,
+  ].join('\n');
+  // A mix (owner request 2026-10-29): each scene is either motion graphics or the HTML render, for its job.
+  if (finish === 'mix') return [
+    'ATELIER SHOTS, MIX OF MOTION GRAPHICS AND HTML RENDER: every atelier frame names its "finish": "motion" (designed motion graphics: numbers, words, diagrams, charts, metaphors) or "anime" (the HTML render: cel-painted characters and places, people included, never stick figures). Choose per scene by its job: the story, people and feelings as anime; the numbers, comparisons and explanations as motion graphics. Keep one finish per scene and say why in the first shot\'s notes. Both share the one colour script, so the video stays one film.',
+    'MOTION GRAPHICS FRAMES ("finish": "motion"):', ...motion.slice(1),
+    'HTML RENDER FRAMES ("finish": "anime"):', ...animeFrame,
+    scriptLine, ...catalogue,
+  ].join('\n');
+  return [
+    ...motion,
+    'Also give the plan ONE "direction" (the art direction every atelier shot follows): {"read": what the video must feel like and why (not adjectives), "dials": {"variance": 1-10, "motion": 1-10, "density": 1-10}, "palette": {"canvas", "ink", "accent", "support"} as #RRGGBB, "fonts": {"display", "body"} from the installed fonts, "motion": the motion grammar in one line, "signature": one signature device used in at most two beats, "avoid": [anti-patterns]}. Installed fonts: ' + FONTS.join(', ') + '.',
+    ...catalogue,
   ].join('\n');
 }
 
-module.exports = {VERSION, FONTS, POSTURES, CONTRACT, FINISHES, ROLES, SCRIPTS, SHOTS, DRAWINGS, contract, colourScript, sakugaBudget, loadCatalog, blueprintText, ruleText, validateDirection, validateFrame, composeMessages, validateComposition, warp, warpAt, promptGuide};
+module.exports = {VERSION, FONTS, POSTURES, CONTRACT, FINISHES, frameFinish, ROLES, SCRIPTS, SHOTS, DRAWINGS, contract, colourScript, sakugaBudget, loadCatalog, blueprintText, ruleText, validateDirection, validateFrame, composeMessages, validateComposition, warp, warpAt, promptGuide};

@@ -130,8 +130,29 @@ test('the anime finish: colour scripts, shot budgets, its own contract and check
   assert.ok(A.validateComposition(composition(swapped, '<svg><rect fill="#00FF00"/></svg>'), size).issues.some(item => /outside the colour script/.test(item)), 'more stray colours send the shot back');
   const inScript = composition(swapped).replace('#10131A', named.script.colors.sky).replace('#F7F4EE', named.script.colors.line);
   assert.deepEqual(A.validateComposition(inScript, size).issues, [], 'a shot in the script that swaps drawings passes');
-  assert.match(A.promptGuide({finish: 'anime'}), /ANIME FINISH[\s\S]*"sakuga"[\s\S]*dip-colour/);
+  assert.match(A.promptGuide({finish: 'anime'}), /HTML RENDER[\s\S]*"sakuga"[\s\S]*dip-colour/);
   assert.match(A.promptGuide({finish: 'anime', script: 'festival'}), /style's Festival/);
+});
+
+// 0.70 (owner request 2026-10-29): a mix of motion graphics and the HTML render, one finish per scene.
+test('the mix finish: each frame names motion graphics or the HTML render, both in one colour script', () => {
+  const read = 'A history of money told through people at markets and the numbers they traded';
+  const direction = A.validateDirection({read, script: 'noon'}, {finish: 'mix'});
+  assert.deepEqual([direction.finish, direction.script.name, direction.palette.accent], ['mix', 'Paper noon', A.SCRIPTS.noon.colors.accent], 'a mixed video keeps one colour script');
+  const beats = [{show: 'the coin changes hands'}], warnings = [];
+  const anime = A.validateFrame({blueprint: 'compose', finish: 'anime', shot: 'sakuga', beats}, {finish: 'mix'});
+  const motion = A.validateFrame({blueprint: 'compose', beats}, {finish: 'mix'});
+  const odd = A.validateFrame({blueprint: 'compose', finish: 'oil', beats}, {finish: 'mix', warn: m => warnings.push(m)});
+  assert.deepEqual([anime.finish, anime.shot, anime.drawings, motion.finish, motion.shot, odd.finish], ['anime', 'sakuga', 8, 'motion', undefined, 'motion']);
+  assert.match(warnings[0], /finish "oil" is motion or anime/);
+  assert.throws(() => A.validateFrame({blueprint: 'compose', finish: 'oil', beats}, {finish: 'mix', lenient: false}), /motion or anime/);
+  assert.deepEqual([A.frameFinish(direction, anime), A.frameFinish(direction, motion), A.frameFinish(A.validateDirection({read}, {finish: 'anime'}), motion), A.frameFinish(A.validateDirection({read}), anime)], ['anime', 'motion', 'anime', 'motion']);
+  // Each frame gets its own contract.
+  const ask = frame => A.composeMessages({frameId, width: 1920, height: 1080, duration: 3, frame, direction, words: [], fps: 24})[0].content;
+  assert.match(ask(anime), /CEL PAINT/);
+  assert.match(ask(motion), /MOTION DOCTRINE/);
+  const guide = A.promptGuide({finish: 'mix', script: 'noon'});
+  assert.match(guide, /MIX OF MOTION GRAPHICS AND HTML RENDER[\s\S]*"finish": "motion"[\s\S]*"sakuga"[\s\S]*style's Paper noon[\s\S]*Blueprints/);
 });
 
 test('the style keeps the atelier finish only for the Atelier and Story Mix engines', () => {
@@ -141,4 +162,6 @@ test('the style keeps the atelier finish only for the Atelier and Story Mix engi
   assert.equal(St.validateStyleSpec(launch('atelier')).atelier, undefined, 'no finish means motion design, and older specs hash the same');
   assert.throws(() => St.validateStyleSpec({...launch('cinematic-hybrid'), atelier: {finish: 'anime'}}), /no atelier finish/);
   assert.throws(() => St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'watercolour'}}), /atelier finish/);
+  assert.equal(St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'mix'}}).atelier.finish, 'mix');
+  assert.match(launch('atelier').name, /^Motion Graphics/, 'the engine is called Motion Graphics (it was Atelier)');
 });
