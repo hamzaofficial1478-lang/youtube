@@ -60,36 +60,41 @@ function styleVisualRules(spec) {
   if (!shown.length) return '';
   return `<details class="scene-history visual-rules"><summary>Visual rules of this look (${shown.length})</summary>${shown.map(item => `<div class="visual-rule"><strong>${esc(item.name)}</strong> ${badge(item.pictures === 'photo' ? 'Real photos' : item.pictures === 'cutout' ? 'Photo cut-outs' : item.pictures === 'natural' ? 'Realistic, painted by ChatGPT' : 'Drawn in this look', item.pictures === 'drawn' ? 'green' : 'orange')}<dl class="style-facts"><div><dt>Pictures</dt><dd>${esc(item.medium)}</dd></div><div><dt>Places</dt><dd>${esc(item.places)}</dd></div><div><dt>Objects</dt><dd>${esc(item.objects)}</dd></div><div><dt>People</dt><dd>${esc(item.people)}</dd></div><div><dt>Motion</dt><dd>${esc(item.motion)}</dd></div><div><dt>Never</dt><dd>${esc(item.never)}</dd></div></dl></div>`).join('')}<p class="hint">The scene planner plans with these rules, every picture is painted or drawn by them, and Claude checks each painted picture against them before it is used.</p></details>`;
 }
-// What the style's engine can do, and for stick figures the look and the hand this style uses.
-function styleFeatures(spec) {
-  const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
-  const chosen = stick || board || design ? `<p class="hint">${adapter === 'story-mix' ? '<strong>Mix of all engines.</strong> ' : ''}${design ? `Documentary look: <strong>${esc(docLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
-  const adaptive = spec.adaptive ? '<p class="hint"><strong>The AI designs each video:</strong> colours, fonts, pace, energy and caption look per story; the settings below are the starting point.</p>' : '';
-  const type = spec.drawing?.pictureType ? `<p class="hint">Picture type: <strong>${esc(typeLabel(spec.drawing.pictureType))}</strong></p>` : '';
-  const film = spec.drawing?.film ? `<p class="hint">Film look: <strong>${esc(filmLabel(spec.drawing.film))}</strong>${spec.drawing.films?.length ? ` from ${esc(spec.drawing.films.map(filmLabel).join(', '))}` : ''}</p>` : '';
-  const ticked = [['Stickman looks mixed', spec.drawing?.looks, styleLabel], ['Whiteboard looks mixed', spec.drawing?.boards, styleLabel], ['Documentary looks mixed', spec.drawing?.designs, docLabel]].filter(([, list]) => list?.length).map(([label, list, name]) => `<p class="hint">${label}: <strong>${esc(list.map(name).join(', '))}</strong></p>`).join('');
-  const grade = spec.cinema ? `<p class="hint">Colour grade: <strong>${esc(gradeLabel(spec.cinema.grade))}</strong>${spec.cinema.letterbox ? ' · cinema bars' : ''}${spec.cinema.grain ? ` · film grain ${esc(spec.cinema.grain)}` : ''}</p>` : '';
+// The chosen style's settings, one row each (owner review 2026-10-29: settings listed, descriptions on hover).
+function styleSettings(spec) {
+  const adapter = spec.renderer.adapter, d = spec.drawing || {}, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
+  const rows = [['Engine', esc(state.styles.renderers[adapter]?.name || adapter) + (adapter === 'story-mix' ? ' · every engine' : '')]];
+  if (design) rows.push(['Documentary look', esc(docLabel(d.design || 'vector'))]);
+  if (stick) rows.push(['Stickman look', esc(styleLabel(d.look || 'classic'))]);
+  if (board) rows.push(['Whiteboard look', esc(styleLabel(d.board || 'cartoon'))]);
+  for (const [label, list, name] of [['Looks mixed', d.looks, styleLabel], ['Boards mixed', d.boards, styleLabel], ['Designs mixed', d.designs, docLabel]]) if (list?.length) rows.push([label, esc(list.map(name).join(', '))]);
+  if (stick || board) rows.push(['Drawing hand', d.hand ? 'On' : 'Off']);
+  if (d.pictureType) rows.push(['Picture type', esc(typeLabel(d.pictureType))]);
+  if (d.film) rows.push(['Film look', esc(filmLabel(d.film)) + (d.films?.length ? ` from ${esc(d.films.map(filmLabel).join(', '))}` : '')]);
+  if (spec.cinema) rows.push(['Colour grade', esc(gradeLabel(spec.cinema.grade)) + (spec.cinema.letterbox ? ' · cinema bars' : '') + (spec.cinema.grain ? ` · film grain ${esc(spec.cinema.grain)}` : '')]);
+  rows.push(['AI design', spec.adaptive ? 'The AI designs each video (these settings are its starting point)' : 'Off: every video uses these settings']);
+  const aspects = spec.formats.map(format => `${styleLabel(format)} ${state.styles.vocabulary.aspect[format]}`).join(' · ');
+  rows.push(['Canvas', `${esc(aspects)} · ${spec.canvas.frameRate} fps`], ['Pacing', `${spec.pacing.shotMinSeconds}-${spec.pacing.shotMaxSeconds}s shots · hook ≤ ${spec.pacing.hookShotMaxSeconds}s`],
+    ['Transitions', esc(transitionList(spec))], ['Captions', `${esc(styleLabel(spec.captions.mode))} · ${spec.captions.maxLines}×${spec.captions.maxCharsPerLine} chars · ${esc(styleLabel(spec.captions.position))}${spec.captions.theme ? ` · ${esc(styleLabel(spec.captions.theme))}` : ''}${spec.captions.animation ? ` · ${esc(styleLabel(spec.captions.animation))}` : ''}`],
+    ['Fonts', esc([...new Set([spec.typography.headingFont, spec.typography.bodyFont])].join(' · '))], ['Visuals', esc(spec.visuals.sources.map(styleLabel).join(', '))],
+    ['Audio', `${esc(spec.audio.musicMoods.join(', '))} · ${spec.audio.targetLufs} LUFS · SFX ${esc(styleLabel(spec.audio.sfxUsage).toLowerCase())}`]);
   // A font this PC does not have is drawn in a look-alike (0.41): say so, so the owner is never surprised.
   const lacking = [spec.typography.headingFont, spec.typography.bodyFont].filter((name, k, all) => all.indexOf(name) === k && state.styles.missingFonts?.[name]);
   const fonts = lacking.length ? `<p class="inline-warning">${lacking.map(name => `${esc(name)} is not installed on this PC, so ${esc(state.styles.missingFonts[name])} is used`).join('; ')}. Install the font or choose another.</p>` : '';
-  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + ticked + adaptive + type + film + grade + fonts + styleVisualRules(spec);
+  return `<dl class="style-facts style-settings">${rows.map(([label, value]) => `<div><dt>${label}</dt><dd>${value}</dd></div>`).join('')}</dl>${fonts}${styleVisualRules(spec)}`;
+}
+// What shows on hover or focus: the style's description, what it is best for and what its engine can do.
+function styleTip(spec) {
+  const features = state.styles.renderers[spec.renderer.adapter]?.features || [];
+  return `<span class="engine-tip" role="tooltip"><span class="tip-summary">${esc(spec.summary)}</span>${spec.bestFit.length ? `<span class="tip-fit">Best for: ${esc(spec.bestFit.join(' · '))}</span>` : ''}${features.length ? `<span class="tip-list">${features.map(item => `<span>${esc(item)}</span>`).join('')}</span>` : ''}</span>`;
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
 function transitionList(spec) {
   const all = state.styles.vocabulary.transitions, allowed = spec.transitions.allowed;
   return all.every(name => allowed.includes(name)) ? `All ${all.length - 1} transitions and cuts (Claude chooses per scene)` : allowed.map(styleLabel).join(', ');
 }
-function styleFacts(spec) {
-  const aspects = spec.formats.map(format => `${styleLabel(format)} ${state.styles.vocabulary.aspect[format]}`).join(' · ');
-  return `<dl class="style-facts">
-    <div><dt>Canvas</dt><dd>${esc(aspects)} · ${spec.canvas.frameRate} fps</dd></div>
-    <div><dt>Pacing</dt><dd>${spec.pacing.shotMinSeconds}-${spec.pacing.shotMaxSeconds}s shots · hook ≤ ${spec.pacing.hookShotMaxSeconds}s</dd></div>
-    <div><dt>Transitions</dt><dd>${esc(transitionList(spec))}</dd></div>
-    <div><dt>Captions</dt><dd>${esc(styleLabel(spec.captions.mode))} · ${spec.captions.maxLines}×${spec.captions.maxCharsPerLine} chars · ${esc(styleLabel(spec.captions.position))}</dd></div>
-    <div><dt>Visuals</dt><dd>${esc(spec.visuals.sources.map(styleLabel).join(', '))}</dd></div>
-    <div><dt>Audio</dt><dd>${esc(spec.audio.musicMoods.join(', '))} · ${spec.audio.targetLufs} LUFS · SFX ${esc(styleLabel(spec.audio.sfxUsage).toLowerCase())}</dd></div>
-  </dl>`;
-}
+// Which library tab is open and which style is shown below the tiles (page state only).
+let styleTab = '', stylePick = '';
 
 function styleRoom(family) {
   const profiles = styleProfiles().filter(profile => !(profile.origin === 'launch' && profile.revisions.every(item => item.status === 'retired'))), handoff = styleHandoff(family.id), familyAssignment = styleActive(family.id);
@@ -121,22 +126,26 @@ function styleRoom(family) {
   }).join('');
 
   const familyAssignedProfile = assigned?.profile.id;
-  const cards = profiles.map(profile => {
+  // Owner review 2026-10-29: the styles side by side under Approved / Not approved, the chosen one's settings below.
+  const usable = profile => profile.revisions.some(item => item.status === 'approved');
+  const groups = {approved: profiles.filter(usable), pending: profiles.filter(profile => !usable(profile))};
+  // Until the owner picks a tab, a library with nothing approved opens on what needs review.
+  const tab = styleTab || (groups.approved.length || !groups.pending.length ? 'approved' : 'pending'), shown = groups[tab];
+  const picked = shown.find(profile => profile.id === stylePick) || shown.find(profile => profile.id === familyAssignedProfile) || shown[0];
+  const tiles = shown.map(profile => {
     const latest = profile.revisions.at(-1), spec = latest.spec;
-    const approved = profile.revisions.filter(item => item.status === 'approved');
-    const inUse = profile.revisions.reduce((sum, item) => sum + item.usage.active, 0);
-    return `<article class="style-card ${profile.id === familyAssignedProfile ? 'assigned' : ''}">
-      ${stylePalette(spec)}
-      <div class="card-top"><span class="micro-label">${profile.origin === 'launch' ? 'Launch profile' : profile.origin === 'derived' ? 'Derived style' : 'Custom style'} · r${latest.revision}</span>${badge(styleLabel(latest.status), latest.status === 'approved' ? 'green' : latest.status === 'draft' ? 'orange' : 'gray')}</div>
-      <h3>${esc(spec.name)}</h3>
-      <p>${esc(spec.summary)}</p>
-      <div class="chip-row">${spec.bestFit.map(item => `<span class="chip">${esc(item)}</span>`).join('')}</div>
-      ${styleFeatures(spec)}
-      ${styleFacts(spec)}
-      <div class="style-card-foot">${styleRendererBadge(spec)}${profile.id === familyAssignedProfile ? badge('This family\'s default', 'green') : ''}${inUse ? `<small>${inUse} active assignment${inUse === 1 ? '' : 's'}</small>` : ''}${approved.length && latest.status === 'draft' ? `<small>r${approved.at(-1).revision} remains approved</small>` : ''}</div>
-      <div class="card-actions">${action('Spec & history', 'style-view', profile.id, 'text-button')}${latest.status === 'draft' ? action('Review & approve', 'style-approve', latest.id, 'primary') : ''}${action('New revision', 'style-revise', profile.id, 'text-button')}${action('Duplicate', 'style-duplicate', profile.id, 'text-button')}${latest.status !== 'retired' ? action('Retire', 'style-retire', latest.id, 'text-button danger') : ''}</div>
-    </article>`;
+    return `<button type="button" class="engine-tile ${profile === picked ? 'active' : ''} ${profile.id === familyAssignedProfile ? 'assigned' : ''}" data-action="style-pick" data-id="${esc(profile.id)}" aria-pressed="${profile === picked}">
+      ${stylePalette(spec)}<strong>${esc(spec.name)}</strong><small>${profile.origin === 'launch' ? 'Launch style' : profile.origin === 'derived' ? 'Channel copy' : 'Custom style'} · r${latest.revision}</small>
+      <span class="tile-badges">${profile.id === familyAssignedProfile ? badge('This family\'s default', 'green') : ''}${latest.status === 'draft' ? badge(usable(profile) ? 'New draft' : 'Needs review', 'orange') : latest.status === 'retired' ? badge('Retired', 'gray') : ''}</span>${styleTip(spec)}</button>`;
   }).join('');
+  const detail = picked ? (() => {
+    const latest = picked.revisions.at(-1), spec = latest.spec, approved = picked.revisions.filter(item => item.status === 'approved');
+    const inUse = picked.revisions.reduce((sum, item) => sum + item.usage.active, 0);
+    return `<div class="style-detail ${picked.id === familyAssignedProfile ? 'assigned' : ''}"><div class="style-detail-head">${stylePalette(spec, true)}<div><h3>${esc(spec.name)}</h3><div class="style-card-foot">${badge(`r${latest.revision} · ${styleLabel(latest.status)}`, latest.status === 'approved' ? 'green' : latest.status === 'draft' ? 'orange' : 'gray')}${styleRendererBadge(spec)}${inUse ? `<small>${inUse} active assignment${inUse === 1 ? '' : 's'}</small>` : ''}${approved.length && latest.status === 'draft' ? `<small>r${approved.at(-1).revision} remains approved</small>` : ''}</div></div></div>
+      ${styleSettings(spec)}
+      <div class="card-actions">${latest.status === 'draft' ? action('Review & approve', 'style-approve', latest.id, 'primary') : ''}${action('Spec & history', 'style-view', picked.id, 'text-button')}${action('New revision', 'style-revise', picked.id, 'text-button')}${action('Duplicate', 'style-duplicate', picked.id, 'text-button')}${latest.status !== 'retired' ? action('Retire', 'style-retire', latest.id, 'text-button danger') : ''}</div></div>`;
+  })() : `<p class="muted">${tab === 'approved' ? 'No approved style yet. Open Not approved to review one.' : 'Every style in the library is approved.'}</p>`;
+  const library = `<div class="style-tabs" role="tablist">${[['approved', 'Approved'], ['pending', 'Not approved']].map(([key, label]) => `<button type="button" role="tab" class="style-tab ${tab === key ? 'active' : ''}" aria-selected="${tab === key}" data-action="style-tab" data-id="${key}">${label} <span>${groups[key].length}</span></button>`).join('')}</div>${shown.length ? `<div class="engine-strip">${tiles}</div>` : ''}${detail}<p class="hint">Hover over a style to see what it does.</p>`;
 
   const historyRows = history.map(item => {
     const found = styleRevisionById(item.revisionId);
@@ -146,7 +155,7 @@ function styleRoom(family) {
   return `<section class="voice-hero"><div><span class="stage-kicker">ROOM 03 · VISUAL GRAMMAR</span><h2>Style Library &amp; Assignment</h2><p>Review versioned editing styles, assign one approved default to this family, and let every channel edition inherit it. Overrides and fallbacks are explicit decisions, never silent switches.</p></div><div class="voice-health"><span class="health-light ${handoff?.ready ? 'ready' : ''}"></span><strong>${handoff?.ready ? 'Style locked for scenes' : 'Style handoff blocked'}</strong><small>${esc(handoff?.ready ? `${assigned.revision.spec.name} r${assigned.revision.revision} · ${handoff.channels.length} channel${handoff.channels.length === 1 ? '' : 's'}` : handoff?.blocker || 'Assign an approved style.')}</small></div></section>
     <div class="production-kpis"><div><span>Styles in library</span><strong>${profiles.length}</strong><small>${pending} awaiting review</small></div><div><span>Approved revisions</span><strong>${approvedCount}</strong><small>immutable once created</small></div><div><span>Family default</span><strong>${assigned ? `r${assigned.revision.revision}` : '—'}</strong><small>${esc(assigned ? assigned.revision.spec.name : 'not assigned')}</small></div><div><span>Channel overrides</span><strong>${overrides.length}</strong><small>${family.channels.length} configured channel${family.channels.length === 1 ? '' : 's'}</small></div></div>
     <section class="production-card"><div class="production-card-head"><div><span class="micro-label">CHANNEL FAMILY DEFAULT</span><h2>Assigned editing style</h2></div><div class="row-end">${family.channels.length > 1 && familyAssignment ? action('Add channel override', 'style-override', family.id, 'secondary') : ''}</div></div>${assignmentPanel}${channelRows ? `<div class="channel-style-list"><span class="micro-label">Effective style per channel</span>${channelRows}</div>` : ''}</section>
-    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STYLE LIBRARY</span><h2>Launch styles and your custom styles</h2></div>${action('+ New custom style', 'style-new', '', 'secondary')}</div><div class="style-grid">${cards}</div></section>
+    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STYLE LIBRARY</span><h2>Launch styles and your custom styles</h2></div>${action('+ New custom style', 'style-new', '', 'secondary')}</div>${library}</section>
     <div class="production-split"><section class="production-card"><div class="production-card-head"><div><span class="micro-label">DECISION TRAIL</span><h2>Assignment history</h2></div>${badge(`${history.length} decision${history.length === 1 ? '' : 's'}`)}</div><div class="history-list">${historyRows}</div></section>
     <section class="production-card"><div class="production-card-head"><div><span class="micro-label">DEPENDENCY LEDGER</span><h2>Style invalidations</h2></div>${badge(`${ledger.length} recent`)}</div>${ledger.length ? `<div class="invalidations">${ledger.map(item => `<div class="invalidation-row"><span>${esc(item.stage.replaceAll('_', ' '))}</span><p>${esc(item.reason)}</p><time>${esc(date(item.createdAt))}</time></div>`).join('')}</div>` : '<p class="muted">Changing, revoking or retiring an assigned style marks scene plans, edits, captions treatment, packaging and renders for approved scripts as stale. Nothing has been invalidated yet.</p>'}</section></div>
     <div class="production-notice"><strong>Renderer boundary.</strong> Assigning a style never grants a renderer, provider, asset library or publishing permission. Every renderer is still locked; Documentary Montage (FFmpeg montage) is the first executable target in P05. The owner rule caps reference influence at 30% — competitor patterns can inform a style, never be copied into it.</div>`;
@@ -449,6 +458,8 @@ function styleDecisionDialog(kind, id) {
 // Handles every data-action that starts with "style-"; called from app.js.
 function styleAction(command, id) {
   const family = state.families.find(item => item.id === id);
+  if (command === 'style-tab') { styleTab = id === 'pending' ? 'pending' : 'approved'; stylePick = ''; return render(); }
+  if (command === 'style-pick') { stylePick = id; return render(); }
   if (command === 'style-view') return styleSpecDialog(id);
   if (command === 'style-approve') return styleReviewDialog(id);
   if (command === 'style-revise') return styleEditorDialog('revise', id);
