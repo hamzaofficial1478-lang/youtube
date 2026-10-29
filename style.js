@@ -100,6 +100,10 @@ const DRAWING_DESIGNS = Object.freeze(['footage', 'cartoon', 'painted', 'vector'
 const DRAWING_FILMS = Object.freeze(['none', 'choose', ...Object.keys(require('./engines').FILMS)]);
 // The Cinematic engine's colour grades (0.40, engines.js GRADES), or Claude chooses one per video.
 const CINEMA_GRADES = Object.freeze(['choose', ...Object.keys(require('./engines').GRADES)]);
+// The picture type of a drawing engine (0.63): cartoon, natural or a mix chosen per scene; engines that draw nothing
+// (Cinematic) or design every shot (Atelier) keep their own pictures.
+const PICTURE_TYPES = Object.freeze(['cartoon', 'natural', 'mix']);
+const PICTURE_TYPE_ADAPTERS = Object.freeze(['ffmpeg-sketch', 'canvas-frames', 'ffmpeg-montage', 'motion-graphics', 'story-mix']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -383,6 +387,9 @@ function validateStyleSpec(input) {
       ...ticked(drawingIn.boards, drawingIn.board === 'mix', DRAWING_BOARDS, 'boards', 'whiteboard looks to mix', 'the whiteboard look is "mix"'),
       ...ticked(drawingIn.designs, drawingIn.design === 'mix', DRAWING_DESIGNS, 'designs', 'documentary looks to mix', 'the documentary look is "mix"'),
       ...ticked(drawingIn.films, drawingIn.film === 'choose', DRAWING_FILMS.filter(item => item !== 'none'), 'films', 'film looks to choose from', 'the film look is "choose"'),
+      // 0.63 (owner request 2026-10-28): the engine's picture type for every look: cartoon (drawn, as before), natural
+      // (realistic scenes painted by ChatGPT) or mix (Claude chooses per scene). Absent means cartoon.
+      ...(drawingIn.pictureType === undefined || drawingIn.pictureType === 'cartoon' ? {} : {pictureType: choice(drawingIn.pictureType, PICTURE_TYPES, 'picture type')}),
       // 0.41: hand-made stepped motion (on twos or threes) and a film camera's motion blur on fast moments (unset: on for
       // the Documentary engine's designed shots, off for hand-made looks).
       ...(drawingIn.cadence === undefined || drawingIn.cadence === 'full' ? {} : {cadence: choice(drawingIn.cadence, ['twos', 'threes'], 'drawing cadence')}),
@@ -390,6 +397,7 @@ function validateStyleSpec(input) {
   })();
 
   // A planning brief learned from an approved style study (0.30), given to Claude's planner. Optional.
+  requireValue(!drawing?.pictureType || PICTURE_TYPE_ADAPTERS.includes(adapter), `The ${name} engine keeps its own pictures; the Natural and Mix picture types are for the Stickman, Hand-drawn, Documentary and Story Mix engines.`);
   const brief = input.brief === undefined || input.brief === null || input.brief === '' ? null : text(input.brief, 'Planning brief', 20, 1200);
   // The Cinematic engine's finish (0.40): one colour grade for the video (or Claude chooses), film grain, cinema bars.
   const cinema = input.cinema === undefined ? null : (() => {
@@ -638,7 +646,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, pictureTypes: PICTURE_TYPES, pictureTypeAdapters: PICTURE_TYPE_ADAPTERS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 
@@ -829,4 +837,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES};
+module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES, PICTURE_TYPES};

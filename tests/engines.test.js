@@ -142,3 +142,26 @@ test('Mix of ticked looks: the style keeps them, the planner sees only them, sho
   assert.throws(() => Sk.validate(shot('whiteboard'), {looks: ticked.drawing.looks}), /Stickman look must be one of: classic, storybook, doodle/);
   assert.equal(Sk.validate(shot('whiteboard'), {}).look, 'whiteboard', 'without ticks every look stays allowed');
 });
+
+test('picture type (0.63): one choice for every look of an engine; natural and mix reach the scope and the planner, engines that do not draw refuse it', () => {
+  const {validateStyleSpec, PICTURE_TYPES} = require('../style'), Dna = require('../visual-dna');
+  assert.deepEqual(PICTURE_TYPES, ['cartoon', 'natural', 'mix']);
+  const stick = validateStyleSpec({...spec('stickman-sketch-explainer'), drawing: {look: 'storybook', hand: false, pictureType: 'natural'}});
+  assert.equal(stick.drawing.pictureType, 'natural');
+  assert.deepEqual(E.engineScope(stick).types, ['natural']);
+  assert.equal(validateStyleSpec({...spec('stickman-sketch-explainer'), drawing: {look: 'classic', hand: false, pictureType: 'cartoon'}}).drawing.pictureType, undefined, 'cartoon is the default and is not stored');
+  assert.equal(E.engineScope(spec('documentary-montage')).types, undefined, 'a style without a type keeps its scope');
+  const mixed = validateStyleSpec({...spec('documentary-montage'), drawing: {look: 'classic', hand: false, design: 'mix', pictureType: 'mix'}});
+  assert.deepEqual(E.engineScope(mixed).types, ['cartoon', 'natural']);
+  assert.throws(() => validateStyleSpec({...spec('cinematic-hybrid'), drawing: {look: 'classic', hand: false, pictureType: 'natural'}}), /keeps its own pictures/);
+  assert.throws(() => validateStyleSpec({...spec('stickman-sketch-explainer'), drawing: {look: 'classic', hand: false, pictureType: 'photo'}}), /picture type/);
+  assert.match(E.promptGuide('stickman', {look: 'storybook', pictureType: 'natural'}), /PICTURE TYPE: natural\. Every drawn shot of this video is natural, in every look\. Natural shots \("type": "natural"\) are one realistic painting/);
+  assert.match(E.promptGuide('motion', {design: 'mix', pictureType: 'mix'}), /PICTURE TYPE: mix of cartoon and natural[\s\S]*Every shot of one scene has the same type/);
+  assert.doesNotMatch(E.promptGuide('stickman', {look: 'classic'}), /PICTURE TYPE/);
+  // Natural keeps the mood of the look it stands in for, and never applies to engines that do not draw.
+  assert.equal(Dna.key({engine: 'stickman', look: 'storybook', type: 'natural'}), 'natural/stickman/storybook');
+  assert.equal(Dna.of({engine: 'stickman', look: 'storybook', type: 'natural'}).pictures, 'natural');
+  assert.match(Dna.of({engine: 'stickman', look: 'storybook', type: 'natural'}).medium, /picture-book mood/);
+  assert.equal(Dna.key({engine: 'cinema', type: 'natural'}), 'cinema/footage');
+  assert.match(Dna.plannerLines(['natural/handdrawn/pencil'])[0], /pictures are realistic paintings by ChatGPT, never photos/);
+});

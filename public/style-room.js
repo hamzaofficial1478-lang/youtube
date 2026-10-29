@@ -55,21 +55,23 @@ function styleVisualRules(spec) {
     : adapter === 'canvas-frames' ? (d.board === 'mix' ? rules.filter(item => item.key.startsWith('handdrawn/')).map(item => item.key) : [`handdrawn/${d.board || 'cartoon'}`])
     : ['ffmpeg-montage', 'motion-graphics'].includes(adapter) ? (d.design === 'mix' ? rules.filter(item => item.key.startsWith('documentary/')).map(item => item.key) : [`documentary/${d.design || 'footage'}`])
     : adapter === 'cinematic-hybrid' ? ['cinema/footage'] : adapter === 'atelier' ? ['atelier/designed'] : [];
-  const shown = keys.map(find).filter(Boolean);
+  // 0.63: a natural video follows the natural rules in every look; a mix follows both.
+  const shown = (d.pictureType === 'natural' ? ['natural'] : d.pictureType === 'mix' ? [...keys, 'natural'] : keys).map(find).filter(Boolean);
   if (!shown.length) return '';
-  return `<details class="scene-history visual-rules"><summary>Visual rules of this look (${shown.length})</summary>${shown.map(item => `<div class="visual-rule"><strong>${esc(item.name)}</strong> ${badge(item.pictures === 'photo' ? 'Real photos' : item.pictures === 'cutout' ? 'Photo cut-outs' : 'Drawn in this look', item.pictures === 'drawn' ? 'green' : 'orange')}<dl class="style-facts"><div><dt>Pictures</dt><dd>${esc(item.medium)}</dd></div><div><dt>Places</dt><dd>${esc(item.places)}</dd></div><div><dt>Objects</dt><dd>${esc(item.objects)}</dd></div><div><dt>People</dt><dd>${esc(item.people)}</dd></div><div><dt>Motion</dt><dd>${esc(item.motion)}</dd></div><div><dt>Never</dt><dd>${esc(item.never)}</dd></div></dl></div>`).join('')}<p class="hint">The scene planner plans with these rules, every picture is painted or drawn by them, and Claude checks each painted picture against them before it is used.</p></details>`;
+  return `<details class="scene-history visual-rules"><summary>Visual rules of this look (${shown.length})</summary>${shown.map(item => `<div class="visual-rule"><strong>${esc(item.name)}</strong> ${badge(item.pictures === 'photo' ? 'Real photos' : item.pictures === 'cutout' ? 'Photo cut-outs' : item.pictures === 'natural' ? 'Realistic, painted by ChatGPT' : 'Drawn in this look', item.pictures === 'drawn' ? 'green' : 'orange')}<dl class="style-facts"><div><dt>Pictures</dt><dd>${esc(item.medium)}</dd></div><div><dt>Places</dt><dd>${esc(item.places)}</dd></div><div><dt>Objects</dt><dd>${esc(item.objects)}</dd></div><div><dt>People</dt><dd>${esc(item.people)}</dd></div><div><dt>Motion</dt><dd>${esc(item.motion)}</dd></div><div><dt>Never</dt><dd>${esc(item.never)}</dd></div></dl></div>`).join('')}<p class="hint">The scene planner plans with these rules, every picture is painted or drawn by them, and Claude checks each painted picture against them before it is used.</p></details>`;
 }
 // What the style's engine can do, and for stick figures the look and the hand this style uses.
 function styleFeatures(spec) {
   const renderer = state.styles.renderers[spec.renderer.adapter] || {}, adapter = spec.renderer.adapter, stick = ['ffmpeg-sketch', 'story-mix'].includes(adapter), board = ['canvas-frames', 'story-mix'].includes(adapter), design = ['ffmpeg-montage', 'motion-graphics', 'story-mix'].includes(adapter);
   const chosen = stick || board || design ? `<p class="hint">${adapter === 'story-mix' ? '<strong>Mix of all engines.</strong> ' : ''}${design ? `Documentary look: <strong>${esc(docLabel(spec.drawing?.design || 'vector'))}</strong>${stick || board ? ' · ' : ''}` : ''}${stick ? `Stickman look: <strong>${esc(styleLabel(spec.drawing?.look || 'classic'))}</strong> · ` : ''}${board ? `Whiteboard look: <strong>${esc(styleLabel(spec.drawing?.board || 'cartoon'))}</strong> · ` : ''}${stick || board ? `drawing hand ${spec.drawing?.hand ? '<strong>on</strong>' : 'off'}` : ''}</p>` : '';
+  const type = spec.drawing?.pictureType ? `<p class="hint">Picture type: <strong>${esc(typeLabel(spec.drawing.pictureType))}</strong></p>` : '';
   const film = spec.drawing?.film ? `<p class="hint">Film look: <strong>${esc(filmLabel(spec.drawing.film))}</strong>${spec.drawing.films?.length ? ` from ${esc(spec.drawing.films.map(filmLabel).join(', '))}` : ''}</p>` : '';
   const ticked = [['Stickman looks mixed', spec.drawing?.looks, styleLabel], ['Whiteboard looks mixed', spec.drawing?.boards, styleLabel], ['Documentary looks mixed', spec.drawing?.designs, docLabel]].filter(([, list]) => list?.length).map(([label, list, name]) => `<p class="hint">${label}: <strong>${esc(list.map(name).join(', '))}</strong></p>`).join('');
   const grade = spec.cinema ? `<p class="hint">Colour grade: <strong>${esc(gradeLabel(spec.cinema.grade))}</strong>${spec.cinema.letterbox ? ' · cinema bars' : ''}${spec.cinema.grain ? ` · film grain ${esc(spec.cinema.grain)}` : ''}</p>` : '';
   // A font this PC does not have is drawn in a look-alike (0.41): say so, so the owner is never surprised.
   const lacking = [spec.typography.headingFont, spec.typography.bodyFont].filter((name, k, all) => all.indexOf(name) === k && state.styles.missingFonts?.[name]);
   const fonts = lacking.length ? `<p class="inline-warning">${lacking.map(name => `${esc(name)} is not installed on this PC, so ${esc(state.styles.missingFonts[name])} is used`).join('; ')}. Install the font or choose another.</p>` : '';
-  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + ticked + film + grade + fonts + styleVisualRules(spec);
+  return (renderer.features?.length ? `<ul class="engine-features">${renderer.features.map(item => `<li>${esc(item)}</li>`).join('')}</ul>` : '') + chosen + ticked + type + film + grade + fonts + styleVisualRules(spec);
 }
 // A style that allows every transition says so in one line; Claude picks one per scene from all of them.
 function transitionList(spec) {
@@ -232,6 +234,7 @@ function styleEditorBody(spec) {
     ${['story-mix', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Documentary look<select name="s.drawingDesign">${styleOptions(v.drawingDesigns || ['vector'], spec.drawing?.design || 'vector', docLabel)}</select><span class="hint">One look (footage with motion graphics, cartoon documentary, painted story, vector world, infographic, collage or data desk), or Mix: every documentary look in one video, or only the ones you tick. Footage needs a stock or image key.</span></label>${mixTicks('s.drawingDesigns', 's.drawingDesign', v.drawingDesigns || [], spec.drawing?.designs, spec.drawing?.design === 'mix', docLabel)}` : ''}
     ${!['canvas-frames', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Stickman look<select name="s.drawingLook">${styleOptions(v.drawingLooks || ['classic'], spec.drawing?.look || 'classic')}</select><span class="hint">How the stick-figure shots are drawn: one look (classic cartoon, whiteboard, storybook, marker doodle or illustrated), or Mix: every Stickman look in one video (or only the ones you tick), picked for each scene.</span></label>${mixTicks('s.drawingLooks', 's.drawingLook', v.drawingLooks || [], spec.drawing?.looks, spec.drawing?.look === 'mix')}` : ''}
     ${!['ffmpeg-sketch', 'motion-graphics', 'ffmpeg-montage'].includes(spec.renderer.adapter) ? `<label>Whiteboard look<select name="s.drawingBoard">${styleOptions(v.drawingBoards || ['cartoon'], spec.drawing?.board || 'cartoon')}</select><span class="hint">How the hand-drawn engine draws: one look (colour cartoon, black marker, pencil sketch, framed board or dry-erase markers), or Mix: every look in one video (or only the ones you tick), picked for each scene.</span></label>${mixTicks('s.drawingBoards', 's.drawingBoard', v.drawingBoards || [], spec.drawing?.boards, spec.drawing?.board === 'mix')}` : ''}
+    ${(v.pictureTypeAdapters || []).includes(spec.renderer.adapter) ? `<label>Picture type<select name="s.drawingPictureType">${styleOptions(v.pictureTypes || ['cartoon'], spec.drawing?.pictureType || 'cartoon', typeLabel)}</select><span class="hint">For every look of this engine: drawn cartoon pictures, natural (realistic scenes painted by ChatGPT, never photos), or a mix where the AI chooses per scene. Natural and Mix need ChatGPT connected for pictures.</span></label>` : ''}
     <label>Film look<select name="s.drawingFilm">${styleOptions(v.drawingFilms || ['none'], spec.drawing?.film || 'none', filmLabel)}</select><span class="hint">How every drawn shot is printed: a silent film, a newspaper, a blueprint, a woodcut, art deco gold and more, or Claude picks the one that suits the story. The colour of the hero (the accent) survives where the medium allows it. Footage keeps its own grade.</span></label>${mixTicks('s.drawingFilms', 's.drawingFilm', v.drawingFilms || [], spec.drawing?.films, spec.drawing?.film === 'choose', filmLabel)}
     <label>Animation cadence<select name="s.drawingCadence">${styleOptions(['full', 'twos', 'threes'], spec.drawing?.cadence || 'full', value => ({full: 'Smooth (every frame)', twos: 'On twos (hand-made 2D feel)', threes: 'On threes (stop-motion feel)'}[value]))}</select><span class="hint">On twos or threes, drawings move in small steps like hand-made animation.</span></label>
     <label class="checkbox-label"><input type="checkbox" name="s.drawingMotionBlur" ${spec.drawing?.motionBlur ?? ['ffmpeg-montage', 'motion-graphics'].includes(spec.renderer.adapter) ? 'checked' : ''}>Motion blur on fast moves (like a film camera)</label>
@@ -278,7 +281,7 @@ function collectStyleSpec(form) {
     visuals: {sources: checked('s.sources'), primarySource: value('s.primarySource'), aiDisclosure: value('s.aiDisclosure'), characterConsistency: form.elements['s.characterConsistency'].checked},
     audio: {musicMoods: list('s.musicMoods', ','), duckingDb: num('s.duckingDb'), targetLufs: num('s.targetLufs'), truePeakDbtp: num('s.truePeakDbtp'), sfxUsage: value('s.sfxUsage')},
     renderer: {adapter: value('s.renderer')},
-    ...(form.elements['s.drawingHand'] ? {drawing: {look: form.elements['s.drawingLook'] ? value('s.drawingLook') : 'classic', hand: form.elements['s.drawingHand'].checked === true, ...(form.elements['s.drawingBoard'] ? {board: value('s.drawingBoard')} : {}), ...(form.elements['s.drawingDesign'] ? {design: value('s.drawingDesign')} : {}), ...(form.elements['s.drawingFilm'] && value('s.drawingFilm') !== 'none' ? {film: value('s.drawingFilm')} : {}), ...Object.fromEntries([['looks', 's.drawingLook', 'mix'], ['boards', 's.drawingBoard', 'mix'], ['designs', 's.drawingDesign', 'mix'], ['films', 's.drawingFilm', 'choose']].filter(([, menu, when]) => form.elements[menu] && value(menu) === when && checked(`${menu}s`).length).map(([field, menu]) => [field, checked(`${menu}s`)])), ...(form.elements['s.drawingCadence'] && value('s.drawingCadence') !== 'full' ? {cadence: value('s.drawingCadence')} : {}), ...(form.elements['s.drawingMotionBlur'] ? {motionBlur: form.elements['s.drawingMotionBlur'].checked} : {})}} : {}),
+    ...(form.elements['s.drawingHand'] ? {drawing: {look: form.elements['s.drawingLook'] ? value('s.drawingLook') : 'classic', hand: form.elements['s.drawingHand'].checked === true, ...(form.elements['s.drawingBoard'] ? {board: value('s.drawingBoard')} : {}), ...(form.elements['s.drawingDesign'] ? {design: value('s.drawingDesign')} : {}), ...(form.elements['s.drawingFilm'] && value('s.drawingFilm') !== 'none' ? {film: value('s.drawingFilm')} : {}), ...(form.elements['s.drawingPictureType'] && value('s.drawingPictureType') !== 'cartoon' ? {pictureType: value('s.drawingPictureType')} : {}), ...Object.fromEntries([['looks', 's.drawingLook', 'mix'], ['boards', 's.drawingBoard', 'mix'], ['designs', 's.drawingDesign', 'mix'], ['films', 's.drawingFilm', 'choose']].filter(([, menu, when]) => form.elements[menu] && value(menu) === when && checked(`${menu}s`).length).map(([field, menu]) => [field, checked(`${menu}s`)])), ...(form.elements['s.drawingCadence'] && value('s.drawingCadence') !== 'full' ? {cadence: value('s.drawingCadence')} : {}), ...(form.elements['s.drawingMotionBlur'] ? {motionBlur: form.elements['s.drawingMotionBlur'].checked} : {})}} : {}),
     ...(form.elements['s.cinemaGrade'] ? {cinema: {grade: value('s.cinemaGrade'), grain: num('s.cinemaGrain'), letterbox: form.elements['s.cinemaLetterbox'].checked}} : {}),
     ...(value('s.brief').trim() ? {brief: value('s.brief').trim()} : {}),
     qc: {maxBlackSeconds: num('s.maxBlackSeconds'), maxFrozenSeconds: num('s.maxFrozenSeconds'), minSceneSeconds: num('s.minSceneSeconds'), maxSceneSeconds: num('s.maxSceneSeconds'), contactSheetEverySeconds: num('s.contactSheetEverySeconds')},
@@ -514,8 +517,8 @@ document.addEventListener('change', event => {
   if (form.elements['s.drawingHand']) form.elements['s.drawingHand'].checked = preset.hand;
 });
 
-// 0.63 (owner request 2026-10-28, point 4): the channel's editing style chosen from its page in one window - the
-// engine, its ticked looks and film looks - saved for this channel (its own copy) or for every channel (a new
+// 0.62 (owner request 2026-10-28, point 4): the channel's editing style chosen from its page in one window - the
+// engine, its ticked looks, picture type (0.63) and film looks - saved for this channel (its own copy) or for every channel (a new
 // revision of the library style), then approved by name and assigned through Room 03's own routes.
 const FS_GROUPS = [['looks', 'look', 'drawingLooks', 'Stickman looks', ['ffmpeg-sketch', 'story-mix']], ['boards', 'board', 'drawingBoards', 'Whiteboard looks', ['canvas-frames', 'story-mix']], ['designs', 'design', 'drawingDesigns', 'Documentary looks', ['ffmpeg-montage', 'story-mix']]];
 const fsLabel = field => (field === 'designs' ? docLabel : styleLabel);
@@ -528,6 +531,8 @@ function fsTicked(spec, field, single, all) {
   if (drawing[single] === 'mix') return all.filter(value => value !== 'mix');
   return drawing[single] ? [drawing[single]] : [];
 }
+const typeLabel = value => ({cartoon: 'Cartoon (drawn)', natural: 'Natural (realistic, painted by ChatGPT)', mix: 'Mix (the AI chooses per scene)'}[value] || value);
+const fsTypes = spec => ({natural: ['natural'], mix: ['cartoon', 'natural']}[spec.drawing?.pictureType] || ['cartoon']);
 function familyStyleBody(form) {
   const family = state.families.find(item => item.id === form.elements.familyId.value), profiles = fsProfiles(), v = state.styles.vocabulary;
   const chosen = profiles.find(profile => profile.id === form.dataset.profileId) || profiles[0], spec = fsLatest(chosen).spec, adapter = spec.renderer.adapter;
@@ -536,9 +541,11 @@ function familyStyleBody(form) {
     const all = v[vocab] || [], ticked = fsTicked(spec, field, single, all);
     return `<div class="full"><span class="field-label">${title} <span class="hint">Tick one for one look, or two or more to mix only those in this engine, chosen per scene.</span></span>${styleChecks(`fs.${field}`, all.filter(value => value !== 'mix'), ticked, fsLabel(field))}</div>`;
   }).join('');
+  // 0.63: the engine's picture type, for every look it uses: tick Cartoon, Natural, or both for a mix chosen per scene.
+  const types = (v.pictureTypeAdapters || []).includes(adapter) ? `<div class="full"><span class="field-label">Picture type <span class="hint">For every look of this engine. Cartoon: drawn pictures. Natural: realistic scenes painted by ChatGPT (not photos). Both: the AI chooses per scene.</span></span>${styleChecks('fs.types', ['cartoon', 'natural'], fsTypes(spec), typeLabel)}</div>` : '';
   const films = adapter === 'cinematic-hybrid' ? '' : `<div class="full"><span class="field-label">Film looks <span class="hint">None: no film look. One: every drawn shot in it. Two or more: Claude chooses one of them for each video.</span></span>${styleChecks('fs.films', (v.drawingFilms || []).filter(value => !['none', 'choose'].includes(value)), fsTicked(spec, 'films', 'film', []).filter(value => value !== 'choose'), filmLabel)}</div>`;
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
-  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${films}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
+  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${types}${films}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }
 function familyStyleDialog(familyId) {
   const form = $('#family-style-form'), current = styleActive(familyId), found = current && styleRevisionById(current.revisionId);
@@ -559,6 +566,13 @@ function familyStyleSpec(form, base) {
     delete spec.drawing[field];
     if (ticked.length === 1) spec.drawing[single] = ticked[0];
     else { spec.drawing[single] = 'mix'; spec.drawing[field] = ticked; }
+  }
+  const types = boxes('fs.types');
+  if (types.length && (state.styles.vocabulary.pictureTypeAdapters || []).includes(spec.renderer.adapter)) {
+    spec.drawing ||= {look: 'classic', hand: false};
+    delete spec.drawing.pictureType;
+    if (types.length > 1) spec.drawing.pictureType = 'mix';
+    else if (types[0] === 'natural') spec.drawing.pictureType = 'natural';
   }
   if (spec.renderer.adapter !== 'cinematic-hybrid') {
     const films = boxes('fs.films');

@@ -21,6 +21,11 @@ const STOCK_NAMES = {pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia
 // The looks the owner ticked for a mix (0.62), passed to the planner beside the style's look.
 const ticks = drawing => Object.fromEntries(['looks', 'boards', 'designs', 'films'].filter(key => drawing?.[key]?.length).map(key => [key, drawing[key]]));
 function dnaKeys(style) {
+  const keys = lookKeys(style), types = E.PICTURE_TYPES[style.pictureType] || ['cartoon'];
+  // A natural or mixed video (0.63) plans with the natural rules of each of its looks too.
+  return types.flatMap(type => (type === 'natural' ? keys.map(name => `natural/${name}`).filter(Dna.rulesOf) : keys));
+}
+function lookKeys(style) {
   const engine = style.engine || 'stickman', all = (list, field) => list.map(value => Dna.key({engine, [field]: value}));
   if (engine === 'stickman') return style.look === 'mix' ? all(style.looks || Sk.STICK_LOOKS, 'look') : [Dna.key({engine, look: style.look})];
   if (engine === 'handdrawn') return style.board === 'mix' ? all(style.boards || Sk.BOARDS, 'board') : [Dna.key({engine, board: style.board})];
@@ -74,6 +79,9 @@ const SETTINGS_DEFAULTS = {
   // Pictures (0.33): shots that carry an illustration Claude draws for them (paid in tokens), per minute of video,
   // and each picture's own token limit. The rest of every drawn shot is drawn by the program for free.
   picturesPerMinute: 3, pictureTokenLimit: 40000,
+  // Natural paintings (0.63): how many realistic scenes ChatGPT may paint per minute of a natural or mixed video
+  // (shots of one scene in one place share a painting).
+  naturalPerMinute: 8,
 };
 const STOPWORDS = new Set(('about above after again against because been before being below between both but by could did does doing down during each few from further have having here hers herself himself into itself just more most must myself once only other ought ours ourselves over same should some such than that their theirs them themselves then there these they this those through under until very were what when where which while whom with would your yours yourself yourselves also every never always still even many much like make made thing things people really today first last next another years year time times something someone anything nothing because without within will shall cannot might around across toward towards whose ever upon onto kept keep keeps came come comes went goes became become began begin said says took take takes gave give gives used uses using found find told tell know knew'
 ).split(' '));
@@ -240,7 +248,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec, terms, summary
       // An atelier frame (P06h) replaces the sketch; its composition, once designed, is checked again here.
       const frame = shot.source === 'generated-graphics' && shot.frame ? atelierFrame(shot.frame, shotLabel, warnings, format) : null;
       const drawPrimary = E.ENGINES[primary]?.draws ? primary : 'motion';
-      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit, engines: allowed, films, looks: E.engineScope(spec).looks, boards: E.engineScope(spec).boards, designs: E.engineScope(spec).designs}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
+      const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit, engines: allowed, films, looks: E.engineScope(spec).looks, boards: E.engineScope(spec).boards, designs: E.engineScope(spec).designs, types: E.engineScope(spec).types || ['cartoon']}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
       // Leaving the main look is a judgement call: the planner says why in the shot's notes.
       const leaves = frame ? primary !== 'atelier' : E.ENGINES[primary]?.draws ? (sketch.sketch ? sketch.sketch.engine !== primary : true) : primary === 'atelier' ? !!sketch.sketch && shot.source !== 'generated-graphics' : !!sketch.sketch;
       if (leaves && !shot.notes.trim()) warnings.push(`${shotLabel} leaves the main ${primary} look without a reason in its notes.`);
@@ -331,15 +339,16 @@ function planMessages(input) {
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
     SCENE_CRAFT,
-    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films})] : []),
+    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
+    ...(input.style.naturalPaintings ? [`NATURAL PAINTINGS (paid, ChatGPT): up to ${input.style.naturalPaintings} paintings ${input.part ? 'in this part' : 'in this video'}; shots that repeat a scene's backdrop "describe" word for word share one painting and count once. Spend new paintings where the place, the moment or the action changes; frame a shared painting differently in each shot (focus, camera) and keep the motion layer moving over it.`] : []),
     ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
     ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
       : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
     // The look's visual rules (visual-dna.js): every place, object and picture is planned in this look.
     ...Dna.plannerLines(dnaKeys(input.style)),
-    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, painted: input.style.painted === true, looks: input.style.look === 'mix' && (input.style.looks || true), boards: input.style.board === 'mix' && (input.style.boards || true), designs: input.style.design === 'mix' && (input.style.designs || true), engines: input.style.drawEngines}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
+    ...(input.style.sources.includes('generated-graphics') ? ['For generated-graphics shots leave query and prompt empty.', Sk.promptGuide(input.style.engine === 'atelier' ? 'motion' : input.style.engine || 'stickman', {pictures: input.style.pictures > 0, painted: input.style.painted === true, looks: input.style.look === 'mix' && (input.style.looks || true), boards: input.style.board === 'mix' && (input.style.boards || true), designs: input.style.design === 'mix' && (input.style.designs || true), engines: input.style.drawEngines, types: E.PICTURE_TYPES[input.style.pictureType] || null}), ...(input.style.frames === false ? [] : [At.promptGuide()])] : []),
     ...(input.cast?.length ? ['The video already has this cast (input "cast"): reuse their ids and looks; add a new character only when the story needs one.'] : []),
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
   ].join('\n');
@@ -363,7 +372,7 @@ function reviewMessages(input) {
     '(7) OWNER STANDARD - fix every shot that fails one of these: something that breaks physics or nature without a reason in the words (floating things, wrong sizes, water or light that cannot be, an animal or person moving in a way they cannot); a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
-    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film, looks: input.looks, boards: input.boards, designs: input.designs, films: input.films}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix' && (input.looks || true), boards: input.board === 'mix' && (input.boards || true), designs: input.design === 'mix' && (input.designs || true)}),
+    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film, looks: input.looks, boards: input.boards, designs: input.designs, films: input.films, pictureType: input.pictureType}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix' && (input.looks || true), boards: input.board === 'mix' && (input.boards || true), designs: input.design === 'mix' && (input.designs || true), types: E.PICTURE_TYPES[input.pictureType] || null}),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -523,6 +532,7 @@ class SceneRoom {
       storyMap: input.storyMap !== false, designedPerMinute: input.designedPerMinute === undefined ? SETTINGS_DEFAULTS.designedPerMinute : integer(input.designedPerMinute, 0, 10, 'Designed shots per minute'),
       picturesPerMinute: input.picturesPerMinute === undefined ? SETTINGS_DEFAULTS.picturesPerMinute : integer(input.picturesPerMinute, 0, 20, 'Pictures per minute'),
       pictureTokenLimit: input.pictureTokenLimit === undefined ? SETTINGS_DEFAULTS.pictureTokenLimit : integer(input.pictureTokenLimit, 12000, 120000, 'Picture token limit'),
+      naturalPerMinute: input.naturalPerMinute === undefined ? SETTINGS_DEFAULTS.naturalPerMinute : integer(input.naturalPerMinute, 0, 30, 'Natural paintings per minute'),
     };
     return this.store.transaction(() => {
       const current = this.settings(family.id);
@@ -661,11 +671,18 @@ class SceneRoom {
     const engines = D.availableEngines({sources, frames}).filter(name => !E.ENGINES[name]?.draws || !inputs.scope || inputs.scope.drawn.includes(name)), designedShots = !frames ? 0 : inputs.engine === 'atelier' ? null : D.designedBudget(inputs.voice.durationSeconds, perMinute);
     // Pictures (0.33): only where the program draws; at least one when they are on.
     const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = pictureRate > 0 && sources.includes('generated-graphics') ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
+    // Natural or mixed picture type (0.63): ChatGPT paints the natural scenes, so the plan needs it and a painting budget.
+    const pictureType = E.PICTURE_TYPES[spec.drawing?.pictureType] && sources.includes('generated-graphics') ? spec.drawing.pictureType : null, naturalRate = settings.naturalPerMinute ?? SETTINGS_DEFAULTS.naturalPerMinute;
+    if (pictureType) {
+      requireValue(this.ai?.team?.().painted, `This style's picture type is ${pictureType === 'mix' ? 'Mix' : 'Natural'}: its natural scenes are painted by ChatGPT. Connect ChatGPT in Connections and give it the pictures in the AI team, or set the style's picture type to Cartoon.`, 409);
+      requireValue(naturalRate > 0, 'Natural paintings per minute is 0 in visual settings, so no natural scene could be painted. Raise it, or set the style\'s picture type to Cartoon.', 409);
+    }
+    const naturalPaintings = pictureType ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * naturalRate)) : 0;
     // The owner's approved skills for scene planning (0.39): reviewed craft rules, recorded with the job.
     const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id) || null;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), cameraMoves: spec.motion.cameraMoves, transitions: (spec.transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
       // The narrator's performance (voice direction), when the approved narration was directed: faces, moods
@@ -682,7 +699,8 @@ class SceneRoom {
     const partSize = E.ENGINES[inputs.engine]?.draws || E.ENGINES[inputs.engine]?.composes ? PART_SENTENCES_DRAWN : PART_SENTENCES;
     const groups = Array.from({length: Math.ceil(promptInput.sentences.length / partSize)}, (_, k) => promptInput.sentences.slice(k * partSize, (k + 1) * partSize));
     const parts = groups.map((items, k) => {
-      const partInput = groups.length === 1 ? promptInput : {...promptInput, sentences: items, ...(pictures ? {style: {...promptInput.style, pictures: Math.max(1, Math.ceil(pictures * items.length / promptInput.sentences.length))}} : {}),
+      const share = total => Math.max(1, Math.ceil(total * items.length / promptInput.sentences.length));
+      const partInput = groups.length === 1 ? promptInput : {...promptInput, sentences: items, ...(pictures || naturalPaintings ? {style: {...promptInput.style, ...(pictures ? {pictures: share(pictures)} : {}), ...(naturalPaintings ? {naturalPaintings: share(naturalPaintings)} : {})}} : {}),
         part: {index: k + 1, of: groups.length, firstSentence: items[0].n, lastSentence: items.at(-1).n, before: k ? groups[k - 1].at(-1).text : null, after: groups[k + 1]?.[0].text ?? null}};
       // Claude thinks before it answers and both count as output, so the answer gets room for both (inside the
       // same reservation); a cut-off answer is thrown away whole, which is the real waste.
@@ -694,7 +712,7 @@ class SceneRoom {
     });
     // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
     const map = parts.length > 1 && settings.storyMap !== false ? (() => {
-      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(pictureType ? {pictureType} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
       const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
       requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
       return {input, maxTokens};
@@ -707,7 +725,7 @@ class SceneRoom {
       // Its answers read every drawing of a part plus the vocabulary, so they get their own (byte-counted) limit.
       const review = settings.continuityReview && E.ENGINES[inputs.engine]?.draws ? {chunks: parts.length, tokenLimit: settings.reviewTokenLimit ?? SETTINGS_DEFAULTS.reviewTokenLimit} : null;
       const compose = frames && inputs.sources.includes('generated-graphics') ? {tokenLimit: settings.composeTokenLimit ?? SETTINGS_DEFAULTS.composeTokenLimit, ...(designedShots ? {budget: designedShots} : {})} : null;
-      const illustrate = pictures ? {budget: pictures, tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit} : null;
+      const illustrate = pictures || naturalPaintings ? {budget: pictures, ...(naturalPaintings ? {natural: naturalPaintings} : {}), tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit} : null;
       const scope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(illustrate ? {illustrate} : {}), ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences), skillRevisionIds: skillBrief?.revisionIds || []};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(scope), createdBy, at, at);
       if (skillBrief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'scene', taskKey: 'scene.plan', brief: skillBrief});
@@ -945,14 +963,31 @@ class SceneRoom {
     if (!scope) return {plan: merged, pictures: null};
     const content = this.store.content(job.content_id), inputs = this.inputs(content), family = inputs.family, plan = structuredClone(merged), notes = [];
     const spec = inputs.spec, palette = {background: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent};
+    // Claude's natural shots are repaired the way the plan check repairs them (sketch.js validate): a style without the
+    // natural type never paints one, and a natural shot's first picture is its painted scene.
+    const typesAllowed = E.engineScope(spec).types || ['cartoon'];
+    plan.scenes.forEach(scene => (scene.shots || []).forEach(shot => {
+      if (shot.sketch?.type === 'natural' && !typesAllowed.includes('natural')) delete shot.sketch.type;
+      const elements = shot.sketch?.type === 'natural' && Array.isArray(shot.sketch.elements) ? shot.sketch.elements : [], first = elements.find(item => item?.kind === 'picture');
+      if (first && !elements.some(item => item?.kind === 'picture' && item.backdrop === true)) first.backdrop = true;
+    }));
     const targets = [];
     plan.scenes.forEach((scene, si) => (scene.shots || []).forEach((shot, hi) => (shot.sketch?.elements || []).forEach((item, ei) => {
       if (item?.kind === 'picture' && !item.art && (!only || only.includes(`${si}:${hi}`))) targets.push({si, hi, ei, item, shot});
     })));
     if (!targets.length) return {plan, pictures: null};
     // The budget goes to one picture per scene first, so they spread across the video.
-    const firsts = targets.filter((item, k) => targets.findIndex(other => other.si === item.si) === k);
-    const keep = new Set([...firsts, ...targets].slice(0, scope.budget));
+    // Natural shots (0.63) are paintings with their own budget; shots of one scene that repeat a backdrop's describe
+    // share one painting and count once.
+    const isNatural = target => target.shot.sketch.type === 'natural', share = target => (target.item.backdrop ? `${target.si}|${target.item.describe}` : `${target.si}:${target.hi}:${target.ei}`);
+    const spread = (list, budget, key = target => target) => {
+      const groups = [...new Set(list.map(key))], scene = group => list.find(item => key(item) === group).si;
+      const firsts = groups.filter((group, k) => groups.findIndex(other => scene(other) === scene(group)) === k);
+      const kept = new Set([...new Set([...firsts, ...groups])].slice(0, budget));
+      return list.filter(item => kept.has(key(item)));
+    };
+    const keep = new Set([...spread(targets.filter(target => !isNatural(target)), scope.budget), ...spread(targets.filter(isNatural), scope.natural ?? 0, share)]);
+    const orphans = [], failed = new Set();
     const report = {pictures: targets.length, drawn: 0, tokens: 0, notes};
     const shotLabel = (si, hi) => `S${String(si + 1).padStart(2, '0')}${String.fromCharCode(65 + hi)}`;
     const words = (() => { try { const built = buildPayload({scenes: aiScenes(merged, false).scenes, sentences: splitSentences(content.script, family.primaryLocale).map(({n, text: value, words: count}) => ({n, text: value, words: count})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: [], primary: inputs.engine}); return built.payload.scenes.map(scene => scene.shots.map(shot => built.payload.sentences.filter(item => item.n >= scene.sentenceStart && item.n <= scene.sentenceEnd).map(item => item.text).join(' '))); } catch { return []; } })();
@@ -966,7 +1001,9 @@ class SceneRoom {
     });
     const settle = (key, usage, status) => this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, reserved_tokens=CASE WHEN ?=\'released\' THEN 0 ELSE reserved_tokens END, updated_at=? WHERE job_id=?').run(status, usage?.promptTokens ?? null, usage?.completionTokens ?? null, usage?.totalTokens ?? null, status, now(), key);
     // The video's style key: its first painting that passed, attached to every later painting so the video keeps one style.
-    let styleKey = (() => { const row = this.db.prepare("SELECT art FROM plan_pictures WHERE job_id=? AND key='paint:style-key'").get(job.id); return row ? JSON.parse(row.art).image : null; })();
+    // Natural paintings keep a style key of their own, and the first painting of each character is that character's portrait.
+    const keptImage = key => { const row = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, key); return row ? JSON.parse(row.art).image : null; };
+    const styleKeys = {cartoon: keptImage('paint:style-key'), natural: keptImage('paint:style-key:natural')};
     const artDirector = async (sha, rules, item, label, attempt) => {
       const key = `${job.id}:picture:${label}:${job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
       if (!reserve(key, CHECK_TOKENS)) return {fits: true, problems: [], unchecked: 'the family\'s monthly token limit could not reserve the check'};
@@ -974,9 +1011,11 @@ class SceneRoom {
       try { const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens: 4000, onStart}); settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown'); report.tokens += reply.usage?.totalTokens || 0; return Dna.readCheck(reply.content); }
       catch (error) { settle(key, null, 'unknown'); return {fits: true, problems: [], unchecked: error instanceof AiError || error instanceof InputError ? error.message : 'no answer'}; }
     };
-    const drop = ({si, hi, ei}, why) => {
+    const drop = ({si, hi, item}, why) => {
       const label = shotLabel(si, hi), sketch = plan.scenes[si].shots[hi].sketch;
-      sketch.elements.splice(ei, 1, ...[]);
+      sketch.elements.splice(sketch.elements.indexOf(item), 1);
+      // A natural shot without its painting is drawn as a cartoon shot.
+      if (sketch.type === 'natural' && !sketch.elements.some(el => el.kind === 'picture' && el.backdrop && el.image)) delete sketch.type;
       notes.push(`${label}: ${why}; the program draws this shot itself.`);
       // A shot that was only its picture is drawn from its words.
       if (!sketch.elements.length) plan.scenes[si].shots[hi].sketch = Sk.fromText(words[si]?.[hi] || plan.scenes[si].shots[hi].notes || '', {shotIndex: hi, purpose: plan.scenes[si].purpose, primary: inputs.engine, cast: plan.cast || []});
@@ -984,21 +1023,28 @@ class SceneRoom {
     // Dropped elements change indexes: work from the last element back.
     for (const target of [...targets].sort((a, b) => b.si - a.si || b.hi - a.hi || b.ei - a.ei)) {
       const {si, hi, item, shot} = target, label = shotLabel(si, hi);
-      if (!keep.has(target)) { drop(target, `past the video's budget of ${scope.budget} pictures`); continue; }
+      const natural = isNatural(target);
+      if (!keep.has(target)) { if (natural) orphans.push({target, why: `past the video's budget of ${scope.natural ?? 0} natural paintings`}); else drop(target, `past the video's budget of ${scope.budget} pictures`); continue; }
       const own = value => (value && value !== 'mix' ? value : null), engine = E.DRAW_ENGINES.includes(shot.sketch.engine) ? shot.sketch.engine : E.ENGINES[inputs.engine]?.draws ? inputs.engine : 'stickman';
       const board = own(shot.sketch.board) || own(spec.drawing?.board) || spec.drawing?.boards?.[0] || 'cartoon', look = own(shot.sketch.look) || own(spec.drawing?.look) || spec.drawing?.looks?.[0] || 'classic', design = engine === 'motion' ? own(shot.sketch.design) || own(spec.drawing?.design) || spec.drawing?.designs?.find(value => value !== 'footage') || 'vector' : null, aspect = {s: 1.2, m: 1.3, l: 1.5, xl: 1.78}[item.size || 'l'] || 1.5;
-      const pictureKey = hash({label, describe: item.describe, engine, board, look, ...(design ? {design} : {}), aspect}), stored = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pictureKey);
+      // A natural scene's painting is keyed by its scene and words, not its shot, so the shots that share it pay once.
+      const pictureKey = natural && item.backdrop ? hash({scene: si, describe: item.describe, engine, board, look, ...(design ? {design} : {}), type: 'natural', aspect}) : hash({label, describe: item.describe, engine, board, look, ...(design ? {design} : {}), ...(natural ? {type: 'natural'} : {}), aspect}), stored = natural ? null : this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pictureKey);
       let findings = [], art = stored ? JSON.parse(stored.art) : null;
       if (stored) notes.push(`${label}: its picture was kept from an earlier attempt of this plan (no new tokens).`);
       // ChatGPT paints it when the AI team gives it the pictures (owner request 2026-10-22): a real image instead of a
       // line drawing, kept like the drawings so a retry never pays twice. If it cannot, Claude draws it as before.
       const team = this.ai.team?.();
+      // A shared natural painting that already failed for another shot of its scene is not asked for again.
+      if (natural && failed.has(pictureKey)) { orphans.push({target, why: 'ChatGPT could not paint its natural scene for an earlier shot of this place'}); continue; }
       if (team?.painted) {
         const paintKey = `paint:${pictureKey}:${item.backdrop ? 'b' : 'p'}`, kept = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, paintKey);
         let image = kept ? JSON.parse(kept.art).image : null, why = null, problems = [];
-        if (kept) notes.push(`${label}: its painted picture was kept from an earlier attempt of this plan.`);
+        if (kept) notes.push(natural && item.backdrop ? `${label}: shares its scene's painting (painted once for the scene, no new tokens).` : `${label}: its painted picture was kept from an earlier attempt of this plan.`);
         // The look's visual rules (visual-dna.js) decide the medium; the shot's film look prints it afterwards.
-        const rules = Dna.of({engine, look, board, design}), film = [shot.sketch.film, spec.drawing?.film].find(value => E.FILMS[value]) || null;
+        const type = natural ? 'natural' : 'cartoon', rules = Dna.of({engine, look, board, design, type}), film = [shot.sketch.film, spec.drawing?.film].find(value => E.FILMS[value]) || null;
+        const people = natural ? (item.who || []).map(id => (plan.cast || []).find(member => member.id === id)).filter(Boolean) : [];
+        const portraits = people.map(member => keptImage(`paint:cast:${member.id}`)).filter(Boolean), styleKey = styleKeys[type];
+        const references = [...(styleKey ? [styleKey] : []), ...portraits].slice(0, 3).map(sha => this.artFile(sha));
         for (let attempt = 1; attempt <= 2 && !image; attempt++) {
           const key = `${job.id}:picture:${label}:${job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}${attempt > 1 ? `-${attempt}` : ''}`;
           if (!reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
@@ -1006,7 +1052,7 @@ class SceneRoom {
           fs.mkdirSync(path.dirname(incoming), {recursive: true});
           let settled = false;
           try {
-            const made = await this.ai.image({connectorId: team.pictures.id, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems}), outFile: incoming, references: styleKey ? [this.artFile(styleKey)] : [], onStart});
+            const made = await this.ai.image({connectorId: team.pictures.id, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems}), outFile: incoming, references, onStart});
             settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
             report.tokens += made.usage?.totalTokens || 0;
             const candidate = this.keepArt(incoming);
@@ -1016,7 +1062,9 @@ class SceneRoom {
             if (verdict.fits) {
               image = candidate;
               this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, paintKey, JSON.stringify({image}), now());
-              if (!styleKey) { styleKey = image; this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, 'paint:style-key', JSON.stringify({image}), now()); }
+              const keepAs = key => this.db.prepare('INSERT OR IGNORE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, key, JSON.stringify({image}), now());
+              if (!styleKeys[type]) { styleKeys[type] = image; keepAs(natural ? 'paint:style-key:natural' : 'paint:style-key'); }
+              for (const member of people) keepAs(`paint:cast:${member.id}`);
               if (verdict.unchecked) notes.push(`${label}: its painting could not be checked by the art director (${verdict.unchecked}); look at it in Room 04.`);
             } else {
               problems = verdict.problems.length ? verdict.problems : ['it does not match the look'];
@@ -1026,9 +1074,12 @@ class SceneRoom {
           } catch (error) { if (!settled) settle(key, null, 'unknown'); why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer'; fs.rmSync(incoming, {force: true}); break; }
         }
         if (image) { plan.scenes[si].shots[hi].sketch.elements[target.ei].image = image; report.drawn++; report.painted = (report.painted || 0) + 1; continue; }
+        if (natural) { failed.add(pictureKey); orphans.push({target, why: `ChatGPT could not paint its natural scene (${why})`}); continue; }
         notes.push(`${label}: ChatGPT could not paint it (${why}); it is drawn instead.`);
         if (item.backdrop) { drop(target, 'its painted backdrop was not made'); continue; }
       }
+      // A natural picture is only ever painted: without ChatGPT it waits for its scene's painting below.
+      if (natural) { orphans.push({target, why: 'ChatGPT is not connected for pictures'}); continue; }
       for (let attempt = 1; attempt <= 2 && !art; attempt++) {
         const key = `${job.id}:picture:${label}:${job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
@@ -1045,6 +1096,15 @@ class SceneRoom {
       }
       if (art) { plan.scenes[si].shots[hi].sketch.elements[target.ei].art = art; report.drawn++; }
       else drop(target, `its picture was not drawn (${findings[0] || 'no answer'})`);
+    }
+    // A natural scene left without its own painting shares a painting of its scene when there is one (the camera frames
+    // it differently); otherwise it is drawn as a cartoon shot.
+    for (const {target, why} of orphans) {
+      const {si, hi, item} = target, label = shotLabel(si, hi), sketch = plan.scenes[si].shots[hi].sketch;
+      const donor = item.backdrop && plan.scenes[si].shots.map((other, k) => ({k, el: other.sketch?.type === 'natural' && other.sketch.elements.find(el => el.kind === 'picture' && el.backdrop && el.image)})).find(({el}) => el);
+      if (donor) { item.image = donor.el.image; notes.push(`${label}: ${why}, so it shares the painting of ${shotLabel(si, donor.k)}.`); continue; }
+      drop(target, why);
+      if (sketch.type !== 'natural') notes.push(`${label}: drawn as a cartoon shot instead of natural.`);
     }
     notes.reverse();
     return {plan, pictures: report};
@@ -1068,7 +1128,7 @@ class SceneRoom {
       const listed = slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes})));
       const flagged = [...Sk.continuity(listed, built.payload.cast || []), ...Sk.worldNotes(listed, merged.world)];
       const kitNow = kitOf(merged.kit);
-      const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
+      const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {}), ...ticks(inputs.spec.drawing), ...(E.PICTURE_TYPES[inputs.spec.drawing.pictureType] ? {pictureType: inputs.spec.drawing.pictureType} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
         ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
           shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
@@ -1182,7 +1242,7 @@ class SceneRoom {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
       const id = randomUUID(), at = now();
       const jobScope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: 0, parts: [],
-        illustrate: {budget: 1, tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit}, picture: {manifestId: row.id, revision: row.revision, shotId: shot.id, label: shot.label, describe, size, replace: input.replace === true}};
+        illustrate: {budget: 1, natural: 1, tokenLimit: settings.pictureTokenLimit ?? SETTINGS_DEFAULTS.pictureTokenLimit}, picture: {manifestId: row.id, revision: row.revision, shotId: shot.id, label: shot.label, describe, size, replace: input.replace === true}};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(jobScope), createdBy, at, at);
       this.store.event(`Queued a paid picture for ${shot.label} of "${content.title}"`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
@@ -1326,7 +1386,7 @@ class SceneRoom {
       if (input.cue !== undefined) { const cue = text(input.cue, 'Cue', 0, 80); if (cue) shot.cue = cue; else delete shot.cue; }
       if (input.sketch !== undefined) {
         if (input.sketch === null) delete shot.sketch;
-        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || [], kit: payload.kit || null, engines: inputs.scope?.drawn, films: inputs.scope?.films, looks: inputs.scope?.looks, boards: inputs.scope?.boards, designs: inputs.scope?.designs}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
+        else { try { Sk.validate(input.sketch, {primary: inputs.engine || 'stickman', cast: payload.cast || [], kit: payload.kit || null, engines: inputs.scope?.drawn, films: inputs.scope?.films, looks: inputs.scope?.looks, boards: inputs.scope?.boards, designs: inputs.scope?.designs, types: inputs.scope?.types || ['cartoon']}); } catch (error) { throw new InputError(`Drawing: ${error.message}`); } shot.sketch = input.sketch; delete shot.frame; }
       }
       // The owner can drop a designed frame (the shot then uses its drawing, or one made from its words).
       if (input.frame === null) delete shot.frame;

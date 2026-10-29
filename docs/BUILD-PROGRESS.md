@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-28. Current application: 0.61.1: the laptop program (0.6.0 to 0.61.0) merged into GitHub `main`, with the fixes of the 2026-10-28 review. The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.63.0: the Cartoon / Natural / Mix picture type on top of 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next build (owner request 2026-10-28): the editing styles and their updates (Room 03 Style Library and the engines: docs/STYLE-ROOM.md, docs/DRAWN-SCENES.md, docs/CINEMATIC-ENGINE.md, engines.js, style.js, visual-dna.js). Still open for the owner from 0.61: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
+Next builds (owner requests 2026-10-28, in this order): engines choose their own colours, effects, transitions and pace per video instead of fixed look presets; more fonts, caption looks and caption animations; competitor reading with per-competitor picks of what the owner liked. Still open for the owner from 0.61: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,35 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - The Cartoon / Natural / Mix picture type (0.63.0)
+
+- **Owner request (2026-10-28):** "the type (natural, cartoonish) are the engine's type, not for each style ... there
+  was no box to check for the type ... where the user selects the engine, the style and the film this option must be
+  there so the user can set up all the things in one go." Point 5 of the earlier list, with the owner's answers:
+  natural = realistic, made by ChatGPT, "the more realistic version of cartoon", never real photos; ChatGPT paints all
+  of it; Mix = the AI decides per scene.
+- **Built** (DRAWN-SCENES.md section 31, STYLE-ROOM.md "Picture type"):
+  - `drawing.pictureType` (natural or mix; absent = cartoon) for every look of the Stickman, Hand-drawn, Documentary
+    and Story Mix engines; Cinematic and Atelier refuse it. The channel window has Cartoon and Natural tick boxes
+    (both = Mix), the style editor a "Picture type" menu, the style card names it and shows the natural rules.
+  - Natural shots: one painted scene with the motion layer over it; drawn figures, props, crowds and bubbles are left
+    out (named warning) or refused (owner edits); the cast in a painting is named (`who`).
+  - Natural visual rules with each look's mood; the planner's PICTURE TYPE and NATURAL PAINTINGS lines; a new visual
+    setting "Natural paintings per minute" (default 8); a natural or mixed plan is refused without ChatGPT pictures.
+  - Painting: own budget, one painting shared by the shots of one place, a natural style key, character portraits
+    attached to later paintings, and a fallback that shares the scene's painting or draws a cartoon shot (never a
+    traced line drawing). The budget now also counts each scene once when it spreads pictures (it could fall short).
+- **Found and fixed while testing:** the painting step saw Claude's plan before the drawing check repaired it, so a
+  natural shot whose only picture lacked `backdrop` was painted as a card; it now applies the same repair first. A
+  shared painting that failed was asked for again by the scene's next shot; it is asked once.
+- **Tests:** `npm run check` passes; `npm test` 372 tests, 346 passed, 0 failed, 26 skipped (browser or Windows only);
+  the browser files (atelier, drawn, editing, QC review, world, scene) 77 of 77 with Chromium; the channel window
+  clicked through in a real browser (ticks saved as Mix and Natural, reopened with its ticks, not offered for
+  Cinematic, the style card) with no page errors.
+- **Not tested:** a real ChatGPT painting of a natural scene and a rendered natural video (no live connection in the
+  build environment); the owner's Windows laptop. The owner's reference image of the natural look has not arrived;
+  the natural rules can be tuned to it.
 
 ### 2026-10-28 - Channel pages, the editing style from the channel page, mixes of ticked looks (0.62.0)
 
