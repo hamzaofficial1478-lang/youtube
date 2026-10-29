@@ -124,6 +124,41 @@ and those channels join the seeds (5 at most). Seed channels are now competitor 
 
 **Not tested:** live NexLev, YouTube or Claude reads and evaluations (they need the owner's keys and go-ahead).
 
+## Niche suggestions (0.70)
+
+Owner request 2026-10-29: "the program should also suggest the niches according to our competitors ... or the new
+niches going on trend so we can catch up more early ... a sub niche that will give us more chances to get viral ...
+with YT api, nexlev mcp or api, reddit scan and also ... screenshots attached by the user".
+
+"Suggest niches" on the Niche Factory page asks Claude once, on that click, for 3-8 niches of one of two kinds:
+
+- **Sub-niches of one of my channels:** narrower angles of the channel's niche that its competitors leave open, with
+  more chance to spread. Claude reads the channel (niche, audience, competitor names), its newest competitor scan
+  (each competitor's strongest videos and the hit-video keywords of the competitor watch, `hitKeywords`) and the trend
+  evidence below.
+- **New niches on the rise:** what the owner's scans show growing now, different from the owner's own niches and
+  active ideas.
+
+The evidence is only what the scans already hold, numbered E1, E2 ... (`suggestionEvidence`): Reddit trend scans,
+YouTube trend scans (only with the YouTube derived-use approval recorded in Trending topics settings, re-checked before
+Claude is asked), NexLev discoveries of niche ideas (keywords and rising channels; new niches only) and completed
+screenshot reads. Nothing is fetched from YouTube, NexLev or Reddit by a suggestion; the card says what it can learn
+from and where to run more scans. The program never runs NexLev's MCP; NexLev data comes from its REST API discoveries.
+
+Each suggestion has a title, description, audience, 1-5 search keywords, formats, why it is rising now, the chance to
+spread (Claude's estimate) and why, the competition level, how this channel would win and the evidence refs it rests
+on (`validateSuggestions`: exactly the number asked, only supplied refs, formats the channel makes, no near-duplicate
+niches). The copy guard refuses six words in a row from any supplied title. "Create niche idea from this" fills the
+idea form (a sub-niche also gets the channel's competitors as seed channels and a note of where it came from); nothing
+is saved until the owner saves it, and the idea then goes through discovery and the go/no-go as before.
+
+Jobs (`niche_suggestions`) reserve the suggestion token limit (setting "Tokens per niche suggestion", default 16,000)
+from the Niche Factory monthly limit (usage kind `niche_suggest`), are never retried by themselves (an interrupted one
+needs a confirmed retry, at most 3 attempts), become `stale` when the channel, the YouTube approval or the Claude
+connection changed before the call, and drop the YouTube data copied into their prompt when it is 30 days old
+(`purgeSuggestions`; Claude's answer stays). Tested in tests/niche-intake.test.js ("niche suggestions") and in a real
+browser.
+
 ## Not included yet
 
 - NexLev MCP (OAuth) is not used; the REST API with a key in a Windows-protected connector slot is.

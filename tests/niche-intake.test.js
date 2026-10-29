@@ -188,3 +188,54 @@ test('a screenshot is checked, kept in the data folder and read by Claude as an 
   assert.equal(niches.tokenSummary().settled, 4500, 'reads count against the Niche Factory monthly limit');
   assert.throws(() => validateRead(JSON.parse(readAnswer({niche: {...JSON.parse(readAnswer()).niche, formats: ['podcast']}}))), /unknown format/);
 });
+
+// 0.70 (owner request 2026-10-29): Claude suggests sub-niches of a channel's niche, or new niches on the rise, from
+// what the owner's scans already hold; YouTube data only with the recorded approval, refs checked, copy guard.
+test('niche suggestions: sub-niches from a channel and its competitors, new niches from the scans, evidence checked', async t => {
+  let asked = null, reply = null;
+  const net = network({claude: body => { asked = body; return reply; }}), {niches, ids, store} = setup(t, net);
+  const {TrendScanner} = require('../trends'), {CompetitorIntelligence} = require('../competitor-intel');
+  new TrendScanner(store, niches.connectors, niches.quota); new CompetitorIntelligence(store, niches.connectors, niches.quota, niches.styles);
+  assert.throws(() => niches.queueSuggestions({mode: 'new', connector: ids.claude, requestedBy: 'Owner'}), /nothing to learn new niches from yet/);
+  const family = store.saveFamily({name: 'Finance Plain', tier: 'A', countries: ['United States'], audience: 'Young adults who want their money explained simply.', niche: 'Personal finance', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 0, cadence: 2, format: 'long-form', competitors: ['@MoneyMap']});
+  const at = new Date().toISOString(), insert = (table, row) => store.db.prepare(`INSERT INTO ${table}(${Object.keys(row).join(',')}) VALUES(${Object.keys(row).map(() => '?').join(',')})`).run(...Object.values(row));
+  const outliers = ['Why renters quietly get richer', 'The debt trick banks hate', 'Renters versus owners after ten years'].map((title, n) => ({videoId: vid(n), title, views: 900000 - n * 1000, outlierScore: 4}));
+  insert('competitor_scans', {id: 'scan-c', family_id: family.id, family_revision: family.revision, status: 'completed', scope: '{}', result: JSON.stringify({retrievedAt: at, youtubeDerivedUse: false, channels: [{ref: 'C1', competitorKey: 'handle:@moneymap', input: {value: '@MoneyMap'}, status: 'ok', nexlev: {about: {title: 'Money Map'}, videos: [], outliers}, stats: {medianViews: 80000, uploadsPerWeek: 2}}]}), created_by: 'Owner', created_at: at, updated_at: at});
+  insert('trend_scans', {id: 'scan-r', status: 'completed', scope: JSON.stringify({source: 'reddit', days: 7}), result: JSON.stringify({source: 'reddit', retrievedAt: at, keywords: [{ref: 'K1', keyword: 'renting'}], posts: [{ref: 'R1', title: 'Is renting forever actually fine?', subreddit: 'personalfinance', score: 5400, comments: 900, keywords: ['K1']}]}), created_by: 'Owner', created_at: at, updated_at: at});
+  insert('trend_scans', {id: 'scan-y', status: 'completed', scope: JSON.stringify({days: 7}), result: JSON.stringify({keywords: [{ref: 'K1', keyword: 'side hustle'}], videos: [{ref: 'T1', videoId: vid(9), title: 'Side hustles nobody tells you about', views: 2000000, channelId: CH[0], publishedAt: at, keywords: ['K1']}], channels: {[CH[0]]: {subscribers: 4000}}}), youtube_expires_at: new Date(Date.now() + 30 * DAY).toISOString(), created_by: 'Owner', created_at: at, updated_at: at});
+  const suggestion = (title, refs, extra = {}) => ({title, description: 'Plain explainers of one money decision people put off, told with real numbers.', audience: 'Renters aged 22-35', keywords: ['renting vs buying'], formats: ['long-form'], whyNow: 'Renting questions keep rising across the evidence.', viralChance: 'high', viralWhy: 'Everyone has an opinion on renting.', competition: 'medium', angle: 'Run the numbers for one real city per video.', refs, ...extra});
+  const answer = list => JSON.stringify({summary: 'Renting and debt are the open corners of personal finance right now.', suggestions: list, avoid: ['Crypto get-rich-quick angles']});
+
+  // Sub-niches: the channel (F), its competitors' hit videos and the Reddit scan; YouTube trends are display-only.
+  const sub = niches.queueSuggestions({mode: 'sub', familyId: family.id, count: 3, connector: ids.claude, requestedBy: 'Owner'});
+  assert.deepEqual(sub.evidence.map(item => item.kind), ['competitor', 'competitor hit keywords', 'reddit scan'], 'no YouTube data without the approval');
+  reply = answer([suggestion('Renting smarter in big cities', ['F', 'E1']), suggestion('Paying off student loans early', ['E2'], {competition: 'low'}), suggestion('Money moves for first jobs', ['E3'])]);
+  const done = await niches.processNextSuggestions();
+  assert.equal(done.status, 'completed');
+  assert.deepEqual(done.result.suggestions.map(item => item.viralChance), ['high', 'high', 'high']);
+  assert.match(asked.system || JSON.stringify(asked.messages), /sub-niches of the channel family's niche/);
+  assert.match(JSON.stringify(asked.messages), /Why renters quietly get richer[\s\S]*Is renting forever actually fine/);
+  assert.equal(store.db.prepare('SELECT kind FROM intelligence_usage WHERE job_id=?').get(done.id).kind, 'niche_suggest');
+  assert.equal(niches.tokenSummary().settled, 4500, 'suggestions count against the Niche Factory monthly limit');
+
+  // New niches, with YouTube derived use recorded: the trend scan joins; an invented ref and copied wording are refused.
+  store.db.prepare("INSERT INTO trend_settings(id,revision,payload,updated_at) VALUES('global',1,?,?)").run(JSON.stringify({youtubeDerivedUse: {approved: true}}), at);
+  const fresh = niches.queueSuggestions({mode: 'new', count: 3, note: 'Something for Gen Z', connector: ids.claude, requestedBy: 'Owner'});
+  assert.deepEqual(fresh.evidence.map(item => item.kind), ['reddit scan', 'youtube trend scan']);
+  reply = answer([suggestion('Side income for students', ['E2', 'NOTE']), suggestion('Gen Z money myths', ['E9']), suggestion('Budgeting for gamers', ['E1'])]);
+  assert.equal((await niches.processNextSuggestions(), niches.publicSuggestions(niches.suggestionRow(fresh.id))).status, 'quality_failed', 'an invented ref is refused');
+  niches.retrySuggestions(fresh.id, {});
+  reply = answer([suggestion('Side hustles nobody tells you about', ['E2']), suggestion('Gen Z money myths', ['E1']), suggestion('Budgeting for gamers', ['NOTE'])]);
+  await niches.processNextSuggestions();
+  assert.match(niches.publicSuggestions(niches.suggestionRow(fresh.id)).error, /repeats wording/, 'the copy guard holds');
+  // The approval is withdrawn before Claude is asked: nothing is sent.
+  const later = niches.queueSuggestions({mode: 'new', count: 3, connector: ids.claude, requestedBy: 'Owner'});
+  store.db.prepare("UPDATE trend_settings SET payload=? WHERE id='global'").run(JSON.stringify({youtubeDerivedUse: {approved: false}}));
+  assert.equal(await niches.processNextSuggestions(), null);
+  assert.equal(niches.publicSuggestions(niches.suggestionRow(later.id)).status, 'stale');
+  // After 30 days the YouTube data leaves the stored prompt; Claude's answer stays.
+  niches.purgeSuggestions(new Date(Date.now() + 31 * DAY));
+  assert.equal(JSON.parse(niches.suggestionRow(later.id).scope).promptInput, null);
+  assert.throws(() => niches.retrySuggestions(later.id, {}), /expired/);
+  assert.equal(niches.state().suggestions.length, 3);
+});

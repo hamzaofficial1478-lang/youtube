@@ -245,6 +245,20 @@ function readsCard(niches) {
   }).join('');
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCREENSHOTS</span><h2>Read by Claude</h2></div>${action('Read a screenshot', 'niche-read', '', 'secondary')}</div>${rows || '<p class="muted">Attach a screenshot of a channel, a video, a search page or a post. Claude reads the channels, numbers and patterns it shows and drafts a niche idea for you to check.</p>'}</section>`;
 }
+// Niche suggestions (0.70): sub-niches of a channel or new niches on the rise, from what the scans already hold.
+function suggestionsCard(niches) {
+  const src = niches.suggestionSources, level = value => badge(value, value === 'high' ? 'green' : value === 'medium' ? 'orange' : 'gray');
+  const have = [`${src.reddit} Reddit scan${src.reddit === 1 ? '' : 's'}`, `${src.youtube} YouTube trend scan${src.youtube === 1 ? '' : 's'}${src.youtube && !src.youtubeApproved ? ' (not used until YouTube derived use is recorded)' : ''}`, `${src.discoveries} NexLev discover${src.discoveries === 1 ? 'y' : 'ies'}`, `${src.reads} screenshot read${src.reads === 1 ? '' : 's'}`, `competitor scans of ${Object.keys(src.competitorScans).length} channel${Object.keys(src.competitorScans).length === 1 ? '' : 's'}`];
+  const rows = niches.suggestions.map(job => {
+    const family = state.families.find(item => item.id === job.familyId), result = job.result;
+    const retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'niche-suggest-retry', job.id, 'text-button') : '';
+    const from = ref => ref === 'F' ? `your channel ${family?.name || ''}` : ref === 'NOTE' ? 'your note' : (item => item ? `${item.kind}${item.label ? `: ${item.label}` : ''}` : ref)(job.evidence.find(item => item.ref === ref));
+    return `<div class="suggest-job"><div>${intelStatus(job.status)} <strong>${job.mode === 'sub' ? `Sub-niches of ${esc(family?.name || 'a channel')}` : 'New niches on the rise'}</strong> <small>${esc(date(job.createdAt))}${job.usage?.total ? ` · ${intelNumber(job.usage.total)} tokens` : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>
+      ${result ? `<p>${esc(result.summary)}</p><div class="bp-grid">${result.suggestions.map((item, index) => `<div class="bp-section"><p><strong>${esc(item.title)}</strong> Chance to spread ${level(item.viralChance)} Competition ${level(item.competition)}</p><p>${esc(item.description)}</p><p class="muted">${esc(item.whyNow)} ${esc(item.viralWhy)}</p><p><strong>How we win:</strong> ${esc(item.angle)}</p><div class="chip-row">${item.keywords.map(key => `<span class="chip">${esc(key)}</span>`).join('')}</div><small>From: ${esc(item.refs.map(from).join(' · '))}</small><div>${action('Create niche idea from this', 'niche-from-suggestion', `${job.id}:${index}`, 'secondary')}</div></div>`).join('')}</div>${result.avoid.length ? `<span class="micro-label">Better avoided</span>${intelList(result.avoid)}` : ''}` : ''}${retry}</div>`;
+  }).join('');
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SUGGESTIONS</span><h2>Niches the program suggests</h2></div>${action('Suggest niches', 'niche-suggest', '', 'primary')}</div>
+    <p>Sub-niches of one of your channels, found in its competitors, or new niches on the rise. Claude learns from what your scans hold now: ${esc(have.join(', '))}.</p><p class="hint">More scans, better suggestions: YouTube and Reddit scans in <a href="#trends">Trending topics</a>, discovery on a niche idea (NexLev), a screenshot read, or a channel's <a href="#competitors">competitor reading</a>.</p>${rows || '<p class="muted">No suggestions yet.</p>'}</section>`;
+}
 const GO_LABEL = {strong: ['Go', 'green'], promising: ['Go with a small test', 'orange'], weak: ['No-go for now', 'gray'], do_not_produce: ['Do not produce', 'gray']};
 function risingTable(disc) {
   if (!disc.rising?.length) return '';
@@ -281,9 +295,9 @@ function nichesView() {
   }).join('');
   const idea = ideas.find(item => item.id === selectedIdea);
   const used = niches.tokens;
-  return heading('Niche Factory', 'Your niche ideas, from your own words, pasted links or screenshots. Discovery finds the competitors that grew in the last 3 months; Claude judges go or no-go, studies the viewers and finds what competitors miss. You decide what becomes a family.', action('Read a screenshot', 'niche-read', '', 'secondary') + action('+ New niche idea', 'niche-new', '', 'primary'))
+  return heading('Niche Factory', 'Your niche ideas, from your own words, pasted links or screenshots. Discovery finds the competitors that grew in the last 3 months; Claude judges go or no-go, studies the viewers and finds what competitors miss. You decide what becomes a family.', action('Suggest niches', 'niche-suggest', '', 'secondary') + action('Read a screenshot', 'niche-read', '', 'secondary') + action('+ New niche idea', 'niche-new', '', 'primary'))
     + `<div class="production-kpis"><div><span>Active ideas</span><strong>${active.length}</strong><small>${ideas.length - active.length} archived</small></div><div><span>NexLev this month</span><strong>${intelNumber(niches.quota.nexlev.used)}</strong><small>of ${intelNumber(niches.quota.nexlev.cap)} requests</small></div><div><span>Niche tokens ${esc(used.period)}</span><strong>${intelNumber(used.settled + used.reserved)}</strong><small>of ${intelNumber(used.limit)}</small></div><div><span>Shortlisted / approved</span><strong>${niches.evaluations.filter(item => ['shortlisted', 'approved'].includes(item.review?.decision)).length}</strong><small>${niches.evaluations.filter(item => item.review?.familyId).length} became families</small></div></div>`
-    + `<div class="intel-grid"><div>${idea ? nicheDetail(idea, niches) : `<section class="production-card">${empty('Add your first niche idea.', 'Describe the idea, add 1-5 keywords and optional seed channels. Discovery uses NexLev; evaluation uses Claude.', action('+ New niche idea', 'niche-new', '', 'primary'))}</section>`}</div>
+    + `<div class="intel-grid"><div>${idea ? nicheDetail(idea, niches) : `<section class="production-card">${empty('Add your first niche idea.', 'Describe the idea, add 1-5 keywords and optional seed channels. Discovery uses NexLev; evaluation uses Claude.', action('+ New niche idea', 'niche-new', '', 'primary'))}</section>`}${suggestionsCard(niches)}</div>
       <div><section class="production-card"><div class="production-card-head"><div><span class="micro-label">YOUR IDEAS</span><h2>Niche ideas</h2></div>${action('Settings', 'niche-settings', '', 'secondary')}</div><div class="niche-list">${cards || '<p class="muted">No ideas yet.</p>'}</div></section>${readsCard(niches)}${dataCapsCard()}</div></div>`;
 }
 
@@ -573,10 +587,29 @@ function intelAction(command, id, button) {
     return;
   }
   // Niche Factory
-  if (command === 'niche-new' || command === 'niche-edit' || command === 'niche-from-read') {
+  if (command === 'niche-suggest') {
+    const families = state.families.filter(item => !item.archived);
+    return intelDialog('niche-suggest', 'Suggest niches', 'CLAUDE · NICHES FROM YOUR SCANS', `<div class="form-grid">
+      <label class="full">What to look for<select name="mode">${families.length ? '<option value="sub">Sub-niches of one of my channels: narrower angles its competitors leave open, with more chance to spread</option>' : ''}<option value="new">New niches on the rise: what your trend scans, discoveries and screenshots show growing now</option></select></label>
+      <label>Channel (for sub-niches)<select name="familyId">${families.map(item => `<option value="${esc(item.id)}">${esc(item.name)} · ${esc(item.niche || '')}</option>`).join('')}</select></label>
+      <label>Suggestions<input name="count" type="number" min="3" max="8" required value="5"></label>
+      <label class="full">Your note <span class="hint">optional: what you are looking for</span><textarea name="note" rows="2" maxlength="1000"></textarea></label>
+      ${connectorSelect('claude', 'ai', 'Claude connection')}${nameField()}</div>
+      <p class="note">One answer from Claude on this click, never repeated by itself. Reserves up to ${intelNumber(state.intelligence.niches.settings.suggestTokenLimit)} tokens from the Niche Factory monthly limit. Nothing new is fetched from YouTube, NexLev or Reddit; nothing becomes an idea until you check and save it.</p>`, 'Suggest');
+  }
+  if (command === 'niche-suggest-retry') {
+    const job = state.intelligence.niches.suggestions.find(item => item.id === id), unknown = job?.status === 'interrupted' || job?.usage?.status === 'unknown';
+    if (unknown && !confirm('The last attempt was interrupted, so tokens may already have been used. Deliberately retry?')) return;
+    button.disabled = true;
+    return api(`/api/niche-suggestions/${id}/retry`, {confirmInterrupted: unknown}).then(refresh).then(() => toast('Deliberately requeued.')).catch(error => toast(error.message, true)).finally(() => { button.disabled = false; });
+  }
+  if (command === 'niche-new' || command === 'niche-edit' || command === 'niche-from-read' || command === 'niche-from-suggestion') {
     const read = command === 'niche-from-read' ? state.intelligence.niches.reads.find(item => item.id === id) : null;
+    const [jobId, index] = command === 'niche-from-suggestion' ? id.split(':') : [], job = jobId && state.intelligence.niches.suggestions.find(item => item.id === jobId), picked = job?.result?.suggestions[Number(index)];
+    const parent = job?.mode === 'sub' && state.families.find(item => item.id === job.familyId);
+    const fromSuggestion = picked && {title: picked.title, description: picked.description, audience: picked.audience, countries: parent?.countries || [], formats: picked.formats, keywords: picked.keywords, seedChannels: (parent?.competitors || []).slice(0, 5), seedVideos: [], notes: `Suggested by Claude on ${date(job.createdAt)}${parent ? ` as a sub-niche of ${parent.name} (${parent.niche})` : ''}: ${picked.whyNow} How we win: ${picked.angle}`.slice(0, 2000)};
     const fromRead = read && {title: read.result.niche.title, description: read.result.niche.description, audience: read.result.niche.audience, countries: [], formats: read.result.niche.formats, keywords: read.result.niche.keywords, seedChannels: read.result.channels.filter(item => item.handle).slice(0, 5).map(item => ({url: `https://www.youtube.com/${item.handle}`})), seedVideos: [], notes: `From a screenshot read on ${date(read.createdAt)}: ${read.result.seen.summary}`.slice(0, 2000)};
-    const idea = fromRead || state.intelligence.niches.ideas.find(item => item.id === id) || {title: '', description: '', audience: '', countries: [], formats: ['long-form'], keywords: [], seedChannels: [], seedVideos: [], notes: ''};
+    const idea = fromRead || fromSuggestion || state.intelligence.niches.ideas.find(item => item.id === id) || {title: '', description: '', audience: '', countries: [], formats: ['long-form'], keywords: [], seedChannels: [], seedVideos: [], notes: ''};
     return intelDialog('idea', idea.id ? 'Edit niche idea' : 'New niche idea', 'YOUR NICHE IDEA', `<div class="form-grid">
       <label class="full">Niche title<input name="title" required minlength="3" maxlength="120" value="${esc(idea.title)}" placeholder="e.g. Stone Age money"></label>
       <label class="full">Description<textarea name="description" required minlength="10" maxlength="2000" rows="3" placeholder="What the channel explains and why it is different">${esc(idea.description)}</textarea></label>
@@ -613,7 +646,8 @@ function intelAction(command, id, button) {
       <label>Results per keyword<input name="keywordResults" type="number" min="10" max="50" required value="${settings.keywordResults}"></label>
       <label>Channels to estimate<input name="analyticsTopChannels" type="number" min="0" max="5" required value="${settings.analyticsTopChannels}"><span class="hint">1 NexLev request each.</span></label>
       <label>Channels checked for recent growth<input name="momentumChannels" type="number" min="0" max="30" required value="${settings.momentumChannels}"><span class="hint">1 NexLev request each; the 10 that grew most become the rising competitors.</span></label>
-      <label>Tokens per screenshot read<input name="readTokenLimit" type="number" min="6000" max="30000" step="1000" required value="${settings.readTokenLimit}"></label></div>`, 'Save settings', {revision: settings.revision});
+      <label>Tokens per screenshot read<input name="readTokenLimit" type="number" min="6000" max="30000" step="1000" required value="${settings.readTokenLimit}"></label>
+      <label>Tokens per niche suggestion<input name="suggestTokenLimit" type="number" min="8000" max="40000" step="1000" required value="${settings.suggestTokenLimit}"></label></div>`, 'Save settings', {revision: settings.revision});
   }
   if (command === 'niche-discover') {
     const idea = state.intelligence.niches.ideas.find(item => item.id === id), settings = state.intelligence.niches.settings;
@@ -672,7 +706,8 @@ document.getElementById('intel-form').addEventListener('submit', event => {
       const idea = data.id ? await api(`/api/niche-ideas/${data.id}`, {...body, revision: data.revision}, 'PUT') : await api('/api/niche-ideas', body);
       selectedIdea = idea.id; return idea;
     }
-    if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels'), momentumChannels: number('momentumChannels'), readTokenLimit: number('readTokenLimit')});
+    if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels'), momentumChannels: number('momentumChannels'), readTokenLimit: number('readTokenLimit'), suggestTokenLimit: number('suggestTokenLimit')});
+    if (kind === 'niche-suggest') return api('/api/niche-suggestions', {mode: value('mode'), familyId: value('mode') === 'sub' ? value('familyId') : '', count: number('count'), note: value('note'), connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
     if (kind === 'discover') return api(`/api/niche-ideas/${data.ideaId}/discoveries`, {ideaRevision: data.ideaRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
     if (kind === 'evaluate') return api(`/api/niche-ideas/${data.ideaId}/evaluations`, {ideaRevision: data.ideaRevision, discoveryId: data.discoveryId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
     if (kind === 'niche-read') {
