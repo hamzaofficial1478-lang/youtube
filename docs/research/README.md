@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## whiteboard-animation-vi.md (2026-10-29)
+
+The deep read of letuandat131/whiteboard-animation-vi: how it turns one picture into a hand-drawn whiteboard video (line map, line order, colour regions, brush route and timing). Its brain is ported in `drawn-reveal.js` (the sketch reveal, 0.67); 7 draft skills in `skills/whiteboard-craft.json`.
+
 ## claude-video.md (2026-10-06)
 
 The deep read of bradautomates/claude-video (/watch): video evidence for an AI. Its scene-change detection now keeps stock clips inside one shot and checks renders for unplanned cuts; its evidence and engine rules became 5 draft skills.

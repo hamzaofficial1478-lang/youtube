@@ -1,0 +1,137 @@
+[
+  {
+    "id": "whiteboard.line-order",
+    "title": "Draw a picture's lines in the order an artist would",
+    "rooms": ["scene", "motion"],
+    "tasks": ["scene.plan", "motion.template", "editing.plan"],
+    "kind": "ruleset",
+    "when": "Whenever a hand draws a picture on the whiteboard: a painted picture, a traced illustration or a built scene.",
+    "summary": "A whiteboard drawing reads as human when the pen finishes one thing before it moves on. The main subject comes first, lettering is written left to right, and the remaining outlines follow, each region done before the next, so the viewer never watches a pen jump between half-drawn objects.",
+    "do": [
+      "Draw the largest connected drawing (the main subject) first.",
+      "Write lettering in short bands from left to right, following each letter's own ink.",
+      "Finish a region together: a label, its letters and its arrow are one region.",
+      "A long ground line or arrow that joins two objects is split, so each object is drawn on its own.",
+      "Tiny fragments go with the nearest big drawing instead of being drawn on their own between words.",
+      "Inside an outline, start where the ink is densest and follow the line with the least turning."
+    ],
+    "avoid": ["a pen that alternates between two half-drawn objects", "lettering drawn top to bottom or in random order", "drawing tiny specks one by one"],
+    "tags": ["whiteboard", "hand-drawn", "line-order"],
+    "source": "whiteboard-animation-vi (CC0; grid routing from SRT Whiteboard, MIT), pinned c689bf7: handdraw/grid_stream.py and grid.py, restated in our own words.",
+    "priority": 72
+  },
+  {
+    "id": "whiteboard.colour-after-line",
+    "title": "Lines first, then colour, then a hold",
+    "rooms": ["scene", "motion", "editing"],
+    "tasks": ["scene.plan", "motion.template", "editing.plan"],
+    "kind": "formula",
+    "when": "Timing a picture that the hand draws and colours on the whiteboard.",
+    "summary": "The drawing reads because it has a rhythm: the line art builds first, the colour follows inside the finished lines, and the finished picture is held long enough to be read before the cut.",
+    "do": [
+      "Give the lines about 45% of the drawing time and the colour the other 55%.",
+      "Keep drawing and colouring to about 60-70% of the picture's time on screen; the rest is a hold of the finished picture.",
+      "Never cut before the colour has finished; a picture still being coloured at the cut reads as a mistake."
+    ],
+    "avoid": ["colour that starts before the lines are done", "a finished picture that is cut as soon as it is complete"],
+    "numbers": {"inkShare": 0.45, "drawShare": "0.6-0.7", "maxDrawSeconds": 5},
+    "tags": ["whiteboard", "timing"],
+    "source": "whiteboard-animation-vi (CC0), pinned c689bf7: handdraw/settings.py (draw 70%, ink 45% of it) and v181d_plan.py, restated; our engine uses 60% of the picture's time, at most 5 s.",
+    "priority": 70
+  },
+  {
+    "id": "whiteboard.subject-first-colour",
+    "title": "Colour the subject first, each colour from the top",
+    "rooms": ["motion", "scene"],
+    "tasks": ["motion.template", "scene.plan"],
+    "kind": "ruleset",
+    "when": "Colouring a drawn picture or a painted place on the whiteboard.",
+    "summary": "The eye goes to what is coloured first, so the subject (the person, the object the words are about) is coloured before its surroundings. Each colour starts where it first appears from the top, the way an artist fills a sheet, and a painted place is coloured region by region from left to right.",
+    "do": [
+      "Colour the subject before the background.",
+      "Take the colours in the order they first appear from the top of the picture.",
+      "In a painted place, colour the background region by region from left to right after the subject.",
+      "Leave the picture's white paper alone: the board is the paper, and the brush only lays real colour."
+    ],
+    "avoid": ["colouring the sky before the character the narration names", "a brush sweeping over blank paper"],
+    "tags": ["whiteboard", "colour"],
+    "source": "whiteboard-animation-vi (CC0), pinned c689bf7: v181d_subject_fill.py, v181e_background_fill.py and v181d_palette.py, restated.",
+    "priority": 68
+  },
+  {
+    "id": "whiteboard.brush-lanes",
+    "title": "Brush colour in slanted lanes on the shortest route",
+    "rooms": ["motion"],
+    "tasks": ["motion.template"],
+    "kind": "algorithm",
+    "when": "Building how colour is laid into a drawn picture.",
+    "summary": "Colour laid in parallel slanted strokes looks like a marker at work; each colour of the picture is swept lane by lane, short neighbouring spans are joined, and the order of the strokes is chosen so the hand travels as little as possible.",
+    "steps": [
+      "Group the picture's pixels into a few colours (up to eight, weighted by area).",
+      "For each colour, cut it into lanes about 12 degrees off vertical, one brush wide (about 12% of the picture's shorter side).",
+      "Split a lane where it would cross more than three quarters of a brush of other colour; join short neighbouring spans that fit one brush.",
+      "Order the strokes three ways (nearest first, with a three-choice look-ahead, and looking at the next colour), flip strokes to start at the nearer end, improve with short reversals, and keep the route with the least travel.",
+      "Time each stroke by its travel (1.5 times faster than colouring) and its length; colour a pixel exactly when the eased nib reaches it."
+    ],
+    "numbers": {"angleDegrees": 12, "brushShare": 0.12, "brushMinPx": 24, "brushMaxPx": 92, "travelSpeed": 1.5},
+    "tags": ["whiteboard", "colour", "route"],
+    "source": "whiteboard-animation-vi (CC0), pinned c689bf7: v181d_subject_fill.py (_route, _compact_route, _merge_short, contact timeline), restated; built in drawn-reveal.js.",
+    "priority": 60
+  },
+  {
+    "id": "whiteboard.hand-motion",
+    "title": "The hand lifts between strokes and carries its colour",
+    "rooms": ["motion"],
+    "tasks": ["motion.template"],
+    "kind": "ruleset",
+    "when": "Animating the drawing hand on the whiteboard.",
+    "summary": "A believable hand is down on the board while it draws, lifts on a small arc when it travels to the next stroke, moves with eased starts and stops, and holds a marker of the colour it is laying.",
+    "do": [
+      "Keep the pen on the board while it draws or colours; lift it on an arc only between strokes.",
+      "Ease every travel and every stroke in and out (a cosine ease), never constant speed.",
+      "Show the marker in the colour being laid while colouring.",
+      "Let the hand leave the frame when the drawing is done, so the finished picture is clean."
+    ],
+    "avoid": ["a hand sliding across the picture with the pen down", "a hand that stays over the finished picture"],
+    "tags": ["whiteboard", "hand"],
+    "source": "whiteboard-animation-vi (CC0), pinned c689bf7: v181d_subject_fill.py (pen lift sin(pi q), eased travel) and v181d_hand.py (separate draw and colour poses), restated; the program draws its own hand.",
+    "priority": 58
+  },
+  {
+    "id": "whiteboard.paint-for-drawing",
+    "title": "Paint pictures that draw well on a whiteboard",
+    "rooms": ["visuals", "scene"],
+    "tasks": ["visuals.prompt", "scene.plan"],
+    "kind": "checklist",
+    "when": "Asking for a picture that the whiteboard hand will draw and colour.",
+    "summary": "The hand can only draw what it can see as lines and flat colour. Clean dark outlines, flat colour inside them and a plain white paper give a crisp drawing; textures, gradients and busy backgrounds turn into scratchy lines and muddy colour.",
+    "checks": [
+      "Clean, dark outlines of an even weight round every shape.",
+      "Flat colour inside the lines; no gradients, textures or photographic detail.",
+      "White paper behind the subject (the whiteboard is the paper).",
+      "One clear subject per picture; lettering, if any, in one straight row.",
+      "Few colours (up to about eight), each a clear area."
+    ],
+    "tags": ["whiteboard", "pictures", "prompt"],
+    "source": "whiteboard-animation-vi (CC0), pinned c689bf7: the line detection and palette in v181d_plan.py and v181d_palette.py work best on such pictures (README examples), restated as advice.",
+    "priority": 62
+  },
+  {
+    "id": "whiteboard.held-place",
+    "title": "Draw a place once, then keep it",
+    "rooms": ["scene", "editing"],
+    "tasks": ["scene.plan", "editing.plan"],
+    "kind": "principle",
+    "when": "Several shots in a row happen in the same painted place on the whiteboard.",
+    "summary": "Redrawing the same place on every cut wastes the viewer's time and breaks the illusion of one board. The place is drawn by the hand once; the following shots in it keep it on screen and draw only what is new.",
+    "do": [
+      "Keep the same painted place on consecutive shots of one place, so it holds instead of being drawn again.",
+      "Draw only the new things of a shot over a held place.",
+      "Change the place only when the story moves."
+    ],
+    "avoid": ["the same backdrop drawn again on every cut"],
+    "tags": ["whiteboard", "continuity"],
+    "source": "Our own rule, made for the sketch reveal of 0.67 (Sk.carry holdBackdrop), in the spirit of whiteboard-animation-vi's one drawing then hold.",
+    "priority": 55
+  }
+]

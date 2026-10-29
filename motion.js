@@ -13,7 +13,7 @@ const {InputError} = require('./store');
 const F = require('./fonts');
 
 // The page script: the drawn-shot engine (P06d) first, then the templates that call it.
-const TEMPLATE_FILES = ['drawn-kit.js', 'drawn-props.js', 'drawn-things.js', 'drawn-figures.js', 'drawn-sets.js', 'drawn-engine.js', 'motion-templates.js'].map(name => path.join(__dirname, name));
+const TEMPLATE_FILES = ['drawn-kit.js', 'drawn-props.js', 'drawn-things.js', 'drawn-figures.js', 'drawn-sets.js', 'drawn-reveal.js', 'drawn-engine.js', 'motion-templates.js'].map(name => path.join(__dirname, name));
 // The drawn engines' country shapes (maps.js, 0.36) come first, as data.
 const pageScript = () => `window.DMAP=${require('./maps').pageData()};\n` + TEMPLATE_FILES.map(file => fs.readFileSync(file, 'utf8')).join(';\n');
 const BROWSER_CANDIDATES = [

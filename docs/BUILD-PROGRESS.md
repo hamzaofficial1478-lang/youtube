@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.66.1: tidier family cards, Style Library and Competitors page, on top of 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.67.0: painted pictures drawn by the whiteboard hand, on top of 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,22 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - Painted pictures drawn by the whiteboard hand (0.67.0)
+
+- **Owner request (2026-10-29):** deeply analyse letuandat131/whiteboard-animation-vi ("more accurate and more stable
+  and more advanced" hand sketch animation) and upgrade our hand-drawn engine with its skills and brain.
+- **Read:** the whole repository at `c689bf7` (research/whiteboard-animation-vi.md): its line map, line order on a
+  grid, colour regions, colour route and contact timing; what it had that we lacked (a painted picture only wiped in
+  as a card on our whiteboard).
+- **Built** (DRAWN-SCENES.md section 32): `drawn-reveal.js`, a JavaScript port of that brain (subject found by a
+  border rule instead of its segmentation model; white paper left clear), used by the drawing engine on the whiteboard
+  and under the drawing hand: lines first in a sensible order, then the colours brushed in lane by lane, the hand
+  lifting between strokes and carrying the colour; a held painted place is not drawn again; the planner is told.
+  7 draft skills (skills/whiteboard-craft.json, 443 builtin skills); licence notice in vendor/whiteboard-animation.
+- **Tests:** tests/reveal.test.js (2 tests, one in the real drawing browser). Contact sheets of a whiteboard card, a
+  whiteboard backdrop and a Stickman card looked at frame by frame. A 1024x768 picture plans in about 1.7 s in the
+  drawing browser (once per picture); a frame costs about 2 ms.
 
 ### 2026-10-29 - Tidier family cards, Style Library and Competitors page (0.66.1)
 
