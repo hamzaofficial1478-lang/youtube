@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.65.0: competitors read in one click with finer subjects, on top of 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.66.0: the Windows installer and updater, on top of 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-The owner's 2026-10-28 list is built (0.62-0.65). Next, by the owner's plan: save each channel's editing style (AI design and picture type), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
+Next: the owner tries the installer on another Windows PC (docs/INSTALL.md). Then, by the owner's plan: save each channel's editing style (AI design and picture type), read the competitors, connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end. Nothing has run against a live channel yet; keep every human approval gate.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,26 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - The program on other Windows PCs; the Gemini question (0.66.0)
+
+- **Owner questions (2026-10-29):** can the Gemini subscription make the pictures, or is the Gemini API needed; and
+  make the program work on other PCs (answers: Windows PCs only, each starting fresh).
+- **Gemini, researched:** the Gemini API lists no free tier for any image model (Google's pricing page, checked
+  2026-10-29); paid images cost about $0.034 (Nano Banana 2 Lite), $0.067 (Nano Banana 2) or $0.134 (Nano Banana Pro)
+  each at 1K. The Gemini app subscription has no supported route for a program: Gemini CLI's Google sign-in for Pro and
+  Ultra was retired in June 2026 in favour of the Antigravity CLI, whose built-in image tool in headless use is not
+  confirmed as allowed by Google, and Google banned accounts that connected third-party agents in February 2026.
+  Nothing was built for Gemini; ChatGPT stays the painter.
+- **Built** (docs/INSTALL.md): `Install Control Room.cmd` (Node 24 and FFmpeg 9.0.2 essentials into `runtime\`, each
+  checked by SHA-256; Git through winget when missing; the folder linked to GitHub; packages; a desktop shortcut;
+  the start), `Update Control Room.cmd` (fast-forward only, never over local changes), and the launcher using the
+  installer's Node and FFmpeg. Checked here: nodejs.org's Node 24 list (node-v24.22.2-win-x64.zip), the FFmpeg package
+  and its published checksum (they match), its features (libass, libx264, fontconfig, freetype), and the git linking
+  sequence on a copy (untracked data and runtime folders kept).
+- **Tests:** `npm run check` passes; `npm test` 378 tests, 352 passed, 0 failed, 26 skipped (browser or Windows only);
+  new tests/install.test.js. Running PowerShell here was refused by the environment's safety check, so the scripts
+  themselves have not run: their first run is on the owner's Windows PC.
 
 ### 2026-10-29 - Competitors read in one go, finer subjects to keep (0.65.0)
 
