@@ -14,7 +14,7 @@ Version 0.8 adds the **Competitors** page. It studies each channel family's 3-10
 
 ## Blend picks: what to keep from each channel (0.9)
 
-Under every competitor link on the Competitors page you can tick what you like about that channel: **Voice-over**, **Narration**, **Editing**, **Thumbnails** and **Visuals**. Tick several on one link, and pick the same area on several links if you want to blend them (for example editing from A and C, voice-over and narration from B). **Save blend** stores the picks as a new revision with your name.
+Under every competitor link on the Competitors page you can tick what you like about that channel: **Voice-over**, **Narration**, **Editing**, **Thumbnails** and **Visuals** (0.65 adds nine finer subjects; see "Read in one go" below). Tick several on one link, and pick the same area on several links if you want to blend them (for example editing from A and C, voice-over and narration from B). **Save blend** stores the picks as a new revision with your name.
 
 | Pick | Blueprint area | Where the result goes |
 |---|---|---|
@@ -31,6 +31,28 @@ The **blend recipe** under the list shows, for each area, which channels it lear
 - **each area** keeps at most 30% reference (one adopted pattern needs at least three original contributions in the same area), in addition to the overall 30/70 rule.
 
 With no picks at all, the analysis learns from every channel, as before. Saving new picks makes an approved blueprint **outdated** (guidance stops) until you analyze and approve again.
+
+## Read in one go and finer subjects (0.65)
+
+Owner request 2026-10-28: "analyzing and reading the competitors as the links are added, then for each competitor the
+desired subject is chosen - what the user liked from each - and the program reads that competitor and adopts the
+style."
+
+- **Finer subjects.** Each channel now offers 14 things to keep: Voice-over, Narration, Hooks and openings, Story
+  structure, Editing, Pacing and cuts, Transitions and effects, Captions and on-screen words, Music and sound, Visuals,
+  Colours and look, Characters and animation, Thumbnails, Titles. Each still feeds one of the five blueprint areas
+  (several subjects of one area name the channel once for it), and Claude receives the exact subjects as
+  `ownerWantsToLearn`, so the blueprint learns what was liked and nothing else.
+- **Read in one go.** "Read competitors" (Competitors page, and on the channel page as soon as links are saved) is the
+  scan with an optional Claude connection: when the scan finishes, Claude's blueprint is queued by itself inside its
+  own token reservation (the owner's click asked for both; nothing is retried by itself). If the analysis cannot start
+  (a connection changed, the token limit), the scan says so and "Ask Claude" starts it.
+- **Adopting the style.** An approved blueprint already reaches the script writer, the narrator draft, a style draft,
+  the packaging brief and the scene planner. Since 0.64, a channel whose style lets the AI design each video also
+  weighs the approved editing and visual techniques (pace, transitions, captions, colours) when it designs a video.
+- **Honest limit.** The program never downloads or watches videos from links (YouTube's terms and the owner's rule).
+  It reads the channels through NexLev and YouTube data, transcripts and the owner's notes; to learn a competitor's
+  look from its frames, point a **style study** at a video file or screenshots on this PC.
 
 ## Checks before you can review
 

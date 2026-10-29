@@ -21,12 +21,23 @@ const YOUTUBE_RETENTION_DAYS = 30;
 const SETTINGS_DEFAULTS = {recentVideos: 30, transcriptsPerChannel: 2, useOutliers: true, analysisTokenLimit: 40000, youtubeDerivedUse: {approved: false}};
 const AREAS = ['script', 'voice', 'editing', 'visuals', 'packaging'];
 // Owner picks per competitor link: what to learn from that channel. Each trait feeds one blueprint area and one room.
+// 0.65 (owner request 2026-10-28: "for each competitor the desired subject will be chosen, what the user liked from each
+// competitor"): finer subjects; each still feeds one of the five blueprint areas, and Claude hears the subject itself.
 const TRAITS = {
   voice: {label: 'Voice-over', area: 'voice', route: 'Voice Room narrator draft'},
   narration: {label: 'Narration', area: 'script', route: 'Claude script guidance'},
+  hooks: {label: 'Hooks and openings', area: 'script', route: 'Claude script guidance'},
+  structure: {label: 'Story structure', area: 'script', route: 'Claude script guidance'},
   editing: {label: 'Editing', area: 'editing', route: 'New style draft'},
-  thumbnails: {label: 'Thumbnails', area: 'packaging', route: 'Packaging brief'},
+  pacing: {label: 'Pacing and cuts', area: 'editing', route: 'New style draft and each video\'s AI design'},
+  transitions: {label: 'Transitions and effects', area: 'editing', route: 'New style draft and each video\'s AI design'},
+  captions: {label: 'Captions and on-screen words', area: 'editing', route: 'New style draft and each video\'s AI design'},
+  music: {label: 'Music and sound', area: 'editing', route: 'New style draft (music moods, effects)'},
   visuals: {label: 'Visuals', area: 'visuals', route: 'Scene planner guidance'},
+  look: {label: 'Colours and look', area: 'visuals', route: 'Scene planner guidance and each video\'s AI design'},
+  characters: {label: 'Characters and animation', area: 'visuals', route: 'Scene planner guidance'},
+  thumbnails: {label: 'Thumbnails', area: 'packaging', route: 'Packaging brief'},
+  titles: {label: 'Titles', area: 'packaging', route: 'Packaging brief'},
 };
 const VOICE_PACE = {slow: 0.9, measured: 1, brisk: 1.08, fast: 1.15};
 const EMOTIONS = ['neutral', 'warm', 'serious', 'energetic', 'calm', 'dramatic'];
@@ -291,7 +302,7 @@ class CompetitorIntelligence {
       const picks = {};
       for (const [key, traits] of Object.entries(picksIn)) {
         requireValue(keys.has(key), 'A pick refers to a channel that is not in this family\'s competitor list.');
-        requireValue(Array.isArray(traits) && traits.every(trait => Object.hasOwn(TRAITS, trait)) && new Set(traits).size === traits.length, 'Choose voice, narration, editing, thumbnails or visuals for each channel.');
+        requireValue(Array.isArray(traits) && traits.every(trait => Object.hasOwn(TRAITS, trait)) && new Set(traits).size === traits.length, `Choose from: ${Object.values(TRAITS).map(item => item.label).join(', ')}.`);
         if (traits.length) picks[key] = Object.keys(TRAITS).filter(trait => traits.includes(trait));
       }
       this.db.prepare('INSERT INTO competitor_picks(id,family_id,revision,payload,created_by,created_at) VALUES(?,?,?,?,?,?)').run(randomUUID(), familyId, current.revision + 1, JSON.stringify({picks}), createdBy, now());
@@ -304,7 +315,8 @@ class CompetitorIntelligence {
     const {revision, picks} = this.picks(familyId);
     if (!Object.values(picks).some(list => list.length)) return {revision, blend: null};
     const areaSources = Object.fromEntries(AREAS.map(name => [name, []]));
-    for (const channel of channels) for (const trait of picks[channel.competitorKey] || []) areaSources[TRAITS[trait].area].push(channel.ref);
+    // Several subjects of one area (editing and pacing, say) name the channel once for that area.
+    for (const channel of channels) for (const trait of picks[channel.competitorKey] || []) if (!areaSources[TRAITS[trait].area].includes(channel.ref)) areaSources[TRAITS[trait].area].push(channel.ref);
     return {revision, blend: {areaSources, ownAreas: AREAS.filter(name => !areaSources[name].length)}};
   }
   notes(familyId) {
@@ -361,10 +373,13 @@ class CompetitorIntelligence {
       const youtube = connectorReference(this.connectors, input.youtubeConnector, 'youtube', 'YouTube public research', false);
       const nexlev = connectorReference(this.connectors, input.nexlevConnector, 'nexlev', 'NexLev research API', false);
       requireValue(youtube || nexlev, 'Choose at least one tested data connector: NexLev and/or YouTube public research.');
+      // 0.65: one click reads the competitors - Claude's analysis is queued by itself when this scan finishes.
+      const then = connectorReference(this.connectors, input.claudeConnector, 'ai', 'Claude', false);
       requireValue(!this.db.prepare(`SELECT 1 FROM competitor_scans WHERE family_id=? AND status IN ('queued','running')`).get(familyId), 'A competitor scan is already queued or running for this family.', 409);
       const settings = this.settings(familyId);
       const scope = {competitors: family.competitors, settings: {recentVideos: settings.recentVideos, transcriptsPerChannel: settings.transcriptsPerChannel, useOutliers: settings.useOutliers, youtubeDerivedUse: settings.youtubeDerivedUse}, connectors: {youtube, nexlev}};
       scope.plannedUnits = this.plannedUnits(scope);
+      if (then) scope.then = then;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO competitor_scans(id,family_id,family_revision,status,scope,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,?,?,?)").run(id, familyId, family.revision, JSON.stringify(scope), requestedBy, at, at);
       this.store.event(`Queued competitor scan for ${family.name}: ${family.competitors.length} channel${family.competitors.length === 1 ? '' : 's'}`);
@@ -508,6 +523,11 @@ class CompetitorIntelligence {
           .run(status, JSON.stringify(result), hasYouTube ? new Date(Date.now() + YOUTUBE_RETENTION_DAYS * DAY).toISOString() : null, status === 'failed' ? 'No competitor data could be collected. Read the per-channel errors.' : null, now(), job.id);
         this.store.event(`Competitor scan ${status} for ${this.store.family(job.family_id).name}: ${used.nexlev} NexLev request${used.nexlev === 1 ? '' : 's'}, ${used.youtube} YouTube unit${used.youtube === 1 ? '' : 's'}`);
       });
+      // Read in one go (0.65): the owner's click asked for Claude's analysis too; it is reserved and queued now.
+      if (job.scope.then && status !== 'failed') {
+        try { this.queueAnalysis(job.family_id, {requestedBy: job.created_by, familyRevision: this.store.family(job.family_id).revision, connector: job.scope.then, scanId: job.id}); }
+        catch (error) { this.store.event(`Claude's analysis of the competitor scan could not start: ${error.message}`); this.db.prepare('UPDATE competitor_scans SET error=?, updated_at=? WHERE id=?').run(`Claude's analysis could not start: ${error.message} Start it with "Ask Claude".`, now(), job.id); }
+      }
       return this.publicScan(this.scanRow(job.id));
     } catch (error) {
       this.store.transaction(() => {

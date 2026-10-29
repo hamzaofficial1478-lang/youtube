@@ -36,6 +36,12 @@ function picksChanged(familyId) {
   const saved = state.intelligence.competitors.families[familyId].picks.picks, next = pendingPicks[familyId];
   return [...new Set([...Object.keys(saved), ...Object.keys(next)])].filter(key => JSON.stringify(saved[key] || []) !== JSON.stringify(next[key] || [])).length;
 }
+// The five blueprint areas, each named by the subjects that feed it (0.65: several subjects share one area).
+function intelAreas() {
+  const areas = new Map();
+  for (const info of Object.values(state.intelligence.competitors.traits)) areas.set(info.area, [...(areas.get(info.area) || []), info.label]);
+  return [...areas].map(([area, labels]) => [area, labels.join(', ')]);
+}
 function blendRecipe(family, names) {
   const traits = state.intelligence.competitors.traits, picks = picksFor(family.id);
   return `<div class="blend-recipe">${Object.entries(traits).map(([trait, info]) => {
@@ -110,7 +116,7 @@ function competitorsView() {
         ${rows || '<p class="muted">No competitors listed for this family yet.</p>'}
         <p class="hint">Your own observations (editing style, voice, visuals, thumbnails) are the strongest evidence: no API watches the videos for you.</p>
         ${family.competitors.length ? `<h3 class="intel-subhead">Your blend recipe ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : '<small class="muted">nothing picked yet: Claude learns from every channel</small>'}</h3>${blendRecipe(family, names)}<p class="hint">Pick what you like on each link; several picks per link are fine. Each area learns only from the channels you picked for it, keeps at most 30% reference, and areas without picks stay 100% your own. Saving new picks makes an approved blueprint outdated until you analyze again.</p>` : ''}</section>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Run scan', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
+      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Read competitors', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
       <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Claude for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
         ${analysis ? blueprintView(analysis, family, data) : ''}</section>
@@ -168,7 +174,7 @@ function blueprintView(analysis, family, data) {
   return `${head}
     ${analysis.quality && !analysis.quality.passed ? `<div class="checks"><strong>Blocked:</strong>${intelList(analysis.quality.issues)}</div>` : ''}
     <p class="bp-summary">${esc(bp.summary)}</p>
-    ${analysis.blend ? `<div class="blend-recipe compact">${Object.entries(state.intelligence.competitors.traits).map(([trait, info]) => { const from = analysis.blend.areaSources[info.area] || []; return `<div class="blend-slot ${from.length ? '' : 'own'}"><b>${esc(info.label)}</b><span>${from.length ? `From ${esc(from.join(' + '))}` : '100% own'}</span>${analysis.quality?.areaShares ? `<small>${analysis.quality.areaShares[info.area]}% reference</small>` : ''}</div>`; }).join('')}</div>` : ''}
+    ${analysis.blend ? `<div class="blend-recipe compact">${intelAreas().map(([area, label]) => { const info = {area, label}, from = analysis.blend.areaSources[area] || []; return `<div class="blend-slot ${from.length ? '' : 'own'}"><b>${esc(info.label)}</b><span>${from.length ? `From ${esc(from.join(' + '))}` : '100% own'}</span>${analysis.quality?.areaShares ? `<small>${analysis.quality.areaShares[info.area]}% reference</small>` : ''}</div>`; }).join('')}</div>` : ''}
     <div class="share-bar" aria-label="Reference versus original share"><span class="share-ref" data-width="${share}">${share}% reference</span><span class="share-own">${100 - share}% original</span></div>
     <div class="bp-grid">
       ${section('Adopt (reference, ≤30%)', `<ul class="intel-list">${bp.adopt.map(item => `<li><b>${esc(item.area)}</b> · ${esc(item.pattern)} <small>${esc(item.refs.join(', '))}</small></li>`).join('')}</ul>`)}
@@ -424,8 +430,9 @@ function intelAction(command, id, button) {
   }
   if (command === 'intel-scan') {
     const settings = familyData.settings, n = family.competitors.length;
-    return intelDialog('scan', `Scan ${n} competitor${n === 1 ? '' : 's'} · ${family.name}`, 'EXPLICIT DATA REQUEST', `<div class="form-grid">${connectorSelect('nexlev', 'nexlev', 'NexLev connector', true)}${connectorSelect('youtube', 'youtube', 'YouTube public research', true)}</div>
-      <p class="note">Planned at most ${n * (1 + (settings.useOutliers ? 1 : 0) + (settings.transcriptsPerChannel ? 1 : 0))} NexLev requests and ${n * 3} YouTube units, reserved against your caps before anything is sent. No automatic retries.</p><div class="form-grid">${nameField()}</div>`, 'Run scan', {familyId: family.id, familyRevision: family.revision});
+    return intelDialog('scan', `Read ${n} competitor${n === 1 ? '' : 's'} · ${family.name}`, 'EXPLICIT DATA REQUEST', `<div class="form-grid">${connectorSelect('nexlev', 'nexlev', 'NexLev connector', true)}${connectorSelect('youtube', 'youtube', 'YouTube public research', true)}${connectorSelect('claude', 'ai', 'Then Claude analyses it (blueprint)', true)}</div>
+      <p class="hint">With Claude chosen, one click reads the channels and then asks Claude for the blueprint, learning what you ticked under each channel. Up to ${intelNumber(settings.analysisTokenLimit)} tokens are reserved from the family's monthly limit when the scan finishes. You still review and approve the blueprint.</p>
+      <p class="note">Planned at most ${n * (1 + (settings.useOutliers ? 1 : 0) + (settings.transcriptsPerChannel ? 1 : 0))} NexLev requests and ${n * 3} YouTube units, reserved against your caps before anything is sent. No automatic retries.</p><div class="form-grid">${nameField()}</div>`, 'Read competitors', {familyId: family.id, familyRevision: family.revision});
   }
   if (command === 'intel-analyze') {
     const scan = familyData.scans.find(item => ['completed', 'partial'].includes(item.status));
@@ -618,7 +625,7 @@ document.getElementById('intel-form').addEventListener('submit', event => {
     if (kind === 'caps') return api('/api/quota-settings', {revision: data.revision, nexlevMonthlyRequestCap: number('nexlev'), youtubeDailyUnitCap: number('youtube')});
     if (kind === 'settings') return api(`/api/families/${data.familyId}/competitor-settings`, {revision: data.revision, recentVideos: number('recentVideos'), transcriptsPerChannel: number('transcriptsPerChannel'), analysisTokenLimit: number('analysisTokenLimit'), useOutliers: checked('useOutliers'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
     if (kind === 'note') return api(`/api/families/${data.familyId}/competitor-notes`, {competitorKey: data.competitorKey, expectedRevision: data.expectedRevision, createdBy: value('person'), editingStyle: value('editingStyle'), voice: value('voice'), visuals: value('visuals'), thumbnails: value('thumbnails'), script: value('script'), strengths: value('strengths'), weaknesses: value('weaknesses')});
-    if (kind === 'scan') return api(`/api/families/${data.familyId}/competitor-scans`, {familyRevision: data.familyRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
+    if (kind === 'scan') return api(`/api/families/${data.familyId}/competitor-scans`, {familyRevision: data.familyRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube'), claudeConnector: connectorPayload(form, 'claude')});
     if (kind === 'analyze') { const analysis = await api(`/api/families/${data.familyId}/competitor-analyses`, {familyRevision: data.familyRevision, scanId: data.scanId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')}); selectedAnalysis = analysis.id; return analysis; }
     if (kind === 'review') return api(`/api/competitor-analyses/${data.id}/review`, data.revoke ? {decision: 'reject', reviewer: value('person'), notes: value('notes')} : {decision: value('decision'), reviewer: value('person'), notes: value('notes'), confirmations: {techniquesNotCopied: checked('techniquesNotCopied'), balanceAccepted: checked('balanceAccepted'), recommendationsReviewed: checked('recommendationsReviewed')}});
     if (kind === 'study') return api(`/api/families/${data.familyId}/style-studies`, {path: value('path'), title: value('title'), channel: value('channel') || undefined, link: value('link') || undefined, notes: value('notes') || undefined, connector: connectorPayload(form, 'claude'), createdBy: value('person')});
