@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.70.0: the Motion Graphics engine (was Atelier) with HTML render and mix finishes, and niche suggestions, on top of 0.69 (Editing Engines, competitors on their page and the ChatGPT sign-in), 0.68 (the Atelier anime finish and the colour-dip cut), 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.70.1: deleting a family with its work after a warning, on top of 0.70 (the Motion Graphics engine with HTML render and mix finishes, and niche suggestions), 0.69 (Editing Engines, competitors on their page and the ChatGPT sign-in), 0.68 (the Atelier anime finish and the colour-dip cut), 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,24 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - Deleting a family with its work (0.70.1)
+
+- **Owner request (2026-10-29):** "Finance already has work (1 style assignments, 3 competitor picks), so it cannot be
+  deleted ... this channel was a dummy ... if user want to delete the user will get a warning while deleting and if
+  user will allow then that channel family will be deleted."
+- **Built:** the family card's Delete lists the family's work with a warning (what goes, that videos on YouTube stay
+  there, that only an earlier backup brings it back, that archiving keeps it) and a tick "Delete all of this too";
+  with the typed name and the tick the family and every record that belongs to it are deleted in one transaction
+  (rows with its family ID and everything hanging off them by foreign key, history tables included); running or
+  waiting work blocks it; other families are untouched. Files in the data folder and the channel's saved style copy in
+  Editing Engines stay.
+- **Tests:** `npm run check` passes; `npm test` 387 tests, 384 passed, 0 failed, 3 skipped (Windows only); a new test
+  deletes a family with a script, a history table that refuses deletes, a row hanging off it and a job (a running job
+  blocks it; after the tick 4 records go, the other family's script and history stay and the history guard is back); a
+  Playwright check of the owner's case (a style assignment and 3 competitor picks) passed 8 checks: the warning lists
+  the work, nothing goes without the tick, with it the family goes and the other channel stays, an empty family shows
+  no warning, no page errors. Not tested on the owner's own data.
 
 ### 2026-10-29 - The Motion Graphics engine and niche suggestions (0.70.0)
 
