@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.68.0: the Atelier anime finish and the colour-dip cut, on top of 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.69.0: Editing Engines, competitors on their page and the ChatGPT sign-in, on top of 0.68 (the Atelier anime finish and the colour-dip cut), 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,24 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-29 - Editing Engines, competitors on their page, the ChatGPT sign-in (0.69.0)
+
+- **Owner review (2026-10-29, eleven points with screenshots).** This release answers points 1, 2, 4-9 and 11;
+  point 3 (the Atelier name, an HTML render finish and a mix) and point 10 (niche suggestions) follow.
+- **Built:** Room 03 renamed Editing Engines and showing the engines only (channel copies folded inside their engine;
+  no channels, history or invalidations in the room); the channel page shows the channel's style per language, the
+  language override ("Give a language its own style"), fallback, removal and a folded history that explains decisions
+  and what a change made out of date; the channel style window lists each engine once with the current style apart.
+  Fixed: the assign, override and fallback windows did not open since 0.66.1 (a removed helper). Competitors: links are
+  added and deleted on the page, steps jump to their cards, the channel page's competitor step opens the Competitors
+  tab. Connectors: "OpenAI API key" and "ChatGPT subscription (sign in ...)"; saving the subscription opens ChatGPT's
+  sign-in through Codex and tests the connection by itself.
+- **Tests:** `npm run check` passes; `npm test` 384 tests, 381 passed, 0 failed, 3 skipped (Windows only); new test of
+  the ChatGPT sign-in with a fake Codex (signed in then tested; a cancelled sign-in says why; only ChatGPT signs in);
+  a Playwright walk-through on a throwaway workspace passed 21 checks (window, channel page, override window, the
+  competitor step, add/refuse/delete links, step jumps, Editing Engines, connector names and the sign-in start). Not
+  tested: a real `codex login` on the owner's PC.
 
 ### 2026-10-29 - The Atelier anime finish and the colour-dip cut (0.68.0)
 

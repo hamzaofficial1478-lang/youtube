@@ -1,5 +1,5 @@
 'use strict';
-// Room 03 - Style Library & Assignment (UI).
+// Room 03 - Editing Engines (UI), and the channel's editing style on its page.
 // Loaded before app.js. Shared helpers ($, esc, badge, action, state, api, refresh,
 // toast, saveForm, date, localeName) come from app.js and are only used inside functions.
 
@@ -97,69 +97,62 @@ function transitionList(spec) {
 // Which library tab is open and which style is shown below the tiles (page state only).
 let styleTab = '', stylePick = '';
 
-function styleRoom(family) {
-  const profiles = styleProfiles().filter(profile => !(profile.origin === 'launch' && profile.revisions.every(item => item.status === 'retired'))), handoff = styleHandoff(family.id), familyAssignment = styleActive(family.id);
-  const assigned = familyAssignment && styleRevisionById(familyAssignment.revisionId);
-  const overrides = styleFamilyAssignments(family.id).filter(item => item.status === 'active' && item.scope === 'channel');
-  const approvedCount = profiles.reduce((sum, profile) => sum + profile.revisions.filter(item => item.status === 'approved').length, 0);
-  const pending = profiles.filter(profile => profile.revisions.at(-1).status === 'draft').length;
-  const history = styleFamilyAssignments(family.id);
-  const ledger = state.productionInvalidations.filter(item => item.familyId === family.id && item.reason.startsWith('Style')).slice(-12).reverse();
-
-  const assignmentPanel = assigned ? `<div class="assign-panel">
-      ${stylePalette(assigned.revision.spec, true)}
-      <div class="assign-main">
-        <div class="card-top"><h2>${esc(assigned.revision.spec.name)}</h2>${badge(`r${assigned.revision.revision} · ${styleLabel(assigned.revision.status)}`, assigned.revision.status === 'approved' ? 'green' : 'orange')}</div>
-        <p>${esc(assigned.revision.spec.summary)}</p>
-        <p class="muted">Assigned by ${esc(familyAssignment.decision.assignedBy)} · ${esc(date(familyAssignment.createdAt))} · “${esc(familyAssignment.decision.reason)}”</p>
-        <div class="assign-meta">${styleRendererBadge(assigned.revision.spec)}${familyAssignment.fallback ? badge(`Fallback: ${styleRevisionById(familyAssignment.fallback.revisionId)?.revision.spec.name || 'revision'} (manual only)`, 'green') : badge('No fallback approved')}</div>
-        <div class="card-actions">${action('Change default style', 'style-assign', family.id, 'secondary')}${action(familyAssignment.fallback ? 'Change fallback' : 'Approve a fallback', 'style-fallback', familyAssignment.id, 'text-button')}${!overrides.length ? action('Revoke default', 'style-revoke', familyAssignment.id, 'text-button danger') : ''}</div>
-      </div>
-    </div>` : `<div class="production-empty"><span class="empty-icon">◆</span><h2>No editing style assigned</h2><p>Review a style in the library below, then assign it as ${esc(family.name)}'s default. Every channel edition inherits it unless you add a deliberate override.</p>${action('Assign default style', 'style-assign', family.id, 'primary')}</div>`;
-
-  const channelRows = (handoff?.channels || []).map(channel => {
-    const override = channel.source === 'override' ? overrides.find(item => item.locale === channel.locale) : null;
-    return `<div class="channel-style-row">
-      <div><strong>${esc(localeName(channel.locale))}</strong><small>${channel.primary ? 'Primary master channel' : 'Additional channel edition'}</small></div>
-      <div>${channel.revisionId ? `<strong>${esc(channel.name)} r${channel.revision}</strong><small>${channel.source === 'override' ? 'Deliberate channel override' : 'Inherited from family default'}</small>` : '<strong>No style</strong><small>Waiting for the family default</small>'}</div>
-      <div class="row-end">${channel.issues.length ? badge(channel.issues[0], 'orange') : channel.revisionId ? badge('Locked for scenes', 'green') : badge('Blocked')}${override ? action('Revoke override', 'style-revoke', override.id, 'text-button danger') : ''}</div>
-    </div>`;
-  }).join('');
-
-  const familyAssignedProfile = assigned?.profile.id;
-  // Owner review 2026-10-29: the styles side by side under Approved / Not approved, the chosen one's settings below.
-  const usable = profile => profile.revisions.some(item => item.status === 'approved');
-  const groups = {approved: profiles.filter(usable), pending: profiles.filter(profile => !usable(profile))};
+// Owner review 2026-10-29: Room 03 is "Editing Engines" - the engines, their features and settings, approved or not.
+// Nothing about channels is here: each channel chooses, assigns and overrides its style on its own page.
+const engineOf = profile => profile.revisions.at(-1).spec.renderer.adapter;
+// The engines: one library (launch) style each. Channel copies and custom styles are versions of their engine.
+function styleEngines() {
+  const all = styleProfiles(), live = profile => !profile.revisions.every(item => item.status === 'retired');
+  const engines = all.filter(profile => profile.origin === 'launch' && live(profile));
+  return engines.map(engine => ({engine, versions: all.filter(profile => profile.origin !== 'launch' && live(profile) && engineOf(profile) === engineOf(engine))}));
+}
+function styleRoom() {
+  const engines = styleEngines(), approvedOf = ({engine, versions}) => [engine, ...versions].some(profile => profile.revisions.some(item => item.status === 'approved'));
+  const groups = {approved: engines.filter(approvedOf), pending: engines.filter(item => !approvedOf(item))};
+  // An engine whose library settings wait for review can still be approved in a channel's own version.
+  const forChannel = engine => engines.find(item => item.engine === engine)?.versions.some(profile => profile.revisions.some(item => item.status === 'approved'));
   // Until the owner picks a tab, a library with nothing approved opens on what needs review.
   const tab = styleTab || (groups.approved.length || !groups.pending.length ? 'approved' : 'pending'), shown = groups[tab];
-  const picked = shown.find(profile => profile.id === stylePick) || shown.find(profile => profile.id === familyAssignedProfile) || shown[0];
-  const tiles = shown.map(profile => {
-    const latest = profile.revisions.at(-1), spec = latest.spec;
-    return `<button type="button" class="engine-tile ${profile === picked ? 'active' : ''} ${profile.id === familyAssignedProfile ? 'assigned' : ''}" data-action="style-pick" data-id="${esc(profile.id)}" aria-pressed="${profile === picked}">
-      ${stylePalette(spec)}<strong>${esc(spec.name)}</strong><small>${profile.origin === 'launch' ? 'Launch style' : profile.origin === 'derived' ? 'Channel copy' : 'Custom style'} · r${latest.revision}</small>
-      <span class="tile-badges">${profile.id === familyAssignedProfile ? badge('This family\'s default', 'green') : ''}${latest.status === 'draft' ? badge(usable(profile) ? 'New draft' : 'Needs review', 'orange') : latest.status === 'retired' ? badge('Retired', 'gray') : ''}</span>${styleTip(spec)}</button>`;
+  const picked = shown.find(item => item.engine.id === stylePick) || shown[0];
+  const tiles = shown.map(({engine}) => {
+    const latest = engine.revisions.at(-1), spec = latest.spec;
+    return `<button type="button" class="engine-tile ${engine === picked?.engine ? 'active' : ''}" data-action="style-pick" data-id="${esc(engine.id)}" aria-pressed="${engine === picked?.engine}">
+      ${stylePalette(spec)}<strong>${esc(spec.name)}</strong><small>${esc(state.styles.renderers[spec.renderer.adapter]?.name || 'Engine')}</small>
+      <span class="tile-badges">${latest.status === 'approved' ? badge('Approved', 'green') : engine.revisions.some(item => item.status === 'approved') ? badge('New draft', 'orange') : forChannel(engine) ? badge('Approved for a channel', 'green') : latest.status === 'draft' ? badge('Needs review', 'orange') : ''}</span>${styleTip(spec)}</button>`;
   }).join('');
   const detail = picked ? (() => {
-    const latest = picked.revisions.at(-1), spec = latest.spec, approved = picked.revisions.filter(item => item.status === 'approved');
-    const inUse = picked.revisions.reduce((sum, item) => sum + item.usage.active, 0);
-    return `<div class="style-detail ${picked.id === familyAssignedProfile ? 'assigned' : ''}"><div class="style-detail-head">${stylePalette(spec, true)}<div><h3>${esc(spec.name)}</h3><div class="style-card-foot">${badge(`r${latest.revision} · ${styleLabel(latest.status)}`, latest.status === 'approved' ? 'green' : latest.status === 'draft' ? 'orange' : 'gray')}${styleRendererBadge(spec)}${inUse ? `<small>${inUse} active assignment${inUse === 1 ? '' : 's'}</small>` : ''}${approved.length && latest.status === 'draft' ? `<small>r${approved.at(-1).revision} remains approved</small>` : ''}</div></div></div>
+    const {engine, versions} = picked, latest = engine.revisions.at(-1), spec = latest.spec, approved = engine.revisions.filter(item => item.status === 'approved');
+    const versionRows = versions.map(profile => { const last = profile.revisions.at(-1); return `<div class="history-row"><span class="job-dot ${last.status === 'approved' ? 'completed' : ''}"></span><div><strong>${esc(last.spec.name)} r${last.revision}</strong><small>${esc(styleLabel(last.status))} · ${profile.origin === 'derived' ? 'saved for a channel from its page' : 'custom style'}</small></div><div class="row-end">${action('Spec & history', 'style-view', profile.id, 'text-button')}${last.status === 'draft' ? action('Review & approve', 'style-approve', last.id, 'text-button') : ''}</div></div>`; }).join('');
+    return `<div class="style-detail"><div class="style-detail-head">${stylePalette(spec, true)}<div><h3>${esc(spec.name)}</h3><div class="style-card-foot">${badge(`r${latest.revision} · ${styleLabel(latest.status)}`, latest.status === 'approved' ? 'green' : latest.status === 'draft' ? 'orange' : 'gray')}${styleRendererBadge(spec)}${approved.length && latest.status === 'draft' ? `<small>r${approved.at(-1).revision} remains approved</small>` : ''}</div></div></div>
       ${styleSettings(spec)}
-      <div class="card-actions">${latest.status === 'draft' ? action('Review & approve', 'style-approve', latest.id, 'primary') : ''}${action('Spec & history', 'style-view', picked.id, 'text-button')}${action('New revision', 'style-revise', picked.id, 'text-button')}${action('Duplicate', 'style-duplicate', picked.id, 'text-button')}${latest.status !== 'retired' ? action('Retire', 'style-retire', latest.id, 'text-button danger') : ''}</div></div>`;
-  })() : `<p class="muted">${tab === 'approved' ? 'No approved style yet. Open Not approved to review one.' : 'Every style in the library is approved.'}</p>`;
-  const library = `<div class="style-tabs" role="tablist">${[['approved', 'Approved'], ['pending', 'Not approved']].map(([key, label]) => `<button type="button" role="tab" class="style-tab ${tab === key ? 'active' : ''}" aria-selected="${tab === key}" data-action="style-tab" data-id="${key}">${label} <span>${groups[key].length}</span></button>`).join('')}</div>${shown.length ? `<div class="engine-strip">${tiles}</div>` : ''}${detail}<p class="hint">Hover over a style to see what it does.</p>`;
-
-  const historyRows = history.map(item => {
-    const found = styleRevisionById(item.revisionId);
-    return `<div class="history-row ${item.status}"><span class="job-dot ${item.status === 'active' ? 'completed' : ''}"></span><div><strong>${item.scope === 'family' ? 'Family default' : `Override · ${esc(item.locale)}`} → ${esc(found?.revision.spec.name || 'Unknown style')} r${found?.revision.revision ?? '?'}</strong><small>${esc(item.status)} · ${esc(item.decision.assignedBy)} · ${esc(date(item.createdAt))} · ${esc(item.decision.reason)}${item.endedReason ? ` · ended: ${esc(item.endedReason)}` : ''}</small></div></div>`;
-  }).join('') || '<p class="muted">No style decisions for this family yet.</p>';
-
-  return `<section class="voice-hero"><div><span class="stage-kicker">ROOM 03 · VISUAL GRAMMAR</span><h2>Style Library &amp; Assignment</h2><p>Review versioned editing styles, assign one approved default to this family, and let every channel edition inherit it. Overrides and fallbacks are explicit decisions, never silent switches.</p></div><div class="voice-health"><span class="health-light ${handoff?.ready ? 'ready' : ''}"></span><strong>${handoff?.ready ? 'Style locked for scenes' : 'Style handoff blocked'}</strong><small>${esc(handoff?.ready ? `${assigned.revision.spec.name} r${assigned.revision.revision} · ${handoff.channels.length} channel${handoff.channels.length === 1 ? '' : 's'}` : handoff?.blocker || 'Assign an approved style.')}</small></div></section>
-    <div class="production-kpis"><div><span>Styles in library</span><strong>${profiles.length}</strong><small>${pending} awaiting review</small></div><div><span>Approved revisions</span><strong>${approvedCount}</strong><small>immutable once created</small></div><div><span>Family default</span><strong>${assigned ? `r${assigned.revision.revision}` : '—'}</strong><small>${esc(assigned ? assigned.revision.spec.name : 'not assigned')}</small></div><div><span>Channel overrides</span><strong>${overrides.length}</strong><small>${family.channels.length} configured channel${family.channels.length === 1 ? '' : 's'}</small></div></div>
-    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">CHANNEL FAMILY DEFAULT</span><h2>Assigned editing style</h2></div><div class="row-end">${family.channels.length > 1 && familyAssignment ? action('Add channel override', 'style-override', family.id, 'secondary') : ''}</div></div>${assignmentPanel}${channelRows ? `<div class="channel-style-list"><span class="micro-label">Effective style per channel</span>${channelRows}</div>` : ''}</section>
-    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STYLE LIBRARY</span><h2>Launch styles and your custom styles</h2></div>${action('+ New custom style', 'style-new', '', 'secondary')}</div>${library}</section>
-    <div class="production-split"><section class="production-card"><div class="production-card-head"><div><span class="micro-label">DECISION TRAIL</span><h2>Assignment history</h2></div>${badge(`${history.length} decision${history.length === 1 ? '' : 's'}`)}</div><div class="history-list">${historyRows}</div></section>
-    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">DEPENDENCY LEDGER</span><h2>Style invalidations</h2></div>${badge(`${ledger.length} recent`)}</div>${ledger.length ? `<div class="invalidations">${ledger.map(item => `<div class="invalidation-row"><span>${esc(item.stage.replaceAll('_', ' '))}</span><p>${esc(item.reason)}</p><time>${esc(date(item.createdAt))}</time></div>`).join('')}</div>` : '<p class="muted">Changing, revoking or retiring an assigned style marks scene plans, edits, captions treatment, packaging and renders for approved scripts as stale. Nothing has been invalidated yet.</p>'}</section></div>
-    <div class="production-notice"><strong>Renderer boundary.</strong> Assigning a style never grants a renderer, provider, asset library or publishing permission. Every renderer is still locked; Documentary Montage (FFmpeg montage) is the first executable target in P05. The owner rule caps reference influence at 30% — competitor patterns can inform a style, never be copied into it.</div>`;
+      ${versions.length ? `<details class="scene-history"><summary>Versions of this engine (${versions.length})</summary><p class="hint">Settings saved from a channel's page or made as custom styles. Channels choose theirs on their own page.</p><div class="history-list">${versionRows}</div></details>` : ''}
+      <div class="card-actions">${latest.status === 'draft' ? action('Review & approve', 'style-approve', latest.id, 'primary') : ''}${action('Spec & history', 'style-view', engine.id, 'text-button')}${action('New revision', 'style-revise', engine.id, 'text-button')}${action('Duplicate', 'style-duplicate', engine.id, 'text-button')}${latest.status !== 'retired' ? action('Retire', 'style-retire', latest.id, 'text-button danger') : ''}</div></div>`;
+  })() : `<p class="muted">${tab === 'approved' ? 'No engine approved yet. Open Not approved to review one.' : 'Every engine is approved.'}</p>`;
+  return `<section class="voice-hero"><div><span class="stage-kicker">ROOM 03 · EDITING ENGINES</span><h2>Editing Engines</h2><p>Every editing engine with its features and settings. Approve the engines you want to use; each channel then chooses its engine and looks on its own page.</p></div></section>
+    <div class="production-kpis"><div><span>Editing engines</span><strong>${engines.length}</strong><small>one card each</small></div><div><span>Approved</span><strong>${groups.approved.length}</strong><small>ready for channels</small></div><div><span>Not approved</span><strong>${groups.pending.length}</strong><small>review before use</small></div></div>
+    <section class="production-card"><div class="production-card-head"><div><span class="micro-label">ENGINES</span><h2>Choose an engine to see its settings</h2></div>${action('+ New custom style', 'style-new', '', 'secondary')}</div>
+      <div class="style-tabs" role="tablist">${[['approved', 'Approved'], ['pending', 'Not approved']].map(([key, label]) => `<button type="button" role="tab" class="style-tab ${tab === key ? 'active' : ''}" aria-selected="${tab === key}" data-action="style-tab" data-id="${key}">${label} <span>${groups[key].length}</span></button>`).join('')}</div>${shown.length ? `<div class="engine-strip">${tiles}</div>` : ''}${detail}<p class="hint">Hover over an engine to see what it does.</p></section>`;
+}
+// The channel's editing style on its own page (moved out of Room 03, 2026-10-29): what it uses per language, the
+// language overrides and fallback, and the history of decisions and of what each change made out of date.
+function channelStyleDetails(family) {
+  const handoff = styleHandoff(family.id), current = styleActive(family.id), assigned = current && styleRevisionById(current.revisionId);
+  const overrides = styleFamilyAssignments(family.id).filter(item => item.status === 'active' && item.scope === 'channel'), history = styleFamilyAssignments(family.id);
+  const ledger = state.productionInvalidations.filter(item => item.familyId === family.id && item.reason.startsWith('Style')).slice(-12).reverse();
+  if (!assigned) return '';
+  const rows = (handoff?.channels || []).map(channel => {
+    const override = channel.source === 'override' ? overrides.find(item => item.locale === channel.locale) : null;
+    return `<div class="channel-style-row"><div><strong>${esc(localeName(channel.locale))}</strong><small>${channel.primary ? 'Main language' : 'Extra language'}</small></div><div>${channel.revisionId ? `<strong>${esc(channel.name)} r${channel.revision}</strong><small>${channel.source === 'override' ? 'Its own style (override)' : 'Same as the channel'}</small>` : '<strong>No style</strong>'}</div><div class="row-end">${channel.issues.length ? badge(channel.issues[0], 'orange') : channel.revisionId ? badge('Ready', 'green') : badge('Blocked')}${override ? action('Use the channel\'s style again', 'style-revoke', override.id, 'text-button danger') : ''}</div></div>`;
+  }).join('');
+  const historyRows = history.map(item => { const found = styleRevisionById(item.revisionId); return `<div class="history-row ${item.status}"><span class="job-dot ${item.status === 'active' ? 'completed' : ''}"></span><div><strong>${item.scope === 'family' ? 'Channel style' : `${esc(localeName(item.locale))} override`} → ${esc(found?.revision.spec.name || 'Unknown style')} r${found?.revision.revision ?? '?'}</strong><small>${esc(item.status)} · ${esc(item.decision.assignedBy)} · ${esc(date(item.createdAt))} · ${esc(item.decision.reason)}${item.endedReason ? ` · ended: ${esc(item.endedReason)}` : ''}</small></div></div>`; }).join('');
+  return `<section class="panel"><div class="panel-header"><h2>Editing style</h2>${badge(handoff?.ready ? 'Ready for scenes' : 'Blocked', handoff?.ready ? 'green' : 'orange')}</div><div class="panel-body">
+    <p><strong>${esc(assigned.revision.spec.name)}</strong> r${assigned.revision.revision} · chosen by ${esc(current.decision.assignedBy)}, ${esc(date(current.createdAt))}</p>
+    ${family.locales.length > 1 ? `<div class="channel-style-list">${rows}</div>` : ''}
+    <div class="card-actions">${action('Change engine and looks', 'family-style', family.id, 'secondary')}${family.locales.length > 1 ? action('Give a language its own style', 'style-override', family.id, 'text-button') : ''}${action(current.fallback ? 'Change fallback' : 'Approve a fallback', 'style-fallback', current.id, 'text-button')}${!overrides.length ? action('Remove the style', 'style-revoke', current.id, 'text-button danger') : ''}</div>
+    <details class="scene-history"><summary>History (${history.length} decision${history.length === 1 ? '' : 's'}, ${ledger.length} made out of date)</summary>
+      <p class="hint"><strong>Decisions</strong> are every time a style was chosen, changed, given to one language or removed for this channel, with who did it and why.</p><div class="history-list">${historyRows}</div>
+      <p class="hint"><strong>Made out of date</strong> lists the work a style change affected: scene plans, edits, captions, packages and renders made with the old style are marked stale, so nothing old is published by mistake.</p>${ledger.length ? `<div class="invalidations">${ledger.map(item => `<div class="invalidation-row"><span>${esc(item.stage.replaceAll('_', ' '))}</span><p>${esc(item.reason)}</p><time>${esc(date(item.createdAt))}</time></div>`).join('')}</div>` : '<p class="muted">Nothing has been made out of date yet.</p>'}
+    </details></div></section>`;
 }
 
 // ---------------------------------------------------------------- dialogs
@@ -327,7 +320,7 @@ function styleResetForm(form) {
 
 function styleEditorDialog(mode, profileId) {
   const profile = styleProfiles().find(item => item.id === profileId) || styleProfiles().find(item => item.key === 'documentary-montage') || styleProfiles()[0];
-  if (!profile) return toast('The style library is not available yet.', true);
+  if (!profile) return toast('The editing engines are not available yet.', true);
   const latest = profile.revisions.at(-1), form = document.getElementById('style-editor-form'), spec = structuredClone(latest.spec);
   styleResetForm(form);
   if (mode !== 'revise') spec.name = mode === 'duplicate' ? `${spec.name} (custom)`.slice(0, 60) : 'New custom style';
@@ -400,9 +393,11 @@ function styleAssignDialog(familyId, scope) {
   styleResetForm(form);
   const current = scope === 'family' ? styleActive(family.id) : null;
   const familyDefault = styleActive(family.id);
-  const candidates = styleProfiles().flatMap(profile => profile.revisions.filter(item => item.status === 'approved' && item.spec.formats.includes(family.format)).map(item => ({profile, revision: item})))
+  // The approved engines, custom styles and this channel's own saved settings (never another channel's copy).
+  const offered = profile => profile.origin !== 'derived' || profile.name.startsWith(`${family.name} · `);
+  const candidates = styleProfiles().filter(offered).flatMap(profile => profile.revisions.filter(item => item.status === 'approved' && item.spec.formats.includes(family.format)).map(item => ({profile, revision: item})))
     .filter(item => scope === 'family' ? item.revision.id !== current?.revisionId : item.revision.id !== familyDefault?.revisionId);
-  if (!candidates.length) return toast(`No approved style supports ${family.format}${scope === 'channel' ? ' besides the family default' : ''}. Review and approve a style in the library first.`, true);
+  if (!candidates.length) return toast(scope === 'channel' ? `No other approved engine supports ${family.format}. Approve another engine in Production panel → 03 Editing Engines, then give this language its own style.` : `No approved engine supports ${family.format}. Approve one in Production panel → 03 Editing Engines first.`, true);
   const extraLocales = family.locales.slice(1);
   form.elements.familyId.value = family.id;
   form.elements.familyRevision.value = family.revision;
@@ -423,7 +418,7 @@ function styleAssignDialog(familyId, scope) {
 function styleAssignPreview() {
   const form = document.getElementById('style-assign-form'), found = styleRevisionById(form.elements.revisionId.value);
   const preview = document.getElementById('style-assign-preview');
-  preview.innerHTML = found ? `${stylePalette(found.revision.spec)}<strong>${esc(found.revision.spec.name)} r${found.revision.revision}</strong><p class="muted">${esc(found.revision.spec.summary)}</p>${styleFacts(found.revision.spec)}` : '';
+  preview.innerHTML = found ? `${stylePalette(found.revision.spec)}<strong>${esc(found.revision.spec.name)} r${found.revision.revision}</strong><p class="muted">${esc(found.revision.spec.summary)}</p>${styleSettings(found.revision.spec)}` : '';
   applySwatches(preview);
 }
 
@@ -565,10 +560,15 @@ function fsTicked(spec, field, single, all) {
 }
 const typeLabel = value => ({cartoon: 'Cartoon (drawn)', natural: 'Natural (realistic, painted by ChatGPT)', mix: 'Mix (the AI chooses per scene)'}[value] || value);
 const fsTypes = spec => ({natural: ['natural'], mix: ['cartoon', 'natural']}[spec.drawing?.pictureType] || ['cartoon']);
+// The channel's own copy of an engine (named "<channel> · <engine style>"), when it has one.
+const fsOwn = (family, engine) => fsProfiles().find(profile => profile.name === `${family.name} · ${engine.name.split(' · ')[0]}`.slice(0, 60));
+// Owner review 2026-10-29: the window lists each engine once; the channel's current style is shown on its own above.
 function familyStyleBody(form) {
-  const family = state.families.find(item => item.id === form.elements.familyId.value), profiles = fsProfiles(), v = state.styles.vocabulary;
-  const chosen = profiles.find(profile => profile.id === form.dataset.profileId) || profiles[0], spec = fsLatest(chosen).spec, adapter = spec.renderer.adapter;
-  const engines = `<fieldset class="setup-choice"><legend>Editing engine</legend>${profiles.map(profile => { const latest = fsLatest(profile); return `<label class="radio-card"><input type="radio" name="profileId" value="${esc(profile.id)}" ${profile.id === chosen.id ? 'checked' : ''}><span><strong>${esc(profile.name)}</strong><small>${esc(latest.spec.summary || '')}</small></span></label>`; }).join('')}</fieldset>`;
+  const family = state.families.find(item => item.id === form.elements.familyId.value), profiles = styleEngines().map(item => item.engine), v = state.styles.vocabulary;
+  const chosen = profiles.find(profile => profile.id === form.dataset.profileId) || profiles[0], own = fsOwn(family, chosen), spec = fsLatest(own || chosen).spec, adapter = spec.renderer.adapter;
+  const current = styleActive(family.id), using = current && styleRevisionById(current.revisionId);
+  const now = using ? `<div class="fs-current"><span class="micro-label">THIS CHANNEL USES NOW</span><strong>${esc(using.revision.spec.name)}</strong> <small>r${using.revision.revision} · ${esc(state.styles.renderers[using.revision.spec.renderer.adapter]?.name || '')}</small></div>` : '<div class="fs-current"><span class="micro-label">THIS CHANNEL USES NOW</span><strong>No editing style yet</strong> <small>choose an engine below</small></div>';
+  const engines = `${now}<fieldset class="setup-choice"><legend>Editing engines</legend>${profiles.map(profile => { const latest = fsLatest(profile), mine = fsOwn(family, profile); return `<label class="radio-card"><input type="radio" name="profileId" value="${esc(profile.id)}" ${profile.id === chosen.id ? 'checked' : ''}><span><strong>${esc(profile.name)}${mine ? ' <span class="chip green">this channel\'s settings saved</span>' : ''}</strong><small>${esc(latest.spec.summary || '')}</small></span></label>`; }).join('')}</fieldset>${own ? `<p class="hint">The ticks below are this channel's own settings for ${esc(chosen.name)}.</p>` : ''}`;
   const groups = FS_GROUPS.filter(([, , , , adapters]) => adapters.includes(adapter)).map(([field, single, vocab, title]) => {
     const all = v[vocab] || [], ticked = fsTicked(spec, field, single, all);
     return `<div class="full"><span class="field-label">${title} <span class="hint">Tick one for one look, or two or more to mix only those in this engine, chosen per scene.</span></span>${styleChecks(`fs.${field}`, all.filter(value => value !== 'mix'), ticked, fsLabel(field))}</div>`;
@@ -586,7 +586,8 @@ function familyStyleBody(form) {
 function familyStyleDialog(familyId) {
   const form = $('#family-style-form'), current = styleActive(familyId), found = current && styleRevisionById(current.revisionId);
   form.reset(); form.querySelector('.form-error').hidden = true; form.elements.familyId.value = familyId;
-  form.dataset.profileId = found?.profile.id || fsProfiles()[0]?.id || '';
+  const engines = styleEngines().map(item => item.engine), engine = found && (found.profile.origin === 'launch' ? found.profile : engines.find(item => engineOf(item) === engineOf(found.profile)));
+  form.dataset.profileId = engine?.id || engines[0]?.id || '';
   delete form.dataset.revisionId;
   familyStyleBody(form);
   $('#family-style-dialog').showModal();
@@ -636,7 +637,7 @@ document.getElementById('family-style-form').addEventListener('submit', event =>
   const form = event.currentTarget;
   saveForm(form, async () => {
     const data = Object.fromEntries(new FormData(form)), family = state.families.find(item => item.id === data.familyId);
-    const profile = fsProfiles().find(item => item.id === form.dataset.profileId), latest = fsLatest(profile);
+    const profile = styleEngines().map(item => item.engine).find(item => item.id === form.dataset.profileId), latest = fsLatest(profile);
     const confirmations = {specReviewed: true, rightsReviewed: true, originalityReviewed: true};
     // A revision made by an earlier try of this window is reused, so a failed step never makes a second one.
     let revision = form.dataset.revisionId ? styleRevisionById(form.dataset.revisionId)?.revision || null : null;

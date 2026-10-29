@@ -306,7 +306,7 @@ test('HTTP style routes require the local token, validate input and return the l
   assert.equal(state.app.version, JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8')).version);
   const script = await fetch(`${base}/style-room.js`);
   assert.equal(script.status, 200);
-  assert.match(await script.text(), /function styleRoom\(family\)/);
+  assert.match(await script.text(), /function styleRoom\(\)[\s\S]*function channelStyleDetails\(family\)/);
   const draft = state.styles.profiles.find(item => item.key === 'documentary-montage').revisions[0];
   const send = (url, body, token = state.token) => fetch(base + url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Local-Token': token}, body: JSON.stringify(body)});
   assert.equal((await send(`/api/style-revisions/${draft.id}/approve`, review, 'wrong-token')).status, 403);

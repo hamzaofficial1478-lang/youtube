@@ -7,6 +7,14 @@ let input = '';
 process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {
   const args = process.argv.slice(2), at = name => args[args.indexOf(name) + 1];
+  // `codex login` (0.69): prints the sign-in link like Codex does, then succeeds or fails as the test asks.
+  if (args.at(-1) === 'login') {
+    fs.appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify({args, home: process.env.CODEX_HOME, apiKeyPresent: 'OPENAI_API_KEY' in process.env}) + '\n');
+    process.stdout.write('Starting local login server on http://localhost:1455.\nIf your browser did not open, navigate to this URL to authenticate:\n\nhttps://auth.openai.com/oauth/authorize?client_id=test&state=abc\n');
+    if (process.env.FAKE_CODEX_LOGIN === 'fail') { process.stderr.write('Login cancelled by the user\n'); process.exit(1); }
+    process.stdout.write('Successfully logged in\n');
+    return;
+  }
   fs.appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify({args, cwd: process.cwd(), home: process.env.CODEX_HOME, apiKeyPresent: 'OPENAI_API_KEY' in process.env || 'CODEX_API_KEY' in process.env, images: args.filter((arg, k) => args[k - 1] === '-i').map(file => fs.existsSync(file)), stdin: input}) + '\n');
   const {answer = '', usage = {input_tokens: 17000, cached_input_tokens: 16000, output_tokens: 40, reasoning_output_tokens: 10}, fail = null, image = null, tool = null} = JSON.parse(fs.readFileSync(process.env.FAKE_CODEX_REPLY, 'utf8'));
   const thread = 'thread-test-1', events = [{type: 'thread.started', thread_id: thread}, {type: 'turn.started'}];

@@ -208,3 +208,32 @@ test('a Claude model per kind of job (owner request 2026-10-22: stronger models 
   const gpt = slots.save({name: 'My ChatGPT', provider: 'chatgpt', models: {main: 'gpt-6-sol'}});
   assert.equal(ai.model(gpt, 'scenes').model, 'gpt-6-sol', 'ChatGPT jobs keep the GPT model of their connection');
 });
+
+// 0.69 (owner review 2026-10-29): choosing the ChatGPT subscription signs in through Codex's own login, then tests.
+test('the ChatGPT subscription signs in through Codex and is tested by itself; a cancelled sign-in says so', async t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const slots = new ConnectorSlots(store, protector, async () => { throw new Error('no network'); });
+  const fake = fakeCodex(t);
+  slots.ai = new Ai(slots, {claudeCode: {complete: async () => ({content: 'OK', usage: {}, model: 'x'})}, codex: new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home})});
+  const gpt = slots.save({name: 'My ChatGPT', provider: 'chatgpt'});
+  fake.reply('OK');
+  const started = slots.signIn(gpt.id, gpt.revision);
+  assert.equal(started.signIn.status, 'waiting');
+  assert.throws(() => slots.signIn(gpt.id, gpt.revision), /already open/, 'one sign-in at a time');
+  const wait = async done => { for (let k = 0; k < 200 && !done(); k++) await new Promise(resolve => setTimeout(resolve, 25)); };
+  await wait(() => slots.list()[0].signIn?.status === 'done');
+  const after = slots.list()[0];
+  assert.deepEqual([after.signIn.status, after.test.status], ['done', 'passed'], 'signed in, then tested by itself');
+  const login = fake.calls().find(call => call.args.at(-1) === 'login');
+  assert.ok(login && login.home === fake.home && !login.apiKeyPresent, 'Codex logs in into its own home, never with a stray key');
+  process.env.FAKE_CODEX_LOGIN = 'fail';
+  t.after(() => { delete process.env.FAKE_CODEX_LOGIN; });
+  slots.signIn(gpt.id, gpt.revision);
+  await wait(() => slots.list()[0].signIn?.status === 'failed');
+  assert.match(slots.list()[0].signIn.message, /did not finish \(Login cancelled by the user\)/);
+  assert.doesNotMatch(slots.list()[0].signIn.message, /auth\.openai\.com/, 'the sign-in link is never kept in a message');
+  const claude = slots.save({name: 'My Claude', provider: 'claude-code'});
+  assert.throws(() => slots.signIn(claude.id, claude.revision), /Only the ChatGPT subscription/);
+  assert.match(require('../connectors').PROVIDERS.openai.name, /OpenAI API key/);
+});

@@ -54,6 +54,14 @@ style."
   It reads the channels through NexLev and YouTube data, transcripts and the owner's notes; to learn a competitor's
   look from its frames, point a **style study** at a video file or screenshots on this PC.
 
+## Adding and removing links on the page (0.69)
+
+Owner review 2026-10-29: links are added in Step 1 itself ("Add a competitor channel": one or several @handle,
+/channel/ or /user/ links; video links are refused with the reason) and every channel has a Delete button with a
+one-line confirmation (`store.updateCompetitors`, revision-checked, `POST /api/families/:id/competitors` with `add` or
+`remove`). Picks of a removed channel are dropped. The four steps at the top jump to their cards. The channel page's
+competitor step opens this page ("Add competitors and choose what you like"), not the scan window.
+
 ## Checks before you can review
 
 A blueprint is blocked (status **Blocked by checks**) when:

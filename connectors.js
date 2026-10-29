@@ -7,7 +7,7 @@ const {MODELS, DEFAULT_MODELS, MODEL_GROUPS, AiError} = require('./ai');
 const PROVIDERS = {
   youtube: {name: 'YouTube public research', test: 'Public channel lookup', ready: true},
   'youtube-oauth': {name: 'YouTube channel access (Google OAuth client)', test: 'Checks the client ID and secret are saved; Google checks them when you connect a channel in Room 11', ready: true, oauth: true},
-  openai: {name: 'OpenAI', test: 'Read model list; no generation', ready: true},
+  openai: {name: 'OpenAI API key (paid per use; not the ChatGPT subscription)', test: 'Read model list; no generation', ready: true},
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   // Owner request 2026-10-22: Fish Audio as a second narration provider (https://fish.audio, API key from its dashboard).
   'fish-audio': {name: 'Fish Audio', test: 'Reads your API credit balance; no generation', ready: true},
@@ -16,7 +16,7 @@ const PROVIDERS = {
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
   claude: {name: 'Claude API key', test: 'Reads the chosen models\' details with the key; no generation', ready: true, ai: true},
   // Owner request 2026-10-22: the ChatGPT plan through the Codex app's own sign-in (no API key).
-  chatgpt: {name: 'ChatGPT subscription (Codex app on this PC)', test: 'Asks Codex one tiny question on your ChatGPT plan', ready: true, keyless: true, ai: true, gpt: true},
+  chatgpt: {name: 'ChatGPT subscription (sign in with ChatGPT, through the Codex app)', test: 'Asks Codex one tiny question on your ChatGPT plan', ready: true, keyless: true, ai: true, gpt: true},
   // Owner decision 2026-10-06: Claude replaced Hermes. Old Hermes slots stay visible so they can be deleted.
   hermes: {name: 'Hermes (removed; use Claude)', test: 'Hermes was removed from the program on 2026-10-06. Delete this slot.', ready: false, retired: true},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
@@ -55,7 +55,25 @@ class ConnectorSlots {
     return this.aiRoles();
   }
   row(id){const row=this.db.prepare('SELECT * FROM connectors WHERE id=?').get(id);if(!row)throw new InputError('Connector not found.',404);return row;}
-  public(row){return {...JSON.parse(row.payload),id:row.id,hasKey:!!row.secret,busy:this.busy.has(row.id)};}
+  public(row){return {...JSON.parse(row.payload),id:row.id,hasKey:!!row.secret,busy:this.busy.has(row.id),...(this.signIns?.has(row.id)?{signIn:{...this.signIns.get(row.id)}}:{})};}
+  // The ChatGPT subscription signs in through Codex's own login (owner review 2026-10-29); when it finishes, the
+  // connection test runs by itself (one tiny question on the plan). The sign-in state lives in memory only.
+  signIn(id,revision){
+    const row=this.row(id);this.checkRevision(row,revision);const slot=JSON.parse(row.payload);
+    if(slot.provider!=='chatgpt')throw new InputError('Only the ChatGPT subscription signs in from here; other connections use their key.');
+    this.signIns||=new Map();
+    if(['waiting','testing'].includes(this.signIns.get(id)?.status))throw new InputError('The ChatGPT sign-in is already open in your browser.',409);
+    const state={status:'waiting',at:new Date().toISOString(),message:'ChatGPT\'s sign-in page is opening in your browser. Sign in there with your ChatGPT account, then come back here.',link:null};
+    this.signIns.set(id,state);
+    const {Ai}=require('./ai');
+    (this.ai||new Ai(this)).codex.login({onLink:link=>{state.link=link;}}).then(async()=>{
+      state.status='testing';state.message='Signed in. Testing the connection with one tiny question...';
+      try{const tested=await this.test(id,revision);state.status=tested.connector.test?.status==='passed'?'done':'failed';state.message=tested.connector.test?.status==='passed'?'Signed in with ChatGPT and tested.':`Signed in, but the test did not pass: ${tested.connector.test?.message||'no answer'}`;}
+      catch(error){state.status='failed';state.message=`Signed in, but the test could not run: ${error.message}`;}
+      state.link=null;
+    },error=>{state.status='failed';state.message=error.message;state.link=null;});
+    return {connector:this.public(this.row(id)),signIn:{...state}};
+  }
   list(){return this.db.prepare('SELECT * FROM connectors ORDER BY rowid').all().map(row=>this.public(row));}
   idle(id){if(this.busy.has(id))throw new InputError('This connector is being tested. Wait before changing or deleting it.',409);}
   checkRevision(row,revision){this.store.version(JSON.parse(row.payload),revision);}
