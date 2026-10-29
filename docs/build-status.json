@@ -1,5 +1,5 @@
 {
-  "version": "0.68.0",
+  "version": "0.69.0",
   "updated": "2026-10-29",
   "nextAction": "Try the new whiteboard drawing of painted pictures and the Atelier anime finish on a real video (pick Anime in the channel window for an Atelier channel). Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
@@ -655,5 +655,5 @@
     "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval.",
     "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image."
   ],
-  "milestone": "0.68.0: the Atelier anime finish and the colour-dip cut (the html-anime method)"
+  "milestone": "0.69.0: Editing Engines (engines only), channel styles on the channel page, competitors added and deleted on their page, the ChatGPT sign-in"
 }

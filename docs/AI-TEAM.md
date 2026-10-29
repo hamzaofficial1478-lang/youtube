@@ -27,6 +27,15 @@ The connection is a connector slot of provider `chatgpt` (keyless, like `claude-
 (any slug Codex lists, e.g. `gpt-6.1-sol`) or leaves it empty for Codex's own default; its test asks one tiny question.
 The program never reads the Codex sign-in file.
 
+**Signing in (0.69, owner review 2026-10-29).** Saving a ChatGPT subscription connection starts Codex's own sign-in
+(`CodexCli.login`: `codex login` with its own home and no stray key), which opens ChatGPT's sign-in page in the browser;
+the card shows the state ("waiting", "testing", done or failed with the reason) and the page's link in case the
+browser did not open (kept in memory only, never in a message). When the sign-in finishes, the connection test runs by
+itself (one tiny question). "Sign in with ChatGPT" / "Sign in again" on the card starts it again (one at a time, 10
+minutes at most). The connector list says "OpenAI API key (paid per use; not the ChatGPT subscription)" for the API
+and "ChatGPT subscription (sign in with ChatGPT, through the Codex app)" for the plan. The Claude subscription still
+signs in inside Claude Code itself.
+
 ## 2. The team and its roles
 
 `Ai.team()` reads the tested Claude connection (API key or subscription) and the tested ChatGPT connection, and the

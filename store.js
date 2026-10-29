@@ -285,6 +285,22 @@ class Store {
       this.event(`${old?'Updated':'Created'} channel family: ${family.name}`);return family;
     });
   }
+  // Owner request 2026-10-29: competitor links are added and removed on the Competitors page itself, without the
+  // whole family form; only the list changes (same checks as the form, revision-checked).
+  updateCompetitors(id, input) {
+    object(input);return this.transaction(()=>{
+      const f=this.family(id);this.version(f,input.revision);
+      const keyOf=item=>`${item.kind}:${item.value.toLowerCase()}`;
+      let next=f.competitors.map(item=>item.url);
+      if(input.add!==undefined)next=[...next,...String(input.add).split(/[\s,]+/).map(x=>x.trim()).filter(Boolean)];
+      if(input.remove!==undefined){requireValue(f.competitors.some(item=>keyOf(item)===String(input.remove).toLowerCase()),'That competitor is not in this family\'s list.',404);next=f.competitors.filter(item=>keyOf(item)!==String(input.remove).toLowerCase()).map(item=>item.url);}
+      requireValue(input.add!==undefined||input.remove!==undefined,'Add a competitor link or choose one to remove.');
+      const family={...f,competitors:competitorList(next),revision:f.revision+1,updatedAt:now()};
+      requireValue(JSON.stringify(family.competitors)!==JSON.stringify(f.competitors),'Paste a YouTube channel link to add.');
+      this.db.prepare('UPDATE families SET payload=? WHERE id=?').run(JSON.stringify(family),id);
+      this.event(`${input.remove!==undefined?'Removed a competitor from':'Added competitors to'} ${family.name}`);return family;
+    });
+  }
   // Owner request 2026-10-22: a family can be deleted for good after its name is typed, but only while nothing was
   // made for it yet (every table that names a family is counted). A family with scripts, voices, plans or videos is
   // archived instead, so finished work and its history are never destroyed by one click.

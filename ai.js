@@ -202,6 +202,29 @@ class CodexCli {
   // command/prefix/home: tests run a fake script through node with its own Codex home.
   constructor({command, prefix = [], home = null} = {}) { this.override = command; this.prefix = prefix; this.home = home; }
   get command() { return this.override !== undefined ? this.override : findCodex(); }
+  // Owner review 2026-10-29: choosing the ChatGPT subscription signs in. Codex's own `codex login` opens ChatGPT's
+  // sign-in page in the browser and keeps the sign-in inside Codex (the program never reads it). The page's link is
+  // handed to `onLink` for when the browser does not open by itself. One attempt, 10 minutes at most.
+  login({onLink = () => {}, timeoutMs = 600000} = {}) {
+    if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app first, then sign in again.', 503));
+    const env = {...process.env, CODEX_HOME: codexHome(this.home)};
+    delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY;
+    return new Promise((resolve, reject) => {
+      let said = '', child;
+      try { child = spawn(this.command, [...this.prefix, 'login'], {env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']}); }
+      catch { return reject(new AiError('Codex could not start its sign-in.', 503)); }
+      const timer = setTimeout(() => { child.kill(); reject(new AiError('The ChatGPT sign-in was not finished within 10 minutes. Start it again.', 408)); }, timeoutMs);
+      const read = chunk => { said = (said + chunk).slice(-8000); const link = said.match(/https:\/\/auth\.openai\.com\/\S+/); if (link) onLink(link[0]); };
+      child.stdout.on('data', read); child.stderr.on('data', read);
+      child.on('error', () => { clearTimeout(timer); reject(new AiError('Codex could not start its sign-in.', 503)); });
+      child.on('close', code => {
+        clearTimeout(timer);
+        if (code === 0) return resolve({message: 'Signed in with ChatGPT.'});
+        const last = said.replace(/https:\/\/\S+/g, '').trim().split('\n').filter(Boolean).pop() || 'it was closed';
+        reject(new AiError(`The ChatGPT sign-in did not finish (${last.slice(0, 160)}).`, 401));
+      });
+    });
+  }
   // guard: a text answer is discarded when Codex used a tool; a picture request leaves Codex its image tool.
   run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true}) {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app and sign in with your ChatGPT account.', 503));

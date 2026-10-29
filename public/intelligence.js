@@ -3,7 +3,7 @@
 // Loaded before app.js; app.js helpers (state, esc, badge, action, api, refresh, toast,
 // saveForm, date, localeName, heading, empty, familyDialog) are only used inside functions.
 
-let competitorFamily = '', selectedAnalysis = '', selectedIdea = '', pendingPicks = {};
+let competitorFamily = '', selectedAnalysis = '', selectedIdea = '', pendingPicks = {}, removingCompetitor = '';
 
 const INTEL_STATUS = {
   queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Completed', 'green'], partial: ['Partial data', 'orange'], failed: ['Failed', 'gray'],
@@ -30,10 +30,13 @@ function intelBusy() {
 function competitorLabel(item) { return item.kind === 'username' ? `/user/${item.value}` : item.value; }
 const competitorKeyOf = item => `${item.kind}:${item.value.toLowerCase()}`;
 // Owner picks per competitor link (what to learn from it). Unsaved changes live here until "Save blend".
-function picksFor(familyId) { return pendingPicks[familyId] || state.intelligence.competitors.families[familyId].picks.picks; }
+function picksFor(familyId) {
+  const listed = new Set((state.families.find(item => item.id === familyId)?.competitors || []).map(competitorKeyOf)), picks = pendingPicks[familyId] || state.intelligence.competitors.families[familyId].picks.picks;
+  return Object.fromEntries(Object.entries(picks).filter(([key]) => listed.has(key)));
+}
 function picksChanged(familyId) {
   if (!pendingPicks[familyId]) return 0;
-  const saved = state.intelligence.competitors.families[familyId].picks.picks, next = pendingPicks[familyId];
+  const saved = state.intelligence.competitors.families[familyId].picks.picks, next = picksFor(familyId);
   return [...new Set([...Object.keys(saved), ...Object.keys(next)])].filter(key => JSON.stringify(saved[key] || []) !== JSON.stringify(next[key] || [])).length;
 }
 // The five blueprint areas, each named by the subjects that feed it (0.65: several subjects share one area).
@@ -115,6 +118,7 @@ function competitorsView() {
       <div class="competitor-notes">${note ? `<small>Observations r${note.revision} · ${esc(note.createdBy)}</small><p>${esc([note.editingStyle, note.voice, note.visuals].filter(Boolean).join(' · ').slice(0, 160))}</p>` : '<small class="muted">No observations yet</small>'}${action(note ? 'Update observations' : 'Add observations', 'intel-note', key, 'text-button')}</div>
       ${keepPicker(family, key)}
       ${channel?.errors?.length ? `<p class="inline-warning">${esc(channel.errors.join(' · '))}</p>` : ''}
+      <div class="competitor-remove">${removingCompetitor === key ? `<span class="hint">Remove ${esc(name)} from ${esc(family.name)}? Its picks go with it.</span>${action('Remove', 'intel-remove', key, 'text-button danger')}${action('Cancel', 'intel-remove-cancel', key, 'text-button')}` : action('Delete', 'intel-remove-ask', key, 'text-button danger')}</div>
     </article>`;
   }).join('');
   const scanRows = data.scans.map(scan => `<div class="history-row ${scan.status === 'completed' ? 'active' : ''}"><span class="job-dot ${['queued', 'running'].includes(scan.status) ? 'queued' : scan.status === 'completed' ? 'completed' : ''}"></span><div><strong>${intelStatus(scan.status)} ${esc(date(scan.createdAt))}</strong><small>${scan.result ? `${scan.result.usage.nexlev} NexLev request${scan.result.usage.nexlev === 1 ? '' : 's'} · ${scan.result.usage.youtube} YouTube unit${scan.result.usage.youtube === 1 ? '' : 's'}` : `Planned: ${scan.scope.plannedUnits.nexlev} NexLev · ${scan.scope.plannedUnits.youtube} YouTube`} · attempt ${scan.attempts}/3 · by ${esc(scan.createdBy)}${scan.youtubePurgedAt ? ' · YouTube data deleted after 30 days' : scan.youtubeExpiresAt ? ` · YouTube data kept until ${esc(date(scan.youtubeExpiresAt))}` : ''}${scan.error ? ` · ${esc(scan.error)}` : ''}</small></div>${['failed', 'interrupted', 'blocked_quota', 'stale'].includes(scan.status) && scan.attempts < 3 ? action('Retry deliberately', 'intel-scan-retry', scan.id, 'text-button') : ''}</div>`).join('') || '<p class="muted">No scans yet. A scan only runs when you start it.</p>';
@@ -125,12 +129,13 @@ function competitorsView() {
     + `<div class="production-toolbar"><div><label for="competitor-family">Channel family</label><select id="competitor-family">${families.map(item => `<option value="${item.id}" ${item.id === family.id ? 'selected' : ''}>${esc(item.name)}</option>`).join('')}</select></div><div class="production-context"><span>${family.competitors.length} competitor${family.competitors.length === 1 ? '' : 's'}</span><span>${esc(localeName(family.primaryLocale))}</span><span>${esc(family.format)}</span>${data.guidanceActive ? '<span class="good">Script guidance active</span>' : ''}</div></div>`
     + intelSteps(family, data, latestScan)
     + `<div class="intel-grid"><div>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels and what to learn</h2></div><div class="row-end">${changes ? action('Discard', 'intel-picks-discard', family.id, 'text-button') + action(`Save blend (${changes} change${changes === 1 ? '' : 's'})`, 'intel-picks-save', family.id, 'primary') : ''}${action('Edit family list', 'edit-family', family.id, 'secondary')}</div></div>
+      <section class="production-card" id="intel-step-1"><div class="production-card-head"><div><span class="micro-label">STEP 1 · YOUR COMPETITORS</span><h2>Competitor channels and what to learn</h2></div><div class="row-end">${changes ? action('Discard', 'intel-picks-discard', family.id, 'text-button') + action(`Save blend (${changes} change${changes === 1 ? '' : 's'})`, 'intel-picks-save', family.id, 'primary') : ''}${action('Channel details', 'edit-family', family.id, 'text-button')}</div></div>
+        <form class="competitor-add" data-competitor-add="${esc(family.id)}"><label>Add a competitor channel <span class="hint">Paste a YouTube channel link (@handle, /channel/… or /user/…), or several separated by spaces. ${family.competitors.length} of 10 listed.</span><span class="competitor-add-row"><input name="link" required maxlength="900" placeholder="https://www.youtube.com/@channel" autocomplete="off"${family.competitors.length >= 10 ? ' disabled' : ''}><button type="submit" class="button primary"${family.competitors.length >= 10 ? ' disabled' : ''}>Add</button></span></label><p class="form-error" hidden></p></form>
         ${family.competitors.length < 3 ? `<p class="inline-warning">Add ${family.competitors.length ? `${3 - family.competitors.length} more` : '3-10'} competitor channel${family.competitors.length === 2 ? '' : 's'} for a reliable comparison.</p>` : ''}
         ${rows || '<p class="muted">No competitors listed for this family yet.</p>'}
         ${family.competitors.length ? `<h3 class="intel-subhead">Your blend ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : ''}</h3>${blendRecipe(family, names)}<p class="hint">Open "Learn from this channel" on each link and tick what you like; several per link are fine. Each subject learns only from the channels you ticked for it, keeps at most 30% reference, and the rest stays 100% your own. Saving new picks makes an approved blueprint outdated until you analyse again. Your own observations are the strongest evidence: no API watches the videos for you.</p>` : ''}</section>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Read competitors', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
-      <section class="production-card"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
+      <section class="production-card" id="intel-step-2"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Read competitors', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
+      <section class="production-card" id="intel-step-3"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Claude for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
         ${analysis ? blueprintView(analysis, family, data) : ''}</section>
       ${studiesCard(family)}
@@ -141,7 +146,8 @@ function intelSteps(family, data, latestScan) {
   const n = family.competitors.length, current = data.current;
   const steps = [['Add 3-10 channels', n >= 3, `${n} listed`], ['Read them', Boolean(latestScan), latestScan ? `read ${date(latestScan.createdAt)}` : 'not yet'], ['Claude\'s blueprint', data.analyses.some(item => item.status === 'completed'), data.analyses.length ? `${data.analyses.length} made` : 'not yet'], ['You approve', Boolean(current && !current.outdated), current ? (current.outdated ? 'outdated' : 'approved') : 'not yet']];
   const next = steps.findIndex(([, done]) => !done);
-  return `<ol class="intel-steps">${steps.map(([label, done, note], k) => `<li class="${done ? 'done' : k === next ? 'next' : ''}"><span>${done ? '✓' : k + 1}</span><div><strong>${label}</strong><small>${esc(note)}</small></div></li>`).join('')}</ol>`;
+  // Each step jumps to its card (the approval is in the blueprint card). Owner review 2026-10-29: steps must be clickable.
+  return `<ol class="intel-steps">${steps.map(([label, done, note], k) => `<li class="${done ? 'done' : k === next ? 'next' : ''}"><button type="button" data-intel-step="intel-step-${Math.min(3, k + 1)}"><span>${done ? '✓' : k + 1}</span><div><strong>${label}</strong><small>${esc(note)}</small></div></button></li>`).join('')}</ol>`;
 }
 
 // R05c: the program learns a look from a reference (a video file or screenshots on this PC).
@@ -218,7 +224,7 @@ function guidanceCard(family, data) {
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">WHAT IT CHANGES</span><h2>Approved guidance</h2></div>${badge(current ? (current.outdated ? 'Outdated' : 'Active') : 'None yet', current && !current.outdated ? 'green' : 'gray')}</div>
     <div class="handoff-record"><span>${data.guidanceActive ? '✓' : '○'}</span><div><strong>Claude script guidance</strong><p>${data.guidanceActive ? 'New Claude script candidates for this family include the approved hook, structure, pacing and avoid list as technique guidance.' : 'Starts after you approve a blueprint for the current competitor list.'}</p></div></div>
     <div class="handoff-record"><span>${data.voiceDirection ? '✓' : '○'}</span><div><strong>Narrator direction</strong><p>${data.voiceDirection ? `${esc(data.voiceDirection.emotion)} · pace ${data.voiceDirection.pace} · energy ${data.voiceDirection.energy}. Applied only when you save a narrator profile.` : 'Available after approval.'}</p></div></div>
-    <div class="handoff-record"><span>○</span><div><strong>Editing style</strong><p>"Create style draft" makes a new draft in the Style Library. You still review, approve and assign it.</p></div></div>
+    <div class="handoff-record"><span>○</span><div><strong>Editing style</strong><p>"Create style draft" makes a new draft in Editing Engines. You still review, approve and assign it.</p></div></div>
     <div class="handoff-record"><span>${data.packagingBrief ? '✓' : '○'}</span><div><strong>Packaging brief</strong><p>${data.packagingBrief ? `${esc(data.packagingBrief.thumbnailNotes.slice(0, 2).join(' · '))}. Saved for the Packaging Room.` : 'Thumbnail and title lessons, saved for the Packaging Room after approval.'}</p></div></div>
     <div class="handoff-record"><span>${current && !current.outdated ? '✓' : '○'}</span><div><strong>Scene planner guidance</strong><p>${current && !current.outdated ? 'Claude scene plans use the approved visual and editing techniques.' : 'Starts after approval.'}</p></div></div>
     ${current?.outdated ? `<p class="inline-warning">${esc(current.outdatedReason || 'The competitor list changed after this approval.')} Run a new scan and analysis.</p>` : ''}</section>`;
@@ -421,6 +427,12 @@ function intelAction(command, id, button) {
   const family = state.families.find(item => item.id === id);
   const familyData = family && state.intelligence.competitors.families[family.id];
   if (command === 'intel-picks-discard') { delete pendingPicks[id]; render(); return; }
+  if (command === 'intel-remove-ask') { removingCompetitor = id; render(); return; }
+  if (command === 'intel-remove-cancel') { removingCompetitor = ''; render(); return; }
+  if (command === 'intel-remove') {
+    const owner = state.families.find(item => item.id === competitorFamily);
+    return api(`/api/families/${owner.id}/competitors`, {revision: owner.revision, remove: id}).then(async () => { removingCompetitor = ''; await refresh(); toast('Competitor removed.'); }).catch(error => toast(error.message, true));
+  }
   if (command === 'intel-picks-save') {
     const saved = state.intelligence.competitors.families[id].picks;
     return intelDialog('picks', 'Save your blend picks', 'WHAT TO LEARN FROM EACH CHANNEL', `<p class="hint">Saves revision ${saved.revision + 1} of the picks for ${esc(family.name)}. The next analysis learns each area only from the channels you picked for it. An approved blueprint made with the old picks stops steering your rooms until you approve a new one.</p><div class="form-grid">${nameField()}</div>`, 'Save blend', {familyId: id, expectedRevision: saved.revision});
@@ -480,8 +492,8 @@ function intelAction(command, id, button) {
       <label class="checkbox-label"><input type="checkbox" name="balance">The 30% reference / 70% our own balance is acceptable.</label>
       <label class="checkbox-label"><input type="checkbox" name="reviewed">I read the whole study, including the planning brief.</label>
       <div class="form-grid">${nameField('Reviewer name', 'person')}<label>Reason <span class="hint">needed to reject</span><input name="reason" maxlength="500"></label></div>`, 'Record decision', {id});
-  if (command === 'intel-study-draft') return intelDialog('study-draft', 'Create a style draft from the study', 'STYLE LIBRARY', '<p class="hint">Starts from the launch style the study maps onto and applies its palette, shot lengths, transitions, look and planning brief (changes that do not pass the Style Library checks are skipped and listed). It is saved as a new draft that you still review, approve and assign in the Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
-  if (command === 'intel-style-draft') return intelDialog('style-draft', 'Create a style draft', 'STYLE LIBRARY', '<p class="hint">Copies the recommended style\'s latest approved revision, applies the proposed adjustments that pass validation, and saves it as a new draft. You still approve and assign it in Production panel → Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
+  if (command === 'intel-study-draft') return intelDialog('study-draft', 'Create a style draft from the study', 'EDITING ENGINES', '<p class="hint">Starts from the launch style the study maps onto and applies its palette, shot lengths, transitions, look and planning brief (changes that do not pass the Style Library checks are skipped and listed). It is saved as a new draft that you still review, approve and assign in the Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
+  if (command === 'intel-style-draft') return intelDialog('style-draft', 'Create a style draft', 'EDITING ENGINES', '<p class="hint">Copies the recommended style\'s latest approved revision, applies the proposed adjustments that pass validation, and saves it as a new draft. You still approve and assign it in Production panel → Style Library.</p><div class="form-grid">' + nameField() + '</div>', 'Create draft', {id});
   if (command === 'intel-voice') {
     const direction = familyData?.voiceDirection;
     if (!direction) return toast('Approve a blueprint first.', true);
@@ -687,7 +699,17 @@ document.addEventListener('toggle', event => {
   const key = event.target.dataset?.keepOpen;
   if (key) { if (event.target.open) keepOpen.add(key); else keepOpen.delete(key); }
 }, true);
+document.addEventListener('submit', event => {
+  const form = event.target.closest('[data-competitor-add]');
+  if (!form) return;
+  event.preventDefault();
+  const owner = state.families.find(item => item.id === form.dataset.competitorAdd), error = form.querySelector('.form-error');
+  api(`/api/families/${owner.id}/competitors`, {revision: owner.revision, add: form.elements.link.value}).then(async () => { await refresh(); toast('Competitor added. Tick what you like about it below.'); })
+    .catch(failure => { error.textContent = failure.message; error.hidden = false; });
+});
 document.addEventListener('click', event => {
+  const step = event.target.closest('[data-intel-step]');
+  if (step) { document.getElementById(step.dataset.intelStep)?.scrollIntoView({behavior: 'smooth', block: 'start'}); return; }
   const tab = event.target.closest('[data-select-analysis]');
   if (tab) { selectedAnalysis = tab.dataset.selectAnalysis; render(); return; }
   const chip = event.target.closest('[data-keep]');

@@ -1,4 +1,15 @@
-# Style Library & Assignment Room (Room 03)
+# Editing Engines (Room 03, formerly Style Library & Assignment)
+
+**Since 0.69 (owner review 2026-10-29)** Room 03 is called Editing Engines and shows the engines only: one card per
+engine (its library style), Approved / Not approved, the chosen engine's settings one per row, its description and
+abilities on hover. Channel copies and custom styles are listed folded inside their engine ("Versions of this engine");
+they are no longer separate cards. Nothing about channels is in the room any more: the channel's style, the style per
+language, language overrides ("Give a language its own style"), the fallback, removing the style and the history
+(every decision, and the work a change made out of date) are on the channel's own page (`channelStyleDetails`). The
+channel's style window lists each engine once and shows the channel's current style apart; choosing the channel's
+engine opens its own saved ticks. The override and assign windows offer approved engines, custom styles and the
+channel's own versions, never another channel's copy. The sections below describe the underlying rules, which did not
+change.
 
 Version 0.7 makes Room 03 of the Production Panel live. It owns the editing-style library, the human review of every style revision, and the explicit decisions that tie a style to a channel family and its channel editions. It records decisions only: no renderer, visual provider, asset library or publishing permission becomes active here.
 

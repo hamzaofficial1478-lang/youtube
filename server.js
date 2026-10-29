@@ -161,12 +161,13 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:262144);let result;
       if(pathname==='/api/connectors'&&req.method==='POST')return json(res,200,connectors.save(body));
       if(pathname==='/api/ai-roles'&&req.method==='POST')return json(res,200,connectors.saveAiRoles(body));
-      const connectorRoute=pathname.match(/^\/api\/connectors\/([a-f0-9-]+)(?:\/(test|delete))?$/);
+      const connectorRoute=pathname.match(/^\/api\/connectors\/([a-f0-9-]+)(?:\/(test|delete|sign-in))?$/);
       if(connectorRoute){
         const [,id,action]=connectorRoute;
         if(!action&&req.method==='PUT')result=connectors.save(body,id);
         else if(action==='test'&&req.method==='POST')result=await connectors.test(id,body.revision,body.channel);
         else if(action==='delete'&&req.method==='POST')result=connectors.remove(id,body.revision);
+        else if(action==='sign-in'&&req.method==='POST')result=connectors.signIn(id,body.revision);
         else throw new InputError('Action not found.',404);
         return json(res,200,result);
       }
@@ -351,12 +352,13 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(researchBrief&&req.method==='POST')return json(res,200,researchReasoning.queue(researchBrief[1],body));
         const retry=pathname.match(/^\/api\/script-jobs\/([a-f0-9-]+)\/retry$/);
         if(retry&&req.method==='POST')return json(res,200,reasoning.retry(retry[1],body));
-        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|delete|review|storyboard|ai-script))?$/);
+        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|delete|competitors|review|storyboard|ai-script))?$/);
         if(!match)throw new InputError('Action not found.',404);
         const [,kind,id,action]=match;
         if(kind==='families' && !action && req.method==='PUT')result=store.saveFamily(body,id);
         else if(kind==='families' && action==='archive' && req.method==='POST')result=store.archiveFamily(id,body);
         else if(kind==='families' && action==='delete' && req.method==='POST')result=store.deleteFamily(id,body);
+        else if(kind==='families' && action==='competitors' && req.method==='POST')result=store.updateCompetitors(id,body);
         else if(kind==='content' && !action && req.method==='PUT')result=store.saveContent(body,id);
         else if(kind==='content' && action==='review' && req.method==='POST')result=store.reviewContent(id,body);
         else if(kind==='content' && action==='storyboard' && req.method==='POST')result=store.queueStoryboard(id,body);
