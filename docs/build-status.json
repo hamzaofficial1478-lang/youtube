@@ -1,7 +1,7 @@
 {
-  "version": "0.72.0",
+  "version": "0.73.0",
   "updated": "2026-10-30",
-  "nextAction": "Install VoiceStudio on the laptop, pick a light engine (KittenTTS, Supertonic-3 or PocketTTS without an NVIDIA card), connect it in Connections and narrate one test video end to end. Approve the claude-youtube pack and decide the call-to-action rule. Then move to paid voices (ElevenLabs Creator) for real videos.",
+  "nextAction": "Pull 0.73.0 on the laptop, test the Claude connection again (it asks every model it is used with; choose another model if the plan lacks one), retry the interrupted script and blueprint jobs, then write or attach one script and scan one trending topic inside a niche with your channel's size. Then VoiceStudio test narration end to end, and paid voices (ElevenLabs Creator) for real videos.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -162,6 +162,14 @@
       "license": "AGPL-3.0 (app); model weights under their own terms (OmniVoice CC-BY-NC)",
       "status": "Read only; used as a separate local program through its API",
       "usage": "The owner installs VoiceStudio; the Control Room calls its OpenAI-style local API at 127.0.0.1:3900 for free test narrations. No code copied or bundled. Its narrations are test-only and refused by Room 11."
+    },
+    {
+      "name": "pdf.js (pdfjs-dist)",
+      "url": "https://github.com/mozilla/pdf.js",
+      "revision": "6.4.299 (npm, exact)",
+      "license": "Apache-2.0",
+      "status": "npm dependency, unmodified",
+      "usage": "documents.js reads the text of a script PDF the owner attaches in Content Studio. Word .docx is read and the planning file written by our own zip/XML code."
     }
   ],
   "phases": [
@@ -264,7 +272,7 @@
           "id": "R07",
           "title": "Trending topics",
           "status": "testing",
-          "evidence": "0.49.0 (2026-10-21): Trending topics: 1-30 keywords searched on YouTube for the most-viewed videos of the last 1-30 days (the owner's mindstory.py method, videos and channels matched by ID), units reserved first, the first refusal stops the scan, data purged after 30 days, filters (keyword, small channels under 3,000, length); worked-out numbers and Claude topic ideas (title under 60 characters, hook, promise, why click, what we add, cited trend videos, copy guard) only with the recorded YouTube derived-use approval; \"Start a draft\" prefills the draft form. Tested in tests/trends.test.js (stand-in YouTube and Claude) and in the browser on a throwaway workspace. npm test (326 tests, 326 passing after updating one state-keys assertion) passed.",
+          "evidence": "0.49.0 (2026-10-21): Trending topics: 1-30 keywords searched on YouTube for the most-viewed videos of the last 1-30 days (the owner's mindstory.py method, videos and channels matched by ID), units reserved first, the first refusal stops the scan, data purged after 30 days, filters (keyword, small channels under 3,000, length); worked-out numbers and Claude topic ideas (title under 60 characters, hook, promise, why click, what we add, cited trend videos, copy guard) only with the recorded YouTube derived-use approval; \"Start a draft\" prefills the draft form. Tested in tests/trends.test.js (stand-in YouTube and Claude) and in the browser on a throwaway workspace. npm test (326 tests, 326 passing after updating one state-keys assertion) passed. 0.73.0 (2026-10-30): scans stay inside a niche (a channel's or another typed in, with niche words; title or description excerpt must name one) and optionally the owner's channel size (channels that size or smaller, 50 results per keyword for the same 100 units); left-out videos are shown on request and never sent to Claude; Claude's topics must stay inside the niche. tests/trends.test.js (new niche/size test) and Playwright (dialog, kept/left-out card). Tests: npm test 396, 393 passed, 0 failed, 3 skipped (Windows only); Playwright 25 checks on a scratch workspace.",
           "remaining": "A live scan with the owner's YouTube key (spends quota; needs the go-ahead). Topic ideas stay locked until the owner records YouTube's approval for derived use."
         },
         {
@@ -328,7 +336,7 @@
           "id": "S01",
           "title": "Skills Engine: reviewed operating knowledge used at runtime",
           "status": "done",
-          "evidence": "313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision. 0.71: 46 claude-youtube drafts (499 builtin), pack updates arrive as drafts beside the approved revision, skills in competitors.blueprint, audio.mix and niche.discover, steps sent for skills without do rules."
+          "evidence": "313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision. 0.71: 46 claude-youtube drafts (499 builtin), pack updates arrive as drafts beside the approved revision, skills in competitors.blueprint, audio.mix and niche.discover, steps sent for skills without do rules. 0.73.0 (2026-10-30): built-in skills approved with the program on every PC (approveBuiltins; retired and owner revisions untouched), own skills private and approved by name; per-job brief budgets and job-first order (script job 3 -> 21 skills with everything approved); 'Skills in every request' on the Skills page. Tests: npm test 396, 393 passed, 0 failed, 3 skipped (Windows only); Playwright 25 checks on a scratch workspace."
         },
         {
           "id": "P06",
@@ -521,7 +529,7 @@
           "id": "S02",
           "title": "YouTube craft engine: hooks, packaging, chapters, Shorts, outliers, retention and writing voice",
           "status": "done",
-          "evidence": "Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks."
+          "evidence": "Version 0.14 (2026-10-06): craft.js ports youtube-agent-skill's hook scorer (five properties, 0.6 mean + 0.4 weakest, 21 formulas), title/thumbnail pairing linter, chapter drafting (pauses, vocabulary shift, scene and paragraph breaks; 0:00, 3+, 10 s rules), outlier multiples over the channel median, a Shorts finder (20-55 s, complete opening, a turn, ends on a line) and a retention-CSV reader ending in one fix. Scores match the Python originals exactly on the same inputs. Families gain a writing voice: Hermes writes in it and never-used words block a candidate. Advice shows on drafts, chapters and Shorts in the Editing Room, multiples and title formulas in competitor scans. 31 new draft skills (youtube-agent-skill 14, HyperFrames 17). 9 craft tests plus room and competitor checks. 0.73.0 (2026-10-30): hook scores explain each number (why, words) and the panel says it reads only the title and hook line. Tests: npm test 396, 393 passed, 0 failed, 3 skipped (Windows only); Playwright 25 checks on a scratch workspace."
         },
         {
           "id": "S03",
@@ -534,7 +542,7 @@
           "id": "S04",
           "title": "AI team: ChatGPT subscription beside Claude (Codex app), scripts written together, painted pictures",
           "status": "testing",
-          "evidence": "0.53.0 (2026-10-22): live on the owner's PC: Codex found in the Store package, signed in with ChatGPT, one text answer and one painted picture (1672x941, about 11k uncached tokens); a drawn shot rendered on the painted backdrop. Tests: tests/ai-team.test.js with a fake Codex (isolation, usage, errors, image copy, team roles, script duo with partner and revision failures, paint prompts) and the painted-plan test in tests/scene.test.js, which found two bugs (a plan with pictures crashing at the end, a backdrop and a picture of one shot sharing a reservation). Browser check of the setup dialog and the AI team card on a scratch workspace; the card's save button was broken and fixed.",
+          "evidence": "0.53.0 (2026-10-22): live on the owner's PC: Codex found in the Store package, signed in with ChatGPT, one text answer and one painted picture (1672x941, about 11k uncached tokens); a drawn shot rendered on the painted backdrop. Tests: tests/ai-team.test.js with a fake Codex (isolation, usage, errors, image copy, team roles, script duo with partner and revision failures, paint prompts) and the painted-plan test in tests/scene.test.js, which found two bugs (a plan with pictures crashing at the end, a backdrop and a picture of one shot sharing a reservation). Browser check of the setup dialog and the AI team card on a scratch workspace; the card's save button was broken and fixed. 0.73.0 (2026-10-30): Claude Code refusals show Claude Code's words and are nothing-used failures (no unknown usage, no paid attempt); the connection test asks every model in use and a sign-in refusal fails it; Content Studio 'Ask AI to write' uses the team (together or the one connected) and 'Add my script' reads TXT, PDF and DOCX. Tests: npm test 396, 393 passed, 0 failed, 3 skipped (Windows only); Playwright 25 checks on a scratch workspace.",
           "remaining": "A live script written together and a live painted plan on the owner's real family; the owner's review of painted versus traced pictures."
         },
         {
@@ -690,7 +698,8 @@
     "2026-10-29: A channel family that has work can be deleted with all of it after a warning that lists the work, the typed name and an explicit tick; archiving stays the way to keep it.",
     "2026-10-30: Deleting a channel asks whether to keep its style and settings or delete everything. Kept: its own style stays in Editing Engines and its settings and work records are saved to a file in the data folder, whose path the page shows. Delete everything: its own style copy and its files go too.",
     "2026-10-30: Read claude-youtube, yt-dlp, youtube-transcript-api and claude-video. claude-youtube's knowledge became 46 draft skills and 7 skill updates. yt-dlp and youtube-transcript-api are not built in: downloading and caption scraping conflict with YouTube's terms and the API audit, so videos are never downloaded from links; the compliant way to let an AI watch a public video is Gemini's YouTube URL input, which waits for the owner's decision and key.",
-    "2026-10-30: The owner declined the Gemini watcher (extra cost), so competitor videos are still learned from NexLev data, owner notes and style studies of local files. The owner chose free VoiceStudio voices to test the program before paid APIs; because their model weights are not cleared for commercial use, VoiceStudio narrations are test-only and are never uploaded."
+    "2026-10-30: The owner declined the Gemini watcher (extra cost), so competitor videos are still learned from NexLev data, owner notes and style studies of local files. The owner chose free VoiceStudio voices to test the program before paid APIs; because their model weights are not cleared for commercial use, VoiceStudio narrations are test-only and are never uploaded.",
+    "2026-10-30: The owner approved every skill pack and decided that built-in skills come approved with the program on every PC; the owner's own skills stay on that PC (database and backups) and still need a named approval. Scripts are written by the AI team (both together when both are connected, else the one connected) or attached by the owner (text, PDF, Word). Trending topics stay inside a chosen niche and, when given, the owner's channel size."
   ],
-  "milestone": "0.72.0: free VoiceStudio test voices on this PC (keyless local connection, test-only narrator profiles, uploads refused)"
+  "milestone": "0.73.0: fixes from the owner's tests (Claude Code refusals named and free, scripts by the AI team or attached as PDF/Word/text, built-in skills approved with the program, trending topics inside the niche and channel size, planning file in Word)"
 }
