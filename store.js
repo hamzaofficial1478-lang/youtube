@@ -308,17 +308,24 @@ class Store {
     const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(row=>row.name);
     return tables.filter(name=>this.db.prepare(`PRAGMA table_info("${name}")`).all().some(column=>column.name==='family_id')).map(name=>({table:name,count:this.db.prepare(`SELECT COUNT(*) AS n FROM "${name}" WHERE family_id=?`).get(id).n})).filter(item=>item.count);
   }
-  // Owner request 2026-10-29: a family with work is deleted too, after a warning that lists the work and the owner's
-  // tick (deleteWork); otherwise it can only be archived.
+  // Owner requests 2026-10-29/30: a family is deleted after its typed name and the owner's choice. keep: true saves
+  // its settings, work records and styles to a file in the data folder (its own style copies stay in Editing Engines,
+  // its files stay where they are); keep: false deletes its own style copies and its files too.
   deleteFamily(id, input) {
-    object(input);return this.transaction(()=>{
+    object(input);let folders=[];
+    const result=this.transaction(()=>{
       const f=this.family(id);this.version(f,input.revision);
       requireValue(typeof input.confirmName==='string'&&input.confirmName.trim()===f.name,'Type the family\'s name exactly to delete it.');
-      const work=this.familyWork(id);
-      requireValue(!work.length||input.deleteWork===true,`${f.name} has work (${work.map(item=>`${item.count} ${item.table.replace(/_/g,' ')}`).join(', ')}). Tick "Delete all of this too" to delete it with the family for good, or archive the family to keep it.`,409);
-      const rows=work.length?this.familyRows(id):new Map();
+      requireValue(typeof input.keep==='boolean','Choose whether to keep this channel\'s style and settings or delete everything.');
+      requireValue(!input.keep||this.artifactRoot,'This workspace has no data folder to save the channel in.',409);
+      const work=this.familyWork(id),rows=work.length?this.familyRows(id):new Map();
       const busy=[...rows].filter(([table,ids])=>this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='status')&&this.db.prepare(`SELECT 1 FROM "${table}" WHERE status IN ('queued','running','uploading') AND rowid IN (SELECT value FROM json_each(?)) LIMIT 1`).get(JSON.stringify([...ids])));
       requireValue(!busy.length,`${f.name} has work waiting or running (${busy.map(([table])=>table.replace(/_/g,' ')).join(', ')}). Let it finish or cancel it, then delete the family.`,409);
+      const styles=this.familyStyles(f);folders=this.familyFolders(id);
+      const saved=input.keep?this.saveFamilyRecord(f,rows,styles,folders):null;
+      // Style copies another family still uses stay in either case.
+      const dropStyles=input.keep?[]:styles.filter(style=>!this.db.prepare(`SELECT 1 FROM style_assignments WHERE family_id<>? AND revision_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(id,JSON.stringify(style.revisions.map(item=>item.id))));
+      if(dropStyles.length){rows.set('style_revisions',new Set(this.db.prepare(`SELECT rowid AS r FROM style_revisions WHERE profile_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(dropStyles.map(style=>style.id))).map(row=>row.r)));rows.set('style_profiles',new Set(this.db.prepare(`SELECT rowid AS r FROM style_profiles WHERE id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(dropStyles.map(style=>style.id))).map(row=>row.r)));}
       // History tables refuse deletes; their guard is lifted for this transaction only and comes back from its own SQL.
       this.db.exec('PRAGMA defer_foreign_keys=ON');
       for(const [table,ids] of rows){
@@ -329,8 +336,32 @@ class Store {
       }
       this.db.prepare('DELETE FROM families WHERE id=?').run(id);
       const removed=[...rows.values()].reduce((sum,ids)=>sum+ids.size,0);
-      this.event(`Deleted family: ${f.name}${removed?` and all its work (${removed} records)`:''}`);return {deleted:true,name:f.name,...(removed?{removed}:{})};
+      this.event(input.keep?`Deleted family: ${f.name}; its style, settings and work are saved in ${saved}`:`Deleted family: ${f.name} with everything (${removed} records, ${dropStyles.length} style cop${dropStyles.length===1?'y':'ies'}, ${folders.length} folder${folders.length===1?'':'s'} of files)`);
+      return {deleted:true,name:f.name,kept:input.keep,...(removed?{removed}:{}),...(saved?{savedTo:saved,styles:styles.map(style=>style.name),folders}:{})};
     });
+    // Files go only after the records are gone for good.
+    if(!result.kept)for(const folder of folders)fs.rmSync(folder,{recursive:true,force:true});
+    return result;
+  }
+  // The channel's own style copies ("<channel> · <style>", made in its style window).
+  familyStyles(f) {
+    if(!this.db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='style_profiles'").get())return [];
+    return this.db.prepare("SELECT id FROM style_profiles WHERE origin='derived'").all().map(row=>({id:row.id,revisions:this.db.prepare('SELECT id, revision, status, spec FROM style_revisions WHERE profile_id=? ORDER BY revision').all(row.id).map(item=>({...item,spec:JSON.parse(item.spec)}))})).map(style=>({...style,name:style.revisions.at(-1)?.spec.name||''})).filter(style=>style.name.startsWith(`${f.name} · `));
+  }
+  // Folders of the data folder that hold only this family's files (renders/<family>, packaging/<family> ...).
+  familyFolders(id) {
+    if(!this.artifactRoot||!fs.existsSync(this.artifactRoot))return [];
+    const found=[],walk=(dir,depth)=>{for(const entry of fs.readdirSync(dir,{withFileTypes:true})){if(!entry.isDirectory()||(depth===0&&['backups','saved-channels'].includes(entry.name)))continue;const full=path.join(dir,entry.name);if(entry.name===id)found.push(full);else if(depth<2)walk(full,depth+1);}};
+    walk(this.artifactRoot,0);return found;
+  }
+  // One JSON file with the family, its own styles and every record that belonged to it; secrets are left out.
+  saveFamilyRecord(f,rows,styles,folders) {
+    const records={},hidden=/^(secret|session)$|token|cipher/i;
+    for(const [table,ids] of rows)records[table]=this.db.prepare(`SELECT * FROM "${table}" WHERE rowid IN (SELECT value FROM json_each(?))`).all(JSON.stringify([...ids])).map(row=>Object.fromEntries(Object.entries(row).filter(([key])=>!hidden.test(key))));
+    const dir=path.join(this.artifactRoot,'saved-channels'),file=path.join(dir,`${now().slice(0,10)}-${f.name.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,40)||'channel'}-${f.id.slice(0,8)}.json`);
+    fs.mkdirSync(dir,{recursive:true});
+    fs.writeFileSync(file,JSON.stringify({savedAt:now(),family:f,styles,files:folders,records},null,2));
+    return file;
   }
   // Every row that belongs to a family: rows with its family_id, then every row hanging off those through a foreign key.
   // shortcut: files in the data folder (renders, drawings, pictures) stay; a later clean-up can remove unreferenced ones.

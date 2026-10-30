@@ -1,6 +1,6 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-10-29. Current application: 0.70.1: deleting a family with its work after a warning, on top of 0.70 (the Motion Graphics engine with HTML render and mix finishes, and niche suggestions), 0.69 (Editing Engines, competitors on their page and the ChatGPT sign-in), 0.68 (the Atelier anime finish and the colour-dip cut), 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
+Last updated: 2026-10-29. Current application: 0.70.2: keep or delete a channel's style and settings when deleting it, on top of 0.70.1 (deleting a family with its work after a warning), 0.70 (the Motion Graphics engine with HTML render and mix finishes, and niche suggestions), 0.69 (Editing Engines, competitors on their page and the ChatGPT sign-in), 0.68 (the Atelier anime finish and the colour-dip cut), 0.67 (painted pictures drawn by the whiteboard hand), 0.66.1 (tidier family cards, Style Library and Competitors page), 0.66 (the Windows installer and updater), 0.65 (competitors read in one click with finer subjects), 0.64 (the AI designs each video; more fonts, caption looks and animations), 0.63 (the Cartoon / Natural / Mix picture type), 0.62 (channel pages, ticked-look mixes) and 0.61.1 (the laptop program merged into GitHub `main` with the 2026-10-28 review fixes). The newest entry of the implementation log below is the current state; the older entries are history.
 
 ## Resume here
 
@@ -153,6 +153,24 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-10-30 - Keep or delete a channel's style and settings (0.70.2)
+
+- **Owner request (2026-10-30):** "while deleting channel ask from user if user want to delete the settings and style of
+  the channel or wants to keep them ... if user select save then the style, data and the settings will remain save and
+  program will tell the user where the data is saved."
+- **Built:** the family card's Delete asks "What happens to its style and settings?". Keep them (the default): the
+  channel's own style stays in Editing Engines under "Versions of this engine" (a new channel with the same name picks
+  it up again), its settings and work records are saved as one JSON file in the data folder's `saved-channels`
+  folder (secrets left out), its files stay; the families page shows the file, the styles and the folders until "Got
+  it". Delete everything: its own style copy (unless another channel uses it) and its folders of files go too. There is
+  no button yet to bring a saved channel back from its file.
+- **Tests:** `npm run check` passes; `npm test` 388 tests, 385 passed, 0 failed, 3 skipped (Windows only); a new test
+  keeps one channel (the record file has the family, its competitors and its style; the style copy and the files stay)
+  and deletes another with everything (its style copy and both folders of files go; the engine, the other channel's
+  files and the style history guard stay); a Playwright check passed 10 checks (the choice with keep preselected, the
+  work listed, the saved path shown and the file there, the style kept, the note closes, delete everything removes the
+  style copy, no page errors, no sideways scroll at 390 px). Not tested on the owner's own data.
 
 ### 2026-10-29 - Deleting a family with its work (0.70.1)
 

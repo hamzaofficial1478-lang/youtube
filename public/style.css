@@ -152,7 +152,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .tl-toolbar label.tl-zoom{display:flex;flex-direction:row;gap:6px;align-items:center}.tl-fields select,.tl-fields input,.tl-fields textarea{padding:4px 7px;min-height:0;height:auto;font-size:12px}.tl-fields label{gap:2px}
 .tl-inspector .card-actions,.tl-proposal .card-actions{flex-wrap:wrap}
 .tl-command-row label{display:flex;flex-direction:row;gap:6px;align-items:center;font-weight:500}
-.backup-confirm{margin-top:6px;border:1px solid #e3e8df;border-radius:8px;padding:8px 10px;background:#fff}
+.backup-confirm{margin-top:6px;border:1px solid #e3e8df;border-radius:8px;padding:8px 10px;background:#fff}.delete-choice{border:0;padding:0;margin:8px 0;display:grid;gap:8px}.delete-choice legend{font-weight:600;margin-bottom:4px}.delete-choice .check{align-items:flex-start}.saved-note{margin-bottom:16px;padding:16px 20px}.saved-note code{word-break:break-all}
 .visual-rule{border:1px solid #e3e8df;border-radius:8px;padding:8px 10px;margin:6px 0;background:#fff}.visual-rule .style-facts{margin-top:6px}
 .watch-family{border-top:1px solid #e3e8df;padding:8px 0}.watch-family:first-of-type{border-top:0}
 .ops .style-facts div{grid-template-columns:170px minmax(0,1fr)}.ops .card-actions{margin:0 0 14px}.ops .stats{margin-bottom:12px}.ops .panel{margin-bottom:18px}
