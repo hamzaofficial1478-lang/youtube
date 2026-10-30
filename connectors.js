@@ -126,6 +126,9 @@ class ConnectorSlots {
     this.db.prepare('INSERT INTO connectors(id,name_key,payload,secret) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET name_key=excluded.name_key,payload=excluded.payload,secret=excluded.secret').run(recordId,name.toLowerCase(),JSON.stringify(next),encrypted);
     return this.public(this.row(recordId));
   }
+  // A job found this connection signed out (0.73): its test no longer stands, so the page stops showing it connected
+  // and jobs queued on it stop before anything is sent (stale) instead of failing one by one. Testing again restores it.
+  failTest(id,message){const row=this.db.prepare('SELECT payload FROM connectors WHERE id=?').get(id);if(!row)return;const slot=JSON.parse(row.payload);slot.test={status:'failed',at:new Date().toISOString(),message:String(message).slice(0,600)};this.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify(slot),id);}
   remove(id,revision){this.idle(id);this.checkRevision(this.row(id),revision);this.db.prepare('DELETE FROM connectors WHERE id=?').run(id);return {removed:true};}
   key(id){const row=this.row(id);if(!row.secret)throw new InputError('Edit this connector and add its API key first.',409);return secret(this.protector.transform('unprotect',Buffer.from(row.secret)).toString('utf8'),PROVIDERS[JSON.parse(row.payload).provider]?.keyMin);}
   async test(id,revision,channel='@GoogleDevelopers'){

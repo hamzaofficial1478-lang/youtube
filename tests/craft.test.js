@@ -195,3 +195,17 @@ test('the craft check route needs the local token and bounds its input', async t
   assert.equal(result.hook.applicable, true);
   assert.equal((await fetch(`${base}/api/content/00000000-0000-0000-0000-000000000000/retention`, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Local-Token': token}, body: JSON.stringify({csv: 'x'.repeat(30)})})).status, 404);
 });
+
+// 0.73 (owner review 2026-10-30: "length 78, from where those numbers came?"): every hook number says what it read.
+test('each hook score explains itself from the hook line alone', () => {
+  const plain = C.scoreHook('A casino opened in the stone age');
+  assert.deepEqual([plain.words, plain.properties.brevity, plain.properties.address, plain.properties.specificity], [7, 78, 26, 34]);
+  assert.match(plain.why.brevity, /^7 words; a spoken hook fits 9 to 24 words/);
+  assert.match(plain.why.address, /Never says "you", so it stays at the base score/);
+  assert.match(plain.why.specificity, /No number, name or date/);
+  const strong = C.scoreHook('Why would you risk 3 years of savings on a casino in Rome?');
+  assert.match(strong.why.address, /Says you in the first six words/);
+  assert.match(strong.why.stakes, /risk/);
+  assert.equal(strong.why.specificity, 'Found 3, Rome.');
+  assert.match(strong.why.curiosity, /\(why\) and ends with a question mark/);
+});

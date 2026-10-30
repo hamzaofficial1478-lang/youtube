@@ -389,14 +389,25 @@ function loadPacks(root = __dirname) {
 const BRIEF_BYTE_BUDGET = 1800;
 // Rooms whose Claude answers are large get a larger share for skills (0.39): the scene planner and the story director
 // read many craft rules; the rest keep the default.
-const TASK_BRIEF_BYTES = Object.freeze({'scene.plan': 9000, 'voice.direction': 3000, 'motion.template': 3000, 'visuals.prompt': 2500});
+// 0.73 (owner question 2026-10-30, "will the skills be used?"): with every skill approved a script job received 3 of
+// 122 script skills. The creative jobs now carry far more; their limits grow with the brief (scripts add it on top,
+// voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 14000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 3000, 'visuals.prompt': 2500});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
+// The jobs whose AI request carries approved skills (0.73 Skills page: "what reaches each job"); the editing brain applies
+// its skills in code rather than in a prompt.
+const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.plan', 'Scene planner and story director'], ['voice.direction', 'Voice direction'],
+  ['audio.mix', 'Music score'], ['competitors.blueprint', 'Competitor blueprint'], ['niche.evaluate', 'Niche go/no-go'], ['niche.discover', 'Niche suggestions'],
+  ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Editing brain (in code)']]);
 
 class SkillsEngine {
-  constructor(store, {root = __dirname, seed = true} = {}) {
+  // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
+  // the review steps themselves turn it off.
+  constructor(store, {root = __dirname, seed = true, builtinApproved = true} = {}) {
     this.store = store;
     this.db = store.db;
     this.root = root;
+    this.builtinApproved = builtinApproved;
     this.migrate();
     if (seed) this.seedBuiltinPacks();
   }
@@ -449,8 +460,27 @@ class SkillsEngine {
       }
       if (created) this.store.event(`Seeded ${created} builtin skill draft${created === 1 ? '' : 's'} for review`);
       if (updated) this.store.event(`${updated} builtin skill${updated === 1 ? '' : 's'} updated as draft${updated === 1 ? '' : 's'} for review`);
+      if (this.builtinApproved) this.approveBuiltins();
       return created;
     });
+  }
+
+  // Owner decision 2026-10-30: the built-in skills are part of the program, approved on every PC it runs on. The newest
+  // built-in text of each built-in skill is approved (a pack update replaces the older built-in text the same way).
+  // A skill whose newest revision the owner wrote, or that the owner retired, is left as it is; the owner's own skills
+  // and learned lessons still need the named review.
+  approveBuiltins() {
+    const review = JSON.stringify({approvedBy: 'Built into the program', approvedAt: now(), notes: 'Built-in skill: approved with the program (owner decision 2026-10-30).', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, builtin: true});
+    const rows = this.db.prepare(`SELECT r.id, r.skill_id FROM skill_revisions r JOIN skills s ON s.id=r.skill_id
+      WHERE s.origin='builtin' AND r.status='draft' AND r.created_by='Builtin skill pack'
+        AND r.revision=(SELECT MAX(revision) FROM skill_revisions WHERE skill_id=r.skill_id)
+        AND NOT EXISTS (SELECT 1 FROM skill_revisions x WHERE x.skill_id=r.skill_id AND x.status='retired')`).all();
+    for (const row of rows) {
+      this.db.prepare("UPDATE skill_revisions SET status='superseded' WHERE skill_id=? AND id<>? AND status='approved'").run(row.skill_id, row.id);
+      this.db.prepare("UPDATE skill_revisions SET status='approved', review=? WHERE id=?").run(review, row.id);
+    }
+    if (rows.length) this.store.event(`${rows.length} built-in skill${rows.length === 1 ? '' : 's'} approved with the program`);
+    return rows.length;
   }
 
   // ------------------------------------------------------------ reads
@@ -537,6 +567,11 @@ class SkillsEngine {
       sourceHierarchy: SOURCE_HIERARCHY, briefByteBudget: BRIEF_BYTE_BUDGET, rules: RULES.limits,
       skills, bindings: this.bindings(), lessons, usage: this.usage(50), projectState: this.projectState(),
       packs: PACK_FILES.map(pack => pack.label),
+      reach: REACH.map(([taskKey, label]) => {
+        if (taskKey === 'editing.plan') { const available = this.select(taskKey).length; return {taskKey, label, used: available, available, inCode: true}; }
+        const brief = this.brief(taskKey);
+        return {taskKey, label, used: brief.skills.length, available: brief.available, bytes: brief.injectedBytes};
+      }),
     };
   }
 
@@ -771,6 +806,8 @@ class SkillsEngine {
       Number(right.pinned) - Number(left.pinned)
       || left.pinPosition - right.pinPosition
       || ORIGIN_RANK[right.origin] - ORIGIN_RANK[left.origin]
+      // A skill written for this job (its first task) comes before one that only touches it (0.73).
+      || Number(right.skill.tasks[0] === taskKey) - Number(left.skill.tasks[0] === taskKey)
       || right.skill.priority - left.skill.priority
       || left.skill.id.localeCompare(right.skill.id));
     return selected;

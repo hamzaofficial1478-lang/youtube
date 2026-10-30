@@ -36,6 +36,24 @@ minutes at most). The connector list says "OpenAI API key (paid per use; not the
 and "ChatGPT subscription (sign in with ChatGPT, through the Codex app)" for the plan. The Claude subscription still
 signs in inside Claude Code itself.
 
+**Claude Code refusals (0.73, owner test review 2026-10-30).** A script job said "Claude Code is not logged in" and
+"interrupted · usage unknown" while the connection showed connected. Two causes: the connection test asked only the
+small support model, while jobs use the AI team's models (Opus 5.5 for scripts), and any Claude Code error whose text
+mentioned "login" was shown as a sign-in problem (Claude Code's message for a model the plan does not include ends
+with "run /login"). Now `claudeCodeRefusal` shows what Claude Code said and names the case: a model the plan cannot use
+("choose a model your plan includes"), not signed in ("open a terminal, run claude, type /login"), a usage limit, or an
+answer longer than the output limit. These are refusals before anything was generated (`nothingUsed`): the job fails
+plainly, its token reservation is released and no paid attempt is used. Only other errors after Claude Code started
+keep "usage unknown". A sign-in refusal also marks the connection test failed, so Connections stops saying connected.
+The Claude Code test now asks every model the connection is used with (one tiny question each). Codex and the Claude
+API name their refusals the same way.
+
+**Scripts in Content Studio (0.73).** A draft without a script shows two choices. "Ask AI to write" uses the team as
+set in section 3: both AIs together (draft, review, revision) when both are connected and the roles say together,
+otherwise the one connected does all of it; the card says which. "Add my script" opens the draft with the script box:
+type or paste it, or attach a .txt, .pdf or Word .docx file (`documents.js`, 10 MB at most; scanned PDFs without text
+and old .doc files are refused with what to do). The hook takes the script's first sentence when it is empty.
+
 ## 2. The team and its roles
 
 `Ai.team()` reads the tested Claude connection (API key or subscription) and the tested ChatGPT connection, and the

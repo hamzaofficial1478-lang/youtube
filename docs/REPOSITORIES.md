@@ -225,6 +225,11 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - Source: <https://github.com/debpalash/VoiceStudio>, read at `4d4cb0b` (2026-10-29). License: AGPL-3.0 for the app; model weights keep their own terms (the default OmniVoice weights are CC-BY-NC, and VoiceStudio's own register clears none for commercial use).
 - No code copied, bundled or installed by the Control Room. The owner installs VoiceStudio as its own program; `voice.js` `VoiceStudioSpeechClient` and the connection test call its OpenAI-style local API at `http://127.0.0.1:3900`. Narrations made with it are test-only and refused by Room 11. Analysis in `research/voicestudio.md`.
 
+### mozilla/pdf.js as pdfjs-dist 6.4.299 (0.73, npm dependency)
+
+- Source: <https://github.com/mozilla/pdf.js>, installed from npm as `pdfjs-dist` at exactly `6.4.299` (package-lock.json). License: Apache-2.0 (the licence file ships inside the package in node_modules).
+- Used unchanged by `documents.js` (`pdfjs-dist/legacy/build/pdf.mjs`, loaded on demand) to read the text of a script PDF the owner attaches in Content Studio: text items grouped into lines and paragraphs by their position. Its optional `@napi-rs/canvas` dependency installs with it and is not used. Word .docx files are read and the planning file is written by our own small zip and XML code, with no library.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).

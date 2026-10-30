@@ -126,6 +126,13 @@ English only and say so for other locales.
 | `analyseRetention` | Hook leak (first 30 s; under 25% healthy), the five steepest cliffs with what the narration said within 4 s, the slide; ends in ONE fix | Editing Room, paste a YouTube Studio CSV |
 | `neverWordsUsed` | Words the family never uses | Blocks Hermes candidates; advice on drafts |
 
+**Where the hook numbers come from (0.73, owner review 2026-10-30: "length 78 with no script").** The draft's craft
+check reads only what is typed now: the working title and the opening hook line, never the script (the script is
+checked under "Will viewers stay?" once it has 60 words). Each hook number is a rule of thumb from youtube-agent-skill,
+not research about the niche: it starts from a base (Specific 34, "you" 26, Stakes 22, Open question 24) and rises with
+what it finds; Length is 100 for 9 to 24 words and loses 11 points for each word below 9 (a 7-word hook scores 78).
+`scoreHook` now returns `why` (what each number found, in plain words) and `words`, and the panel lists them.
+
 ### The family writing voice
 
 Families have an optional **writing voice** (youtube-agent-skill's `voice.md`): the one person a video

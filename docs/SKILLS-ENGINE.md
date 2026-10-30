@@ -8,7 +8,9 @@ Open it in the app at **Skills** in the left navigation.
 
 ## 1. The boundary, in one paragraph
 
-Every skill is a **draft** until a named human approves that exact revision. A draft is visible,
+Every skill is a **draft** until a named human approves that exact revision (since 0.73 the built-in skills come
+approved with the program by the owner's decision of 2026-10-30, section 8; own and learned skills still wait for a
+named approval). A draft is visible,
 searchable and reviewable, but it never reaches a prompt and never changes how a room behaves.
 Approving a revision is the only thing that puts a skill into use. Revisions are immutable and are
 never deleted, so what was in force on any given day stays reconstructible.
@@ -66,7 +68,8 @@ concrete to act on.
 
 1. **Selection** (`select`): approved revisions whose `tasks` include the task key. A family **pin**
    lifts a skill to the front even where its own bindings do not reach; a **block** removes it, and a
-   block always beats a pin. Order: pinned, then owner > learned > builtin, then priority, then ID.
+   block always beats a pin. Order: pinned, then owner > learned > builtin, then (0.73) skills whose first task is
+   this job, then priority, then ID, so a script job fills its room with script skills before general ones.
    A **pin-only** skill (`pinOnly: true`) is never selected by default, even when approved: it
    reaches a brief only where it is pinned, usually to one family. All niche profiles and the
    format-specific script, visual and editing templates of the mastery bundle are pin-only, so a
@@ -75,7 +78,10 @@ concrete to act on.
    the source-of-truth order, and the family's open project state. Long prose fields are left out,
    except that a skill without `do` rules sends its `steps`, and one with neither sends its `summary`
    (0.71: 75 such skills had reached prompts with only their avoid list and checks).
-3. **Budget**: the brief is capped at **1800 bytes**, taken out of the family's job token limit. A
+3. **Budget**: the brief is capped per job (`TASK_BRIEF_BYTES`, 0.73: script candidates 12,000 bytes, scene plans
+   14,000, voice direction 8,000, the music score 6,000, the competitor analysis 4,000, motion templates 3,000, visual
+   prompts 2,500, every other job 1,800). The script job's token limit grows by the brief, so a fuller brief never
+   takes room from the script itself. A
    skill that does not fit is dropped **whole** and counted, never trimmed mid-rule. If the remaining
    room for a completion falls below the floor, the job is refused with a message naming the cause,
    rather than overspending.
@@ -85,6 +91,13 @@ concrete to act on.
 5. **Logging**: every use writes a `skill_usage` row with the exact revision IDs injected, the byte
    size and how many skills were dropped. The approved skill set is part of the job deduplication
    key, so changing the library produces a new job instead of reusing an old result.
+
+**How many skills reach a job (0.73).** Measured with every skill approved, before 0.73 a script job carried 3 of the
+122 skills bound to it and a scene plan 13 of 140, because the old 1,800 and 9,000-byte briefs were full. Since 0.73 a
+script job carries 21 (19 of them written for scripts), a scene plan 21, voice direction 12, the music score 7 and the
+competitor analysis 6. Skills -> "Skills in every request" shows these numbers live for this PC. A skill is guidance
+for the AI, not a guarantee: it makes the rules the owner approved part of every request (hooks, retention, pacing,
+the 30/70 rule), and the checks in code (retention, craft, copy guards, QC) still decide what passes.
 
 Wired: **script candidates** (`script.candidate`), **daily research briefs** (`research.brief`), **packaging titles**
 (`packaging.title`), the **editing brain** (`editing.plan`, in code) and, since 0.39, the **scene planner and the story
@@ -163,6 +176,15 @@ as a **draft** revision beside the approved one at the next start. The approved 
 approves the update (Skills -> Packs shows it as a draft). A skill whose newest revision the owner wrote is never
 touched, and an older pack never adds its old text back. The claude-youtube pack (`skills/youtube-growth.json`, 46
 drafts) and seven updated skills arrived this way; see research/claude-youtube.md.
+
+**Built-in skills come approved (owner decision 2026-10-30, 0.73).** The owner approved every pack and asked that the
+program's skills go with it to any PC. So the built-in skills are approved with the program: when a pack is seeded or
+updated, the newest built-in draft of each skill is approved (`approveBuiltins`, reviewer "Built into the program",
+`builtin: true`), and the revision it replaces is superseded. A skill the owner retired stays retired, and a skill whose
+newest revision the owner wrote is never touched. The owner's own skills (added on the Skills page, imported or
+learned) stay in this PC's database and its backups, are never part of the program's files, and still need the owner's
+named approval. The Skills page shows Built in (packs, folded), My skills and Browse all. Tests that check the review
+mechanics build the engine with `builtinApproved: false`.
 
 ## 9. Policy decisions carried into the library
 

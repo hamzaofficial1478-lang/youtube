@@ -1089,7 +1089,7 @@ test('0.39: approved skills travel with every scene plan and are logged; a style
   const {SkillsEngine} = require('../skills');
   const {room, content, ids, store, family, narrate} = setup(t, fakeNetwork(), {storyMap: false});
   narrate(60);
-  const skills = new SkillsEngine(store, {root: path.join(__dirname, '..')}).attach();
+  const skills = new SkillsEngine(store, {root: path.join(__dirname, '..'), builtinApproved: false}).attach();
   const pack = 'motionmaxxing (Apache-2.0): measured motion, word timing, script cues, machine-look check';
   skills.approvePack({pack, approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: skills.skills().filter(item => item.pack === pack).map(item => item.latest.id)});
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});

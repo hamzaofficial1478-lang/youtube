@@ -207,7 +207,7 @@ test('niche suggestions: sub-niches from a channel and its competitors, new nich
   const answer = list => JSON.stringify({summary: 'Renting and debt are the open corners of personal finance right now.', suggestions: list, avoid: ['Crypto get-rich-quick angles']});
 
   // Sub-niches: the channel (F), its competitors' hit videos and the Reddit scan; YouTube trends are display-only.
-  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..'), builtinApproved: false}).attach();
   growth.approvePack({pack: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types', approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: growth.skills().filter(item => item.pack === 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types').map(item => item.latest.id)});
   const sub = niches.queueSuggestions({mode: 'sub', familyId: family.id, count: 3, connector: ids.claude, requestedBy: 'Owner'});
   const usedSkills = JSON.parse(store.db.prepare("SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key='niche.discover'").get(sub.id).skill_ids);

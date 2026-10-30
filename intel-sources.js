@@ -314,12 +314,12 @@ class YouTubePublicClient {
   }
   // R07: the most-viewed videos for one keyword since a date (YouTube's own order).
   async search(query, {publishedAfter, maxResults, videoDuration = 'any'}) {
-    const params = {part: 'snippet', q: query, type: 'video', order: 'viewCount', publishedAfter, maxResults, fields: 'items(id/videoId,snippet(publishedAt,channelId,channelTitle,title))'};
+    const params = {part: 'snippet', q: query, type: 'video', order: 'viewCount', publishedAfter, maxResults, fields: 'items(id/videoId,snippet(publishedAt,channelId,channelTitle,title,description))'};
     if (videoDuration !== 'any') params.videoDuration = videoDuration;
     const data = await this.call('search', params, 100);
     return (Array.isArray(data?.items) ? data.items : []).filter(item => VIDEO_ID.test(item?.id?.videoId || '') && CHANNEL_ID.test(item?.snippet?.channelId || '')).map(item => ({
       videoId: item.id.videoId, title: cleanText(item.snippet.title, 200), channelId: item.snippet.channelId,
-      channelTitle: cleanText(item.snippet.channelTitle, 120), publishedAt: isoDate(item.snippet.publishedAt),
+      channelTitle: cleanText(item.snippet.channelTitle, 120), publishedAt: isoDate(item.snippet.publishedAt), description: cleanText(item.snippet.description, 400),
     }));
   }
   // Up to 50 IDs per call; matched by ID, never by position.

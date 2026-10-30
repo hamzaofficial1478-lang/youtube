@@ -77,8 +77,21 @@ function scoreHook(text, {locale = 'en'} = {}) {
   const verdict = Math.round(0.6 * values.reduce((sum, value) => sum + value, 0) / values.length + 0.4 * Math.min(...values));
   const weakest = Object.keys(properties).reduce((low, name) => (properties[name] < properties[low] ? name : low));
   const formula = classifyFormula(hook);
-  return {applicable: true, properties, verdict, band: hookBand(verdict), formula, weakest, fix: HOOK_FIX[weakest],
+  return {applicable: true, properties, verdict, band: hookBand(verdict), formula, weakest, fix: HOOK_FIX[weakest], why: hookReasons(hook), words: hookWords(hook).length,
     note: formula ? null : 'No hook formula matched. That is usually a summary, not a hook.'};
+}
+// What each number read in the hook line, in plain words (owner review 2026-10-30: the scores looked random). Each
+// score starts from a base (Specific 34, "you" 26, Stakes 22, Open question 24) and rises with what it finds.
+function hookReasons(hook) {
+  const found = pattern => [...new Set((String(hook).match(pattern) || []).map(item => item.trim().toLowerCase()))], n = hookWords(hook).length;
+  const names = tokens(hook).slice(1).filter(word => /^\p{Lu}/u.test(word)).map(word => word.replace(/[^\p{L}\p{N}'-]+$/u, '')), figures = found(CONCRETE), you = found(YOU), stakes = found(STAKE), open = found(CURIOSITY);
+  return {
+    specificity: figures.length || names.length ? `Found ${[...figures, ...names].slice(0, 4).join(', ')}.` : 'No number, name or date in the hook, so it stays at the base score.',
+    address: you.length ? `Says ${you.join(', ')}${hits(YOU, tokens(hook).slice(0, 6).join(' ')) ? ' in the first six words' : ', but not in the first six words'}.` : 'Never says "you", so it stays at the base score.',
+    stakes: stakes.length ? `Names what is at stake: ${stakes.join(', ')}.` : 'No word for what the viewer loses or risks, so it stays at the base score.',
+    curiosity: open.length || hook.endsWith('?') ? `Opens a question${open.length ? ` (${open.join(', ')})` : ''}${hook.endsWith('?') ? ' and ends with a question mark' : ''}.` : 'Leaves no question open, so it stays at the base score.',
+    brevity: `${n} word${n === 1 ? '' : 's'}; a spoken hook fits 9 to 24 words (about ten seconds).`,
+  };
 }
 
 // ---------------------------------------------------------------- title + thumbnail (title.py)

@@ -5,6 +5,7 @@ const path=require('node:path');
 const os=require('node:os');
 const {randomBytes,timingSafeEqual}=require('node:crypto');
 const {Store,InputError}=require('./store');
+const Documents=require('./documents');
 const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {ScriptWriter}=require('./writer');
@@ -153,7 +154,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const trendScan=pathname.match(/^\/api\/trend-scans\/([a-f0-9-]+)$/);
         if(trendScan)return json(res,200,trends.publicScan(trends.scanRow(trendScan[1])));
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
-        if(exported){const data=store.exportContent(exported[1]);res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}
+        // 0.73: the planning file is a Word document; ?format=json keeps the raw record.
+        if(exported){const data=store.exportContent(exported[1]),name=`${String(data.content.title||'draft').replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'').slice(0,60)||'draft'}-v${data.content.revision}`;if(url.searchParams.get('format')==='json'){res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}const file=Documents.docxFile(Documents.planningBlocks(data));res.writeHead(200,{'Content-Type':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Content-Length':file.length,'Content-Disposition':`attachment; filename="${encodeURIComponent(name)}.docx"; filename*=UTF-8''${encodeURIComponent(name)}.docx`,'Cache-Control':'no-store'});return res.end(file);}
         const editDrawings=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/drawings$/);
         if(editDrawings)return json(res,200,editingRoom.drawings(editDrawings[1]));
         throw new InputError('Page not found.',404);
@@ -161,7 +163,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(!['POST','PUT'].includes(req.method))throw new InputError('Method not supported.',405);
       const supplied=Buffer.from(String(req.headers['x-local-token']||''));const expected=Buffer.from(token);
       if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected))throw new InputError('Reload the app before saving.',403);
-      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:262144);let result;
+      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:262144);let result;
+      // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
+      if(pathname==='/api/script-file'&&req.method==='POST'){if(typeof body.data!=='string'||!/^[A-Za-z0-9+/=]+$/.test(body.data))throw new InputError('Attach a script file.');return json(res,200,await Documents.extractText({name:String(body.name||'').slice(0,200),data:Buffer.from(body.data,'base64')}));}
       if(pathname==='/api/connectors'&&req.method==='POST')return json(res,200,connectors.save(body));
       if(pathname==='/api/ai-roles'&&req.method==='POST')return json(res,200,connectors.saveAiRoles(body));
       const connectorRoute=pathname.match(/^\/api\/connectors\/([a-f0-9-]+)(?:\/(test|delete|sign-in))?$/);

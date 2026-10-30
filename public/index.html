@@ -97,7 +97,14 @@
         <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
         <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
         <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
-        <label class="full">Primary-language script <span class="hint">Write or paste the script in this family’s first selected locale, or adopt a quality-passed Claude candidate after reviewing it.</span><textarea name="script" maxlength="300000" rows="9" placeholder="Write the complete primary-language narration here."></textarea></label>
+        <fieldset class="full script-source"><legend>How should the script be written?</legend>
+          <label class="radio-line"><input type="radio" name="scriptSource" value="ai"><span><b>Ask AI to write it</b> after saving <span class="hint" id="script-team"></span></span></label>
+          <label class="radio-line"><input type="radio" name="scriptSource" value="own"><span><b>Use my own script</b>: type it, paste it or attach a file</span></label>
+        </fieldset>
+        <div class="full own-script" id="own-script-box">
+          <div class="attach-row"><label class="button secondary attach-button">Attach a script file<input type="file" id="script-file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label><span class="hint" id="script-file-status">PDF, Word (.docx) or plain text, up to 10 MB. Its words go into the box below.</span></div>
+          <label>Primary-language script <span class="hint">In this family’s first language. If the hook box is empty, the script's first sentence becomes the hook.</span><textarea name="script" maxlength="300000" rows="9" placeholder="Type or paste the complete narration here, or attach a file above."></textarea></label>
+        </div>
       </div>
       <div class="section-heading"><h3>Evidence & source rights</h3><button class="button text-button" type="button" id="add-source">+ Add source</button></div>
       <div id="source-fields"></div>
