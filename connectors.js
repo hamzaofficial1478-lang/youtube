@@ -11,6 +11,8 @@ const PROVIDERS = {
   elevenlabs: {name: 'ElevenLabs', test: 'Read voice list; no generation', ready: true},
   // Owner request 2026-10-22: Fish Audio as a second narration provider (https://fish.audio, API key from its dashboard).
   'fish-audio': {name: 'Fish Audio', test: 'Reads your API credit balance; no generation', ready: true},
+  // Owner request 2026-10-30: free voice models on this PC through VoiceStudio (no key), for testing only.
+  voicestudio: {name: 'VoiceStudio (free voices on this PC, for testing only)', test: 'Asks VoiceStudio on this PC for its engines and voices; nothing generated', ready: true, keyless: true},
   // 0.57: free-licence and public-domain images (no key).
   wikimedia: {name: 'Wikimedia Commons (free-licence and public-domain images)', test: 'One image search; nothing downloaded', ready: true, keyless: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
@@ -83,7 +85,7 @@ class ConnectorSlots {
     const provider=input.provider;
     if(!Object.hasOwn(PROVIDERS,provider))throw new InputError('Choose a supported connector type.');
     if(PROVIDERS[provider].retired&&!old)throw new InputError('Hermes was removed from the program. Add a Claude connection instead.');
-    if(PROVIDERS[provider].keyless&&input.key)throw new InputError('A subscription connection uses the sign-in of its app on this PC (Claude Code or Codex); it takes no API key.');
+    if(PROVIDERS[provider].keyless&&input.key)throw new InputError('This connection takes no API key: it uses the app on this PC (Claude Code, Codex or VoiceStudio).');
     if(old&&JSON.parse(old.payload).provider!==provider)throw new InputError('Create a new slot to change provider. Keys cannot be moved between providers.');
     const name=text(input.name,'connector name',80,2), notes=text(input.notes||'','setup notes',1000);
     if(input.clearKey!==undefined&&typeof input.clearKey!=='boolean')throw new InputError('Invalid clear-key choice.');
@@ -169,6 +171,10 @@ class ConnectorSlots {
         const client=slot.provider==='pexels'?new PexelsClient(key,this.fetch):new PixabayClient(key,this.fetch);
         const found=await client.search({capabilityId:`${slot.provider}-photo`,query:'nature',perPage:3});
         result={access:'stock_search',message:`${PROVIDERS[slot.provider].name} accepted the API key and returned ${found.candidates.length} photo result(s) (1 request used). Nothing was downloaded.`};
+      }else if(slot.provider==='voicestudio'){
+        const {voices,engines}=await require('./voice').voiceStudioVoices(this.fetch);
+        if(!engines.length)throw new InputError('VoiceStudio is running but has no voice engine ready. Install one in its Model Manager, then test again.',502);
+        result={access:'local_voices',message:`VoiceStudio is running on this PC with ${engines.length} ready engine(s) (${engines.slice(0,6).join(', ')}) and ${voices.length} saved voice(s). Nothing was generated. Its voices are for testing only.`};
       }else if(slot.provider==='fish-audio'){
         let response;
         try{response=await this.fetch('https://api.fish.audio/wallet/self/api-credit',{headers:{Authorization:`Bearer ${key}`},redirect:'error',signal:AbortSignal.timeout(10000)});}

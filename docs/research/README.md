@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## voicestudio.md (2026-10-30)
+
+The analysis of debpalash/VoiceStudio (a local AI voice studio, AGPL-3.0): how its engines, model manager and local API work, its Windows requirements and the licences of its voices. The Control Room uses it as a separate program for free test narrations that can never be uploaded.
+
 ## claude-youtube.md (2026-10-30)
 
 The deep read of AgriciDaniel/claude-youtube (every sub-skill, reference, template and script mapped to the program), with yt-dlp, youtube-transcript-api and claude-video checked for watching videos. It became 46 draft skills (`skills/youtube-growth.json`), 7 updated skills, skills in three more Claude jobs, and the answer to how the program learns a competitor's look without downloading videos.

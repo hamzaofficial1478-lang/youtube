@@ -87,8 +87,8 @@ Token use is reserved from the family's monthly token limit before the call (ana
 transcripts, words per minute), your notes per competitor, and style studies of video files or screenshots already on
 this PC (frames, cuts and colours measured by FFmpeg, contact sheets Claude sees). Videos are never downloaded from
 links: yt-dlp and transcript scraping conflict with YouTube's terms and the publishing audit. The compliant way for an
-AI to watch a public video is Gemini's YouTube URL input; it is not built and needs your decision and a Google AI
-Studio key. Details in research/claude-youtube.md. Approved skills bound to `competitors.blueprint` now reach the
+AI to watch a public video is Gemini's YouTube URL input; you declined it on 2026-10-30 (it would cost extra), so
+it is not built. Details in research/claude-youtube.md. Approved skills bound to `competitors.blueprint` now reach the
 analysis too.
 
 ## YouTube data policy

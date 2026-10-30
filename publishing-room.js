@@ -22,6 +22,8 @@ const CHECK_EVERY = 60000, MAX_CHECKS = 120; // processing checks: once a minute
 const AUTH_TTL = 15 * 60000;
 // YouTube charges a request it answered even when it refuses it; a request that never left costs nothing.
 const answered = error => error instanceof G.GoogleError && !error.unknown && !error.reconnect;
+// 0.72: free VoiceStudio voices are for testing the program only; their videos never go to YouTube.
+const TEST_VOICE = 'This video is narrated by a free VoiceStudio test voice, which is only for testing. Narrate it with ElevenLabs, Fish Audio or OpenAI, approve it again, then upload.';
 
 class PublishingRoom {
   constructor(store, connectors, {renders, packaging, localization, quota, fetch: fetchImpl = null, wait = ms => new Promise(done => setTimeout(done, ms))} = {}) {
@@ -144,6 +146,7 @@ class PublishingRoom {
     if (locale === family.primaryLocale) {
       const master = this.localization.approvedMaster(contentId), approval = master ? this.renders.masterApproval(master) : null;
       requireValue(master && approval?.current, 'Approve the final master in Room 10 first.', 409);
+      requireValue(!this.testVoice(master.id), TEST_VOICE, 409);
       const checks = JSON.parse(pkgRow.checks);
       return {kind: 'master', renderId: master.id, approvalId: approval.id, title: pkg.titles.find(item => item.id === pkg.chosenTitle).text, description: checks.description, tags: pkg.tags, synthetic};
     }
@@ -151,7 +154,16 @@ class PublishingRoom {
     requireValue(release, 'Approve this language\'s edition for release in Room 06 first.', 409);
     const edition = JSON.parse(this.renders.row(release.renderId).scope).edition;
     requireValue(edition.package?.title, 'This edition has no title. Add one in Room 06.', 409);
+    requireValue(!this.testVoice(release.renderId), TEST_VOICE, 409);
     return {kind: 'edition', renderId: release.renderId, approvalId: release.releaseId, title: edition.package.title, description: edition.package.description, tags: edition.package.tags, synthetic};
+  }
+  // Was this render narrated by a free VoiceStudio test voice (0.72)? Its model licence allows testing only.
+  testVoice(renderId) {
+    const scope = JSON.parse(this.renders.row(renderId).scope), id = scope.edition ? scope.edition.narrationId : scope.narration?.approvalId;
+    if (!id) return false;
+    const provider = scope.edition ? JSON.parse(this.db.prepare('SELECT scope FROM edition_narrations WHERE id=?').get(id)?.scope || '{}').provider
+      : JSON.parse(this.db.prepare('SELECT p.payload FROM voice_approvals v JOIN voice_profiles p ON p.id=v.profile_id WHERE v.id=?').get(id)?.payload || '{}').provider;
+    return provider === 'voicestudio';
   }
   publicationRow(id) { const row = this.db.prepare('SELECT * FROM publications WHERE id=?').get(id); requireValue(row, 'Upload record not found.', 404); return row; }
   queueUpload(contentId, input, {auto = false} = {}) {

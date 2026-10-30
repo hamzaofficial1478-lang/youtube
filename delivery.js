@@ -44,7 +44,7 @@ function validate(raw, sentences, {lenient = false, warn = () => {}} = {}) {
 }
 
 // How much text one provider request may carry (Eleven v3 takes 5,000 characters; tags count).
-const requestLimit = (provider, model) => (provider === 'openai' ? 4000 : provider === 'fish-audio' ? 3000 : /^eleven_v3/.test(String(model)) ? 4500 : 9000);
+const requestLimit = (provider, model) => (provider === 'openai' ? 4000 : provider === 'fish-audio' ? 3000 : provider === 'voicestudio' ? 2500 : /^eleven_v3/.test(String(model)) ? 4500 : 9000);
 const supportsTags = (provider, model) => provider === 'elevenlabs' && /^eleven_v(3|4)/.test(String(model));
 // Stress a word the way v3/v4 voices read it (capitals); other voices get the word unchanged.
 function emphasize(text, words) {
@@ -85,7 +85,7 @@ function segments({script, sentences, direction, provider, model, base = {}, lim
     const gap = place && places[k - 1] ? script.slice(places[k - 1].end, place.start) : ' ';
     if (!current || current.key !== key || (!tags && previous?.pause === 'long') || current.text.length + gap.length + text.length > limit) {
       flush();
-      current = {key, text, speed: SPEED[line.pace], ...(provider === 'elevenlabs' && !tags ? tone(line, base) : {stability: base.stability, style: base.style}), ...(provider === 'openai' ? {instructions: instructionFor(line, base.instructions)} : {}), lines: [line.n]};
+      current = {key, text, speed: SPEED[line.pace], ...(provider === 'elevenlabs' && !tags ? tone(line, base) : {stability: base.stability, style: base.style}), ...(['openai', 'voicestudio'].includes(provider) ? {instructions: instructionFor(line, base.instructions)} : {}), lines: [line.n]};
     } else {
       current.text += /\n/.test(gap) ? gap.replace(/[^\n]/g, '') : ' ';
       current.text += text;
