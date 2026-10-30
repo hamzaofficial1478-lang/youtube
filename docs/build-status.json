@@ -1,7 +1,7 @@
 {
-  "version": "0.71.0",
+  "version": "0.72.0",
   "updated": "2026-10-30",
-  "nextAction": "Approve the claude-youtube pack (Skills -> Packs) and decide the call-to-action rule (one after 60%, or claude-youtube's early soft ask). Decide whether to build the Gemini watcher (needs a Google AI Studio key). Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
+  "nextAction": "Install VoiceStudio on the laptop, pick a light engine (KittenTTS, Supertonic-3 or PocketTTS without an NVIDIA card), connect it in Connections and narrate one test video end to end. Approve the claude-youtube pack and decide the call-to-action rule. Then move to paid voices (ElevenLabs Creator) for real videos.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -154,6 +154,14 @@
       "license": "MIT",
       "status": "Read only, not used",
       "usage": "Not built in: it reads captions from the watch page and YouTube's internal player API outside the official API, and suggests rotating proxies against blocks."
+    },
+    {
+      "name": "VoiceStudio",
+      "url": "https://github.com/debpalash/VoiceStudio",
+      "revision": "4d4cb0b",
+      "license": "AGPL-3.0 (app); model weights under their own terms (OmniVoice CC-BY-NC)",
+      "status": "Read only; used as a separate local program through its API",
+      "usage": "The owner installs VoiceStudio; the Control Room calls its OpenAI-style local API at 127.0.0.1:3900 for free test narrations. No code copied or bundled. Its narrations are test-only and refused by Room 11."
     }
   ],
   "phases": [
@@ -296,7 +304,7 @@
           "id": "P02",
           "title": "Directed, expressive primary-language narration",
           "status": "done",
-          "evidence": "Version 0.6 implements immutable family voice profiles and pronunciation lexicons, consent/commercial-rights evidence, fixed OpenAI/ElevenLabs adapters, pre-request validation, family-local character reservation/settlement, capped deliberate retries, immutable checksummed WAV artifacts, fail-closed FFmpeg decode and measured QC, human comparison and intelligibility approval, revocation, artifact-integrity checks and downstream invalidation. The protected HTTP/runtime workflows, local real-audio fixtures, corruption/tampering cases, 1440 x 1400 desktop and exact 390 x 844 mobile reviews passed. The complete 100-test suite passed after all eight findings from the independent fail-closed review were fixed. No live provider request is claimed; that remains a separate explicit potentially billable operator action."
+          "evidence": "Version 0.6 implements immutable family voice profiles and pronunciation lexicons, consent/commercial-rights evidence, fixed OpenAI/ElevenLabs adapters, pre-request validation, family-local character reservation/settlement, capped deliberate retries, immutable checksummed WAV artifacts, fail-closed FFmpeg decode and measured QC, human comparison and intelligibility approval, revocation, artifact-integrity checks and downstream invalidation. The protected HTTP/runtime workflows, local real-audio fixtures, corruption/tampering cases, 1440 x 1400 desktop and exact 390 x 844 mobile reviews passed. The complete 100-test suite passed after all eight findings from the independent fail-closed review were fixed. No live provider request is claimed; that remains a separate explicit potentially billable operator action. 0.72: free VoiceStudio test voices on this PC (keyless local connection, test-only narrator profiles, uploads refused); tests/voice.test.js."
         },
         {
           "id": "P03",
@@ -681,7 +689,8 @@
     "2026-10-29: The Atelier engine is called Motion Graphics; its anime finish is called HTML render and a Mix finish uses both, one per scene. Niche suggestions (sub-niches of a channel or new niches on the rise) learn only from scans the owner already ran; YouTube data only with the recorded derived-use approval.",
     "2026-10-29: A channel family that has work can be deleted with all of it after a warning that lists the work, the typed name and an explicit tick; archiving stays the way to keep it.",
     "2026-10-30: Deleting a channel asks whether to keep its style and settings or delete everything. Kept: its own style stays in Editing Engines and its settings and work records are saved to a file in the data folder, whose path the page shows. Delete everything: its own style copy and its files go too.",
-    "2026-10-30: Read claude-youtube, yt-dlp, youtube-transcript-api and claude-video. claude-youtube's knowledge became 46 draft skills and 7 skill updates. yt-dlp and youtube-transcript-api are not built in: downloading and caption scraping conflict with YouTube's terms and the API audit, so videos are never downloaded from links; the compliant way to let an AI watch a public video is Gemini's YouTube URL input, which waits for the owner's decision and key."
+    "2026-10-30: Read claude-youtube, yt-dlp, youtube-transcript-api and claude-video. claude-youtube's knowledge became 46 draft skills and 7 skill updates. yt-dlp and youtube-transcript-api are not built in: downloading and caption scraping conflict with YouTube's terms and the API audit, so videos are never downloaded from links; the compliant way to let an AI watch a public video is Gemini's YouTube URL input, which waits for the owner's decision and key.",
+    "2026-10-30: The owner declined the Gemini watcher (extra cost), so competitor videos are still learned from NexLev data, owner notes and style studies of local files. The owner chose free VoiceStudio voices to test the program before paid APIs; because their model weights are not cleared for commercial use, VoiceStudio narrations are test-only and are never uploaded."
   ],
-  "milestone": "0.71.0: claude-youtube restated as 46 draft skills and 7 skill updates; skills reach the competitor analysis, the music score and niche suggestions; the music supervisor hears the approved competitor study's music lessons"
+  "milestone": "0.72.0: free VoiceStudio test voices on this PC (keyless local connection, test-only narrator profiles, uploads refused)"
 }

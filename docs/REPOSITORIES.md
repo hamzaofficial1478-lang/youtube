@@ -220,6 +220,11 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - youtube-transcript-api: <https://github.com/jdepoix/youtube-transcript-api>, read at `b8af68c` (2026-10-20). License: MIT.
 - Nothing imported or installed. Downloading videos and reading captions outside the official API conflict with YouTube's Terms of Service and API Services Developer Policies, which the publishing audit depends on; videos are never downloaded from links. Reasons and the compliant alternative (Gemini's YouTube URL input, not built) in `research/claude-youtube.md` section 4.
 
+### debpalash/VoiceStudio (0.72, separate local program)
+
+- Source: <https://github.com/debpalash/VoiceStudio>, read at `4d4cb0b` (2026-10-29). License: AGPL-3.0 for the app; model weights keep their own terms (the default OmniVoice weights are CC-BY-NC, and VoiceStudio's own register clears none for commercial use).
+- No code copied, bundled or installed by the Control Room. The owner installs VoiceStudio as its own program; `voice.js` `VoiceStudioSpeechClient` and the connection test call its OpenAI-style local API at `http://127.0.0.1:3900`. Narrations made with it are test-only and refused by Room 11. Analysis in `research/voicestudio.md`.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).

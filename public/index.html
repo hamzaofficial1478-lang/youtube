@@ -136,6 +136,7 @@
         <label>Estimated cents per 1M characters<input name="priceCentsPerMillionCharacters" type="number" min="0" max="10000000" step="1" value="0" required></label>
         <label class="checkbox-label full"><input name="consentConfirmed" type="checkbox" required><span>I confirm the recorded owner or rights holder authorized this voice use.</span></label>
         <label class="checkbox-label full"><input name="commercialUseConfirmed" type="checkbox" required><span>I reviewed and confirmed commercial use for this exact voice and provider arrangement.</span></label>
+        <label class="checkbox-label full" hidden><input name="testOnlyConfirmed" type="checkbox"><span>This free VoiceStudio voice is only for testing the program. Videos made with it will not be uploaded to YouTube.</span></label>
       </div>
       <p class="note">Saving creates an immutable new profile and pronunciation-lexicon revision. It never edits old auditions. Changing the approved narrator revokes stale downstream handoffs.</p>
       <p class="form-error" role="alert" hidden></p>

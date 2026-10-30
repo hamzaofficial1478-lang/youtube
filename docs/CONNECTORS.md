@@ -40,6 +40,20 @@ its `model` header, `reference_id`, MP3 128 kb/s and the pace as `prosody.speed`
 the same real-audio checks as every narration. Fish Audio returns no word timing, so captions use the estimate. Music
 and sound effects still need ElevenLabs. Not verified live (needs the owner's key).
 
+## VoiceStudio: free test voices on this PC (0.72)
+
+Owner request 2026-10-30: test the program's voice with free models before paying for ElevenLabs. Connector
+`voicestudio` takes no key: it talks to the VoiceStudio app the owner installs on the same PC, at its fixed local
+address `http://127.0.0.1:3900` (VoiceStudio's default; it needs no credential from the same PC). The test asks
+`GET /v1/audio/voices` for the ready engines and saved voices; nothing is generated. Speech is VoiceStudio's
+OpenAI-style `POST /v1/audio/speech` (WAV, speed, the voice direction as `instructions`) in parts of at most 2,500
+characters, up to 30 minutes per part because a PC without a graphics card reads slowly; a failed part costs nothing.
+Voice profiles use model `tts-1` (the engine chosen inside VoiceStudio) or an engine ID such as `kittentts`, and the
+voice `default` or a VoiceStudio voice ID. Its default model's weights are non-commercial, so a VoiceStudio profile
+confirms **test-only use** instead of commercial use (`rights.testOnly`), and Room 11 refuses to upload any video it
+narrated (`PublishingRoom.testVoice`). No word timing: captions use the estimate. Analysis in research/voicestudio.md.
+Not verified live (VoiceStudio was not run here).
+
 ## Freesound and Jamendo (0.61)
 
 Free sound effects (Freesound, API key) and music (Jamendo, 8-character client ID), used by the Sound library

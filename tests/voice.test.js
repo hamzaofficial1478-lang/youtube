@@ -196,3 +196,46 @@ test('Fish Audio (owner request 2026-10-22): the key test reads the credit, spee
   assert.match(tested.result.message,/API credit 12\.50\)\. Nothing was generated/);
   assert.equal(calls.filter(call=>call.url.endsWith('/v1/tts')).length,1,'the test generated nothing');
 });
+
+// 0.72 (owner request 2026-10-30): VoiceStudio's free voices on this PC test the program; they never reach YouTube.
+test('VoiceStudio: free local voices through its OpenAI-style API, keyless, saved as test voices that never upload',async t=>{
+  const {VoiceStudioSpeechClient,voiceStudioVoices,SPEECH_CLIENTS}=require('../voice'),{PublishingRoom}=require('../publishing-room');
+  const calls=[],audio=Buffer.alloc(4096,3);
+  let speech=()=>new Response(audio,{status:200,headers:{'content-type':'audio/wav'}});
+  const fetchImpl=async(url,init={})=>{calls.push({url:String(url),init});if(String(url)==='http://127.0.0.1:3900/v1/audio/voices')return new Response(JSON.stringify({voices:[{voice_id:'alloy',name:'Alloy',type:'openai_alias'},{voice_id:'v-1',name:'Narrator',type:'profile'}],engines:[{id:'omnivoice',available:true},{id:'kittentts',available:true},{id:'indextts2',available:false}]}),{status:200,headers:{'content-type':'application/json'}});if(String(url)==='http://127.0.0.1:3900/v1/audio/speech')return speech();throw new Error(`unexpected ${url}`);};
+  let started=false;
+  const result=await new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'Stone age people walked for days.',model:'tts-1',voiceId:'default',speed:1.05,instructions:'Warm and calm.',onRequest:()=>{started=true;}});
+  assert.deepEqual([result.extension,result.audio.length,started],['wav',4096,false],'free and local: a failed part costs nothing, so no request is marked as paid');
+  const [call]=calls,body=JSON.parse(call.init.body);
+  assert.deepEqual([call.init.headers.Authorization,call.init.redirect],[undefined,'error']);
+  assert.deepEqual(body,{model:'tts-1',input:'Stone age people walked for days.',voice:'default',response_format:'wav',speed:1.05,instructions:'Warm and calm.'});
+  assert.equal(SPEECH_CLIENTS.voicestudio,VoiceStudioSpeechClient);
+  speech=()=>new Response(JSON.stringify({error:{message:'Accept the OmniVoice licence first.'}}),{status:403});
+  await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'omnivoice',voiceId:'default'}),/Model Manager and accept the model's licence\. Accept the OmniVoice licence first/);
+  speech=()=>new Response('{}',{status:503});
+  await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/still loading or downloading/);
+  await assert.rejects(new VoiceStudioSpeechClient(null,async()=>{throw new TypeError('fetch failed');}).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/did not answer\. Open VoiceStudio/);
+  assert.deepEqual(await voiceStudioVoices(fetchImpl),{voices:[{id:'v-1',name:'Narrator'}],engines:['omnivoice','kittentts']});
+  // The connection takes no key and is tested by asking VoiceStudio for its engines and voices.
+  const store=new Store(':memory:');t.after(()=>store.close());
+  const slots=new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},fetchImpl);
+  assert.throws(()=>slots.save({name:'Local voices',provider:'voicestudio',key:'some-key-0123456789'}),/takes no API key/);
+  const slot=slots.save({name:'Local voices',provider:'voicestudio'});
+  assert.equal(store.db.prepare('SELECT secret FROM connectors WHERE id=?').get(slot.id).secret,null);
+  const tested=await slots.test(slot.id,slot.revision);
+  assert.match(tested.result.message,/2 ready engine\(s\) \(omnivoice, kittentts\) and 1 saved voice\(s\)\. Nothing was generated/);
+  assert.equal(calls.filter(item=>item.url.endsWith('/v1/audio/speech')).length,3,'the connection test generated nothing');
+  await assert.rejects(new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},async()=>{throw new TypeError('fetch failed');}).test(slot.id,slot.revision+0),/not running on this PC/);
+  // The narrator profile confirms test-only use instead of commercial use; an approved test narration never uploads.
+  const env=setup(t,'voicestudio');env.store.db.prepare('UPDATE connectors SET secret=NULL WHERE id=?').run(env.connector.id);
+  const base={model:'tts-1',voiceId:'default',commercialUseConfirmed:false,priceCentsPerMillionCharacters:0};
+  assert.throws(()=>env.store.saveVoiceProfile(env.family.id,profileInput(env.connector,base)),/only for testing/);
+  const profile=env.store.saveVoiceProfile(env.family.id,profileInput(env.connector,{...base,testOnlyConfirmed:true}));
+  assert.deepEqual([profile.provider,profile.rights.testOnly,profile.rights.commercialUseConfirmed],['voicestudio',true,false]);
+  const audition=completedAudition(env.store,env.content,profile,env.connector);
+  const approval=env.store.selectVoiceAudition(audition.id,{approvedBy:'Owner',comparisonNotes:'Compared the complete narration for pacing and clarity.',intelligibilityConfirmed:true});
+  const room=Object.assign(Object.create(PublishingRoom.prototype),{store:env.store,db:env.store.db,packaging:{latestRow:()=>null},localization:{approvedMaster:()=>({id:'m1'})},
+    renders:{row:()=>({scope:JSON.stringify({narration:{approvalId:approval.id}})}),masterApproval:()=>({id:'master-approval',current:true})}});
+  assert.equal(room.testVoice('m1'),true);
+  assert.throws(()=>room.deliverable(env.content.id,'en-US'),/free VoiceStudio test voice[\s\S]*ElevenLabs, Fish Audio or OpenAI/);
+});
