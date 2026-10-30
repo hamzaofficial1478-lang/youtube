@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## claude-youtube.md (2026-10-30)
+
+The deep read of AgriciDaniel/claude-youtube (every sub-skill, reference, template and script mapped to the program), with yt-dlp, youtube-transcript-api and claude-video checked for watching videos. It became 46 draft skills (`skills/youtube-growth.json`), 7 updated skills, skills in three more Claude jobs, and the answer to how the program learns a competitor's look without downloading videos.
+
 ## html-anime.md (2026-10-29)
 
 The deep read of blixvip/html-anime: anime drawn as HyperFrames compositions (shot sheet, colour scripts, cel paint, drawings on twos, one expensive shot, locked camera, colour-dip cut). It became the Atelier engine's anime finish (0.68) and 10 draft skills in `skills/anime-craft.json`.

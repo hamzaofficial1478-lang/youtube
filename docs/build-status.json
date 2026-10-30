@@ -1,7 +1,7 @@
 {
-  "version": "0.70.2",
-  "updated": "2026-10-29",
-  "nextAction": "Try a niche suggestion (Niche Factory, \"Suggest niches\") after a Reddit or YouTube scan, and the Motion Graphics engine's Mix finish on a real video. Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
+  "version": "0.71.0",
+  "updated": "2026-10-30",
+  "nextAction": "Approve the claude-youtube pack (Skills -> Packs) and decide the call-to-action rule (one after 60%, or claude-youtube's early soft ask). Decide whether to build the Gemini watcher (needs a Google AI Studio key). Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -130,6 +130,30 @@
       "license": "MIT",
       "status": "Method restated, no code copied",
       "usage": "The /watch skill (video evidence for an AI) was read in full. Its scene-change detection is rebuilt in render.js and used to keep stock clips inside one shot and to check renders for unplanned cuts; its evidence and engine rules are 5 draft skills. Downloading, Gemini and Whisper transcription are not used."
+    },
+    {
+      "name": "claude-youtube",
+      "url": "https://github.com/AgriciDaniel/claude-youtube",
+      "revision": "84c3fa6",
+      "license": "MIT",
+      "status": "Method restated, no code copied",
+      "usage": "14 sub-skills, 9 references and 9 channel templates restated as 46 draft skills (skills/youtube-growth.json, 9 pin-only profiles) and 7 updates to existing skills. Its scripts and the DataForSEO integration are not used. Map in docs/research/claude-youtube.md."
+    },
+    {
+      "name": "yt-dlp",
+      "url": "https://github.com/yt-dlp/yt-dlp",
+      "revision": "b77c930",
+      "license": "Unlicense",
+      "status": "Read only, not used",
+      "usage": "Not built in: downloading YouTube videos conflicts with YouTube's Terms of Service and API Services Developer Policies; videos are never downloaded from links."
+    },
+    {
+      "name": "youtube-transcript-api",
+      "url": "https://github.com/jdepoix/youtube-transcript-api",
+      "revision": "b8af68c",
+      "license": "MIT",
+      "status": "Read only, not used",
+      "usage": "Not built in: it reads captions from the watch page and YouTube's internal player API outside the official API, and suggests rotating proxies against blocks."
     }
   ],
   "phases": [
@@ -296,7 +320,7 @@
           "id": "S01",
           "title": "Skills Engine: reviewed operating knowledge used at runtime",
           "status": "done",
-          "evidence": "313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision."
+          "evidence": "313 builtin skills seeded as drafts from the three owner documents (38 + 51 + 64, the CB YT AI Mastery bundle added in 0.11.1) and the editing-brain research (160); channel and niche profiles are pin-only and reach only the family they are pinned to; a coverage test asserts every skill ID the build brief maps. Immutable revisions with a named three-point approval, owner skills, import/export, per-family pins and blocks, a compiled brief injected into the Hermes script and research prompts inside the family token limit, a usage log of the exact revisions injected, deterministic rule helpers, and a learning loop whose lessons only ever produce a draft. 16 Skills tests; full suite 154/154 on Node 24.18.1 (0.11.1). Nothing is injected until a human approves that exact revision. 0.71: 46 claude-youtube drafts (499 builtin), pack updates arrive as drafts beside the approved revision, skills in competitors.blueprint, audio.mix and niche.discover, steps sent for skills without do rules."
         },
         {
           "id": "P06",
@@ -656,7 +680,8 @@
     "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image.",
     "2026-10-29: The Atelier engine is called Motion Graphics; its anime finish is called HTML render and a Mix finish uses both, one per scene. Niche suggestions (sub-niches of a channel or new niches on the rise) learn only from scans the owner already ran; YouTube data only with the recorded derived-use approval.",
     "2026-10-29: A channel family that has work can be deleted with all of it after a warning that lists the work, the typed name and an explicit tick; archiving stays the way to keep it.",
-    "2026-10-30: Deleting a channel asks whether to keep its style and settings or delete everything. Kept: its own style stays in Editing Engines and its settings and work records are saved to a file in the data folder, whose path the page shows. Delete everything: its own style copy and its files go too."
+    "2026-10-30: Deleting a channel asks whether to keep its style and settings or delete everything. Kept: its own style stays in Editing Engines and its settings and work records are saved to a file in the data folder, whose path the page shows. Delete everything: its own style copy and its files go too.",
+    "2026-10-30: Read claude-youtube, yt-dlp, youtube-transcript-api and claude-video. claude-youtube's knowledge became 46 draft skills and 7 skill updates. yt-dlp and youtube-transcript-api are not built in: downloading and caption scraping conflict with YouTube's terms and the API audit, so videos are never downloaded from links; the compliant way to let an AI watch a public video is Gemini's YouTube URL input, which waits for the owner's decision and key."
   ],
-  "milestone": "0.70.2: deleting a channel keeps its style and settings (saved to a file) or deletes everything, by the owner's choice"
+  "milestone": "0.71.0: claude-youtube restated as 46 draft skills and 7 skill updates; skills reach the competitor analysis, the music score and niche suggestions; the music supervisor hears the approved competitor study's music lessons"
 }

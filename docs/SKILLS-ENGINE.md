@@ -72,7 +72,9 @@ concrete to act on.
    format-specific script, visual and editing templates of the mastery bundle are pin-only, so a
    sleep-history rule can never leak into a true-crime family's prompt.
 2. **Compilation** (`brief`): a compact brief of `id, title, when, do, avoid, numbers, checks` plus
-   the source-of-truth order, and the family's open project state. Long prose fields are left out.
+   the source-of-truth order, and the family's open project state. Long prose fields are left out,
+   except that a skill without `do` rules sends its `steps`, and one with neither sends its `summary`
+   (0.71: 75 such skills had reached prompts with only their avoid list and checks).
 3. **Budget**: the brief is capped at **1800 bytes**, taken out of the family's job token limit. A
    skill that does not fit is dropped **whole** and counted, never trimmed mid-rule. If the remaining
    room for a completion falls below the floor, the job is refused with a message naming the cause,
@@ -87,7 +89,9 @@ concrete to act on.
 Wired: **script candidates** (`script.candidate`), **daily research briefs** (`research.brief`), **packaging titles**
 (`packaging.title`), the **editing brain** (`editing.plan`, in code) and, since 0.39, the **scene planner and the story
 director** (`scene.plan`, input `skills`, 9,000 bytes because plans are large) and **voice direction**
-(`voice.direction`, 3,000 bytes). Each records a `skill_usage` row with the exact revisions it used.
+(`voice.direction`, 3,000 bytes). Since 0.71 also the **competitor analysis** (`competitors.blueprint`; dropped last when
+the competitor data does not fit the analysis limit), the **music score** (`audio.mix`) and **niche suggestions**
+(`niche.discover`). Each records a `skill_usage` row with the exact revisions it used.
 
 **Pack approval (0.39).** Owner review 2026-10-18 found all 349 drafts still unapproved, so no skill had ever reached a
 video. Skills -> Packs lists every pack with what is in use; "Review & approve the pack" shows every draft of the pack
@@ -153,6 +157,12 @@ Add your own skill from the Skills page with every schema field. It is saved as 
 like any other. An import of a JSON pack creates new drafts for new IDs and **new draft revisions**
 for IDs that already exist; nothing is overwritten and nothing is approved automatically. Export
 returns the approved set by default.
+
+**Pack updates (0.71).** When a program update changes a builtin skill (its source note says so), the new text is added
+as a **draft** revision beside the approved one at the next start. The approved revision stays in use until the owner
+approves the update (Skills -> Packs shows it as a draft). A skill whose newest revision the owner wrote is never
+touched, and an older pack never adds its old text back. The claude-youtube pack (`skills/youtube-growth.json`, 46
+drafts) and seven updated skills arrived this way; see research/claude-youtube.md.
 
 ## 9. Policy decisions carried into the library
 

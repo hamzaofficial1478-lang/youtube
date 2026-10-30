@@ -123,3 +123,22 @@ test('an effect with a build before its hit starts that much earlier, at most tw
   assert.match(graph(5), /adelay=0\|0/, 'a long riser starts at most two seconds early, never before zero');
   assert.match(graph(undefined), /adelay=2000\|2000/);
 });
+
+// 0.71 (owner request 2026-10-30): the approved competitor study's music lessons reach the music supervisor.
+test('the music supervisor hears what the approved competitor study learned about music and sound', () => {
+  const {musicLessons} = require('../competitor-intel'), {SoundtrackRoom} = require('../soundtrack');
+  const blueprint = {editing: {observations: ['Fast cuts every two seconds in the hook.', 'Low piano score under the narration, silence before each reveal.'], adjustments: [{setting: 'audio.musicMoods', value: ['tense', 'curious'], reason: 'Both channels keep a tense, curious bed.'}, {setting: 'pacing.shotMaxSeconds', value: 6, reason: 'Shots stay short.'}]},
+    adopt: [{area: 'editing', pattern: 'A short riser sound before every number reveal.', refs: ['C1']}], original: [{area: 'editing', contribution: 'Our own warm ambient bed instead of their piano.'}, {area: 'script', contribution: 'One story per video.'}],
+    avoid: [{pattern: 'Loud trailer drums under speech', reason: 'It buries the voice.'}]};
+  const lessons = musicLessons(blueprint, {learnedFrom: ['@MoneyMap']});
+  assert.deepEqual(lessons.settings, [{setting: 'audio.musicMoods', value: ['tense', 'curious'], reason: 'Both channels keep a tense, curious bed.'}], 'only audio settings');
+  assert.deepEqual([lessons.observations.length, lessons.learned.length, lessons.original.length, lessons.avoid.length, lessons.learnedFrom[0]], [1, 1, 1, 1, '@MoneyMap']);
+  assert.match(lessons.rule, /never copy a track/);
+  assert.equal(musicLessons({editing: {observations: ['Fast cuts.'], adjustments: []}, adopt: [], original: [], avoid: []}), null, 'nothing about sound, no guidance');
+  const inputs = {family: {id: 'f1', niche: 'Money', audience: 'Adults', format: 'long-form'}, spec: {name: 'Style', audio: {musicMoods: ['calm']}}, engine: 'stickman', durationSeconds: 60, content: {title: 'Coins'}, voice: {},
+    manifest: {plan: {scenes: [{label: 'S1', purpose: 'hook', startSeconds: 0, durationSeconds: 60, direction: 'Open.'}], sentences: [{n: 1, startSeconds: 0, text: 'Coins changed everything.'}]}}};
+  const input = SoundtrackRoom.prototype.promptInput.call({store: {}, scenes: {competitorIntel: {musicGuidance: id => (id === 'f1' ? {analysisId: 'a1', ...lessons} : null)}}}, inputs);
+  assert.equal(input.competitorGuidance.analysisId, 'a1');
+  assert.match(M.messages(input)[0].content, /competitorGuidance/);
+  assert.equal(SoundtrackRoom.prototype.promptInput.call({store: {}, scenes: {}}, inputs).competitorGuidance, undefined, 'no study, no guidance');
+});

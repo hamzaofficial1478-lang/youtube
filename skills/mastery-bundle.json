@@ -1012,21 +1012,43 @@
   {
     "id": "packaging.thumbnail-three-variants",
     "title": "Three thumbnail variants that differ on purpose",
-    "rooms": ["packaging"],
-    "tasks": ["packaging.thumbnail"],
+    "rooms": [
+      "packaging"
+    ],
+    "tasks": [
+      "packaging.thumbnail"
+    ],
     "kind": "procedure",
     "when": "When a thumbnail is designed for review.",
     "summary": "Offer three thumbnails that differ in one deliberate dimension each, such as palette, angle or subject, so the review is a real choice. Text is short, readable at phone size, and true to the video.",
     "steps": [
       "Variant A, B and C each change one named dimension.",
+      "Change exactly one variable per variant (colour, text, expression or composition) and write the hypothesis it tests and the viewers it should win.",
       "Keep text to a few words with high contrast.",
       "Check readability at a phone-sized preview."
     ],
-    "avoid": ["Text claims the video does not support, such as experts being baffled when they are not.", "Clutter and more than one focal point."],
-    "numbers": {"variants": 3, "text_words": [3, 6], "size": "1280x720", "phone_check": "150x84"},
-    "checks": ["Every thumbnail claim is supported by the script."],
-    "tags": ["packaging", "thumbnail"],
-    "source": "CB YT AI Mastery Prompts Bundle, pp. 116-118, 128-130 (owner course material, restated)",
+    "avoid": [
+      "Text claims the video does not support, such as experts being baffled when they are not.",
+      "Clutter and more than one focal point."
+    ],
+    "numbers": {
+      "variants": 3,
+      "text_words": [
+        3,
+        6
+      ],
+      "size": "1280x720",
+      "phone_check": "168x94"
+    },
+    "checks": [
+      "Every thumbnail claim is supported by the script.",
+      "Each variant differs from the primary in one named variable only."
+    ],
+    "tags": [
+      "packaging",
+      "thumbnail"
+    ],
+    "source": "CB YT AI Mastery Prompts Bundle, pp. 116-118, 128-130 (owner course material, restated); updated 0.71 from claude-youtube (MIT, 84c3fa6): sub-skills/thumbnail.md",
     "priority": 4
   },
   {
@@ -1114,17 +1136,29 @@
   {
     "id": "strategy.authenticity-guardrails",
     "title": "Guardrails against inauthentic and reused content",
-    "rooms": ["strategy", "qc", "packaging"],
-    "tasks": ["niche.evaluate", "ideas.titles", "script.review", "editing.review", "qc.review", "packaging.title"],
+    "rooms": [
+      "strategy",
+      "qc",
+      "packaging"
+    ],
+    "tasks": [
+      "niche.evaluate",
+      "ideas.titles",
+      "script.review",
+      "editing.review",
+      "qc.review",
+      "packaging.title"
+    ],
     "kind": "ruleset",
     "when": "Whenever a family plans a series, and at every review before upload.",
-    "summary": "Faceless channels are judged on whether each video adds real value. Topics come from credible sources, titles vary, scripts carry original research and the owner's view, visuals are not one image repeated, formats rotate, and the title and thumbnail are decided before production.",
+    "summary": "Faceless channels are judged on whether each video adds real value. Topics come from credible sources, titles vary, scripts carry original research and the owner's view, visuals are not one image repeated, formats rotate, and the title and thumbnail are decided before production. Since July 2025 YouTube calls this the inauthentic-content policy: mass-produced or templated videos risk losing monetisation, which matters most for a program that makes many videos.",
     "do": [
       "Choose topics that serve real interests and rest on credible sources.",
       "Vary title structures across the channel.",
       "Write scripts from original research with added insight.",
       "Settle title and thumbnail before production starts.",
-      "Rotate editing formats within the niche."
+      "Rotate editing formats within the niche.",
+      "Make every video in a series differ in substance: its own research, structure and visual design, not only a new topic word."
     ],
     "avoid": [
       "Single-image videos as a channel's standard format.",
@@ -1133,9 +1167,17 @@
       "Content with no human insight, data or perspective.",
       "Device, network, account or payment-identity tactics meant to get around YouTube enforcement."
     ],
-    "checks": ["titleVariationIssues is clean for the channel's recent titles.", "The script cites its sources and carries the owner's angle."],
-    "tags": ["strategy", "authenticity", "policy", "qc"],
-    "source": "CB YT AI Mastery Prompts Bundle, 2026 notes, pp. 437-441, 473-475 (owner course material, restated; circumvention tactics excluded)",
+    "checks": [
+      "titleVariationIssues is clean for the channel's recent titles.",
+      "The script cites its sources and carries the owner's angle."
+    ],
+    "tags": [
+      "strategy",
+      "authenticity",
+      "policy",
+      "qc"
+    ],
+    "source": "CB YT AI Mastery Prompts Bundle, 2026 notes, pp. 437-441, 473-475 (owner course material, restated; circumvention tactics excluded); updated 0.71 from claude-youtube (MIT, 84c3fa6): references/monetization-guide.md",
     "priority": 6
   },
   {

@@ -77,21 +77,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 453, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 7 whiteboard craft + 10 anime craft + 160 editing-brain skills');
+  assert.equal(loaded.length, 499, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 7 whiteboard craft + 10 anime craft + 46 claude-youtube + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 453);
+  assert.equal(ids.size, 499);
   const state = skills.state();
-  assert.equal(state.counts.total, 453);
-  assert.equal(state.counts.draft, 453);
+  assert.equal(state.counts.total, 499);
+  assert.equal(state.counts.draft, 499);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 453);
+  assert.equal(state.counts.builtin, 499);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root});
-  assert.equal(second.skills().length, 453);
+  assert.equal(second.skills().length, 499);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -113,6 +113,10 @@ test('nothing reaches a prompt until a human approves a revision', t => {
   // The compiled brief carries the rules, not the long prose fields.
   assert.equal(entry.summary, undefined);
   assert.equal(entry.steps, undefined);
+  // A skill without do rules sends its steps, so its method is not lost (0.71).
+  approveById(skills, 'script.rehook-after-two');
+  const method = skills.promptBrief('script.candidate', {byteBudget: 20000}).prompt.skills.find(item => item.id === 'script.rehook-after-two');
+  assert.ok(method && method.steps.length && !method.do && !method.summary);
 });
 
 test('approval needs every named confirmation and supersedes the previous approved revision', t => {
@@ -473,7 +477,7 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(state.skills.counts.total, 453);
+  assert.equal(state.skills.counts.total, 499);
   assert.equal(state.skills.counts.approved, 0);
   assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
@@ -546,4 +550,34 @@ test('the studio-craft pack seeds as drafts and every skill gets plain advice on
   const bare = S.validateSkill({id: 'test.bare', title: 'A bare rule', rooms: ['scene'], kind: 'ruleset', when: 'On every shot.', summary: 'Use big text.', do: ['MUST use big text', 'NEVER use small text'], source: 'test'});
   const notes = S.skillQuality(bare);
   assert.ok(notes.some(note => /Say why it matters/.test(note)) && notes.some(note => /capitals/.test(note)) && notes.some(note => /more exactly when/.test(note)));
+});
+
+// 0.71: the claude-youtube pack (MIT, read 2026-10-30) seeds as drafts; an updated builtin skill becomes a new draft for review.
+test('the claude-youtube pack seeds as drafts, and an updated builtin skill arrives as a draft beside the approved one', t => {
+  const S = require('../skills');
+  assert.ok(S.PACK_FILES.some(pack => pack.file === 'skills/youtube-growth.json'));
+  const growth = JSON.parse(fs.readFileSync(path.join(root, 'skills', 'youtube-growth.json'), 'utf8'));
+  assert.equal(growth.length, 46);
+  for (const raw of growth) { const skill = S.validateSkill(raw); assert.deepEqual(S.skillQuality(skill), [], `${skill.id} explains why, says when, and stays lean`); assert.match(skill.source, /claude-youtube.*MIT/); }
+  assert.equal(growth.filter(skill => skill.pinOnly).length, 9, 'the nine channel types are pin-only profiles');
+  for (const task of ['competitors.blueprint', 'audio.mix', 'niche.discover', 'packaging.seo', 'analytics.review']) assert.ok(growth.some(skill => skill.tasks.includes(task)), `a growth skill serves ${task}`);
+  // A copy of the packs where two skills were updated (their source notes say so); the owner revised one of them.
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'skills-update-'));
+  t.after(() => fs.rmSync(temp, {recursive: true, force: true}));
+  for (const pack of S.PACK_FILES) { fs.mkdirSync(path.dirname(path.join(temp, pack.file)), {recursive: true}); fs.copyFileSync(path.join(root, pack.file), path.join(temp, pack.file)); }
+  const {store, skills} = setup(t);
+  const target = skills.skills().find(item => item.id === 'hooks.five-mechanisms'), owned = skills.skills().find(item => item.id === 'shorts.hook-change-loop');
+  const approved = skills.approveRevision(target.latest.id, review);
+  skills.createRevision(owned.id, {createdBy: 'Owner', changeNote: 'My own wording', skill: {...owned.latest.skill, summary: `${owned.latest.skill.summary} Mine.`}});
+  const file = path.join(temp, 'skills', 'youtube-growth.json'), pack = JSON.parse(fs.readFileSync(file, 'utf8'));
+  for (const item of pack.filter(raw => ['hooks.five-mechanisms', 'shorts.hook-change-loop'].includes(raw.id))) { item.summary += ' Updated.'; item.source += '; updated in a test'; }
+  fs.writeFileSync(file, JSON.stringify(pack));
+  const again = new SkillsEngine(store, {root: temp});
+  const updated = again.skills().find(item => item.id === 'hooks.five-mechanisms');
+  assert.deepEqual(updated.revisions.map(item => item.status).sort(), ['approved', 'draft'], 'the update waits as a draft; the approved revision stays in use');
+  assert.equal(updated.approved.id, approved.id);
+  assert.match(updated.latest.changeNote, /Updated in claude-youtube/);
+  assert.equal(again.skills().find(item => item.id === 'shorts.hook-change-loop').latest.createdBy, 'Owner', 'an owner revision is never replaced by a pack update');
+  assert.equal(new SkillsEngine(store, {root: temp}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'seeding again adds nothing');
+  assert.equal(new SkillsEngine(store, {root}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'the unchanged pack does not add its older text back');
 });

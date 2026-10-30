@@ -1236,14 +1236,18 @@ test('Room 07 scores the video with Claude, generates each cue once inside the l
   assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: eleven, costConfirmed: true}), /commercial use/);
   room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true});
   assert.throws(() => room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true}), /another tab/);
-  // Claude scores from the scenes and the narration, inside a token reservation.
-  room.queueScore(content.id, {requestedBy: 'Owner', connector: claude});
+  // Claude scores from the scenes and the narration, inside a token reservation, with the owner's approved skills (0.71).
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  growth.approvePack({pack: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types', approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: growth.skills().filter(item => item.pack === 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types').map(item => item.latest.id)});
+  const scoreJob = room.queueScore(content.id, {requestedBy: 'Owner', connector: claude});
+  assert.ok(JSON.parse(store.db.prepare("SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key='audio.mix'").get(scoreJob.id).skill_ids).includes('os.three-quality-gates'), 'the score job records its skills');
   assert.throws(() => room.queueScore(content.id, {requestedBy: 'Owner', connector: claude}), /already scoring/);
   const scored = await room.processNextScore();
   assert.deepEqual([scored.revision, scored.source, scored.cues.length, scored.cues[1].end, scored.current], [2, 'claude', 2, 36, true]);
   assert.equal(room.score(free.id).current, false, 'the older score is no longer current');
   assert.equal(asked[0].task, 'scenes');
   assert.equal(asked[0].input.durationSeconds, 36);
+  assert.ok(asked[0].input.skills.skills.some(item => item.id === 'os.three-quality-gates'), 'approved skills reach the music supervisor');
   assert.ok(asked[0].input.scenes.length >= 3 && asked[0].input.sentences.length >= 5);
   assert.equal(store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='music_score'").get().status, 'settled');
   assert.throws(() => store.db.prepare('UPDATE scores SET note=? WHERE id=?').run('x', scored.id), /immutable/);

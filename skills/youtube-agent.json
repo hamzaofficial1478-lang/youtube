@@ -242,7 +242,8 @@
    "No more than two all-caps words.",
    "Replace vague words (amazing, ultimate, secret, insane) with a number, a name or a date.",
    "The first three words must carry the subject, not filler.",
-   "Thumbnail text: three words is the ceiling at feed size; share no meaningful word with the title."
+   "Thumbnail text: three words is the ceiling at feed size; share no meaningful word with the title.",
+   "Check the pair works as one: the same emotion in both, more curiosity together than either alone, and the video's first five seconds answering the visual question (home-page autoplay makes them an extension of the thumbnail)."
   ],
   "numbers": {
    "desktop_chars": 60,
@@ -253,7 +254,8 @@
   },
   "checks": [
    "Title and thumbnail share no meaningful word.",
-   "The subject survives the 40-character mobile cut."
+   "The subject survives the 40-character mobile cut.",
+   "Every claim in the title and thumbnail is visibly kept in the video; YouTube's systems compare them with the content."
   ],
   "tags": [
    "titles",
@@ -261,7 +263,7 @@
    "packaging",
    "ctr"
   ],
-  "source": "youtube-agent-skill yt-package/title.py and SKILL.md (MIT, a2feb21); implemented in craft.js lintPackaging",
+  "source": "youtube-agent-skill yt-package/title.py and SKILL.md (MIT, a2feb21); implemented in craft.js lintPackaging; updated 0.71 from claude-youtube (MIT, 84c3fa6): sub-skills/thumbnail.md, references/thumbnail-ctr-guide.md",
   "priority": 60
  },
  {
@@ -323,7 +325,8 @@
    "Score each sentence boundary: pause seconds x 1.6 + vocabulary shift (1 - shared/union of topic words in 12 sentences either side) x 3.2 + 1 for a scene start.",
    "Pick boundaries best-first, at least 10 s from each other and from the end; always include 0:00.",
    "Draft a title from the section's most frequent topic words.",
-   "Rewrite every title in the channel's words before pasting."
+   "Rewrite every title in the channel's words before pasting.",
+   "Use descriptive, keyword-aware chapter titles: chapters can appear as key moments in Google search."
   ],
   "numbers": {
    "pause_weight": 1.6,
@@ -344,7 +347,7 @@
    "seo",
    "description"
   ],
-  "source": "youtube-agent-skill yt-chapters/chapters.py (MIT, a2feb21); implemented in craft.js chapterize with the scene-start bonus added",
+  "source": "youtube-agent-skill yt-chapters/chapters.py (MIT, a2feb21); implemented in craft.js chapterize with the scene-start bonus added; updated 0.71 from claude-youtube (MIT, 84c3fa6): references/seo-playbook.md",
   "priority": 40
  },
  {
@@ -455,11 +458,13 @@
    "Take the channel's recent uploads (four or more) as the baseline; compute the median views.",
    "Multiple = video views / channel median.",
    "Study videos at 1.5x or more; name the hook formula each title uses.",
+   "Three times the channel median or more is a true outlier; for each, say whether it rode a one-off event (news, a famous guest) or something repeatable (an angle, a title pattern, a format).",
    "Learn the technique; never reuse a title's wording."
   ],
   "numbers": {
    "min_videos_for_median": 4,
-   "default_threshold_multiple": 1.5
+   "default_threshold_multiple": 1.5,
+   "true_outlier_multiple": 3
   },
   "avoid": [
    "Ranking by raw views across channels of different sizes.",
@@ -473,7 +478,7 @@
    "competitors",
    "ideas"
   ],
-  "source": "youtube-agent-skill yt-viral/swipe.py (MIT, a2feb21); implemented in craft.js outlierMultiples",
+  "source": "youtube-agent-skill yt-viral/swipe.py (MIT, a2feb21); implemented in craft.js outlierMultiples; updated 0.71 from claude-youtube (MIT, 84c3fa6): sub-skills/competitor.md",
   "priority": 45
  },
  {
