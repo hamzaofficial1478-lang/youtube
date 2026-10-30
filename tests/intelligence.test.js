@@ -228,12 +228,17 @@ test('Claude blueprint is validated, reviewed by a human and then drives style, 
   intel.saveNote(family.id, {competitorKey: `channel_id:${channelIds[0].toLowerCase()}`, expectedRevision: 0, createdBy: 'Owner', editingStyle: 'Slow pans over archival maps with a ledger motif.', voice: 'Deep, calm narrator.'});
   intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, youtubeConnector: ids.youtube});
   const scan = await intel.processNextScan();
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  growth.approveRevision(growth.skills().find(item => item.id === 'competitors.four-gaps').latest.id, {approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}});
   const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   assert.equal(queued.status, 'queued');
   assert.ok(Object.keys(queued.refs).includes('N1'));
+  assert.ok(JSON.parse(store.db.prepare("SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key='competitors.blueprint'").get(queued.id).skill_ids).includes('competitors.four-gaps'), 'the analysis records its skills (0.71)');
   const prompt = await (async () => { await intel.processNextAnalysis(); return network.calls.find(call => call.path === '/v1/messages').body; })();
   const userData = JSON.parse(prompt.messages[0].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
   assert.equal(JSON.stringify(userData).includes('YouTube raw title'), false, 'YouTube API data is not sent to Claude without derived-use approval');
+  assert.ok(userData.skills.skills.some(item => item.id === 'competitors.four-gaps'));
+  assert.match(prompt.system, /owner-approved skill brief/);
   assert.match(prompt.system, /at most 30%/);
   const analysis = intel.publicAnalysis(intel.analysisRow(queued.id));
   assert.equal(analysis.status, 'completed');

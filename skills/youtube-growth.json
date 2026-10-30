@@ -1,0 +1,1725 @@
+[
+ {
+  "id": "hooks.five-mechanisms",
+  "title": "Five hook mechanisms, each a full 30-second opening, chosen for the video's job",
+  "rooms": [
+   "hooks",
+   "script"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.hooks",
+   "script.review"
+  ],
+  "kind": "procedure",
+  "when": "When the opening of a long-form script is written or rewritten, and when the owner wants hook options to choose from.",
+  "summary": "Different openings hold different viewers, so offer the owner a real choice instead of one hook. Write the opening five ways, each built on a different mechanism: shock or contradiction (a claim that clashes with what the viewer believes), problem-agitation (name a pain, show what it costs, promise relief), story-open (drop the viewer into the middle of a moment), curiosity gap (show that an answer exists without giving it) and proof (lead with a concrete result or number). Each is a complete spoken opening of about 75 words, so it can be judged as heard, not as a slogan.",
+  "steps": [
+   "Name the topic's core tension, its surprising angle, the viewer's pain and what they stand to gain or lose.",
+   "Write five openings of about 75 spoken words, one per mechanism; no two may start the same way.",
+   "For each: one sentence on how the mechanism works, the drop-off risk (low, medium, high) with its reason, the traffic it suits (search, browse, suggested) and when it backfires.",
+   "Recommend one for this video and a runner-up, with the reason."
+  ],
+  "do": [
+   "Pick by format: explainers and how-tos usually open on problem-agitation, stories on story-open, opinion pieces on contradiction, curiosity-led browse videos on the gap.",
+   "On a new faceless channel, make proof concrete (a number, a record, a document) because there is no presenter whose name earns trust."
+  ],
+  "avoid": [
+   "A curiosity gap that answers itself inside the 30 seconds.",
+   "A story-open that begins 'Let me tell you about a time'; start inside the moment instead."
+  ],
+  "numbers": {
+   "variants": 5,
+   "spoken_words": [
+    65,
+    85
+   ],
+   "seconds": 30
+  },
+  "checks": [
+   "Five mechanisms are present and no two openings share a first-sentence pattern.",
+   "The recommended hook fits the video's format and traffic source."
+  ],
+  "tags": [
+   "hooks",
+   "retention",
+   "openings"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): skills/claude-youtube/sub-skills/hook.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 55
+ },
+ {
+  "id": "hooks.grab-promise-stakes",
+  "title": "The first 30 seconds: grab, promise, stakes, and the title's promise delivered at once",
+  "rooms": [
+   "hooks",
+   "script"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.hooks",
+   "script.review"
+  ],
+  "kind": "template",
+  "when": "When the first 30 seconds of any long-form script are written or checked.",
+  "summary": "Most viewers who leave do so in the first minute, and the video now starts playing on the home page, so the opening seconds act as a second thumbnail. Grab attention in the first five seconds, state exactly what the viewer gets by 15 seconds, then say why it matters by 30. Show straight away that the video is delivering what the title and thumbnail promised, because a viewer who doubts the promise leaves.",
+  "steps": [
+   "0-5 s grab: a bold claim, an unexpected picture or a moment already in motion; no greeting, no channel intro.",
+   "5-15 s promise: the specific outcome the viewer will have by the end.",
+   "15-30 s stakes: what they miss or lose by leaving.",
+   "Within the first 5-10 s, show or say something that proves the title's promise is being kept."
+  ],
+  "avoid": [
+   "'Hey guys, welcome back' or any channel-first opening; it is a measurable drop-off point.",
+   "A promise vaguer than the title."
+  ],
+  "numbers": {
+   "grab_s": [
+    0,
+    5
+   ],
+   "promise_s": [
+    5,
+    15
+   ],
+   "stakes_s": [
+    15,
+    30
+   ],
+   "reported_loss_first_60s_pct": 55,
+   "reported_retention_target_at_30s_pct": 70
+  },
+  "checks": [
+   "The promise is stated by 15 seconds.",
+   "The opening proves the title's promise within 10 seconds."
+  ],
+  "tags": [
+   "hooks",
+   "retention",
+   "autoplay"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/retention-scripting-guide.md, sub-skills/script.md, references/algorithm-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 55
+ },
+ {
+  "id": "script.block-recap-forward",
+  "title": "Every section ends with a one-line recap and a pull into the next",
+  "rooms": [
+   "script"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "When a long-form script is divided into sections or chapters.",
+  "summary": "A section that simply stops gives the viewer a natural exit. Open each section with something that resets attention, deliver its point, then close it with one sentence that sums it up and one that makes the next section feel necessary. The recap helps viewers who drifted; the forward pull keeps them.",
+  "steps": [
+   "Open the section with a fresh angle: a question, a number, a turn.",
+   "Deliver the point in short spoken sentences.",
+   "Close with a one-sentence recap, then a forward hook ('But that only explains half of it...')."
+  ],
+  "checks": [
+   "Every section ends with both a recap and a forward hook."
+  ],
+  "tags": [
+   "script",
+   "structure",
+   "retention"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/script.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "script.interrupt-cadence",
+  "title": "Plan a pattern interrupt every 30-90 seconds and log it",
+  "rooms": [
+   "script",
+   "scene",
+   "editing"
+  ],
+  "tasks": [
+   "script.candidate",
+   "scene.plan",
+   "editing.plan",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "When a long-form script, scene plan or edit is drafted, and in Shorts at a much faster rate.",
+  "summary": "Attention resets when something changes. Plan a deliberate change every 30-90 seconds in long-form: a new visual system or look, a sound sting, an on-screen number or graphic, an unexpected fact, a format shift such as a map, chart or quote. In this program the change is usually a new scene, a motion-graphic beat or a sound effect, so the script should mark where it belongs and why. Shorts need a visual change every two to three seconds.",
+  "steps": [
+   "Mark each interrupt in the script with its type: VISUAL CHANGE, GRAPHIC, SOUND, UNEXPECTED STAT or FORMAT SHIFT.",
+   "Keep a log: time, type, note; check the average gap.",
+   "Put the strongest interrupts where viewers usually leave: after the intro, around the middle and before the last section."
+  ],
+  "avoid": [
+   "Interrupts that do not serve the story; a random effect is noise, not attention."
+  ],
+  "numbers": {
+   "long_form_gap_s": [
+    30,
+    90
+   ],
+   "shorts_gap_s": [
+    2,
+    3
+   ],
+   "live_gap_min": [
+    2,
+    3
+   ]
+  },
+  "checks": [
+   "No stretch longer than 90 seconds without a planned change in a long-form video."
+  ],
+  "tags": [
+   "retention",
+   "pacing",
+   "pattern-interrupt"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/script.md, references/retention-scripting-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "script.retention-risk-map",
+  "title": "Mark at least three drop-off risks in every script, each with its fix",
+  "rooms": [
+   "script",
+   "qc"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "checklist",
+  "when": "Before a long-form script is approved.",
+  "summary": "Every script has places where viewers are likely to leave: a dense stretch of information, a slow bridge from the hook into the content, the cliff around 60% of the runtime, an ending that winds down. Naming them before production turns them into editing and writing tasks instead of surprises in the analytics.",
+  "steps": [
+   "Scan the script and mark each risk with its time, its level (high or medium) and why.",
+   "Give each a concrete fix: cut, reorder, add an interrupt, add a re-hook, move the payoff."
+  ],
+  "numbers": {
+   "min_risks": 3,
+   "cliff_point_pct": 60
+  },
+  "checks": [
+   "At least three risks are named with a fix each.",
+   "The 60% mark has a re-hook."
+  ],
+  "tags": [
+   "retention",
+   "qc",
+   "script"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/script.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "script.energy-pattern",
+  "title": "Choose the video's energy pattern on purpose",
+  "rooms": [
+   "script",
+   "voice",
+   "editing"
+  ],
+  "tasks": [
+   "script.candidate",
+   "voice.direction",
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "When a script is drafted and before voice direction and scene planning, so all three follow the same curve.",
+  "summary": "Energy that never changes tires viewers, and energy that changes at random confuses them. Pick one of five patterns for the format and let the script, the narrator's delivery and the edit follow it: a gradual slowdown (strong open that settles, for short impact pieces), calm and burst (15-25 seconds calm, then a burst every two to three minutes, for explainers), the anchor (return to the thesis every two to three minutes, for long essays), strategic pauses (deliberate slowness before key points, for stories) and progressive energy (high for three minutes, then steady with variety, for entertainment).",
+  "do": [
+   "Name the chosen pattern in the script notes so voice direction and the scene planner follow it."
+  ],
+  "tags": [
+   "energy",
+   "pacing",
+   "voice",
+   "editing"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/retention-scripting-guide.md (AIR Media-Tech energy patterns); restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "script.outro-keeps-energy",
+  "title": "The ending keeps its energy: payoff, one ask, the next video",
+  "rooms": [
+   "script"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "When the last minute of a long-form script is written.",
+  "summary": "A wind-down tells viewers the video is over before it is. End on the strongest payoff, then one clear ask, then a short tease of the next video while the end screen shows it, keeping the pace to the final second.",
+  "steps": [
+   "Payoff: the reveal, result or answer the hook promised.",
+   "One ask tied to what the viewer just got.",
+   "Next-video tease: a small curiosity gap that the end screen resolves."
+  ],
+  "avoid": [
+   "'Thanks for watching' and 'don't forget to' filler.",
+   "A slow recap of everything already said."
+  ],
+  "tags": [
+   "outro",
+   "end-screen",
+   "script"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/script.md, references/retention-scripting-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "script.cta-where-viewers-are",
+  "title": "Place the ask where viewers still are (an alternative to the single late ask)",
+  "rooms": [
+   "script"
+  ],
+  "tasks": [
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "principle",
+  "when": "Only for families whose goal is subscriber growth and whose owner chose an earlier ask; this program's retention check otherwise expects one ask after 60%.",
+  "summary": "The repository reports that only about 16% of viewers reach the final tenth of a video, so an ask placed only at the end is heard by few. Its alternative is a short, soft ask right after the first real value (around the first minute or the 25% mark) and the main ask at the end, both tied to what was just delivered. This conflicts with the owner's own rule of one call to action after 60%; use it only where the owner has decided so for the family.",
+  "do": [
+   "Tie any ask to the value just delivered.",
+   "Keep a soft early ask under 15 seconds."
+  ],
+  "avoid": [
+   "Using both an early and a late ask on a family that follows the one-ask rule."
+  ],
+  "numbers": {
+   "reported_reach_final_tenth_pct": 16,
+   "early_ask_s_max": 15
+  },
+  "tags": [
+   "cta",
+   "subscribe",
+   "script"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/retention-scripting-guide.md, sub-skills/script.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 20
+ },
+ {
+  "id": "voice.ai-narration-risk",
+  "title": "AI narration has to earn attention a human voice gets for free",
+  "rooms": [
+   "voice",
+   "script"
+  ],
+  "tasks": [
+   "voice.direction",
+   "script.candidate"
+  ],
+  "kind": "principle",
+  "when": "Whenever narration for a faceless channel is directed or a script is written for an AI narrator.",
+  "summary": "The repository cites a report that AI narration loses far more viewers than human-fronted videos. Treat it as a warning, not a fact about every voice: what loses viewers is flat, uniform delivery. So the script is written to be spoken (short sentences, contractions, direct address), the voice direction varies emotion, pace and pauses by sentence, and the picture changes with the words.",
+  "do": [
+   "Vary pace and emotion sentence by sentence through voice direction.",
+   "Put a deliberate pause before every key point.",
+   "Listen to the audition before approving it; never approve a narration unheard."
+  ],
+  "avoid": [
+   "One emotion and one pace for a whole video.",
+   "Written-prose sentences read aloud."
+  ],
+  "numbers": {
+   "reported_retention_gap_pct": 70
+  },
+  "tags": [
+   "voice",
+   "ai-narration",
+   "retention"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/retention-scripting-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "packaging.three-title-routes",
+  "title": "Three titles for three routes: search, browse and both",
+  "rooms": [
+   "packaging",
+   "ideas",
+   "seo"
+  ],
+  "tasks": [
+   "packaging.title",
+   "ideas.titles"
+  ],
+  "kind": "procedure",
+  "when": "When title options are written for a video or a topic idea.",
+  "summary": "A title written for search and a title written for the home feed do different jobs. Offer three that differ in strategy, not in a word or two: a search title (the keyword up front, clear intent), a browse title (curiosity or emotion, keyword present but not leading) and a hybrid (keyword up front wrapped in a reason to click). Pick by where this video's viewers will come from.",
+  "steps": [
+   "Name the primary keyword and the route the video mostly depends on.",
+   "Write the three titles; put the keyword or the hook in the first 40 characters, because mobile cuts titles around there.",
+   "Recommend one with the reason."
+  ],
+  "do": [
+   "Use a number or a bracket for context where it is true (a year, 'step by step').",
+   "Keep the most important words before the mobile cut."
+  ],
+  "avoid": [
+   "Three titles that differ only by synonyms.",
+   "Hashtags in the title."
+  ],
+  "numbers": {
+   "variants": 3,
+   "keyword_within_chars": 40,
+   "mobile_cut_chars": [
+    40,
+    50
+   ],
+   "hard_limit_chars": 100
+  },
+  "checks": [
+   "The three titles use three different strategies."
+  ],
+  "tags": [
+   "titles",
+   "seo",
+   "packaging"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/seo.md, sub-skills/metadata.md, references/seo-playbook.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "seo.metadata-limits",
+  "title": "Description, hashtags and tags: the limits that decide whether they work",
+  "rooms": [
+   "seo",
+   "packaging"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "packaging.title"
+  ],
+  "kind": "ruleset",
+  "when": "When a description, hashtags or tags are written for upload.",
+  "summary": "Most viewers see only the first two lines of a description, and YouTube ignores hashtags past a limit, so the first lines are ad copy and the hashtags are few. The first 150-200 characters carry the keyword (within the first 25 words) and a reason to watch; chapters follow; the body is 200-350 natural words with the keyword two to four times; three to five hashtags go at the end, never in the title. Tags matter little now: use them for misspellings and disambiguation, and spend no time on them.",
+  "avoid": [
+   "Keyword stuffing; it reads as spam to viewers and to YouTube."
+  ],
+  "numbers": {
+   "description_max_chars": 5000,
+   "preview_chars": [
+    150,
+    200
+   ],
+   "keyword_within_words": 25,
+   "body_words": [
+    200,
+    350
+   ],
+   "keyword_repeats": [
+    2,
+    4
+   ],
+   "hashtags": [
+    3,
+    5
+   ],
+   "hashtags_ignored_above": 15,
+   "tags_max_chars": 500
+  },
+  "checks": [
+   "The keyword is in the first 25 words.",
+   "No more than five hashtags, none in the title."
+  ],
+  "tags": [
+   "seo",
+   "description",
+   "hashtags"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/seo-playbook.md, sub-skills/metadata.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "packaging.cards-end-screen",
+  "title": "Cards after a curiosity moment, an end screen in the last 20 seconds",
+  "rooms": [
+   "packaging"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "packaging.title"
+  ],
+  "kind": "procedure",
+  "when": "When a long-form video's upload package is prepared.",
+  "summary": "Cards and end screens do not lift ranking, but they move viewers to the next video, which keeps the session going. Place cards at moments that make a related video feel wanted (around 20% and 70% of the runtime) and give the last 15-20 seconds to one suggested video and a subscribe element, with the narration pointing at them.",
+  "steps": [
+   "Card 1 near 20%, after a line that raises a related question.",
+   "Card 2 near 70%.",
+   "End screen in the final 15-20 s: one best-for-viewer video and subscribe; the script's last lines point to it."
+  ],
+  "numbers": {
+   "card_points_pct": [
+    20,
+    70
+   ],
+   "end_screen_s": [
+    15,
+    20
+   ],
+   "end_screen_ctr_healthy_pct": 2,
+   "end_screen_ctr_strong_pct": 4
+  },
+  "tags": [
+   "cards",
+   "end-screen",
+   "session"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/metadata.md, references/seo-playbook.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "seo.prepublish-checklist",
+  "title": "Pre-publish check: every discoverability item, checked, not assumed",
+  "rooms": [
+   "seo",
+   "qc",
+   "packaging"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "packaging.title",
+   "qc.review"
+  ],
+  "kind": "checklist",
+  "when": "Before a video is queued for upload.",
+  "summary": "Missing chapters, a hashtag in the title or a wrong audience setting cost reach that no later fix recovers fully. Check each item against the package itself.",
+  "checks": [
+   "Keyword or hook in the first 40 characters of the title.",
+   "Keyword in the first 25 words of the description; description under 5,000 characters.",
+   "Chapters start at 0:00, at least three, each at least 10 seconds.",
+   "Tags under 500 characters.",
+   "Custom thumbnail chosen.",
+   "Hashtags in the description, three to five.",
+   "Captions attached and checked.",
+   "Audience (made for kids or not) and category set.",
+   "End screen covers the last 20 seconds and the narration points to it.",
+   "AI or sponsor disclosure set where it applies."
+  ],
+  "tags": [
+   "seo",
+   "checklist",
+   "upload"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/metadata.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "packaging.thumbnail-brief",
+  "title": "A thumbnail brief a designer could follow without asking a question",
+  "rooms": [
+   "packaging"
+  ],
+  "tasks": [
+   "packaging.thumbnail",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "When a thumbnail is specified, drawn or painted for a video.",
+  "summary": "Viewers decide in under a second at phone size, so a thumbnail needs one focal point, a clear emotion and room to breathe. Write the brief precisely: what the eye hits first and where it sits, the emotion (on a faceless channel, a character's or object's expression), a few words of text that the title does not already say, colours as hex codes with a reason, composition on the rule of thirds with 30-40% empty space, and a list of what not to include. Check it at feed size (about 168 x 94 pixels) and design at 1920 x 1080 because television viewing is growing.",
+  "steps": [
+   "Focal point: subject, position, share of the frame.",
+   "Emotion and gaze direction.",
+   "Text: a few words, high contrast, never repeating the title.",
+   "Palette: three hex colours with roles.",
+   "Composition and empty space.",
+   "Do-not list of at least three items."
+  ],
+  "avoid": [
+   "A neutral face; a strong, honest expression or none.",
+   "Clutter and a second focal point."
+  ],
+  "numbers": {
+   "negative_space_pct": [
+    30,
+    40
+   ],
+   "feed_check_px": "168x94",
+   "design_px": "1920x1080",
+   "min_px": "1280x720",
+   "max_mb": 2
+  },
+  "checks": [
+   "The thumbnail text shares no meaningful word with the title.",
+   "It still reads at feed size."
+  ],
+  "tags": [
+   "thumbnail",
+   "ctr",
+   "packaging"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/thumbnail.md, references/thumbnail-ctr-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "shorts.hook-change-loop",
+  "title": "Shorts: a one-to-three-second hook, a change every few seconds and an ending that loops",
+  "rooms": [
+   "script",
+   "editing",
+   "packaging"
+  ],
+  "tasks": [
+   "script.candidate",
+   "editing.plan",
+   "scene.plan",
+   "packaging.title"
+  ],
+  "kind": "ruleset",
+  "when": "When a Short is scripted, planned or packaged, whether new or cut from a long video.",
+  "summary": "In the Shorts feed the decision is to swipe or stay, made in the first seconds, and replays count, so the opening frame is the hook and the last line leads back into the first. Change the picture at least every three seconds, keep captions on, and write a short title (four to six words) because most of it is hidden. The repository's length figures disagree with each other (it cites peaks at 13 and 60 seconds and a 15-30 second sweet spot), so length follows the content and is judged on completion.",
+  "steps": [
+   "Hook in 1-3 s: the first frame and line make the question.",
+   "Value without a run-up.",
+   "Last 1-2 s set up the replay: mirror or call back to the opening.",
+   "Title 4-6 words, 20-40 characters, keyword first; the first 125 characters of the description carry the point; 3-5 hashtags."
+  ],
+  "avoid": [
+   "Licensed music in a Short without checking what it does to the Shorts revenue share."
+  ],
+  "numbers": {
+   "hook_s": [
+    1,
+    3
+   ],
+   "visual_change_every_s": 3,
+   "title_words": [
+    4,
+    6
+   ],
+   "title_chars": [
+    20,
+    40
+   ],
+   "description_preview_chars": 125,
+   "reported_viewed_vs_swiped_good_pct": 75,
+   "retest_opening_below_pct": 60
+  },
+  "checks": [
+   "The last line leads back to the first."
+  ],
+  "tags": [
+   "shorts",
+   "hooks",
+   "loops"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/shorts.md, references/shorts-playbook.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "shorts.test-and-bridge",
+  "title": "Use Shorts to test hooks, and bridge to long-form only on purpose",
+  "rooms": [
+   "strategy",
+   "ideas"
+  ],
+  "tasks": [
+   "ideas.titles",
+   "packaging.title",
+   "niche.evaluate"
+  ],
+  "kind": "principle",
+  "when": "When a family plans how its Shorts relate to its long-form videos.",
+  "summary": "Shorts and long-form reach largely different viewers (the repository reports about a tenth overlap), so a Short is not a trailer by default. Use Shorts to test hooks and topics cheaply and turn the winners into long-form; add a bridge (a spoken line, a pinned comment, a teaser) only when the goal of that Short is to send viewers to a long video. Shorts lose their push after about a month, while long-form evergreen videos keep earning.",
+  "do": [
+   "Track which Short hooks hold viewers and reuse the winners as long-form openings."
+  ],
+  "numbers": {
+   "reported_audience_overlap_pct": 10,
+   "reported_freshness_days": [
+    28,
+    30
+   ]
+  },
+  "tags": [
+   "shorts",
+   "strategy",
+   "testing"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/shorts-playbook.md, templates/shorts-first-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "packaging.repurpose-package",
+  "title": "One video, many native pieces: Shorts, a same-day community post and posts for other platforms",
+  "rooms": [
+   "packaging",
+   "editing"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "editing.plan"
+  ],
+  "kind": "procedure",
+  "when": "After a long-form video is approved, when its Shorts and promotion are planned.",
+  "summary": "A long video contains several self-contained moments and a core message that other places can use, but each place has its own form; copying the transcript everywhere wastes it. Pick three to five Shorts that stand alone and rewrite each hook for the scroll, prepare a community post for the day of release, and when the channel uses other platforms, write each piece in that platform's own form (a blog outline with time-stamped embeds, a professional post with three takeaways, a thread whose posts each stand alone, a short newsletter with two subject lines).",
+  "steps": [
+   "Choose 3-5 standalone moments; rewrite each opening line for vertical.",
+   "Order Shorts by hook strength; space them two or three days apart.",
+   "Community post for release day (poll, key frame or behind-the-scenes).",
+   "Other platforms only where the owner uses them; each native."
+  ],
+  "avoid": [
+   "Watermarks from other platforms.",
+   "A Short that needs the previous minute to make sense."
+  ],
+  "numbers": {
+   "shorts_per_long": [
+    3,
+    5
+   ],
+   "short_gap_days": [
+    2,
+    3
+   ]
+  },
+  "tags": [
+   "repurposing",
+   "shorts",
+   "community"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/repurpose.md, references/repurposing-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "ideas.composite-ranking",
+  "title": "Rank ideas by demand, click potential, feasibility and fit, with a route and an urgency",
+  "rooms": [
+   "ideas",
+   "strategy"
+  ],
+  "tasks": [
+   "ideas.titles",
+   "niche.discover"
+  ],
+  "kind": "formula",
+  "when": "When a list of video ideas or topic suggestions is produced or ranked.",
+  "summary": "An idea list in arbitrary order wastes the best ideas. Score each idea 1-10 on search demand, click potential, how easily this program can produce it, and fit with the niche, and rank by the total out of 40. Give each its route (search-first for how-to and explainer topics, browse-first for curiosity and opinion, trending for time-sensitive topics) and an urgency: make this week, seasonal with its deadline, or evergreen. Say which data each idea came from.",
+  "steps": [
+   "Score demand, click potential, feasibility and fit 1-10 each; total out of 40.",
+   "Assign the route and the urgency.",
+   "Use at least three routes across a list of ten.",
+   "Attribute every idea to its source signal."
+  ],
+  "avoid": [
+   "Calling an idea trending without a dated signal.",
+   "Ideas that differ only in wording."
+  ],
+  "numbers": {
+   "score_max": 40,
+   "dimensions": 4,
+   "routes_min_in_ten": 3
+  },
+  "tags": [
+   "ideas",
+   "ranking",
+   "topics"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/ideate.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "ideas.evergreen-share",
+  "title": "Keep most of the channel evergreen and trends to about a quarter",
+  "rooms": [
+   "ideas",
+   "strategy"
+  ],
+  "tasks": [
+   "ideas.titles",
+   "niche.evaluate",
+   "niche.discover"
+  ],
+  "kind": "principle",
+  "when": "When a month of videos or a family's topic mix is planned.",
+  "summary": "Evergreen videos keep collecting views for years; trend videos spike and fade. A channel that lives on trends must keep running to stand still. Aim for roughly 70-80% evergreen and 20-30% trending, refresh evergreen videos that still earn, and treat Shorts as fresh-only (about a month of push).",
+  "numbers": {
+   "evergreen_pct": [
+    70,
+    80
+   ],
+   "trending_pct": [
+    20,
+    30
+   ],
+   "trending_warning_pct": 30
+  },
+  "checks": [
+   "A month's plan has no more than 30% trending topics unless the owner chose a news format."
+  ],
+  "tags": [
+   "evergreen",
+   "trends",
+   "planning"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/repurposing-guide.md, sub-skills/calendar.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "strategy.positioning-line",
+  "title": "One positioning sentence: who the channel helps, to what, how, and how it differs",
+  "rooms": [
+   "strategy",
+   "niche",
+   "branding"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "niche.discover",
+   "branding.identity",
+   "ideas.titles"
+  ],
+  "kind": "template",
+  "when": "When a family is created from a niche, and whenever its topics drift.",
+  "summary": "A channel YouTube cannot classify never gets recommended alongside the right videos, and a viewer who cannot say what the channel is for does not subscribe. Write one sentence: '[Channel] helps [specific viewer] achieve [outcome] through [angle or format] that [what competitors do not offer].' Start narrow (a micro-niche the channel can own in 30-50 videos) and name when it widens.",
+  "steps": [
+   "Fill the sentence with a specific person, not a demographic.",
+   "Name the micro-niche start.",
+   "Name the expansion path and the point that triggers it (for example a subscriber threshold)."
+  ],
+  "checks": [
+   "Every planned topic passes the positioning sentence."
+  ],
+  "tags": [
+   "positioning",
+   "niche",
+   "strategy"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/strategy.md, references/repurposing-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "strategy.hub-hero-help",
+  "title": "Plan the channel in three pillars: regular hub videos, searchable help videos, rare hero videos",
+  "rooms": [
+   "strategy",
+   "ideas"
+  ],
+  "tasks": [
+   "ideas.titles",
+   "niche.evaluate"
+  ],
+  "kind": "template",
+  "when": "When a family's content plan or calendar is drawn up.",
+  "summary": "Videos do different jobs. Hub videos are the recurring series that build a habit; help videos answer what people search for and keep earning; hero videos are rare big swings for reach. A growth-stage channel is mostly hub and help with a little hero; the exact shares depend on the channel type. Each pillar gets a purpose, a format, a frequency, a traffic route and three example videos.",
+  "numbers": {
+   "growth_stage_mix_pct": {
+    "hub": 70,
+    "help": 15,
+    "hero": 15
+   },
+   "pillars": [
+    3,
+    5
+   ],
+   "examples_per_pillar": 3
+  },
+  "checks": [
+   "The balance is stated and imbalances (all hub, no help) are named."
+  ],
+  "tags": [
+   "pillars",
+   "strategy",
+   "planning"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/strategy.md, references/repurposing-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "strategy.cadence-consistency",
+  "title": "A schedule the program can keep beats a burst it cannot",
+  "rooms": [
+   "strategy"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles"
+  ],
+  "kind": "principle",
+  "when": "When a family's upload cadence is set or reviewed.",
+  "summary": "The repository cites a study of five million channels in which channels posting 12 or more videos a month grew much faster, and also that a regular schedule beats sporadic bursts. Set the cadence the family's budget and approval time can sustain every week, then grow it. Subscribers get at most three upload notifications a day, so more uploads in a day waste them.",
+  "do": [
+   "Start with the cadence the weekly budget and approvals can hold for three months, then raise it one step at a time."
+  ],
+  "avoid": [
+   "Raising the cadence beyond what can be reviewed and approved properly; quality and the approval gates come first."
+  ],
+  "numbers": {
+   "reported_fast_growth_per_month": 12,
+   "notification_cap_per_24h": 3,
+   "new_channel_boost_below_subs": 500
+  },
+  "tags": [
+   "cadence",
+   "consistency",
+   "strategy"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/algorithm-guide.md (vidIQ study); restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "strategy.calendar-balance",
+  "title": "A month's calendar: alternate pillars, cap trends, plan Shorts and seasons",
+  "rooms": [
+   "strategy",
+   "ideas"
+  ],
+  "tasks": [
+   "ideas.titles"
+  ],
+  "kind": "checklist",
+  "when": "When a month of videos is scheduled.",
+  "summary": "A calendar is where strategy becomes work, so check its balance before production starts. No two consecutive videos from the same pillar unless the cadence demands it, trending topics at most about 30%, two or three Shorts per long video, holiday topics published early enough (count back from the date), and the season's ad rates in mind: the last quarter pays most, January least.",
+  "numbers": {
+   "q4_cpm_uplift_pct": [
+    30,
+    60
+   ],
+   "shorts_per_long": [
+    2,
+    3
+   ]
+  },
+  "checks": [
+   "No two consecutive videos from one pillar.",
+   "Trending share at most 30%.",
+   "Two or three Shorts planned per long video.",
+   "Holiday lead times counted back from the date."
+  ],
+  "tags": [
+   "calendar",
+   "planning",
+   "seasonality"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/calendar.md, references/analytics-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "strategy.stage-and-goal",
+  "title": "Advice depends on the channel's stage and goal",
+  "rooms": [
+   "strategy"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "principle",
+  "when": "Whenever advice, benchmarks or targets are given for a family.",
+  "summary": "What works at 500 subscribers is not what works at 500,000, and a channel chasing growth needs different videos from one chasing revenue or authority. Before advising, place the family by stage (new under 1K, growing 1K-10K, established 10K-100K, authority above) and by its main goal (growth, monetisation, authority, engagement), and compare only with benchmarks for that stage.",
+  "do": [
+   "State the family's stage and goal at the top of any plan or audit."
+  ],
+  "avoid": [
+   "Comparing a new channel with the numbers of a large one.",
+   "Generic advice such as 'post consistently' without a cadence for this stage."
+  ],
+  "numbers": {
+   "stages_subs": {
+    "new": "<1K",
+    "growing": "1K-10K",
+    "established": "10K-100K",
+    "authority": ">100K"
+   }
+  },
+  "tags": [
+   "strategy",
+   "benchmarks",
+   "stage"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): SKILL.md context-gathering protocol, sub-skills/audit.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "strategy.ypp-and-inauthentic-content",
+  "title": "Monetisation thresholds and YouTube's inauthentic-content policy",
+  "rooms": [
+   "strategy",
+   "qc"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.review",
+   "qc.review"
+  ],
+  "kind": "ruleset",
+  "when": "When a family's path to monetisation is planned, and before a series of similar videos is approved.",
+  "summary": "The partner programme has two tiers: an expanded tier (500 subscribers, three public uploads in 90 days, and 3,000 watch hours in 12 months or 3 million Shorts views in 90 days) and the full tier with ad revenue (1,000 subscribers and 4,000 watch hours or 10 million Shorts views); review takes about a month. In July 2025 YouTube renamed its repetitious-content policy to inauthentic content: mass-produced or templated videos risk losing monetisation. A program that makes videos at scale has to make every video differ in substance.",
+  "do": [
+   "Give every video its own research, structure and visual design; the program's adaptive design and per-video planning exist for this."
+  ],
+  "avoid": [
+   "Series where only the topic word changes in the same template."
+  ],
+  "numbers": {
+   "expanded": {
+    "subs": 500,
+    "uploads_90d": 3,
+    "watch_hours_12m": 3000,
+    "shorts_views_90d": 3000000
+   },
+   "full": {
+    "subs": 1000,
+    "watch_hours_12m": 4000,
+    "shorts_views_90d": 10000000
+   },
+   "review_weeks": 4
+  },
+  "tags": [
+   "monetisation",
+   "policy",
+   "authenticity"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/monetization-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 50
+ },
+ {
+  "id": "strategy.revenue-by-stage",
+  "title": "Which revenue comes first depends on the channel's size",
+  "rooms": [
+   "strategy"
+  ],
+  "tasks": [
+   "niche.evaluate"
+  ],
+  "kind": "principle",
+  "when": "When a family's monetisation plan is drawn up or its niche is evaluated.",
+  "summary": "Ad revenue needs scale, so small channels usually earn first from brand deals and their own products, while large channels optimise ads and add memberships and shopping. Long-form videos of eight minutes or more can carry mid-roll ads; Shorts pay a small fraction of long-form per view; viewers in high-income countries are worth several times more. Estimate each of the seven streams (long-form ads, Shorts share, memberships, Super Chat and Thanks, shopping affiliate, brand deals, own products) at the channel's real scale.",
+  "do": [
+   "Estimate every stream at today's scale and name the next one to switch on."
+  ],
+  "avoid": [
+   "Padding a video to eight minutes; lost retention costs more than the mid-roll earns."
+  ],
+  "numbers": {
+   "midroll_min_minutes": 8,
+   "reported_shorts_rpm_usd": [
+    0.01,
+    0.07
+   ],
+   "reported_tier1_value_multiple": [
+    5,
+    8
+   ],
+   "streams": 7
+  },
+  "tags": [
+   "monetisation",
+   "revenue",
+   "strategy"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/monetize.md, references/monetization-guide.md, references/analytics-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "packaging.sponsor-disclosure",
+  "title": "Sponsored and AI-made content is disclosed where viewers actually see it",
+  "rooms": [
+   "packaging",
+   "qc"
+  ],
+  "tasks": [
+   "packaging.seo",
+   "packaging.title",
+   "qc.review"
+  ],
+  "kind": "checklist",
+  "when": "When a video contains a sponsorship, an affiliate link or AI-generated material.",
+  "summary": "A disclosure only counts if the viewer notices it, and the repository notes US rules hold both the brand and the creator liable. Say it in the first 15-30 seconds, show it on screen for at least ten seconds, put it in the first two lines of the description, and turn on YouTube's paid-promotion setting; the setting alone is not enough. AI-made material needs its own disclosure too.",
+  "numbers": {
+   "spoken_within_s": [
+    15,
+    30
+   ],
+   "on_screen_s_min": 10
+  },
+  "checks": [
+   "Spoken disclosure in the first 30 seconds.",
+   "On screen for at least 10 seconds.",
+   "In the first two description lines.",
+   "Paid-promotion setting on.",
+   "AI disclosure set where it applies."
+  ],
+  "tags": [
+   "disclosure",
+   "sponsorship",
+   "ai"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/monetization-guide.md, sub-skills/monetize.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "competitors.four-gaps",
+  "title": "Read competitors on four gaps: top videos, keywords, formats and the audience",
+  "rooms": [
+   "competitors"
+  ],
+  "tasks": [
+   "competitors.blueprint",
+   "niche.evaluate"
+  ],
+  "kind": "procedure",
+  "when": "When a competitor scan is analysed into a blueprint, or a niche is evaluated against its competitors.",
+  "summary": "Studying competitors only for what they do well misses where a new channel can win. Read four gaps: their top videos (title patterns, thumbnail styles, topic clusters, typical length), keywords they cover that this channel does not, formats that perform above each competitor's own average, and the audience's unmet needs (complaints, unanswered questions and requests in comments). Use only data that was supplied; when comments or thumbnails were not in the data, say that the audience or thumbnail gap could not be read rather than guessing.",
+  "steps": [
+   "Top videos: patterns across each channel's best performers.",
+   "Keyword gap: topics they cover, this channel does not.",
+   "Format gap: formats above that channel's own average.",
+   "Audience gap: only from supplied comments; otherwise mark it unread."
+  ],
+  "avoid": [
+   "Inventing audience complaints without comment data.",
+   "Recommending a copy of any channel; the point is the gap."
+  ],
+  "checks": [
+   "Each gap names its evidence or says it was not available."
+  ],
+  "tags": [
+   "competitors",
+   "gaps",
+   "analysis"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/competitor.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 50
+ },
+ {
+  "id": "competitors.two-signal-quick-wins",
+  "title": "A quick win needs two independent signals",
+  "rooms": [
+   "competitors",
+   "ideas"
+  ],
+  "tasks": [
+   "competitors.blueprint",
+   "ideas.titles",
+   "niche.discover"
+  ],
+  "kind": "ruleset",
+  "when": "When opportunities, quick wins or video ideas are drawn from competitor data.",
+  "summary": "One data point is often noise. Call an idea a quick win only when two different signals point to it: keyword demand and an audience request, or a competitor's outlier and a format gap, or a trend and an unanswered question. Give each quick win its source gaps, its difficulty for this program and its expected impact.",
+  "numbers": {
+   "signals_min": 2,
+   "quick_wins": 5
+  },
+  "checks": [
+   "Every quick win names its two signals."
+  ],
+  "tags": [
+   "competitors",
+   "ideas",
+   "evidence"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/competitor.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "competitors.replicable-outliers",
+  "title": "Separate outliers that can be learned from those that were one-off events",
+  "rooms": [
+   "competitors"
+  ],
+  "tasks": [
+   "competitors.blueprint",
+   "ideas.titles",
+   "niche.evaluate"
+  ],
+  "kind": "ruleset",
+  "when": "When a competitor's outlier videos are studied.",
+  "summary": "A video at three or more times its channel's usual views is a true outlier, but not every outlier teaches something repeatable. Some ride a news event, a collaboration or a famous guest; others win on a topic angle, a title pattern or a format that this channel can adapt in its own way. Say which is which before turning an outlier into a plan.",
+  "do": [
+   "For each outlier, name the specific factor that made it work and whether it can be repeated."
+  ],
+  "avoid": [
+   "Copying an outlier's title or topic; learn the mechanism."
+  ],
+  "numbers": {
+   "true_outlier_multiple": 3,
+   "study_from_multiple": 1.5
+  },
+  "tags": [
+   "outliers",
+   "competitors"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/competitor.md, references/algorithm-guide.md (outlier method); restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "competitors.differentiation-angles",
+  "title": "Differentiation angles must be specific enough to act on",
+  "rooms": [
+   "competitors",
+   "strategy"
+  ],
+  "tasks": [
+   "competitors.blueprint",
+   "niche.evaluate",
+   "niche.discover"
+  ],
+  "kind": "ruleset",
+  "when": "When a blueprint or a niche evaluation says how this channel will stand out.",
+  "summary": "'Be more authentic' or 'higher quality' gives nobody anything to do. Each angle says what this channel covers or shows differently, for whom, and how it will be visible in the first video (a format, a recurring segment, a viewpoint, a depth, a visual system).",
+  "avoid": [
+   "Generic angles: authenticity, quality, passion, consistency."
+  ],
+  "checks": [
+   "Each angle could be checked in a finished video."
+  ],
+  "tags": [
+   "differentiation",
+   "positioning",
+   "competitors"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/competitor.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "analytics.funnel-leak",
+  "title": "Find the one leak in the funnel: impressions, click-through, views, watch time",
+  "rooms": [
+   "analytics"
+  ],
+  "tasks": [
+   "analytics.review"
+  ],
+  "kind": "procedure",
+  "when": "When a published video's or a channel's numbers are read.",
+  "summary": "A channel's problem is usually at one stage, and fixing another stage wastes effort. Walk the funnel from impressions to click-through to views to watch time and name the single biggest drop. High impressions with low click-through is a packaging problem; high click-through with short watch time is a broken promise; low impressions with high click-through is a topic too narrow for reach. Click-through falls naturally as a video reaches colder viewers, so judge it against its stage.",
+  "numbers": {
+   "ctr_healthy_pct": [
+    4,
+    8
+   ],
+   "ctr_fix_below_pct": 3,
+   "avd_deprioritised_below_pct": 40,
+   "reported_ctr_by_source_pct": {
+    "search": 12.5,
+    "suggested": 9.5,
+    "browse": 3.5,
+    "external": 2.8
+   }
+  },
+  "checks": [
+   "Exactly one primary leak is named with its evidence."
+  ],
+  "tags": [
+   "analytics",
+   "funnel",
+   "ctr"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/analyze.md, references/analytics-guide.md, references/algorithm-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 40
+ },
+ {
+  "id": "analytics.retention-shapes",
+  "title": "Name the retention curve's shape before fixing it",
+  "rooms": [
+   "analytics",
+   "script"
+  ],
+  "tasks": [
+   "analytics.review",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "When a retention graph is read, and when a script is revised after one.",
+  "summary": "Each shape has its own cause: a cliff in the first 15 seconds is a failed hook; a steady slope is normal; a valley around the middle is pacing; bumps are rewatched moments to repeat on purpose; a high, flat 'bridge' comes from open loops; a sawtooth comes from regular interrupts. Name the shape and its time, then fix that cause.",
+  "do": [
+   "Turn bumps into a pattern: find what was rewatched and do more of it."
+  ],
+  "numbers": {
+   "cliff_loss_pct_in_15s": 20,
+   "valley_window_pct": [
+    40,
+    60
+   ]
+  },
+  "tags": [
+   "analytics",
+   "retention",
+   "diagnosis"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/retention-scripting-guide.md, sub-skills/analyze.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "analytics.traffic-source-health",
+  "title": "Read where viewers come from; one dominant source is a risk",
+  "rooms": [
+   "analytics"
+  ],
+  "tasks": [
+   "analytics.review"
+  ],
+  "kind": "ruleset",
+  "when": "When a channel's traffic sources are reviewed.",
+  "summary": "A channel that gets most of its views from one place is fragile: one change at that source and the views are gone. Flag any single source above 60% and treat 80% as danger. Suggested growing faster than search means strong retention; search strong but suggested weak means good keywords with content that does not hold viewers.",
+  "do": [
+   "Name the largest source's share and the next step to widen the mix (search titles, Shorts, playlists, community posts)."
+  ],
+  "numbers": {
+   "warning_single_source_pct": 60,
+   "fragile_single_source_pct": 80
+  },
+  "checks": [
+   "Source shares add up to about 100% and any share above 60% is flagged."
+  ],
+  "tags": [
+   "analytics",
+   "traffic",
+   "risk"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/analyze.md, references/analytics-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "analytics.five-actions",
+  "title": "End an analysis with at most five actions, ranked by impact for the effort",
+  "rooms": [
+   "analytics",
+   "learning"
+  ],
+  "tasks": [
+   "analytics.review"
+  ],
+  "kind": "ruleset",
+  "when": "When an analysis or audit is turned into next steps.",
+  "summary": "Long to-do lists do not get done. Give at most five actions, ordered by the improvement expected per hour of effort, each with the number that will show whether it worked and when to look. When data is missing, say what is missing and how it limits the advice.",
+  "numbers": {
+   "max_actions": 5
+  },
+  "checks": [
+   "Every action has a measurable outcome and a time to check it."
+  ],
+  "tags": [
+   "analytics",
+   "actions",
+   "prioritisation"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): sub-skills/analyze.md, sub-skills/audit.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30
+ },
+ {
+  "id": "analytics.algorithm-is-audience",
+  "title": "The algorithm measures viewers; optimise for their satisfaction",
+  "rooms": [
+   "analytics",
+   "strategy"
+  ],
+  "tasks": [
+   "analytics.review",
+   "ideas.titles",
+   "script.candidate"
+  ],
+  "kind": "principle",
+  "when": "Whenever a decision is justified by 'the algorithm'.",
+  "summary": "YouTube recommends per viewer and weighs satisfaction, so every decision should answer why people click, stay and share. Shares are the strongest single signal, then repeat viewing, staying on the platform, saves, survey answers, likes and comments. A click that turns into a short, disappointed view hurts more than no click, which is why misleading packaging backfires. Replies to comments in the first two hours are reported to widen reach.",
+  "do": [
+   "Justify a packaging or editing choice by a viewer reason: why they click, stay or share."
+  ],
+  "avoid": [
+   "Tricks aimed at the system rather than at viewers."
+  ],
+  "numbers": {
+   "reported_reply_window_h": 2
+  },
+  "tags": [
+   "algorithm",
+   "satisfaction",
+   "strategy"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/algorithm-guide.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 35
+ },
+ {
+  "id": "os.three-quality-gates",
+  "title": "Three gates before anything is delivered: specific, grounded, complete",
+  "rooms": [
+   "os",
+   "qc"
+  ],
+  "tasks": [
+   "script.candidate",
+   "packaging.title",
+   "niche.evaluate",
+   "competitors.blueprint",
+   "ideas.titles",
+   "analytics.review",
+   "audio.mix"
+  ],
+  "kind": "checklist",
+  "when": "Before an AI answer (a script, a plan, a blueprint, ideas, a package) is handed to the owner.",
+  "summary": "Most weak outputs fail one of three ways: advice that would fit any channel, numbers nobody can trace, or missing sections. Check that every recommendation is specific to this channel, that every figure comes from the supplied data or a cited source (otherwise say 'not available'), and that every requested section is present. When a revision is asked for, change the failing parts only.",
+  "checks": [
+   "No generic advice without this channel's specifics.",
+   "Every number is traceable or marked as unavailable.",
+   "Every requested section is present."
+  ],
+  "tags": [
+   "quality",
+   "grounding",
+   "os"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): SKILL.md quality gates and self-anneal loop; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 45
+ },
+ {
+  "id": "profile.type-education",
+  "title": "Channel type: education explainer",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family whose videos explain or teach.",
+  "summary": "Education videos hold viewers longer than most formats and rank in both YouTube and Google search, so every upload keeps earning; the win is utility per minute, clear structure and a searchable library.",
+  "do": [
+   "Content mix: about 60% searchable help videos, 30% series and deep dives, 10% myth-busting tentpoles; 80%+ evergreen.",
+   "Cadence: two long videos a week (more with capacity) plus two or three Shorts of key ideas; 8-15 minutes to allow mid-roll ads.",
+   "Hook style: problem-agitation for searched topics, curiosity gap for series; restate the title's promise and preview the payoff in 30 seconds.",
+   "Thumbnail: one to three bold words, a before/after or step visual, saturated background; sell simplicity, keep complexity for the video.",
+   "Money: ads first (mid-rolls from 8 minutes), then own products, brand deals, memberships, shopping."
+  ],
+  "avoid": [
+   "Lecturing at the viewer instead of solving with them.",
+   "Missing chapters, which hides the video from Google key moments.",
+   "Spending on polish before reaching a steady cadence."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "education"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/education-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-entertainment",
+  "title": "Channel type: entertainment",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family built on stories, challenges or comedy meant for the home feed.",
+  "summary": "Entertainment lives on click-through and the first 30 seconds, mostly from the home feed, with low ad rates, so volume, identity and series matter more than search.",
+  "do": [
+   "Content mix: about 40% big swings, 30% recurring series, 10% behind-the-scenes, 20% quick takes on what is current; about 30% evergreen.",
+   "Cadence: three long videos a week where possible plus several Shorts; 8-12 minutes.",
+   "Hook style: shock or contradiction: open on the most striking moment, then rewind; a shift every 30-60 seconds.",
+   "Thumbnail: one strong, honest emotion, almost no text, saturated colours, a sense that something is about to happen.",
+   "Money: brand deals and volume of ads; Shorts share helps at scale."
+  ],
+  "avoid": [
+   "Repeating one thumbnail template until click-through collapses.",
+   "Chasing trends without a recognisable format.",
+   "Expecting ad revenue to carry the channel."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "entertainment"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/entertainment-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-tutorial",
+  "title": "Channel type: tutorial",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that teaches a tool, method or step-by-step task.",
+  "summary": "Tutorials are search machines: each video solves one specific problem and keeps ranking for years, so specificity, chapters and the end result shown early decide success.",
+  "do": [
+   "Content mix: about 70% single-problem tutorials, 20% series or full builds, 10% complete guides; 80%+ evergreen, years in titles refreshed.",
+   "Cadence: two a week, 7-15 minutes, plus tip Shorts.",
+   "Hook style: validate the problem in five seconds, show the end result in the first 15, then go back to step one.",
+   "Thumbnail: before/after split or a clean, cropped screen with one arrow; two or three words; the tool's colours.",
+   "Money: ads, then affiliate links to the tools used, own templates or courses, sponsorships from tool makers."
+  ],
+  "avoid": [
+   "Covering many unrelated tools.",
+   "Missing chapters.",
+   "Re-explaining basics in every video instead of linking a start-here video."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "tutorial"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/tutorial-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-vlog",
+  "title": "Channel type: vlog and personal journey",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family built on a recurring personal narrative (rare for faceless channels).",
+  "summary": "Vlogs grow through loyalty, because their views come from the subscription feed and the channel's own suggested videos; returning viewers are the core number.",
+  "do": [
+   "Content mix: about 60% recurring series and updates, 15% lessons, 15% milestone events, 10% personal takes on current moments.",
+   "Cadence: one or two a week, consistency over volume; 8-12 minutes.",
+   "Hook style: story-open in the middle of the moment; authenticity over gimmicks.",
+   "Thumbnail: genuine emotion, the setting visible, one or two words at most, a consistent colour grade.",
+   "Money: memberships, merchandise and brand deals built on trust; ads are moderate."
+  ],
+  "avoid": [
+   "Clickbait that breaks trust.",
+   "Irregular uploads that break the habit."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "vlog"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/vlog-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-review",
+  "title": "Channel type: review and comparison",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that reviews or compares products or services.",
+  "summary": "Review viewers arrive ready to decide, mostly from search, so honesty and timing matter: an honest negative review earns more trust than any positive one.",
+  "do": [
+   "Content mix: about 55% single reviews, 30% comparisons and best-of roundups, 15% launch-day or test-everything videos; about 70% evergreen.",
+   "Cadence: two a week around release cycles; 8-15 minutes, comparisons longer.",
+   "Hook style: problem-agitation ('before you spend this...'); state the verdict's direction in the first 30 seconds.",
+   "Thumbnail: product and reaction, or both products with VS and the winner marked; a rating, price or verdict word.",
+   "Money: affiliate links first (disclosed), ads, launch sponsorships, buying guides."
+  ],
+  "avoid": [
+   "Only positive reviews.",
+   "Reviewing what nobody is searching for.",
+   "Missing the launch window."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "review"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/review-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-commentary",
+  "title": "Channel type: commentary and analysis",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that gives a point of view on news, culture or events.",
+  "summary": "Commentary rides current topics for reach and wins on the strength and speed of its angle; most views arrive in the first week, so an evergreen layer protects the channel.",
+  "do": [
+   "Content mix: about 25-30% timely takes, 45-50% recurring series, 20-25% evergreen explainers.",
+   "Cadence: two or three long videos a week; timely takes within a day of the event; 8-15 minutes.",
+   "Hook style: shock or contradiction with a counter-consensus claim, then the reasoning in clear parts.",
+   "Thumbnail: a strong expression or a reference image of the subject, three or four bold words, high contrast.",
+   "Money: ads (mid-rolls), brand deals, memberships, an email list as insurance."
+  ],
+  "avoid": [
+   "Trending-only channels with nothing that compounds.",
+   "Copying other commentators' style instead of a distinct angle.",
+   "Burnout from speed; keep a buffer of evergreen videos."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "commentary"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/commentary-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-niche-authority",
+  "title": "Channel type: niche authority",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that goes deep on one high-value subject (finance, business, tech, health, law, real estate).",
+  "summary": "Authority channels are keyword libraries: topical clusters that suggest each other, so evergreen videos keep earning for years at the highest ad rates on the platform; growth is slow and then compounds.",
+  "do": [
+   "Content mix: about 50-60% searchable how-tos and explainers, 25-30% recurring series, 10-15% tentpole guides; start with one tight sub-topic.",
+   "Cadence: two long videos a week plus two or three Shorts; 10-20 minutes.",
+   "Hook style: problem-agitation with the exact pain and its cost, then a credibility stamp and a road map of the video.",
+   "Thumbnail: clean and minimal, a chart or a big number, the same two or three colours on every thumbnail.",
+   "Money: ads (premium rates), then own products or services, premium brand deals, affiliate links."
+  ],
+  "avoid": [
+   "Starting too broad for YouTube to classify the channel.",
+   "Jargon and skipped fundamentals; write for a smart 14-year-old.",
+   "Weak packaging on strong content."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "niche-authority"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/niche-authority-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-personal-brand",
+  "title": "Channel type: personal brand",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family built around one recognisable creator identity (for faceless channels: a recurring narrator persona or mascot).",
+  "summary": "Personal-brand channels build trust and earn most of their money off-platform; returning viewers matter more than raw impressions.",
+  "do": [
+   "Content mix: about 40-50% recurring formats, 25-35% searchable how-tos from the persona's expertise, 15-20% milestone or tentpole videos.",
+   "Cadence: one or two long videos a week plus Shorts; 8-15 minutes.",
+   "Hook style: story-open with a personal stake, then a clear promise of what the video gives.",
+   "Thumbnail: the same anchor (persona or mascot) with varying expression, two to four words, a signature colour.",
+   "Money: own products and services first, brand deals, memberships; an email list is the key asset."
+  ],
+  "avoid": [
+   "Too many unrelated topics with no through-line.",
+   "No owned audience off YouTube.",
+   "Perfectionism that drops the cadence."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "personal-brand"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/personal-brand-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ },
+ {
+  "id": "profile.type-shorts-first",
+  "title": "Channel type: Shorts-first",
+  "rooms": [
+   "strategy",
+   "ideas",
+   "script",
+   "packaging"
+  ],
+  "tasks": [
+   "niche.evaluate",
+   "ideas.titles",
+   "script.candidate",
+   "packaging.title"
+  ],
+  "kind": "template",
+  "when": "Pinned to a family that publishes mainly vertical Shorts.",
+  "summary": "Shorts-first channels win on 'viewed versus swiped away' and completion, need volume because Shorts lose their push after about a month, and earn little per view, so the money comes from a bridge to long-form or products.",
+  "do": [
+   "Content mix: about 50-60% recurring Short formats, 25-30% trend-riding, 10-20% quick tips; every Short belongs to a recognisable series.",
+   "Cadence: one to three Shorts a day with a two-week buffer; long-form once the channel reaches a few thousand subscribers.",
+   "Hook style: curiosity gap or contradiction in the first one or two seconds; no intro.",
+   "Thumbnail: the first frame is the thumbnail in the feed: bold centred text and contrast; series branding on the channel page.",
+   "Money: own products, Short sponsorships, the Shorts share, then the long-form bridge where real ad revenue is."
+  ],
+  "avoid": [
+   "No long-form bridge: big and broke.",
+   "Licensed music on every Short, which cuts the revenue share.",
+   "Pausing for weeks and losing distribution."
+  ],
+  "tags": [
+   "channel-type",
+   "profile",
+   "shorts-first"
+  ],
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): templates/shorts-first-channel.md; restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "priority": 30,
+  "pinOnly": true
+ }
+]

@@ -121,7 +121,10 @@ class SoundtrackRoom {
   recentTracks(familyId, contentId) { return [...new Set(this.db.prepare('SELECT payload FROM scores WHERE family_id=? AND content_id<>? ORDER BY created_at DESC LIMIT 10').all(familyId, contentId).flatMap(row => JSON.parse(row.payload).cues.map(cue => cue.track).filter(Boolean)))]; }
   promptInput(inputs) {
     const performed = inputs.voice.auditionId ? this.store.voiceDirectionLines(inputs.voice.auditionId) : null;
-    return {family: {niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format},
+    // What the approved competitor blueprint teaches about music and sound (0.71); techniques only.
+    let competitorGuidance = null;
+    try { competitorGuidance = this.scenes?.competitorIntel?.musicGuidance(inputs.family.id) || null; } catch { competitorGuidance = null; }
+    return {family: {niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format}, ...(competitorGuidance ? {competitorGuidance} : {}),
       style: {name: inputs.spec?.name, musicMoods: inputs.spec?.audio.musicMoods || [], sfxUsage: inputs.spec?.audio.sfxUsage, engine: inputs.engine},
       durationSeconds: Math.round(inputs.durationSeconds * 10) / 10, title: inputs.content.title,
       scenes: inputs.manifest.plan.scenes.map(scene => ({label: scene.label, purpose: scene.purpose, start: scene.startSeconds, end: Math.round((scene.startSeconds + scene.durationSeconds) * 10) / 10, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {})})),
@@ -144,9 +147,11 @@ class SoundtrackRoom {
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM score_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'Claude is already scoring this video.', 409);
       const tracks = this.libraryTracks(inputs.family.id), library = tracks.length ? M.catalogue(tracks, {moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche}) : null;
-      const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
+      const skillBrief = this.store.skillRuntime?.brief('audio.mix', inputs.family.id) || null;
+      const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO score_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, voiceApprovalId: inputs.voice.approvalId, connector, promptInput, ...(library ? {refs: Object.fromEntries(library.map(item => [item.ref, item.id]))} : {}), maxTokens, tokenLimit}), by, at, at);
+      if (skillBrief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'audio', taskKey: 'audio.mix', brief: skillBrief});
       this.store.event(`Queued Claude music score for "${inputs.content.title}"`);
       return this.publicScoreJob(this.scoreJobRow(id));
     });

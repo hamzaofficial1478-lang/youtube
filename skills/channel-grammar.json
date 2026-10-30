@@ -246,7 +246,8 @@
   "steps": [],
   "do": [
    "Pick the target minutes from the format and the depth of the story.",
-   "Cut a long video into chapters that each re-hook."
+   "Cut a long video into chapters that each re-hook.",
+   "Mid-roll ads start at 8 minutes; never pad a story to reach it, because lost retention costs more than the mid-roll earns."
   ],
   "avoid": [],
   "checks": [],
@@ -254,7 +255,7 @@
    "length",
    "format"
   ],
-  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.",
+  "source": "Study of 12 channels the owner named (2026-10-18): channel pages, Popular sort, durations and storyboard contact sheets of a typical video each (Vox, Johnny Harris, MagnatesMedia, Iman Gadzhi, Ali Abdaal, IMPERIAL, maximise, Metro Media House, LEMMiNO, kold / Sam Kolder, Arsacre, Gawx Art). Techniques only, in our own words; notes in docs/research/channel-study-2026-10-18.md.; updated 0.71 from claude-youtube (MIT, 84c3fa6): references/retention-scripting-guide.md",
   "priority": 60,
   "numbers": {
    "explainer_min": "8-30",

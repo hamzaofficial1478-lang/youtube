@@ -207,13 +207,19 @@ test('niche suggestions: sub-niches from a channel and its competitors, new nich
   const answer = list => JSON.stringify({summary: 'Renting and debt are the open corners of personal finance right now.', suggestions: list, avoid: ['Crypto get-rich-quick angles']});
 
   // Sub-niches: the channel (F), its competitors' hit videos and the Reddit scan; YouTube trends are display-only.
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  growth.approvePack({pack: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types', approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: growth.skills().filter(item => item.pack === 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types').map(item => item.latest.id)});
   const sub = niches.queueSuggestions({mode: 'sub', familyId: family.id, count: 3, connector: ids.claude, requestedBy: 'Owner'});
+  const usedSkills = JSON.parse(store.db.prepare("SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key='niche.discover'").get(sub.id).skill_ids);
+  assert.ok(usedSkills.length >= 1, 'suggestions record their skills (0.71)');
   assert.deepEqual(sub.evidence.map(item => item.kind), ['competitor', 'competitor hit keywords', 'reddit scan'], 'no YouTube data without the approval');
   reply = answer([suggestion('Renting smarter in big cities', ['F', 'E1']), suggestion('Paying off student loans early', ['E2'], {competition: 'low'}), suggestion('Money moves for first jobs', ['E3'])]);
   const done = await niches.processNextSuggestions();
   assert.equal(done.status, 'completed');
   assert.deepEqual(done.result.suggestions.map(item => item.viralChance), ['high', 'high', 'high']);
   assert.match(asked.system || JSON.stringify(asked.messages), /sub-niches of the channel family's niche/);
+  assert.match(asked.system, /owner-approved skill brief/);
+  assert.ok(usedSkills.every(id => JSON.stringify(asked.messages).includes(id)));
   assert.match(JSON.stringify(asked.messages), /Why renters quietly get richer[\s\S]*Is renting forever actually fine/);
   assert.equal(store.db.prepare('SELECT kind FROM intelligence_usage WHERE job_id=?').get(done.id).kind, 'niche_suggest');
   assert.equal(niches.tokenSummary().settled, 4500, 'suggestions count against the Niche Factory monthly limit');

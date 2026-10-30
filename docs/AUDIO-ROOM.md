@@ -67,6 +67,15 @@ Owner request 2026-10-09: "add music and sfx build this room now all the related
 - Sound effects are placed by the edit, never invented: transitions that open a drawn shot (whip, zoom, pop, ink, glitch), stamps, counters, headline and number text, bursts, flashes, shockwaves, checks and crosses, props that drop or appear, at the time the drawing engine draws them. Each event needs a density; no two effects within 0.18 s (the more important one stays). Stock footage and stills get no effects.
 - The edit revision's audio settings name the score. The render checks every music and effect file against its checksum, finishes the voice first, lays music cues at their times with fades and gains from their measured loudness, carves room for the voice (0.28: split at 300 Hz and 4 kHz, the speech band ducked under the voice by a sidechain compressor, the bass and the top kept, the whole bed dipped a little; the HyperFrames voice-over carve, applied to the music, never to the narration), adds the effects at gains from their measured peak, limits, then measures the whole mix and brings it back to the loudness target (two-pass) before encoding. The manifest records the cues, effects, graph checksum and measurements; the encoded audio is checked as before. When music or effects are on, the mix is always normalized, even if the voice was kept at its original level.
 
+## What the music supervisor reads (0.71)
+
+Claude's score also receives what the family's **approved competitor study** learned about music and sound
+(`competitorGuidance`: audio settings it proposed, observations about music, effects and silence, the patterns it
+adopted, the channel's own contributions, its avoid list and the channels the owner picked for "music"). It uses the
+techniques that fit the story and follows the avoid list; it never copies a track, an artist or a signature sound.
+Nothing is sent while the blueprint is unapproved or outdated. Approved skills bound to `audio.mix` travel too and are
+logged per score job.
+
 ## The sound library (0.60.0)
 
 Owner decision 2026-10-23: "we will use Pexels, Pixabay for the music, sfx and sounds, not ElevenLabs". ElevenLabs

@@ -208,6 +208,18 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - No code copied. Its scene-change detection idea is rebuilt in `render.js` (`sceneCuts`), used by the editing brain to keep stock clips inside one shot and by the render QC check `unplanned cuts`. Its evidence and engine rules are restated as 5 draft skills in `skills/claude-video.json`.
 - Not used: yt-dlp downloading and browser cookies, the Gemini engine, WhisperX/Groq/OpenAI transcription. Details in `research/claude-video.md`.
 
+### AgriciDaniel/claude-youtube (0.71)
+
+- Source: <https://github.com/AgriciDaniel/claude-youtube>, read at `84c3fa6` (2026-04-10). License: MIT (Daniel Agrici).
+- No code copied. Its 14 sub-skills, 9 references and 9 channel templates are restated in our own words as 46 draft skills in `skills/youtube-growth.json` (9 of them pin-only channel-type profiles), and 7 existing skills gained a revision with its points; each source note names the file. Figures are the repository's cited third-party reports, marked indicative.
+- Not used: its Python scripts (YouTube Data API, YouTube Analytics OAuth, transcript fetching through yt-dlp and youtube-transcript-api) and the DataForSEO integration. File-by-file map in `research/claude-youtube.md`.
+
+### yt-dlp/yt-dlp and jdepoix/youtube-transcript-api (0.71, read only)
+
+- yt-dlp: <https://github.com/yt-dlp/yt-dlp>, read at `b77c930` (2026-10-29). License: Unlicense.
+- youtube-transcript-api: <https://github.com/jdepoix/youtube-transcript-api>, read at `b8af68c` (2026-10-20). License: MIT.
+- Nothing imported or installed. Downloading videos and reading captions outside the official API conflict with YouTube's Terms of Service and API Services Developer Policies, which the publishing audit depends on; videos are never downloaded from links. Reasons and the compliant alternative (Gemini's YouTube URL input, not built) in `research/claude-youtube.md` section 4.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).

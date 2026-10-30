@@ -356,6 +356,7 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/retention-craft.json', label: 'Retention craft 2026-10-21 (owner screenshots: Kallaway script structure, HOOK/VALUE/SOLUTION/CTA, Paul Hilse prompts 1-5; viewer model)'},
   {file: 'skills/whiteboard-craft.json', label: 'whiteboard-animation-vi (CC0): line order, colour after line, brush lanes, the hand, pictures that draw well'},
   {file: 'skills/anime-craft.json', label: 'html-anime (MIT): the anime sequence, drawing budgets, twos, the expensive shot, camera, cel paint, colour scripts, the colour-dip cut'},
+  {file: 'skills/youtube-growth.json', label: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -422,14 +423,24 @@ class SkillsEngine {
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
 
-  // Builtin packs arrive as drafts. Re-running is safe: an existing ID is left alone so an
-  // approved skill is never silently replaced by a pack edit.
+  // Builtin packs arrive as drafts. Re-running is safe: an approved skill is never silently replaced by a pack edit.
+  // Since 0.71 a builtin skill whose pack entry was updated gets it as a new draft revision, unless the owner wrote the
+  // newest revision; the approved revision stays in use until the update is approved. An update marks itself by extending
+  // the skill's source note, so older stored payloads that differ only in normalisation never flood the owner with drafts.
   seedBuiltinPacks() {
     const packs = loadPacks(this.root);
     return this.store.transaction(() => {
-      let created = 0;
+      let created = 0, updated = 0;
       for (const {skill, pack} of packs) {
-        if (this.db.prepare('SELECT id FROM skills WHERE id=?').get(skill.id)) continue;
+        const existing = this.db.prepare('SELECT origin FROM skills WHERE id=?').get(skill.id);
+        if (existing) {
+          const latest = this.latestRevisionRow(skill.id), hash = skillHash(skill);
+          if (existing.origin !== 'builtin' || latest.created_by !== 'Builtin skill pack' || JSON.parse(latest.payload).source === skill.source || this.db.prepare('SELECT 1 FROM skill_revisions WHERE skill_id=? AND payload_hash=?').get(skill.id, hash)) continue;
+          this.db.prepare('INSERT INTO skill_revisions(id,skill_id,revision,status,payload,payload_hash,change_note,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
+            .run(randomUUID(), skill.id, latest.revision + 1, 'draft', JSON.stringify(skill), hash, `Updated in ${pack}. Review the change; the approved revision stays in use until this one is approved.`, 'Builtin skill pack', now());
+          updated++;
+          continue;
+        }
         const at = now();
         this.db.prepare('INSERT INTO skills(id,origin,pack,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(skill.id, 'builtin', pack, 'Builtin skill pack', at, at);
         this.db.prepare('INSERT INTO skill_revisions(id,skill_id,revision,status,payload,payload_hash,change_note,created_by,created_at) VALUES(?,?,1,?,?,?,?,?,?)')
@@ -437,6 +448,7 @@ class SkillsEngine {
         created++;
       }
       if (created) this.store.event(`Seeded ${created} builtin skill draft${created === 1 ? '' : 's'} for review`);
+      if (updated) this.store.event(`${updated} builtin skill${updated === 1 ? '' : 's'} updated as draft${updated === 1 ? '' : 's'} for review`);
       return created;
     });
   }
@@ -773,7 +785,10 @@ class SkillsEngine {
     let used = 0, dropped = 0;
     for (const item of selected) {
       const entry = {id: item.skill.id, title: item.skill.title, when: item.skill.when};
-      for (const key of ['do', 'avoid', 'checks']) if (item.skill[key].length) entry[key] = item.skill[key];
+      // The rules, not the prose. A skill without do rules sends its steps instead, and one with neither its summary
+      // (0.71: 75 such skills reached prompts with only their avoid list and checks).
+      if (!item.skill.do.length && !item.skill.steps.length) entry.summary = item.skill.summary;
+      for (const key of ['do', ...(item.skill.do.length ? [] : ['steps']), 'avoid', 'checks']) if (item.skill[key].length) entry[key] = item.skill[key];
       if (Object.keys(item.skill.numbers).length) entry.numbers = item.skill.numbers;
       const size = Buffer.byteLength(JSON.stringify(entry), 'utf8');
       if (used + size > byteBudget) { dropped++; continue; }

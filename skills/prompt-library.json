@@ -857,30 +857,40 @@
   {
     "id": "qc.title-script-promise",
     "title": "Check that the script keeps the title's promise",
-    "rooms": ["qc"],
+    "rooms": [
+      "qc"
+    ],
     "kind": "checklist",
     "when": "Before a video is finalised, and before any work is spent on its thumbnail.",
     "summary": "The title makes a promise and the script must keep it. Read the title's promise and emotional triggers, then check whether the script fulfils it, builds tension, resolves its conflict and engages, and what it leaves the viewer with. Packaging cannot rescue a broken payoff.",
     "steps": [
       "TITLE: what it promises, which emotions it uses, and how it creates urgency.",
+      "OPENING: the promise is visibly being kept within the first 5-10 seconds; since 2025 YouTube's systems compare title and thumbnail claims with the video, so an unkept promise is suppressed, not just disliked.",
       "SCRIPT: whether the promise is fulfilled, how tension is built, whether the conflict resolves, and how it engages.",
       "THROUGHLINE: whether curiosity is maintained, and where the emotional turns sit.",
       "IMPACT: what the viewer is left with, and whether the close lands.",
       "VERDICT: how well title and content align, and the specific fixes."
     ],
-    "do": ["Fix the script before touching the thumbnail when the promise is not kept."],
+    "do": [
+      "Fix the script before touching the thumbnail when the promise is not kept."
+    ],
     "avoid": [
       "Approving a video whose script does not deliver its title.",
       "Strengthening the packaging to compensate for a weak payoff."
     ],
-    "numbers": {"sections": "4"},
+    "numbers": {
+      "sections": "4"
+    },
     "checks": [
       "The promise is identified in one sentence.",
       "The point in the script that fulfils it is named.",
       "Any gap is reported as a script fix, not a packaging fix."
     ],
-    "tags": ["qa", "promise"],
-    "source": "YT Empire Builders Prompt Library 3.11 (owner course material, restated)",
+    "tags": [
+      "qa",
+      "promise"
+    ],
+    "source": "YT Empire Builders Prompt Library 3.11 (owner course material, restated); updated 0.71 from claude-youtube (MIT, 84c3fa6): references/seo-playbook.md, references/retention-scripting-guide.md",
     "priority": 20
   },
   {

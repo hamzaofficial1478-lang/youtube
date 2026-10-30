@@ -80,6 +80,16 @@ Token use is reserved from the family's monthly token limit before the call (ana
 | Hermes script guidance | New Hermes script candidates for this family receive the approved hook patterns, structure, pacing and avoid list as technique guidance, with the instruction to keep at least 70% original and never reuse competitor wording. | Revoke the approval to stop it. It turns off automatically (shown as **Outdated**) when the family's competitor list changes. |
 | Narrator direction | "Use voice direction" opens the Voice Room narrator form prefilled with emotion, pace (slow 0.9, measured 1.0, brisk 1.08, fast 1.15), energy and delivery instructions. | Nothing is saved until you review the rights fields and save a new narrator profile revision. |
 | Editing style | "Create style draft" copies the recommended style's latest approved revision, applies the proposed adjustments that pass the Style Library validation (invalid ones are skipped and listed) and saves a **new draft**. Its reference share is capped at 30%. | You still review, approve and assign it in Production panel → Style Library. |
+| Music and sound | The music supervisor in Room 07 receives the blueprint's music and sound lessons (audio settings, observations, adopted and own patterns, avoid list) when it scores a video (0.71). | Revoke the approval; an outdated blueprint is not sent. |
+
+
+**Seeing a competitor's look without downloading (0.71).** Claude reads NexLev data (titles, views, outliers, hook
+transcripts, words per minute), your notes per competitor, and style studies of video files or screenshots already on
+this PC (frames, cuts and colours measured by FFmpeg, contact sheets Claude sees). Videos are never downloaded from
+links: yt-dlp and transcript scraping conflict with YouTube's terms and the publishing audit. The compliant way for an
+AI to watch a public video is Gemini's YouTube URL input; it is not built and needs your decision and a Google AI
+Studio key. Details in research/claude-youtube.md. Approved skills bound to `competitors.blueprint` now reach the
+analysis too.
 
 ## YouTube data policy
 
