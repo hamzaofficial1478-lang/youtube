@@ -1,5 +1,5 @@
 {
-  "version": "0.70.1",
+  "version": "0.70.2",
   "updated": "2026-10-29",
   "nextAction": "Try a niche suggestion (Niche Factory, \"Suggest niches\") after a Reddit or YouTube scan, and the Motion Graphics engine's Mix finish on a real video. Then, by the owner's plan: connect Fish Audio, Freesound and Jamendo, fill the sound library and make one real video end to end.",
   "repositories": [
@@ -655,7 +655,8 @@
     "2026-10-28: Competitors are read in one click (data scan, then Claude's blueprint) with the subjects the owner liked from each channel; nothing is downloaded from video links and every blueprint still needs the owner's approval.",
     "2026-10-29: The program runs on other Windows PCs through a one-click installer; each PC starts with its own empty workspace and its own keys. Gemini images stay out for now: the Gemini app subscription has no supported way for a program to use it, and the Gemini API's image models are paid per image.",
     "2026-10-29: The Atelier engine is called Motion Graphics; its anime finish is called HTML render and a Mix finish uses both, one per scene. Niche suggestions (sub-niches of a channel or new niches on the rise) learn only from scans the owner already ran; YouTube data only with the recorded derived-use approval.",
-    "2026-10-29: A channel family that has work can be deleted with all of it after a warning that lists the work, the typed name and an explicit tick; archiving stays the way to keep it."
+    "2026-10-29: A channel family that has work can be deleted with all of it after a warning that lists the work, the typed name and an explicit tick; archiving stays the way to keep it.",
+    "2026-10-30: Deleting a channel asks whether to keep its style and settings or delete everything. Kept: its own style stays in Editing Engines and its settings and work records are saved to a file in the data folder, whose path the page shows. Delete everything: its own style copy and its files go too."
   ],
-  "milestone": "0.70.1: a channel family with work can be deleted after a warning and the owner's tick"
+  "milestone": "0.70.2: deleting a channel keeps its style and settings (saved to a file) or deletes everything, by the owner's choice"
 }
