@@ -159,10 +159,10 @@ test('Control Room HTTP queues Claude script writing and exposes only the review
   app.store.claimScriptJob();app.store.failScriptJob(retry3.data.id,'unknown provider outcome',{usageUnknown:true});
   assert.equal((await send(`/api/script-jobs/${retry3.data.id}/retry`,{revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision,confirmInterrupted:true})).response.status,409);
   const ui = await (await fetch(base+'/app.js')).text();
-  assert.match(ui,/Ask Claude/);
+  assert.match(ui,/Ask AI to write/);
   assert.match(ui,/ai-script/);
   assert.match(ui,/Use candidate/);
-  assert.match(ui,/Retry Claude/);
+  assert.match(ui,/'Try again','retry-claude'/);
   assert.match(ui,/confirmInterrupted/);
   assert.match(ui,/Source IDs/);
   assert.match(ui,/j\.content_id===c\.id&&j\.revision===c\.revision/);

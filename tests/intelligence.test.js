@@ -228,7 +228,7 @@ test('Claude blueprint is validated, reviewed by a human and then drives style, 
   intel.saveNote(family.id, {competitorKey: `channel_id:${channelIds[0].toLowerCase()}`, expectedRevision: 0, createdBy: 'Owner', editingStyle: 'Slow pans over archival maps with a ledger motif.', voice: 'Deep, calm narrator.'});
   intel.queueScan(family.id, {familyRevision: family.revision, requestedBy: 'Owner', nexlevConnector: ids.nexlev, youtubeConnector: ids.youtube});
   const scan = await intel.processNextScan();
-  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..'), builtinApproved: false}).attach();
   growth.approveRevision(growth.skills().find(item => item.id === 'competitors.four-gaps').latest.id, {approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}});
   const queued = intel.queueAnalysis(family.id, {familyRevision: family.revision, scanId: scan.id, connector: ids.claude, requestedBy: 'Owner'});
   assert.equal(queued.status, 'queued');

@@ -56,12 +56,13 @@ function skillsView() {
   const skills = state?.skills;
   if (!skills) return heading('Skills', 'Loading the skill library.');
   const counts = skills.counts, approved = skillRuntimeCount();
-  const hero = `<section class="voice-hero"><div><span class="stage-kicker">SKILLS ENGINE · REVIEWED OPERATING KNOWLEDGE</span><h2>Skills</h2><p>Every skill extracted from your main-brain documents (Precision OS, the YT Empire Builders library and the CB YT AI Mastery bundle) and from the editing research lives here, in our own words. They all start as <b>drafts</b>: a skill changes how a room works only after you approve that exact revision. What the program learns from its own reviews arrives as a proposal in the Lessons queue, never as a silent edit. Skills marked <b>pin to a family</b> are channel or niche profiles: they reach only a family you pin them to.</p></div>
+  const hero = `<section class="voice-hero"><div><span class="stage-kicker">SKILLS ENGINE · BUILT IN, PLUS YOUR OWN</span><h2>Skills</h2><p>The program's <b>built-in skills</b> come approved with the program on every PC it is installed on, and an update of the program updates them. <b>Your own skills</b> (+ Add my own skill) stay in this PC's database and its backups only: they never go to GitHub or to another PC, and each one reaches the AI after you approve it. Retire any skill you do not want; it stays retired.</p><p class="hint">Where they came from: every skill extracted from your main-brain documents (Precision OS, the YT Empire Builders library and the CB YT AI Mastery bundle) and from the editing and channel research lives here, in our own words. What the program learns from its own reviews arrives as a proposal in the Lessons queue, never as a silent edit. Skills marked <b>pin to a family</b> are channel or niche profiles: they reach only a family you pin them to.</p></div>
     <div class="voice-health"><span class="health-light ${approved ? 'ready' : ''}"></span><strong>${approved ? `${approved} skill${approved === 1 ? '' : 's'} in use` : 'Nothing approved yet'}</strong><small>${approved ? `of ${counts.total} in the library` : `${counts.total} drafts waiting for review`}</small></div></section>`;
   const tally = `<div class="production-context skill-tally"><span>${counts.total} skills</span><span>${counts.approved} approved</span><span>${counts.draft} draft</span><span>${counts.retired} retired</span><span>${counts.builtin} builtin</span><span>${counts.owner} owner</span><span>${counts.learned} learned</span><span>${counts.lessonsProposed} lesson${counts.lessonsProposed === 1 ? '' : 's'} waiting</span></div>`;
-  const tabs = [['packs', 'Packs'], ['library', 'Library'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
+  const mine = skillsAll().filter(skill => skill.origin !== 'builtin').length;
+  const tabs = [['packs', 'Built in'], ['mine', `My skills (${mine})`], ['library', 'Browse all'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
   const rail = `<div class="production-toolbar skill-tabs">${tabs.map(([id, label]) => `<button class="button ${skillTab === id ? 'primary' : 'secondary'}" data-skill-tab="${id}">${esc(label)}</button>`).join('')}<div class="row-end">${action('+ Add my own skill', 'skill-new', '', 'primary')}${action('Import pack', 'skill-import', '', 'secondary')}<a class="button secondary" href="/api/skills/export" target="_blank" rel="noopener">Export approved ↗</a></div></div>`;
-  const body = skillTab === 'packs' ? skillPacksPanel() : skillTab === 'lessons' ? skillLessonsPanel() : skillTab === 'usage' ? skillUsagePanel() : skillTab === 'state' ? skillProjectStatePanel() : skillTab === 'rules' ? skillRulesPanel() : skillLibraryPanel();
+  const body = skillTab === 'packs' ? skillPacksPanel() : skillTab === 'mine' ? skillMinePanel() : skillTab === 'lessons' ? skillLessonsPanel() : skillTab === 'usage' ? skillUsagePanel() : skillTab === 'state' ? skillProjectStatePanel() : skillTab === 'rules' ? skillRulesPanel() : skillLibraryPanel();
   return heading('Skills', 'The reusable operating knowledge of this program: what to do, what to avoid, and the exact numbers each room applies.') + hero + tally + rail + body;
 }
 
@@ -77,7 +78,19 @@ function skillPacksPanel() {
       <p>${drafts.length ? `${drafts.length} draft${drafts.length === 1 ? '' : 's'} waiting for your review.` : 'Nothing waiting.'} Skills only reach the AI after they are approved; the Usage tab shows which skills each job used.</p>
       <div class="card-actions">${drafts.length ? action('Review & approve the pack', 'skill-pack-approve', String(packs.indexOf(label)), 'primary') : ''}</div></section>`;
   }).join('');
-  return `<p class="hint">A pack is approved in one review: you read every skill in it, then approve them together under your name. You can still retire any single skill later.</p><div class="skill-grid">${cards}</div>`;
+  return `${skillReachPanel()}<details class="skill-packs"><summary>The ${packs.length} built-in packs (${skillsAll().filter(skill => skill.origin === 'builtin').length} skills, part of the program)</summary><p class="hint">Built-in skills come approved with the program. A pack only asks for a review when one of its skills is waiting (for example after you retired and changed one).</p><div class="skill-grid">${cards}</div></details>`;
+}
+// What reaches each job (0.73): how many approved skills each AI request really carries, the most relevant first.
+function skillReachPanel() {
+  const rows = state.skills.reach || [];
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">WHAT REACHES EACH JOB</span><h2>Skills in every request</h2></div></div>
+    <p class="hint">Each AI request carries the approved skills made for that job first, then the rest by priority, as many as fit its share of the request. Your own skills always go first. The Usage tab lists the exact skills each job used.</p>
+    <table class="data-table"><thead><tr><th>Job</th><th>Skills per request</th></tr></thead><tbody>${rows.map(row => `<tr><td>${esc(row.label)}</td><td>${row.inCode ? `all ${row.available}, applied in code` : `${row.used} of ${row.available} approved`}</td></tr>`).join('')}</tbody></table></section>`;
+}
+// The owner's own and learned skills (0.73): they live on this PC only.
+function skillMinePanel() {
+  const mine = skillsAll().filter(skill => skill.origin !== 'builtin');
+  return `<p class="hint">Skills you add, import or approve from a lesson. They are saved in this PC's database and its backups only; another PC running the program has the built-in skills but not these.</p>${mine.length ? `<div class="skill-grid">${mine.map(skillCard).join('')}</div>` : `<div class="production-empty"><span class="empty-icon">✦</span><h2>No skills of your own yet</h2><p>Use "+ Add my own skill" to write one: what to do, what to avoid and how to check it.</p></div>`}`;
 }
 function skillLibraryPanel() {
   const vocabulary = state.skills.vocabulary;

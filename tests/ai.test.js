@@ -68,7 +68,14 @@ test('the subscription connection runs Claude Code isolated: safe mode, no tools
   fake.reply("API Error: Claude's response exceeded the 40 output token maximum.", {error: true});
   await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 40, effort: 'low'}), /more room/);
   fake.reply('Not logged in. Please run /login', {error: true});
-  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), /not logged in/i);
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /not signed in on this PC[\s\S]*said: "Not logged in\. Please run \/login"[\s\S]*type \/login/.test(error.message) && error.nothingUsed && error.kind === 'login');
+  // 0.73: a model the plan lacks also mentions /login; it is named as the plan's model, not as a sign-in problem.
+  fake.reply('Claude Opus 5.5 is not available with the Claude Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.', {error: true});
+  await assert.rejects(client.complete({model: 'claude-opus-5-5', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /plan cannot use Claude Opus 5\.5/.test(error.message) && error.nothingUsed && error.kind === 'model');
+  fake.reply('Claude AI usage limit reached|1761840000', {error: true});
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /usage limit/.test(error.message) && error.nothingUsed);
+  fake.reply('Something odd happened mid-answer', {error: true});
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /usage may still count\. Claude Code said: "Something odd happened mid-answer"/.test(error.message) && !error.nothingUsed);
   fake.reply('nothing', {stop: 'refusal'});
   await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), /declined/);
   await assert.rejects(new ClaudeCode({command: null}).complete({model: 'claude-opus-4-8', prompt: 'x', maxTokens: 400, effort: 'low'}), /not found/);
@@ -134,9 +141,27 @@ test('connection tests: the key reads model details only; the subscription asks 
   fake.reply('OK', {model: 'claude-opus-4-8'});
   const passed = await slots.test(sub.id, sub.revision);
   assert.equal(passed.connector.test.status, 'passed');
-  assert.equal(fake.calls().length, 1);
+  // 0.73: every model the jobs use is asked once (main and support), not only the support model.
+  assert.deepEqual(fake.calls().map(call => call.args[call.args.indexOf('--model') + 1]), ['claude-opus-5-5', 'claude-opus-4-8']);
+  assert.match(passed.result.message, /Claude Opus 5\.5 and Claude Opus 4\.8/);
   assert.equal(fake.calls()[0].args[fake.calls()[0].args.indexOf('--effort') + 1], 'low');
   fake.reply('Not logged in', {error: true});
-  await assert.rejects(slots.test(sub.id, passed.connector.revision), /not logged in/i);
+  await assert.rejects(slots.test(sub.id, passed.connector.revision), /not signed in/i);
   assert.equal(slots.list().find(item => item.id === sub.id).test.status, 'failed');
+  // A job that finds the plan signed out fails without "usage unknown" and marks the connection's test as failed.
+  fake.reply('OK', {model: 'claude-opus-4-8'});
+  const again = await slots.test(sub.id, slots.list().find(item => item.id === sub.id).revision);
+  assert.equal(again.connector.test.status, 'passed');
+  let started = false;
+  fake.reply('Invalid API key · Please run /login', {error: true});
+  await assert.rejects(slots.ai.complete({connectorId: sub.id, task: 'script', messages: [{role: 'user', content: 'Write.'}], maxTokens: 4000, onStart: () => { started = true; }}), /not signed in/);
+  assert.equal(started, false, 'nothing was generated, so the job is not told its usage is unknown');
+  assert.equal(slots.list().find(item => item.id === sub.id).test.status, 'failed', 'the page stops showing it as connected');
+  fake.reply('Something odd happened mid-answer', {error: true});
+  await assert.rejects(slots.ai.complete({connectorId: sub.id, task: 'script', messages: [{role: 'user', content: 'Write.'}], maxTokens: 4000, onStart: () => { started = true; }}), /usage may still count/);
+  assert.equal(started, true, 'a failure after generation began keeps the unknown usage');
+  started = false;
+  fake.reply({ok: 1});
+  await slots.ai.complete({connectorId: sub.id, task: 'script', messages: [{role: 'user', content: 'Write.'}], maxTokens: 4000, onStart: () => { started = true; }});
+  assert.equal(started, true);
 });

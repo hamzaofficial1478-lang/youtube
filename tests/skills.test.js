@@ -57,7 +57,7 @@ const PLANNED_IDS = [
 function setup(t, {seed = true} = {}) {
   const store = new Store(':memory:');
   t.after(() => store.close());
-  const skills = new SkillsEngine(store, {root, seed});
+  const skills = new SkillsEngine(store, {root, seed, builtinApproved: false});
   return {store, skills};
 }
 const ownerSkill = (overrides = {}) => ({
@@ -90,7 +90,7 @@ test('the builtin packs cover every planned source section and seed only drafts'
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
-  const second = new SkillsEngine(store, {root});
+  const second = new SkillsEngine(store, {root, builtinApproved: false});
   assert.equal(second.skills().length, 499);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
@@ -189,7 +189,7 @@ test('selection ranks owner and learned skills above builtin, and honours pins a
   skills.approveRevision(owner.id, review);
   const order = skills.select('script.candidate').map(item => item.skill.id);
   assert.equal(order[0], 'script.owner-rule', 'an owner skill outranks builtin skills');
-  assert.deepEqual(order.slice(1), ['hooks.universal-3-hook', 'script.spoken-standard'], 'builtin order follows priority then id');
+  assert.deepEqual(order.slice(1), ['script.spoken-standard', 'hooks.universal-3-hook'], 'builtin order: skills made for this job first (0.73), then priority, then id');
   // A family block removes a skill for that family only.
   skills.bind({createdBy: 'Owner', note: 'This family writes its own hooks.', mode: 'block', skillId: 'hooks.universal-3-hook', taskKey: 'script.candidate', familyId: family.id});
   assert.ok(!skills.select('script.candidate', {familyId: family.id}).some(item => item.skill.id === 'hooks.universal-3-hook'));
@@ -365,7 +365,7 @@ test('the quality gate and the review rooms raise lesson candidates automaticall
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
   const store = new Store(':memory:');
   t.after(() => store.close());
-  const skills = new SkillsEngine(store, {root}).attach();
+  const skills = new SkillsEngine(store, {root, builtinApproved: false}).attach();
   const family = store.saveFamily({...familyFixture, monthlyBudget: 500});
   const content = store.saveContent({familyId: family.id, title: 'How trust became money', kind: 'fiction', angle: 'Follow two invented villages through a trade that needs trust.', hook: 'Before coins existed, trust already had a price.', script: 'Draft body for the fixture.', sources: [], rightsConfirmed: true});
   store.db.prepare("INSERT INTO connectors(id,name_key,payload,secret) VALUES('c1','hermes slot',?,?)")
@@ -477,28 +477,29 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(() => { fs.rmSync(dir, {recursive: true, force: true}); resolve(); }); }));
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
+  // 0.73: the program's built-in skills come approved; the owner's own skill goes through the named review.
   assert.equal(state.skills.counts.total, 499);
-  assert.equal(state.skills.counts.approved, 0);
-  assert.equal(state.capabilities.skills, 'drafts_only_not_injected');
+  assert.equal(state.skills.counts.approved, 499);
+  assert.equal(state.capabilities.skills, 'approved_skills_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
   assert.equal((await fetch(`${base}/skills-room.js`)).status, 200);
   const send = (url, body, token = state.token) => fetch(base + url, {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Local-Token': token}, body: JSON.stringify(body)});
-  const draft = state.skills.skills.find(item => item.id === 'hooks.universal-3-hook').latest;
+  const owner = await send('/api/skills', {createdBy: 'Owner', changeNote: 'My own rule, added from the page.', skill: ownerSkill({tasks: ['script.hooks']})});
+  assert.equal(owner.status, 200);
+  const draft = (await owner.json());
   assert.equal((await send(`/api/skill-revisions/${draft.id}/approve`, review, 'wrong-token')).status, 403);
   const missing = await send(`/api/skill-revisions/${draft.id}/approve`, {...review, confirmations: {}});
   assert.equal(missing.status, 400);
   assert.match((await missing.json()).error, /Confirm that the/);
   assert.equal((await send(`/api/skill-revisions/${draft.id}/approve`, review)).status, 200);
-  const owner = await send('/api/skills', {createdBy: 'Owner', changeNote: 'My own rule, added from the page.', skill: ownerSkill()});
-  assert.equal(owner.status, 200);
   const after = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(after.skills.counts.approved, 1);
+  assert.equal(after.skills.counts.approved, 500);
   assert.equal(after.skills.counts.owner, 1);
-  assert.equal(after.capabilities.skills, 'approved_skills_injected');
-  // Reads: the compiled brief and the export are visible for inspection.
+  // Reads: the compiled brief puts the owner's skill first; the export holds what is approved.
   const brief = await (await fetch(`${base}/api/skills/brief?taskKey=script.hooks`)).json();
-  assert.deepEqual(brief.skillIds, ['hooks.universal-3-hook']);
-  assert.equal((await (await fetch(`${base}/api/skills/export`)).json()).skills.length, 1);
+  assert.equal(brief.skillIds[0], 'script.owner-rule');
+  assert.ok(brief.skillIds.length >= 2, 'built-in hook skills follow it');
+  assert.equal((await (await fetch(`${base}/api/skills/export`)).json()).skills.length, 500);
   assert.equal((await fetch(`${base}/api/skills/brief?taskKey=nope`)).status, 400);
   assert.equal((await send('/api/skill-revisions/00000000-0000-0000-0000-000000000000/approve', review)).status, 404);
   const lesson = await send('/api/skill-lessons/00000000-0000-0000-0000-000000000000/review', {reviewedBy: 'Owner', action: 'approve', reason: 'No such lesson exists.'});
@@ -524,9 +525,10 @@ test('0.39: a whole pack is approved in one named review of the exact drafts sho
   assert.equal(approved.length, 14);
   assert.ok(approved.every(item => item.approved.review.approvedBy === review.approvedBy && item.approved.review.pack === pack), 'each revision carries its own named approval');
   const brief = skills.brief('scene.plan');
-  assert.equal(brief.byteBudget, 9000);
-  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 9000);
-  assert.equal(skills.brief('script.candidate').byteBudget, BRIEF_BYTE_BUDGET, 'other rooms keep the default share');
+  assert.equal(brief.byteBudget, 14000);
+  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 14000);
+  assert.equal(skills.brief('script.candidate').byteBudget, 12000, 'script writing carries a full brief (0.73)');
+  assert.equal(skills.brief('research.brief').byteBudget, BRIEF_BYTE_BUDGET, 'jobs with a small fixed limit keep the default share');
   assert.ok(!skills.brief('scene.plan').skillIds.some(id => id.startsWith('profile.')), 'channel profiles reach a family only where pinned');
 });
 
@@ -572,12 +574,40 @@ test('the claude-youtube pack seeds as drafts, and an updated builtin skill arri
   const file = path.join(temp, 'skills', 'youtube-growth.json'), pack = JSON.parse(fs.readFileSync(file, 'utf8'));
   for (const item of pack.filter(raw => ['hooks.five-mechanisms', 'shorts.hook-change-loop'].includes(raw.id))) { item.summary += ' Updated.'; item.source += '; updated in a test'; }
   fs.writeFileSync(file, JSON.stringify(pack));
-  const again = new SkillsEngine(store, {root: temp});
+  // With the review switched on, the update waits as a draft beside the approved one.
+  const again = new SkillsEngine(store, {root: temp, builtinApproved: false});
   const updated = again.skills().find(item => item.id === 'hooks.five-mechanisms');
   assert.deepEqual(updated.revisions.map(item => item.status).sort(), ['approved', 'draft'], 'the update waits as a draft; the approved revision stays in use');
   assert.equal(updated.approved.id, approved.id);
   assert.match(updated.latest.changeNote, /Updated in claude-youtube/);
   assert.equal(again.skills().find(item => item.id === 'shorts.hook-change-loop').latest.createdBy, 'Owner', 'an owner revision is never replaced by a pack update');
-  assert.equal(new SkillsEngine(store, {root: temp}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'seeding again adds nothing');
-  assert.equal(new SkillsEngine(store, {root}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'the unchanged pack does not add its older text back');
+  assert.equal(new SkillsEngine(store, {root: temp, builtinApproved: false}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'seeding again adds nothing');
+  assert.equal(new SkillsEngine(store, {root, builtinApproved: false}).skills().find(item => item.id === 'hooks.five-mechanisms').revisions.length, 2, 'the unchanged pack does not add its older text back');
+  // As the program runs (0.73, owner decision): the update comes approved with the program; the owner's revision stays.
+  const live = new SkillsEngine(store, {root: temp}).skills();
+  assert.equal(live.find(item => item.id === 'hooks.five-mechanisms').approved.revision, 2, 'the built-in update replaces the older built-in text');
+  assert.equal(live.find(item => item.id === 'shorts.hook-change-loop').latest.status, 'draft', "the owner's own revision still waits for the owner");
+});
+
+// 0.73 (owner decision 2026-10-30): the built-in skills come approved with the program on every PC; the owner's own
+// skills stay drafts until the owner approves them, stay on this PC, and a retired built-in skill stays retired.
+test('built-in skills are approved with the program; own skills still need the owner and stay local', t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const skills = new SkillsEngine(store, {root});
+  const state = skills.state();
+  assert.deepEqual([state.counts.total, state.counts.approved, state.counts.draft], [499, 499, 0]);
+  const one = skills.skills().find(item => item.id === 'hooks.universal-3-hook');
+  assert.equal(one.approved.review.approvedBy, 'Built into the program');
+  assert.ok(skills.promptBrief('script.candidate').skillIds.length >= 15, 'a script job carries a full brief of approved skills');
+  // The owner retires one built-in skill: a later start does not bring it back.
+  skills.retireRevision(one.approved.id, {retiredBy: 'Owner', reason: 'This channel never uses three-part hooks.'});
+  new SkillsEngine(store, {root});
+  assert.equal(skills.skills().find(item => item.id === 'hooks.universal-3-hook').approved, null);
+  // The owner's own skill is a draft until approved; it lives in this PC's database only, never in the program's packs.
+  const mine = skills.saveOwnerSkill({createdBy: 'Owner', changeNote: 'My own hook rule.', skill: ownerSkill()});
+  assert.equal(mine.status, 'draft');
+  new SkillsEngine(store, {root});
+  assert.equal(skills.skills().find(item => item.id === 'script.owner-rule').latest.status, 'draft', 'a restart never approves an owner skill');
+  assert.ok(!loadPacks(root).some(item => item.skill.id === 'script.owner-rule'));
 });

@@ -127,6 +127,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 [hidden]{display:none !important}
 .trend-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin:12px 0}.trend-filters label{min-width:160px}
 .table-scroll{overflow-x:auto}.trend-table td:nth-child(2){min-width:240px}
+.trend-niche{margin:8px 0 0}.trend-table tr.left-out td{opacity:.6}
 .read-row{display:grid;grid-template-columns:120px 1fr;gap:12px;border-top:1px solid var(--line,#E6E1D8);padding:12px 0}.suggest-job{border-top:1px solid var(--line,#E6E1D8);padding:12px 0}.suggest-job .bp-section .chip{margin-left:4px}.shot-thumb{width:120px;max-height:220px;object-fit:cover;object-position:top;border-radius:8px;border:1px solid var(--line,#E6E1D8)}
 .retention-list{list-style:none;padding:0;margin:6px 0}.retention-list li{margin:4px 0;font-size:.92em}.retention-list li.fail b{color:#a5521b}.retention-list li.pass b{color:#2f6b3f}
 .topic-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin:12px 0}.topic-card{border:1px solid var(--line,#E6E1D8);border-radius:10px;padding:12px}.topic-card h4{margin:4px 0 8px}.topic-card p{margin:4px 0;font-size:.9em}
@@ -174,3 +175,9 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .competitor-add{margin:4px 0 14px}.competitor-add label{gap:6px}.competitor-add-row{display:flex;gap:8px}.competitor-add-row input{flex:1}.competitor-remove{display:flex;justify-content:flex-end;align-items:center;gap:10px}.competitor-remove .button{padding:2px 0}
 .step-actions{display:flex;flex-wrap:wrap;gap:6px 16px}
 .fs-current{border:1px solid #cfe2d6;background:#f4f9f6;border-radius:9px;padding:10px 14px;margin:0 0 12px}.fs-current .micro-label{display:block;margin-bottom:3px}.fs-current small{color:#6f7d72}
+
+/* 0.73: the two ways to get a script, the attach button and the craft check's reasons */
+.script-choice{margin:12px 0;padding:14px 16px;border:1px solid #dfe5da;border-radius:10px;background:#fafcf7}.script-choice>strong{display:block;font-size:13px;margin-bottom:8px}.script-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.script-options>div{display:flex;flex-direction:column;gap:6px;align-items:flex-start;padding:12px;border:1px solid #e5eadf;border-radius:8px;background:#fff;min-width:0}.script-options p{margin:0}
+.script-source{border:1px solid #e3e8df;border-radius:8px;padding:10px 14px;margin:0}.script-source legend{font-size:12px;font-weight:600;padding:0 4px}.radio-line{flex-direction:row;align-items:flex-start;gap:8px;font-weight:400;margin:6px 0}.radio-line input{width:auto;margin-top:3px}.own-script{display:grid;gap:10px}.attach-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.attach-button{position:relative;overflow:hidden;cursor:pointer}.attach-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
+.craft-why{margin:8px 0 0;padding-left:18px;font-size:11px;line-height:1.6;color:#5f6f66}
+@media(max-width:740px){.script-options{grid-template-columns:1fr}}

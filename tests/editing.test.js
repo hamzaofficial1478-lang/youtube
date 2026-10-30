@@ -314,7 +314,7 @@ function setup(t, {seconds = 36, locales = ['en-US']} = {}) {
   const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'editing-room-'));
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
-  const skills = new SkillsEngine(store, {root: path.join(__dirname, '..')}).attach();
+  const skills = new SkillsEngine(store, {root: path.join(__dirname, '..'), builtinApproved: false}).attach();
   const styles = new StyleLibrary(store), quota = new QuotaLedger(store);
   const family = store.saveFamily({name: 'Money Stories', tier: 'A', countries: ['United States'], audience: 'Curious adults who like money history told as stories.', niche: 'Origins of money', locales, timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'shorts', monthlyTokenLimit: 200000, scriptTokenLimit: 4000, researchTokenLimit: 4000});
   let content = store.saveContent({familyId: family.id, title: 'The first promise', kind: 'fiction', angle: 'Invented villages show how trust became money.', hook, script, sources: [], rightsConfirmed: true});
@@ -1237,7 +1237,7 @@ test('Room 07 scores the video with Claude, generates each cue once inside the l
   room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true});
   assert.throws(() => room.saveSettings(family.id, {...SOUND_SETTINGS, revision: 1, commercialUseConfirmed: true}), /another tab/);
   // Claude scores from the scenes and the narration, inside a token reservation, with the owner's approved skills (0.71).
-  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..')}).attach();
+  const growth = new (require('../skills').SkillsEngine)(store, {root: require('node:path').join(__dirname, '..'), builtinApproved: false}).attach();
   growth.approvePack({pack: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types', approvedBy: 'Owner', notes: '', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}, revisionIds: growth.skills().filter(item => item.pack === 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types').map(item => item.latest.id)});
   const scoreJob = room.queueScore(content.id, {requestedBy: 'Owner', connector: claude});
   assert.ok(JSON.parse(store.db.prepare("SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key='audio.mix'").get(scoreJob.id).skill_ids).includes('os.three-quality-gates'), 'the score job records its skills');

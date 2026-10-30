@@ -27,6 +27,26 @@ needs about 3,000 units; Google's default allowance is 10,000 a day and the prog
 quota or network) and each would cost 100 units. A stopped or failed scan can be retried by hand, 3 attempts at most;
 an interrupted one needs a confirmation because its usage is unknown.
 
+## Staying inside the niche and your channel's size (0.73)
+
+Owner test review 2026-10-30: the topic ideas wandered outside the niche, because YouTube's search also returns videos
+that only share a keyword with it. A scan now asks:
+
+- **Which niche?** "The niche we are working on" (one of your channels; its niche text) or "Another niche" (typed in).
+  **Niche words** are the words a video must name; left empty, they are the niche's own words without filler. A video
+  is **kept** when its title or YouTube's short description excerpt names one of them (`onNiche`; endings are folded,
+  so history also finds historical and histories). The description excerpt comes in the same search answer at no extra
+  cost, is used for this match and is not stored.
+- **Your channel's subscribers** (optional). Only channels of that size or smaller are kept, so the list shows what works
+  for a channel like yours. Because the most-viewed videos mostly come from big channels, such a scan looks through 50
+  videos per keyword (the most one search returns, still 100 units).
+
+Everything else is **left out** with its reason (outside the niche, a bigger channel, a channel that hides its size).
+The scan card names the niche, its words and the channel size, counts what was kept and left out, and "Show the N left
+out" lists them greyed with their reason. Claude only ever reads the kept videos, and its instructions say every topic
+must sit inside the niche and serve the family's audience; Reddit topic ideas carry the same rule with the family's
+niche. A scan where nothing was kept cannot be sent to Claude. Older scans have no niche and keep working as before.
+
 ## YouTube's data rules
 
 YouTube data about other channels is **display-only** and **deleted after 30 days** (AGENTS.md):
@@ -40,7 +60,7 @@ subscriber. Until that approval is recorded, the list is for reading only.
 
 ## Topic ideas with Claude (after the approval)
 
-From a scan, the owner picks a family and a number (5-20). Claude reads the 60 most-viewed videos of the scan and
+From a scan, the owner picks a family and a number (5-20). Claude reads the 60 most-viewed kept videos of the scan and
 answers in the family's language. Each topic idea has:
 - a **title** of at most 60 characters;
 - the **opening hook** (a specific curiosity gap, with no channel intro);
