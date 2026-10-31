@@ -368,7 +368,7 @@ class TrendScanner {
   topicInput(scan, family, count) {
     const result = scan.result, keyword = new Map(result.keywords.map(item => [item.ref, item.keyword]));
     const formats = family.format === 'shorts' ? ['shorts'] : ['long-form', 'shorts'];
-    const skills = this.store.skillRuntime?.brief('ideas.titles', family.id)?.prompt || null;
+    const skills = this.store.skillRuntime?.brief('ideas.titles', family.id, {text: [scan.scope.niche?.name || family.niche, family.audience, ...result.keywords.map(item => item.keyword)].join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null})?.prompt || null;
     const niche = scan.scope.niche ? {name: scan.scope.niche.name, words: scan.scope.niche.words} : {name: family.niche || family.name};
     if (result.source === 'reddit') return {source: 'reddit', family: {name: family.name, niche: family.niche, audience: family.audience, locale: family.primaryLocale, countries: family.countries, formats}, niche, days: scan.scope.days, count, keywords: result.keywords.map(item => item.keyword), subreddits: result.subreddits,
       posts: result.posts.slice(0, TOPIC_VIDEOS).map(item => ({ref: item.ref, title: item.title, subreddit: item.subreddit, votes: item.score, comments: item.comments, posted: item.createdAt?.slice(0, 10) || null, keywords: item.keywords.map(ref => keyword.get(ref))})), ...(skills ? {skills} : {})};

@@ -9,7 +9,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {spawn, execFileSync} = require('node:child_process');
+const {spawn, execFile, execFileSync} = require('node:child_process');
 const Anthropic = require('@anthropic-ai/sdk').default;
 
 // The AI connections every room may use (owner request 2026-10-22: Claude and/or the ChatGPT plan).
@@ -50,16 +50,50 @@ function claudeCodeRefusal(said, model) {
   const words = saidText(said), name = MODELS[model] || model, quoted = words ? ` Claude Code said: "${words}"` : '';
   if (/output token maximum/i.test(words)) return new AiError('Claude needed more room than this job allows. Raise the family token limit for this kind of job.', 413);
   if (/not available (with|on|for|in)|may not exist|not have access|invalid model|unknown model|model\b.*\bnot (found|supported|allowed)|issue with the selected model/i.test(words)) return new AiError(`Your Claude plan cannot use ${name} in Claude Code, so nothing was generated.${quoted} Choose a model your plan includes for this kind of job (Connections: your Claude connection's models, or the AI team), then try again.`, 403, {nothingUsed: true, kind: 'model'});
-  if (/not logged in|log ?in|authenticat|oauth|invalid api key|unauthori[sz]ed|credentials/i.test(words)) return new AiError(`Claude Code is not signed in on this PC, so nothing was generated.${quoted} Open a terminal, run claude, type /login and sign in with your Claude subscription, then test the connection again in Connections.`, 401, {nothingUsed: true, kind: 'login'});
+  if (/not logged in|log ?in|authenticat|oauth|invalid api key|unauthori[sz]ed|credentials/i.test(words)) return new AiError(`Claude Code is not signed in on this PC, so nothing was generated.${quoted} Click "Sign in to Claude" on your Claude connection in Connections (or run claude auth login in a terminal), then test it again.`, 401, {nothingUsed: true, kind: 'login'});
   if (/usage limit|rate limit|limit reached|too many requests|overloaded/i.test(words)) return new AiError(`Your Claude plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later.`, 429, {nothingUsed: true});
   return new AiError(`Claude Code reported an error. Its usage may still count.${quoted}`, 502);
 }
 
-// The Claude Code app installed for this Windows user (the native installer puts it in .local\bin).
+const isFile = file => { try { return !!file && fs.statSync(file).isFile(); } catch { return false; } };
+const pathDirs = () => String(process.env.PATH || '').split(path.delimiter).filter(Boolean);
+// The Claude Code app installed for this Windows user: the native installer puts claude.exe in .local\bin; an npm
+// install has only claude.cmd, which cannot be started without a shell, so its JavaScript entry runs on this Node
+// (0.74). Returns {command, prefix} or null; looked up again on every use, so an install or update needs no restart.
 function findClaudeCode() {
-  const home = os.homedir(), exe = process.platform === 'win32' ? 'claude.exe' : 'claude';
-  const candidates = [process.env.CLAUDE_CODE_PATH, path.join(home, '.local', 'bin', exe), ...String(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(dir => path.join(dir, exe))];
-  return candidates.find(file => { try { return !!file && fs.statSync(file).isFile(); } catch { return false; } }) || null;
+  const exe = process.platform === 'win32' ? 'claude.exe' : 'claude';
+  const native = [process.env.CLAUDE_CODE_PATH, path.join(os.homedir(), '.local', 'bin', exe), ...pathDirs().map(dir => path.join(dir, exe))].find(isFile);
+  if (native) return {command: native, prefix: []};
+  if (process.platform !== 'win32') return null;
+  const pkg = dir => path.join(dir, 'node_modules', '@anthropic-ai', 'claude-code');
+  const roots = [path.join(process.env.APPDATA || '', 'npm'), ...pathDirs()].map(pkg);
+  const bundled = roots.map(root => path.join(root, 'bin', 'claude.exe')).find(isFile);
+  if (bundled) return {command: bundled, prefix: []};
+  const cli = roots.map(root => path.join(root, 'cli.js')).find(isFile);
+  return cli ? {command: process.execPath, prefix: [cli]} : null;
+}
+// What a CLI started by the program inherits (0.74). A program started from inside a Claude Code or Codex session
+// carries that session's variables; a CLI started under them may refuse to run (a "nested" session) or run
+// sandboxed without network. Keys never travel: the subscription's own sign-in is used.
+function cliEnv(extra = {}) {
+  const env = {...process.env};
+  for (const name of Object.keys(env)) {
+    if ((/^CLAUDE_?CODE/i.test(name) && !/^CLAUDE_CODE_(OAUTH_TOKEN|GIT_BASH_PATH)$/i.test(name)) || /^CODEX_(SANDBOX|THREAD_ID|CI$|MANAGED)/i.test(name)
+      || /^(ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|OPENAI_API_KEY|CODEX_API_KEY|CODEX_HOME)$/i.test(name)) delete env[name];
+  }
+  return {...env, ...extra};
+}
+// A CLI that stopped before answering left its reason on stderr (0.74; it used to be thrown away, so every such stop
+// looked like "not signed in"). Returns an AiError naming the cause, or null when stderr says nothing useful.
+function cliProblem(stderr, app) {
+  const lines = String(stderr || '').split(/\r?\n/).map(saidText).filter(Boolean), said = lines.filter(line => /error|unknown|not |fail|invalid|denied|login|auth/i.test(line)).pop() || lines.pop() || '';
+  if (!said) return null;
+  const quoted = ` ${app} said: "${said}"`, update = app === 'Claude Code' ? 'open a terminal and run: claude update' : 'update the Codex app';
+  if (/unknown option|unknown argument|unexpected argument|unrecognized|invalid option|error: option/i.test(said)) return new AiError(`${app} on this PC is older than this program needs, so nothing was generated.${quoted} To fix it, ${update}, then test the connection again.`, 503, {nothingUsed: true, kind: 'version'});
+  if (/another claude code session|nested session/i.test(said)) return new AiError(`Claude Code refused to start inside another Claude Code session, so nothing was generated.${quoted} Start the Control Room with its own Start Control Room shortcut, not from a Claude Code terminal.`, 503, {nothingUsed: true});
+  if (/refresh token|token .*(expired|revoked|already used)|re-?authenticate/i.test(said)) return new AiError(`The program's ChatGPT sign-in has run out, so nothing was generated.${quoted} Click "Sign in again" on your ChatGPT connection.`, 401, {nothingUsed: true, kind: 'login'});
+  if (/not logged in|log ?in|sign ?in|authenticat|unauthori[sz]ed|credentials/i.test(said)) return new AiError(`${app} is not signed in on this PC, so nothing was generated.${quoted} Click "Sign in" on its connection in Connections.`, 401, {nothingUsed: true, kind: 'login'});
+  return new AiError(`${app} stopped before answering. Its usage may still count.${quoted}`, 502);
 }
 
 // Rooms build OpenAI-style message lists; Claude takes one system prompt and the user turn. A user turn may
@@ -128,18 +162,47 @@ class ClaudeApi {
 
 // ---------------------------------------------------------------- Claude Code (subscription)
 
+const CLAUDE_MISSING = 'Claude Code was not found on this PC, so nothing was generated. Install it (claude.com/claude-code: the Windows installer puts it in your user folder), sign in with your Claude subscription, then test the connection again.';
 class ClaudeCode {
-  // command: the claude executable; prefix: extra leading arguments (tests run a fake script through node).
-  constructor({command = findClaudeCode(), prefix = []} = {}) { this.command = command; this.prefix = prefix; }
+  // command: the claude executable; prefix: extra leading arguments (tests run a fake script through node). Without a
+  // command the app is looked up on every use.
+  constructor({command, prefix = []} = {}) { this.override = command; this.overridePrefix = prefix; }
+  get found() { return this.override !== undefined ? (this.override ? {command: this.override, prefix: this.overridePrefix} : null) : findClaudeCode(); }
+  get command() { return this.found?.command || null; }
+  get prefix() { return this.found?.prefix || []; }
+  // Claude Code's version and sign-in, read without asking Claude anything (0.74): `claude auth status` says whether
+  // it is signed in and how (claude.ai = the subscription; api_key = an Anthropic Console key, billed per use).
+  async status() {
+    const found = this.found;
+    if (!found) throw new AiError(CLAUDE_MISSING, 503, {nothingUsed: true});
+    const run = args => new Promise(resolve => execFile(found.command, [...found.prefix, ...args], {env: cliEnv(), timeout: 60000, windowsHide: true, maxBuffer: 1 << 20}, (error, stdout, stderr) => resolve({error, stdout: String(stdout || ''), stderr: String(stderr || '')})));
+    const version = await run(['--version']);
+    if (version.error && !version.stdout) throw cliProblem(version.stderr, 'Claude Code') || new AiError('Claude Code could not be started on this PC.', 503, {nothingUsed: true});
+    const auth = await run(['auth', 'status', '--json']);
+    let parsed = null;
+    try { parsed = JSON.parse(auth.stdout); } catch { /* an older Claude Code without auth status */ }
+    return {version: saidText(version.stdout.split('\n')[0]).slice(0, 80) || null, loggedIn: typeof parsed?.loggedIn === 'boolean' ? parsed.loggedIn : null, method: typeof parsed?.authMethod === 'string' ? parsed.authMethod : null};
+  }
+  // Claude Code's own sign-in in a window of its own (0.74): it opens Claude's sign-in page in the browser and keeps
+  // the sign-in inside Claude Code (the program never reads it). The caller watches status() until it is signed in.
+  login() {
+    const found = this.found;
+    if (!found) throw new AiError(CLAUDE_MISSING, 503);
+    if (process.platform !== 'win32') throw new AiError('Open a terminal on this computer and run: claude auth login. Then test the connection again.', 400);
+    // cmd /k keeps the window open, so its messages stay readable; the owner closes it when done.
+    const line = `"${[found.command, ...found.prefix].map(part => `"${part}"`).join(' ')} auth login --claudeai"`;
+    const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/k', line], {env: cliEnv(), detached: true, stdio: 'ignore', windowsVerbatimArguments: true});
+    child.on('error', () => {});
+    child.unref();
+  }
   complete({model, system, prompt, maxTokens, effort, onStart = () => {}}) {
-    if (!this.command) return Promise.reject(new AiError('The Claude Code app was not found on this PC. Install it and log in with your Claude subscription, or use an API key.', 503, {nothingUsed: true}));
+    if (!this.command) return Promise.reject(new AiError(CLAUDE_MISSING, 503, {nothingUsed: true}));
     // An empty working folder and safe mode keep the owner's personal Claude Code setup (CLAUDE.md, plugins,
     // hooks, skills, MCP servers) out of the program's calls; no tools, and nothing is saved as a session.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-claude-'));
     const systemFile = path.join(dir, 'system.txt');
     fs.writeFileSync(systemFile, system || 'Follow the user message exactly.');
-    const env = {...process.env, CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens)};
-    delete env.ANTHROPIC_API_KEY; delete env.ANTHROPIC_AUTH_TOKEN; // the subscription login, never a stray key
+    const env = cliEnv({CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens)}); // the subscription login, never a stray key
     // Images travel as one stream-json user message (still no tools); plain text keeps the simple JSON mode.
     const blocks = Array.isArray(prompt);
     const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', ...(blocks ? ['--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json']), '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
@@ -149,13 +212,13 @@ class ClaudeCode {
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, cliTimeoutMs(maxTokens));
-      let out = '', bytes = 0;
+      let out = '', bytes = 0, err = '';
       child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); });
-      child.stderr.on('data', () => {});
+      child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
         let reply;
-        try { reply = blocks ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(new AiError(bytes > MAX_REPLY_BYTES ? 'Claude Code returned too much output.' : code === null ? 'Claude Code took too long and was stopped. Its usage may still count.' : 'Claude Code returned no readable answer. Check that it is logged in to your subscription.', 502)); }
+        try { reply = blocks ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(bytes > MAX_REPLY_BYTES ? new AiError('Claude Code returned too much output.', 502) : code === null ? new AiError('Claude Code took too long and was stopped. Its usage may still count.', 502) : cliProblem(err, 'Claude Code') || new AiError('Claude Code returned no readable answer and gave no reason. Its usage may still count.', 502)); }
         if (reply.is_error || reply.subtype !== 'success') return done(claudeCodeRefusal(reply.result, model));
         let value;
         try { value = finish({text: String(reply.result || ''), stop: reply.stop_reason, usage: usageOf(reply.usage), model: Object.keys(reply.modelUsage || {})[0] || model}); }
@@ -180,13 +243,16 @@ function finish({text, stop, usage, model, who = 'Claude'}) {
 // Codex app ships its command-line program signed in with the owner's ChatGPT account; the program asks it like
 // Claude Code: one request, an empty read-only working folder, the owner's own Codex settings left out, nothing
 // kept as a session, never retried by itself. Personal use on the owner's own plan only.
-const codexHome = home => home || process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+// The program keeps its own ChatGPT sign-in, apart from the Codex app's (0.74, owner report 2026-10-30: the test failed
+// "after a while"). ChatGPT's sign-in refreshes with a token that works only once; when the Codex app and the program
+// shared one sign-in file, whichever refreshed second was signed out. CONTROL_ROOM_CODEX_HOME moves it.
+const codexHome = home => home || process.env.CONTROL_ROOM_CODEX_HOME || path.join(os.homedir(), '.control-room', 'codex');
 let codexFound;
 function findCodex() {
-  if (codexFound !== undefined) return codexFound;
+  // The Store app moves to a new folder when it updates: a remembered path that is gone is looked up again.
+  if (codexFound !== undefined && (codexFound === null || isFile(codexFound))) return codexFound;
   const exe = process.platform === 'win32' ? 'codex.exe' : 'codex';
-  const isFile = file => { try { return !!file && fs.statSync(file).isFile(); } catch { return false; } };
-  let found = [process.env.CODEX_PATH, ...String(process.env.PATH || '').split(path.delimiter).filter(Boolean).map(dir => path.join(dir, exe))].find(isFile) || null;
+  let found = [process.env.CODEX_PATH, ...pathDirs().map(dir => path.join(dir, exe))].find(isFile) || null;
   // The Codex app from the Microsoft Store keeps its program inside the app package.
   if (!found && process.platform === 'win32') {
     try {
@@ -214,10 +280,19 @@ class CodexCli {
   // Owner review 2026-10-29: choosing the ChatGPT subscription signs in. Codex's own `codex login` opens ChatGPT's
   // sign-in page in the browser and keeps the sign-in inside Codex (the program never reads it). The page's link is
   // handed to `onLink` for when the browser does not open by itself. One attempt, 10 minutes at most.
+  get homeDir() { const dir = codexHome(this.home); fs.mkdirSync(dir, {recursive: true}); return dir; }
+  // Codex's version and whether the program's own ChatGPT sign-in is there (0.74), without asking ChatGPT anything.
+  async status() {
+    if (!this.command) throw new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app, then sign in again.', 503, {nothingUsed: true});
+    const env = cliEnv({CODEX_HOME: this.homeDir});
+    const run = args => new Promise(resolve => execFile(this.command, [...this.prefix, ...args], {env, timeout: 60000, windowsHide: true, maxBuffer: 1 << 20}, (error, stdout, stderr) => resolve({error, out: `${stdout || ''}\n${stderr || ''}`})));
+    const version = await run(['--version']), login = await run(['login', 'status']);
+    const said = saidText(login.out);
+    return {version: saidText(version.out).slice(0, 80) || null, loggedIn: /logged in using|logged in with/i.test(said) ? true : /not logged in/i.test(said) ? false : null};
+  }
   login({onLink = () => {}, timeoutMs = 600000} = {}) {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app first, then sign in again.', 503));
-    const env = {...process.env, CODEX_HOME: codexHome(this.home)};
-    delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY;
+    const env = cliEnv({CODEX_HOME: this.homeDir});
     return new Promise((resolve, reject) => {
       let said = '', child;
       try { child = spawn(this.command, [...this.prefix, 'login'], {env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']}); }
@@ -239,8 +314,7 @@ class CodexCli {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app and sign in with your ChatGPT account.', 503, {nothingUsed: true}));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-codex-')), last = path.join(dir, 'answer.txt');
     const files = images.map((image, k) => { const file = path.join(dir, `image-${k + 1}.${/png/.test(image.media_type) ? 'png' : 'jpg'}`); fs.writeFileSync(file, Buffer.from(image.data, 'base64')); return file; });
-    const env = {...process.env, CODEX_HOME: codexHome(this.home)};
-    delete env.OPENAI_API_KEY; delete env.CODEX_API_KEY; // the ChatGPT sign-in, never a stray key
+    const env = cliEnv({CODEX_HOME: this.homeDir}); // the program's own ChatGPT sign-in, never a stray key
     const args = [...this.prefix, 'exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only', '-C', dir, '-o', last, ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), ...files.flatMap(file => ['-i', file]), '-'];
     return new Promise((resolve, reject) => {
       const done = (error, value) => { clearTimeout(timer); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
@@ -248,11 +322,11 @@ class CodexCli {
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, timeoutMs);
-      let out = '', bytes = 0;
+      let out = '', bytes = 0, err = '';
       // Read-only still lets Codex open any file of this Windows account, and prompts carry outside text (Reddit,
       // competitors, screenshots): a tool call stops the run and its answer is thrown away, so nothing it read is saved.
       child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (guard && CODEX_TOOL.test(chunk)) child.kill(); });
-      child.stderr.on('data', () => {});
+      child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
         const events = out.split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
@@ -260,7 +334,10 @@ class CodexCli {
         const failed = events.find(event => event.type === 'turn.failed' || event.type === 'error');
         const said = String(failed?.error?.message || failed?.message || '');
         if (failed || !events.some(event => event.type === 'turn.completed')) {
+          // Nothing on the event stream: Codex stopped before the request (an old version, no sign-in); stderr says why.
+          if (!events.length && code !== null) { const problem = cliProblem(err, 'Codex'); if (problem) return done(problem); }
           const quoted = saidText(said) ? ` Codex said: "${saidText(said)}"` : '';
+          if (/refresh token|already used|re-?authenticate/i.test(said)) return done(new AiError(`The program's ChatGPT sign-in has run out, so nothing was generated.${quoted} Click "Sign in again" on your ChatGPT connection.`, 401, {nothingUsed: true, kind: 'login'}));
           if (/log ?in|auth|sign in|unauthori/i.test(said)) return done(new AiError(`Codex is not signed in, so nothing was generated.${quoted} Sign in again from Connections (your ChatGPT connection), then test it.`, 401, {nothingUsed: true, kind: 'login'}));
           if (/usage limit|rate limit|limit reached|quota/i.test(said)) return done(new AiError(`Your ChatGPT plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later.`, 429, {nothingUsed: true}));
           return done(new AiError(`${code === null ? 'Codex took too long and was stopped.' : 'Codex returned no readable answer.'} Its usage may still count.${quoted}`, 502));
@@ -286,7 +363,7 @@ class CodexCli {
     const text = `Generate exactly one image with your image generation tool. ${prompt}\nDo not run commands, read or write files, or ask questions. When the image is made, reply with only the word DONE.`;
     const images = references.map(file => ({media_type: /\.png$/i.test(file) ? 'image/png' : 'image/jpeg', data: fs.readFileSync(file).toString('base64')}));
     const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart, guard: false});
-    const folder = reply.thread ? path.join(codexHome(this.home), 'generated_images', reply.thread) : null;
+    const folder = reply.thread ? path.join(this.homeDir, 'generated_images', reply.thread) : null;
     let made = [];
     try { made = fs.readdirSync(folder).filter(name => /\.(png|jpe?g|webp)$/i.test(name)).map(name => path.join(folder, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs); } catch { /* none */ }
     if (!made.length) throw new AiError('ChatGPT answered but made no picture. Its usage may still count.', 502);
@@ -381,11 +458,18 @@ class Ai {
   async test(slot, key) {
     const models = [slot.models?.main || DEFAULT_MODELS.main, slot.models?.support || DEFAULT_MODELS.support];
     if (slot.provider === 'claude') return new ClaudeApi(key, this.connectors.fetch).check(models);
+    // Both subscriptions first say, for free, whether they are installed and signed in (0.74), so a missing sign-in is
+    // named before any question is asked.
     if (slot.provider === 'chatgpt') {
+      const status = await this.codex.status();
+      if (status.loggedIn === false) throw new AiError('The program\'s own ChatGPT sign-in is missing (since 0.74 it is kept apart from the Codex app, so the two never sign each other out). Click "Sign in again" on this connection.', 401, {nothingUsed: true, kind: 'login'});
       const reply = await this.codex.complete({model: slot.models?.main || null, system: 'Answer with exactly the word OK.', prompt: 'Connection test.', maxTokens: 400, effort: 'low'});
       if (!/^ok\b/i.test(reply.content.trim())) throw new AiError('Codex answered, but not as expected. Try the test again.', 502);
-      return {message: `Codex answered on your ChatGPT plan (${slot.models?.main || 'its default GPT model'}). One tiny test question was used.`};
+      return {message: `Codex${status.version ? ` (${status.version})` : ''} answered on your ChatGPT plan (${slot.models?.main || 'its default GPT model'}). One tiny test question was used.`};
     }
+    const status = await this.claudeCode.status();
+    if (status.loggedIn === false) throw new AiError('Claude Code is not signed in on this PC. Click "Sign in to Claude" on this connection: a window opens Claude\'s sign-in page; sign in with your Claude subscription there.', 401, {nothingUsed: true, kind: 'login'});
+    if (['api_key', 'api_key_helper', 'third_party'].includes(status.method)) throw new AiError(`Claude Code is signed in with ${status.method === 'third_party' ? 'a cloud provider account' : 'an Anthropic Console API key, which is billed per use'}, not your Claude subscription. Click "Sign in to Claude" and choose your Claude subscription, or use a "Claude API key" connection instead.`, 409, {nothingUsed: true, kind: 'login'});
     // Every model the jobs ask for (0.73): the test used to try only the support model, so a plan without the main
     // model (scripts, scenes) still showed connected while every script failed.
     const chosen = Object.values(this.connectors?.aiRoles?.().models || {}).filter(model => MODELS[model]);
@@ -394,8 +478,8 @@ class Ai {
       const reply = await this.claudeCode.complete({model, system: 'Answer with exactly the word OK.', prompt: 'Connection test.', maxTokens: 400, effort: 'low'});
       if (!/^ok\b/i.test(reply.content.trim())) throw new AiError(`Claude Code answered with ${MODELS[model] || model}, but not as expected. Try the test again.`, 502);
     }
-    return {message: `Claude Code answered on your subscription with ${used.map(model => MODELS[model] || model).join(' and ')} (one tiny test question each).`};
+    return {message: `Claude Code${status.version ? ` ${status.version}` : ''}${status.method === 'claude.ai' ? ', signed in with your Claude subscription,' : ''} answered with ${used.map(model => MODELS[model] || model).join(' and ')} (one tiny test question each).`};
   }
 }
 
-module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};
+module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, cliEnv, cliProblem, codexHome, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};

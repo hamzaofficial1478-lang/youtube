@@ -2,10 +2,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const {Ai, AiError, ClaudeApi, ClaudeCode, DEFAULT_MODELS, TASK_ROLE} = require('../ai');
+const {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, DEFAULT_MODELS, TASK_ROLE} = require('../ai');
 const {Store} = require('../store');
 const {ConnectorSlots} = require('../connectors');
-const {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, fakeClaudeCode} = require('./fake-claude');
+const {claudeMessage, claudeStream, isClaudeMessages, isClaudeModel, claudeModel, fakeClaudeCode, fakeCodex} = require('./fake-claude');
 
 const protector = {transform: (op, input) => Buffer.from([...input].reverse())};
 const KEY = 'sk-ant-api03-test-key-0000000000';
@@ -68,7 +68,7 @@ test('the subscription connection runs Claude Code isolated: safe mode, no tools
   fake.reply("API Error: Claude's response exceeded the 40 output token maximum.", {error: true});
   await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 40, effort: 'low'}), /more room/);
   fake.reply('Not logged in. Please run /login', {error: true});
-  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /not signed in on this PC[\s\S]*said: "Not logged in\. Please run \/login"[\s\S]*type \/login/.test(error.message) && error.nothingUsed && error.kind === 'login');
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /not signed in on this PC[\s\S]*said: "Not logged in\. Please run \/login"[\s\S]*Sign in to Claude/.test(error.message) && error.nothingUsed && error.kind === 'login');
   // 0.73: a model the plan lacks also mentions /login; it is named as the plan's model, not as a sign-in problem.
   fake.reply('Claude Opus 5.5 is not available with the Claude Pro plan. If you have updated your subscription plan recently, run /logout and /login for the plan to take effect.', {error: true});
   await assert.rejects(client.complete({model: 'claude-opus-5-5', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /plan cannot use Claude Opus 5\.5/.test(error.message) && error.nothingUsed && error.kind === 'model');
@@ -142,9 +142,12 @@ test('connection tests: the key reads model details only; the subscription asks 
   const passed = await slots.test(sub.id, sub.revision);
   assert.equal(passed.connector.test.status, 'passed');
   // 0.73: every model the jobs use is asked once (main and support), not only the support model.
-  assert.deepEqual(fake.calls().map(call => call.args[call.args.indexOf('--model') + 1]), ['claude-opus-5-5', 'claude-opus-4-8']);
-  assert.match(passed.result.message, /Claude Opus 5\.5 and Claude Opus 4\.8/);
-  assert.equal(fake.calls()[0].args[fake.calls()[0].args.indexOf('--effort') + 1], 'low');
+  // 0.74: the version and the sign-in are read first, for free; then each model gets its one question.
+  assert.deepEqual(fake.calls().slice(0, 2).map(call => call.args.join(' ')), ['--version', 'auth status --json']);
+  const asked = fake.calls().filter(call => call.args.includes('--model'));
+  assert.deepEqual(asked.map(call => call.args[call.args.indexOf('--model') + 1]), ['claude-opus-5-5', 'claude-opus-4-8']);
+  assert.match(passed.result.message, /Claude Code 2\.1\.316 \(Claude Code\), signed in with your Claude subscription, answered with Claude Opus 5\.5 and Claude Opus 4\.8/);
+  assert.equal(asked[0].args[asked[0].args.indexOf('--effort') + 1], 'low');
   fake.reply('Not logged in', {error: true});
   await assert.rejects(slots.test(sub.id, passed.connector.revision), /not signed in/i);
   assert.equal(slots.list().find(item => item.id === sub.id).test.status, 'failed');
@@ -164,4 +167,70 @@ test('connection tests: the key reads model details only; the subscription asks 
   fake.reply({ok: 1});
   await slots.ai.complete({connectorId: sub.id, task: 'script', messages: [{role: 'user', content: 'Write.'}], maxTokens: 4000, onStart: () => { started = true; }});
   assert.equal(started, true);
+});
+
+test('0.74: Claude Code and Codex say why they stopped, run apart from a parent session and sign in by themselves', async t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const fake = fakeClaudeCode(t), client = new ClaudeCode({command: fake.command, prefix: fake.prefix});
+  // Variables of a Claude Code session the program was started from never reach the CLI; the subscription token does.
+  const saved = {...process.env};
+  t.after(() => { for (const name of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_BASE_URL']) if (saved[name] === undefined) delete process.env[name]; else process.env[name] = saved[name]; });
+  Object.assign(process.env, {CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli', CLAUDE_CODE_OAUTH_TOKEN: 'subscription-token', ANTHROPIC_BASE_URL: 'http://127.0.0.1:9'});
+  fake.reply('OK');
+  await client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'});
+  assert.deepEqual(fake.calls().at(-1).inherited.sort(), ['CLAUDE_CODE_MAX_OUTPUT_TOKENS', 'CLAUDE_CODE_OAUTH_TOKEN']);
+  // An old Claude Code that does not know a flag: its own words, nothing used, and how to update it.
+  process.env.FAKE_CLAUDE_STDERR = "error: unknown option '--safe-mode'";
+  t.after(() => { delete process.env.FAKE_CLAUDE_STDERR; });
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /older than this program needs[\s\S]*said: "error: unknown option '--safe-mode'"[\s\S]*claude update/.test(error.message) && error.nothingUsed && error.kind === 'version');
+  delete process.env.FAKE_CLAUDE_STDERR;
+  // The connection test reads the sign-in first: signed out or on a Console key, nothing is asked of Claude.
+  const slots = new ConnectorSlots(store, protector, async () => { throw new Error('no network in this test'); });
+  slots.ai = new Ai(slots, {claudeCode: client, codex: new CodexCli({command: null})});
+  const sub = slots.save({name: 'Claude plan', provider: 'claude-code'});
+  const before = fake.calls().filter(call => call.args.includes('--model')).length;
+  process.env.FAKE_CLAUDE_AUTH = 'none';
+  t.after(() => { delete process.env.FAKE_CLAUDE_AUTH; });
+  await assert.rejects(slots.test(sub.id, sub.revision), /not signed in on this PC\. Click "Sign in to Claude"/);
+  process.env.FAKE_CLAUDE_AUTH = 'api_key';
+  await assert.rejects(slots.test(sub.id, slots.list()[0].revision), /Console API key, which is billed per use/);
+  assert.equal(fake.calls().filter(call => call.args.includes('--model')).length, before, 'no question was asked');
+  // An older Claude Code without `auth status` still gets the questions.
+  process.env.FAKE_CLAUDE_AUTH = 'old';
+  fake.reply('OK');
+  assert.equal((await slots.test(sub.id, slots.list()[0].revision)).connector.test.status, 'passed');
+  // Sign in to Claude: already signed in with the subscription goes straight to the test.
+  process.env.FAKE_CLAUDE_AUTH = 'claude.ai';
+  slots.signIn(sub.id, slots.list()[0].revision);
+  for (let k = 0; k < 200 && ['waiting', 'testing'].includes(slots.list()[0].signIn.status); k++) await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(slots.list()[0].signIn.status, 'done');
+  assert.match(slots.list()[0].signIn.message, /Signed in with your Claude subscription and tested/);
+  // Signed out: the sign-in window opens, and the card waits until Claude Code says it is signed in.
+  process.env.FAKE_CLAUDE_AUTH = 'none';
+  let opened = 0;
+  client.login = () => { opened++; setTimeout(() => { process.env.FAKE_CLAUDE_AUTH = 'claude.ai'; }, 60); };
+  slots.signInPoll = 20;
+  slots.signIn(sub.id, slots.list()[0].revision);
+  for (let k = 0; k < 400 && ['waiting', 'testing'].includes(slots.list()[0].signIn.status); k++) await new Promise(resolve => setTimeout(resolve, 25));
+  assert.equal(opened, 1);
+  assert.equal(slots.list()[0].signIn.status, 'done');
+  assert.equal(slots.list()[0].test.status, 'passed');
+  // Codex: the program's own sign-in folder, and a missing sign-in is named before ChatGPT is asked anything.
+  const codexFake = fakeCodex(t), codex = new CodexCli({command: codexFake.command, prefix: codexFake.prefix, home: codexFake.home});
+  slots.ai = new Ai(slots, {claudeCode: client, codex});
+  const gpt = slots.save({name: 'GPT', provider: 'chatgpt'});
+  process.env.FAKE_CODEX_LOGGED = 'no';
+  t.after(() => { delete process.env.FAKE_CODEX_LOGGED; });
+  await assert.rejects(slots.test(gpt.id, gpt.revision), /own ChatGPT sign-in is missing[\s\S]*Sign in again/);
+  assert.equal(codexFake.calls().some(call => call.args.includes('exec')), false);
+  delete process.env.FAKE_CODEX_LOGGED;
+  codexFake.reply('OK');
+  const ok = await slots.test(gpt.id, slots.list().find(item => item.id === gpt.id).revision);
+  assert.match(ok.result.message, /Codex \(codex-cli 0\.130\.0\) answered/);
+  assert.ok(codexFake.calls().every(call => call.home === codexFake.home), 'every Codex call uses the program\'s own sign-in folder');
+  // A sign-in refreshed elsewhere: named as such, nothing used.
+  codexFake.reply('', {fail: 'Your access token could not be refreshed because your refresh token was already used. Please log out and sign in again.'});
+  await assert.rejects(codex.complete({model: null, system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /ChatGPT sign-in has run out[\s\S]*Sign in again/.test(error.message) && error.nothingUsed && error.kind === 'login');
+  assert.match(require('../ai').codexHome(null), /\.control-room[\\/]codex$/);
 });

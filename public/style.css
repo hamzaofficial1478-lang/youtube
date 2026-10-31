@@ -181,3 +181,4 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .script-source{border:1px solid #e3e8df;border-radius:8px;padding:10px 14px;margin:0}.script-source legend{font-size:12px;font-weight:600;padding:0 4px}.radio-line{flex-direction:row;align-items:flex-start;gap:8px;font-weight:400;margin:6px 0}.radio-line input{width:auto;margin-top:3px}.own-script{display:grid;gap:10px}.attach-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px}.attach-button{position:relative;overflow:hidden;cursor:pointer}.attach-button input{position:absolute;inset:0;opacity:0;cursor:pointer}
 .craft-why{margin:8px 0 0;padding-left:18px;font-size:11px;line-height:1.6;color:#5f6f66}
 @media(max-width:740px){.script-options{grid-template-columns:1fr}}
+.skill-why{margin:0;padding-left:16px;font-size:12px}.skill-why li{margin:2px 0}

@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/youtube-metadata-validator');
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount}=require('./writer');
+// What a script request is about, for choosing the skills that fit it (0.74).
+const skillFormat=family=>['long-form','shorts'].includes(family.format)?family.format:null;
+const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
 const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
 const Retention=require('./retention');
 const Delivery=require('./delivery');
@@ -460,7 +463,7 @@ class Store {
       // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
       const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
       // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
@@ -488,7 +491,7 @@ class Store {
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before retrying.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
       const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
@@ -576,7 +579,7 @@ class Store {
       selected.sort((left,right)=>left.id.localeCompare(right.id));
       const snapshot=selected.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}));
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate,sources:snapshot};
-      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id,{text:[family.niche,family.audience,...basePromptInput.sources.map(item=>item.title)].join(' '),format:skillFormat(family)})||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The approved skill set is part of the prompt, so it is part of the deduplication key.
       const evidenceHash=createHash('sha256').update(JSON.stringify([family.revision,...snapshot.map(item=>[item.recordId,item.revision]),...(skillBrief?.revisionIds||[])])).digest('hex');
       // The skill brief is added on top of the research limit (0.73), as for scripts: built-in skills come approved now.
@@ -601,7 +604,7 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&typeof input.connectorRevision==='number','Choose the current tested Claude connection.');
       const sources=oldScope.evidence.map(reference=>{const current=this.researchEvidence(reference.id);requireValue(current.revision===reference.revision,'Research evidence changed. Queue a fresh daily brief instead.',409);requireValue(current.familyId===family.id&&!current.archived&&current.permission==='permitted'&&current.analysisMode==='brief_synthesis_permitted','Research evidence is no longer eligible for synthesis.',409);requireValue(current.expiresAt>=previous.brief_date,'Research evidence expired for this brief date. Queue a fresh daily brief with current evidence.',409);return current;});
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate:previous.brief_date,sources:sources.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}))};
-      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id,{text:[family.niche,family.audience,...basePromptInput.sources.map(item=>item.title)].join(' '),format:skillFormat(family)})||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top of the research limit (0.73), as for scripts: built-in skills come approved now.
       const jobLimit=family.tokenBudget.researchJobLimit+(skillBrief?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit, or reduce the approved skills bound to research briefs.');
       const id=randomUUID(),at=now(),attempts=paidAttempt?previous.attempts+1:previous.attempts,evidenceHash=`${previous.evidence_hash}:retry:${id}`,scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:jobLimit,evidence:oldScope.evidence,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};

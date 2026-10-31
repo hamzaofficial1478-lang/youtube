@@ -77,7 +77,7 @@ test('the AI team: one AI alone does everything; with both, ChatGPT paints, the 
   t.after(() => store.close());
   const slots = new ConnectorSlots(store, protector, async () => { throw new Error('no network'); });
   const fake = fakeCodex(t);
-  slots.ai = new Ai(slots, {claudeCode: {complete: async () => ({content: 'OK', usage: {promptTokens: 1, completionTokens: 1, totalTokens: 2}, model: 'claude-opus-4-8'})}, codex: new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home})});
+  slots.ai = new Ai(slots, {claudeCode: {status: async () => ({version: null, loggedIn: true, method: 'claude.ai'}), complete: async () => ({content: 'OK', usage: {promptTokens: 1, completionTokens: 1, totalTokens: 2}, model: 'claude-opus-4-8'})}, codex: new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home})});
   const ai = slots.ai;
   assert.throws(() => slots.save({name: 'GPT', provider: 'chatgpt', key: 'sk-test-0000000000000000'}), /takes no API key/);
   assert.throws(() => slots.save({name: 'GPT', provider: 'chatgpt', models: {main: 'GPT 6 <b>'}}), /GPT model name/);
@@ -215,7 +215,7 @@ test('the ChatGPT subscription signs in through Codex and is tested by itself; a
   t.after(() => store.close());
   const slots = new ConnectorSlots(store, protector, async () => { throw new Error('no network'); });
   const fake = fakeCodex(t);
-  slots.ai = new Ai(slots, {claudeCode: {complete: async () => ({content: 'OK', usage: {}, model: 'x'})}, codex: new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home})});
+  slots.ai = new Ai(slots, {claudeCode: {status: async () => ({version: null, loggedIn: true, method: 'claude.ai'}), complete: async () => ({content: 'OK', usage: {}, model: 'x'})}, codex: new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home})});
   const gpt = slots.save({name: 'My ChatGPT', provider: 'chatgpt'});
   fake.reply('OK');
   const started = slots.signIn(gpt.id, gpt.revision);
@@ -233,7 +233,8 @@ test('the ChatGPT subscription signs in through Codex and is tested by itself; a
   await wait(() => slots.list()[0].signIn?.status === 'failed');
   assert.match(slots.list()[0].signIn.message, /did not finish \(Login cancelled by the user\)/);
   assert.doesNotMatch(slots.list()[0].signIn.message, /auth\.openai\.com/, 'the sign-in link is never kept in a message');
-  const claude = slots.save({name: 'My Claude', provider: 'claude-code'});
-  assert.throws(() => slots.signIn(claude.id, claude.revision), /Only the ChatGPT subscription/);
+  // 0.74: Claude signs in from here too; a connection with a key does not.
+  const images = slots.save({name: 'Commons', provider: 'wikimedia'});
+  assert.throws(() => slots.signIn(images.id, images.revision), /Only the Claude and ChatGPT subscriptions/);
   assert.match(require('../connectors').PROVIDERS.openai.name, /OpenAI API key/);
 });

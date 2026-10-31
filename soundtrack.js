@@ -147,7 +147,7 @@ class SoundtrackRoom {
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM score_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'Claude is already scoring this video.', 409);
       const tracks = this.libraryTracks(inputs.family.id), library = tracks.length ? M.catalogue(tracks, {moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche}) : null;
-      const skillBrief = this.store.skillRuntime?.brief('audio.mix', inputs.family.id) || null;
+      const skillBrief = this.store.skillRuntime?.brief('audio.mix', inputs.family.id, {text: [inputs.content.title, inputs.family.niche, ...(inputs.spec?.audio.musicMoods || [])].join(' ')}) || null;
       const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO score_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, voiceApprovalId: inputs.voice.approvalId, connector, promptInput, ...(library ? {refs: Object.fromEntries(library.map(item => [item.ref, item.id]))} : {}), maxTokens, tokenLimit}), by, at, at);
