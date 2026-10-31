@@ -63,6 +63,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // the approved skill brief. Nothing is injected until a skill revision is approved by a human.
   const skills=new SkillsEngine(store,{root}).attach();
   const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles,ai),nicheFactory=new NicheFactory(store,connectors,quota,styles,ai,{shotDir:path.join(dataRoot,'niche-shots')}),trends=new TrendScanner(store,connectors,quota,ai);
+  // The channel's assigned style, for the niche words and topic ideas (0.76).
+  trends.styleOf=familyId=>{const handoff=styles.handoffs().find(item=>item.familyId===familyId&&item.ready);if(!handoff)return null;const spec=JSON.parse(styles.revisionRow(handoff.revisionId).spec);return {name:spec.name,summary:String(spec.summary||'').slice(0,300),...(spec.drawing?.look?{look:spec.drawing.look}:{})};};
   const sceneRoom=new SceneRoom(store,connectors,quota,styles,{dataRoot,ffmpeg,ffprobe,competitorIntel,ai});
   const renderRoom=new RenderRoom(store,styles,sceneRoom,{dataRoot,ffmpeg,ffprobe});
   const editingRoom=new EditingRoom(store,styles,sceneRoom,renderRoom,{ffmpeg});
@@ -336,6 +338,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/sounds/import'&&req.method==='POST')return json(res,200,soundLibrary.queueImport(body));
         if(pathname==='/api/sound-online/search'&&req.method==='POST')return json(res,200,await soundOnline.search(body));
         if(pathname==='/api/sound-online/add'&&req.method==='POST')return json(res,200,await soundOnline.add(body));
+        if(pathname==='/api/trend-niche-suggest'&&req.method==='POST')return json(res,200,await trends.suggestNiche(body));
         if(pathname==='/api/sound-online/fill'&&req.method==='POST')return json(res,200,soundOnline.queueFill(body));
         const soundImport=pathname.match(/^\/api\/sound-imports\/([a-f0-9-]+)\/continue$/);
         if(soundImport&&req.method==='POST')return json(res,200,soundLibrary.continueImport(soundImport[1]));
