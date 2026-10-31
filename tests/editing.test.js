@@ -1358,6 +1358,16 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   assert.equal(scored.cues[0].asset.library.title, 'mystery documentary curious');
   assert.ok(scored.warnings.some(item => /not in the library/.test(item)) && scored.cues[1].asset, 'an unknown ref gets the best fitting track');
   assert.equal(scored.cues[1].asset.library.title, 'epic cinematic trailer');
+  // 0.74: after Freesound adds music for this video, its cues pick again from the fuller library (a new revision);
+  // with nothing better in the library the score stays as it is.
+  assert.equal(room.repickTracks(content.id, 'Owner').revision, scored.revision, 'no better track: no new revision');
+  const darker = path.join(dataRoot, 'tense-dark-suspense.mp3');
+  ffmpeg(['-f', 'lavfi', '-i', 'sine=frequency=330:sample_rate=44100', '-t', '40', '-ac', '2', '-c:a', 'libmp3lame', '-b:a', '96k', '-y', darker]);
+  await sounds.storeFile(darker, {kind: 'music', title: 'mystery suspense curious investigation', tags: ['curious', 'mystery', 'suspense', 'investigation', 'documentary'], source: 'freesound', licence: 'CC0 via Freesound', by: 'Owner'});
+  const repicked = room.repickTracks(content.id, 'Owner');
+  assert.equal(repicked.revision, scored.revision + 1);
+  assert.equal(repicked.cues[0].asset.library.title, 'mystery suspense curious investigation', 'the curious cue takes the better fitting new track');
+  assert.match(repicked.note, /picked again/);
   // The effect slots are filled by the sounds' names; the owner can choose another one per slot.
   const slots = room.library(family.id), slot = kind => slots.find(item => item.kind === kind);
   assert.deepEqual([slot('whoosh').asset.key, slot('cash').asset.key, slot('thunder').asset], ['whoosh', 'cash register ching', null]);

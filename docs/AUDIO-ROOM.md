@@ -161,3 +161,24 @@ such a track is usually released by showing the Pixabay licence; the YouTube Aud
 Owner-uploaded or stock music, per-cue manual edits in the page (the API accepts them as a new score revision), and a live listening proof with real ElevenLabs output are not done. There are no uploaded owner-media requirements. Map routes, stick-figure animation, full-resolution final masters, publishing and autopilot remain separate milestones.
 
 For test evidence and known limitations, see [BUILD-PROGRESS.md](BUILD-PROGRESS.md) and [CONTINUATION-REVIEW.md](CONTINUATION-REVIEW.md). The processing reference is the official [FFmpeg loudnorm documentation](https://ffmpeg.org/ffmpeg-filters.html#loudnorm).
+
+### Freesound fills the library by itself (0.75.0)
+
+Owner request 2026-10-31: "why do I have to find and add music and effects by hand?" With a tested Freesound connection:
+
+- **Sound library -> "Fill my library from Freesound"** (one click). For every empty effect slot (whoosh, pop, impact,
+  ding and the rest) the program adds the most downloaded CC0 or CC BY sound that fits it, and for every mood family the
+  music picker uses (calm, tense, curious, dramatic, uplifting, sad, warm, light, punchy, focused, historical) it adds
+  the most downloaded tracks of at least 45 seconds until the mood has two (`SoundOnline.queueFill` with `music: 'all'`,
+  `moodCounts`, `M.moodFamilies`). One search per slot or mood (about 31) inside the Freesound hourly allowance; each
+  file is downloaded once, checked and kept with its licence, author, page and credit line.
+- **Audio room -> "Find music for this video on Freesound"** (on a current library score). The video's cue moods are
+  read as mood families; each that has fewer than three tracks gets more, and when the fill is done the video's music is
+  picked again from the fuller library (`SoundtrackRoom.repickTracks`: same cues and timing, a new score revision; no
+  revision when no track would change).
+- **Effects in the Audio room** need nothing more: the edit places the library's effects by their slot names. "Fill
+  empty slots from Freesound (most used)" stays on the Sound effects card.
+
+The program never searches by itself without the click (each fill is a job the owner starts) and never retries a failed
+search on its own; a mood or slot with no usable result is listed under Imports.
+

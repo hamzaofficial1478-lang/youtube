@@ -31,13 +31,14 @@ function network() {
       assert.match(target.searchParams.get('filter'), /license:\("Creative Commons 0" OR "Attribution"\)/);
       const q = target.searchParams.get('query');
       if (q === 'whoosh') return json({results: [sound(1, 'https://creativecommons.org/licenses/by/4.0/'), sound(2, 'http://creativecommons.org/publicdomain/zero/1.0/'), sound(3, 'http://creativecommons.org/licenses/by-nc/3.0/'), sound(4, 'https://creativecommons.org/licenses/by/4.0/', {previews: {'preview-hq-mp3': 'https://cdn.freesound.org/redirect/4.mp3'}})]});
-      // The slot fill: one CC0 sound per query, named for it.
+      // The slot fill: one CC0 sound per query, named for it; a music search (0.74) finds two long tracks.
       const id = 100 + Math.abs([...q].reduce((h, c) => (h * 31 + c.charCodeAt(0)) | 0, 7)) % 100000;
+      if (/duration:\[20/.test(target.searchParams.get('filter'))) return json({results: [1, 2].map(n => sound(id * 10 + n, 'http://creativecommons.org/publicdomain/zero/1.0/', {name: `${q} ${n}.mp3`, tags: [...q.split(' '), 'background'], duration: 120, previews: {'preview-hq-mp3': `https://cdn.freesound.org/music/${id * 10 + n}.mp3`}}))});
       return json({results: [sound(id, 'http://creativecommons.org/publicdomain/zero/1.0/', {name: `${q}.wav`, tags: q.split(' '), duration: 0.8})]});
     }
     if (target.hostname === 'cdn.freesound.org') {
       if (target.pathname === '/redirect/4.mp3') return new Response(null, {status: 302, headers: {location: 'https://evil.example/4.mp3'}});
-      return audio(target.pathname);
+      return audio(target.pathname, target.pathname.startsWith('/music/') ? 400 : 40);
     }
     if (target.origin === 'https://api.jamendo.com' && target.pathname === '/v3.0/tracks/') {
       assert.equal(target.searchParams.get('client_id'), 'b6747d04');
@@ -120,4 +121,34 @@ test('the clients send only what each platform needs', async () => {
   await new JamendoClient('b6747d04', net.fetch).search('piano', {limit: 5});
   assert.equal(new URL(net.calls[0].url).searchParams.get('token'), null, 'the Freesound key travels in the header only');
   assert.equal(new URL(net.calls[1].url).searchParams.get('limit'), '5');
+});
+
+test('0.74: one click fills the library: the most downloaded effects and music for every mood; a video\'s moods pick its music again', async t => {
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sound-fill-'));
+  const store = new Store(':memory:', {artifactRoot: dataRoot});
+  t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
+  const net = network(), connectors = new ConnectorSlots(store, protector, net.fetch), quota = new QuotaLedger(store);
+  const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch});
+  const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
+  const tested = await connectors.test(saved.id, saved.revision), ref = {id: tested.connector.id, revision: tested.connector.revision};
+  // The whole library: 20 effect slots and the 11 moods, one search each.
+  const fill = online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 2});
+  assert.equal(fill.progress.total, 20 + Object.keys(M.MOOD_TAGS).length);
+  const done = await online.processNextFill();
+  assert.equal(done.status, 'completed', JSON.stringify(done.progress));
+  const searches = net.calls.filter(call => call.url.includes('/apiv2/search/')).map(call => new URL(call.url).searchParams);
+  assert.ok(searches.slice(-31).every(params => params.get('sort') === 'downloads_desc'), 'the most downloaded, the most used');
+  assert.equal(Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length, 20);
+  assert.ok(Object.values(online.moodCounts()).every(count => count >= 2), JSON.stringify(online.moodCounts()));
+  assert.ok(library.tracks('music').every(track => track.attribution === null && track.source === 'freesound'));
+  assert.throws(() => online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 2}), /already has every effect and enough music/);
+  // One video: its moods need three tracks each; when the fill is done its music is picked again.
+  const picked = [];
+  online.onFilled = scope => picked.push(scope.contentId);
+  const forVideo = online.queueFill({requestedBy: 'Owner', connector: ref, music: ['curious mystery pulse', 'calm piano'], perMood: 3, contentId: 'video-1', effects: false});
+  assert.deepEqual(JSON.parse(store.db.prepare('SELECT scope FROM sound_imports WHERE id=?').get(forVideo.id).scope).moods.map(item => item.mood).sort(), ['calm', 'curious', 'sad', 'tense'], 'warm already has three (calm tracks count for warm too)');
+  await online.processNextFill();
+  assert.deepEqual(picked, ['video-1']);
+  assert.throws(() => online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 9}), /1 to 5/);
 });

@@ -242,6 +242,13 @@ function trackFit(cue, track) {
   fit += track.seconds >= length ? 2 : track.seconds >= length * 0.6 ? 0.5 : -1;
   return fit - Math.abs(trackEnergy(tags) - cue.energy) * 0.6;
 }
+// The mood families (MOOD_TAGS keys) a text names, by the same words trackFit reads (0.74: which moods a library or a
+// video still needs music for).
+function moodFamilies(text) {
+  const found = new Set();
+  for (const word of words(text)) for (const [mood, list] of Object.entries(MOOD_TAGS)) if (word === mood || list.includes(word)) found.add(mood);
+  return [...found];
+}
 // Each cue without a track gets the best one; never the same track twice in a row, a track already used in this
 // score less, one used in the family's recent videos a little less. Deterministic (ties by id).
 function assignTracks(cues, tracks, {recent = []} = {}) {
@@ -291,4 +298,4 @@ function pickEffects(sounds, picks = {}) {
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {MOOD_TAGS, EFFECT_WORDS, trackFit, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

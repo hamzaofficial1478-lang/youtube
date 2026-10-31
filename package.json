@@ -1,6 +1,6 @@
 {
   "name": "youtube-control-room",
-  "version": "0.74.0",
+  "version": "0.75.0",
   "private": true,
   "description": "Local multilingual YouTube planning and production control room",
   "engines": {
