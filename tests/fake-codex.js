@@ -3,6 +3,15 @@
 // An image reply also writes a PNG where Codex keeps generated images (CODEX_HOME/generated_images/<thread>).
 const fs = require('node:fs');
 const path = require('node:path');
+// `codex --version` and `codex login status` (0.74) answer at once; FAKE_CODEX_LOGGED=no is a missing sign-in.
+const early = process.argv.slice(2);
+if (early[0] === '--version' || (early[0] === 'login' && early[1] === 'status')) {
+  fs.appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify({args: early, home: process.env.CODEX_HOME}) + '\n');
+  if (early[0] === '--version') process.stdout.write('codex-cli 0.130.0\n');
+  else if (process.env.FAKE_CODEX_LOGGED === 'no') { process.stderr.write('Not logged in\n'); process.exitCode = 1; }
+  else process.stderr.write('Logged in using ChatGPT\n');
+  return;
+}
 let input = '';
 process.stdin.on('data', chunk => { input += chunk; });
 process.stdin.on('end', () => {

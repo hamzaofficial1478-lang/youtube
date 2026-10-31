@@ -590,7 +590,7 @@ class NicheFactory {
   buildPromptInput(idea, discovery, tokenLimit) {
     const styles = this.styles.profiles().filter(profile => profile.revisions.some(revision => revision.status !== 'retired')).map(profile => ({key: profile.key, name: profile.name, summary: profile.revisions.at(-1).spec.summary.slice(0, 200)}));
     const result = discovery?.result || {seeds: [], channels: [], keywords: [], analytics: []};
-    const skills = this.store.skillRuntime?.brief('niche.evaluate')?.prompt || null;
+    const skills = this.store.skillRuntime?.brief('niche.evaluate', null, {text: [idea.title, idea.description, idea.audience, ...(idea.keywords || [])].join(' ')})?.prompt || null;
     const input = {
       version: 3,
       idea: {ref: 'IDEA', title: idea.title, description: idea.description, audience: idea.audience, countries: idea.countries, formats: idea.formats, keywords: idea.keywords, notes: idea.notes},
@@ -930,7 +930,7 @@ class NicheFactory {
       requireValue(mode === 'sub' || items.length, 'There is nothing to learn new niches from yet. Run a YouTube or Reddit scan in Trending topics, a discovery on a niche idea (NexLev), or read a screenshot first.', 409);
       const formats = family?.format === 'shorts' ? ['shorts'] : FORMATS, tokenLimit = this.settings().suggestTokenLimit;
       const ownNiches = [...this.store.families().filter(item => !item.archived).map(item => item.niche), ...this.db.prepare("SELECT payload FROM niche_ideas WHERE status='active'").all().map(row => JSON.parse(row.payload).title)].filter(Boolean).slice(0, 30);
-      const skillBrief = this.store.skillRuntime?.brief('niche.discover', family?.id || null) || null;
+      const skillBrief = this.store.skillRuntime?.brief('niche.discover', family?.id || null, {text: [family?.niche, family?.audience, note].filter(Boolean).join(' ')}) || null;
       const promptInput = {mode, count, formats, ...(skillBrief ? {skills: skillBrief.prompt} : {}), ...(family ? {family: {ref: 'F', name: family.name, niche: family.niche, audience: family.audience, locale: family.primaryLocale, countries: family.countries, competitors: family.competitors.map(item => item.value)}} : {}), ...(note ? {ownerNote: {ref: 'NOTE', text: note}} : {}), ownNiches, evidence: items};
       // Trim until the prompt and an answer fit the limit: fewer titles first, then the last evidence items.
       const fits = () => messageTokenUpperBound(suggestionMessages(promptInput)) + 2500 <= tokenLimit;

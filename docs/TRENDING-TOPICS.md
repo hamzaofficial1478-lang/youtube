@@ -47,6 +47,14 @@ out" lists them greyed with their reason. Claude only ever reads the kept videos
 must sit inside the niche and serve the family's audience; Reddit topic ideas carry the same rule with the family's
 niche. A scan where nothing was kept cannot be sent to Claude. Older scans have no niche and keep working as before.
 
+## Clearing and exporting (0.74)
+
+Scans and topic ideas have tick boxes and a toolbar: delete the ticked rows or every row shown, and export them as PDF,
+Word or CSV. Deleting a scan deletes its topic ideas too; anything waiting or running is kept, and the token usage of
+topic ideas always stays. An export of a YouTube scan carries the note that YouTube's terms allow keeping its data for
+at most 30 days; a CSV writes a cell that would start a formula as plain text. The same tools are on Content Studio,
+Niche Factory and Research briefs (`manage.js`).
+
 ## YouTube's data rules
 
 YouTube data about other channels is **display-only** and **deleted after 30 days** (AGENTS.md):

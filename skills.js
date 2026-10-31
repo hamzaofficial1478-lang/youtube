@@ -394,6 +394,60 @@ const BRIEF_BYTE_BUDGET = 1800;
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
 const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 14000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 3000, 'visuals.prompt': 2500});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
+
+// ---------------------------------------------------------------- choosing skills for one request (0.74)
+// Owner question 2026-10-31: "on which basis will the program choose which of the 122 script skills to use, or is it
+// fixed to the same 19?" Before 0.74 the order was fixed (pins, origin, priority), so every script got the same skills.
+// Now every approved skill of the job is weighed against what this request is about (its title, angle, hook, niche,
+// audience, format, style...): words they share (rarer words count more), whether the skill was written for this job,
+// its format (a Shorts skill never goes into a long video), and its priority. Areas are spread (hooks, structure,
+// retention, voice...) so one theme cannot fill the brief. Pure and deterministic: the same request picks the same skills.
+const QUIET = new Set(('the and for with that this from your you are was were will what when where which who why how not but all any can may '
+  + 'one two its into than then them they their there these those has have had out our over about each every more most some such very also only '
+  + 'just make made use used using video videos channel viewer viewers program owner job jobs room skill skills rule rules look looks engine style design').split(' '));
+// Skills written for one engine reach a plan only when its style uses that engine (a Stickman plan never gets the anime rules).
+const ENGINE_AREAS = Object.freeze({whiteboard: ['whiteboard', 'handdrawn', 'hand'], anime: ['anime'], cinematic: ['cinema', 'cinematic'], doc: ['montage', 'footage', 'cinema'], hybrid: ['montage', 'footage', 'cinema']});
+const stemOf = word => { for (const end of ['ically', 'ical', 'ings', 'ing', 'ies', 'ied', 'ers', 'er', 'ed', 'es', 's', 'al', 'y']) if (word.endsWith(end) && word.length - end.length >= 4) return word.slice(0, -end.length); return word; };
+const stemsOf = value => new Set((String(value || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(word => word.length >= 3 && !QUIET.has(word) && !/^\d+$/.test(word)).map(stemOf));
+const skillText = skill => [skill.id.replace(/[.-]/g, ' '), skill.title, skill.when, skill.summary, skill.tags.join(' ')].join(' ');
+const forShorts = skill => /^shorts\./.test(skill.id) || skill.tags.includes('shorts') || /\bshorts?\b/i.test(`${skill.title} ${skill.when}`);
+const forLong = skill => skill.tags.includes('long-form') || /\blong[- ]form\b/i.test(`${skill.title} ${skill.when}`);
+// context: {text, format, style}; returns the items in the order to fill the brief, each with why it was chosen.
+function rankSkills(items, taskKey, context = {}) {
+  const want = stemsOf(context.text), format = context.format || null, style = context.style ? new Set(String(context.style).toLowerCase().match(/[a-z]+/g) || []) : null;
+  // The request's own words, shown in the reasons instead of their stems.
+  const said = new Map();
+  for (const word of String(context.text || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []) if (!said.has(stemOf(word))) said.set(stemOf(word), word);
+  const docs = items.map(item => stemsOf(skillText(item.skill))), df = new Map();
+  for (const doc of docs) for (const stem of doc) df.set(stem, (df.get(stem) || 0) + 1);
+  const scored = items.map((item, k) => {
+    const matched = [...docs[k]].filter(stem => want.has(stem)).sort((a, b) => df.get(a) - df.get(b) || a.localeCompare(b));
+    const weight = matched.reduce((sum, stem) => sum + Math.log(1 + items.length / df.get(stem)), 0);
+    const skill = item.skill, shorts = forShorts(skill), long = forLong(skill);
+    const engineWords = ENGINE_AREAS[skill.id.split('.')[0]];
+    const offFormat = (format === 'long-form' && shorts && !long) || (format === 'shorts' && long && !shorts) || (style && engineWords && !engineWords.some(word => style.has(word)));
+    const onFormat = (format === 'shorts' && shorts) || (format === 'long-form' && long);
+    return {item, matched, weight, offFormat, onFormat, primary: skill.tasks[0] === taskKey, area: skill.id.split('.')[0]};
+  });
+  const top = Math.max(1, ...scored.map(entry => entry.weight));
+  for (const entry of scored) entry.score = (entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0);
+  // The owner's pins and own skills keep their place in front; the rest are taken best first, with each further skill
+  // from an area already taken counting a little less (8% for each).
+  const fixed = scored.filter(entry => entry.item.pinned || entry.item.origin !== 'builtin'), open = scored.filter(entry => !fixed.includes(entry) && !entry.offFormat), picked = [...fixed], areas = {};
+  for (const entry of fixed) areas[entry.area] = (areas[entry.area] || 0) + 1;
+  // Templates are alternatives (a video follows one structure): those that fit the request go in, otherwise the two best.
+  let templates = 0, alternatives = 0;
+  while (open.length) {
+    let best = 0;
+    const value = entry => entry.score * 0.92 ** (areas[entry.area] || 0);
+    for (let k = 1; k < open.length; k++) if (value(open[k]) > value(open[best]) + 1e-12 || (Math.abs(value(open[k]) - value(open[best])) <= 1e-12 && open[k].item.skill.id < open[best].item.skill.id)) best = k;
+    const [entry] = open.splice(best, 1);
+    if (entry.item.skill.kind === 'template') { if (!entry.matched.length && templates >= 2) { alternatives++; continue; } templates++; }
+    areas[entry.area] = (areas[entry.area] || 0) + 1;
+    picked.push(entry);
+  }
+  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
+}
 // The jobs whose AI request carries approved skills (0.73 Skills page: "what reaches each job"); the editing brain applies
 // its skills in code rather than in a prompt.
 const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.plan', 'Scene planner and story director'], ['voice.direction', 'Voice direction'],
@@ -430,6 +484,8 @@ class SkillsEngine {
         CREATE INDEX IF NOT EXISTS skill_usage_task ON skill_usage(task_key, created_at);
         CREATE INDEX IF NOT EXISTS family_project_state_open ON family_project_state(family_id, category) WHERE ended_at IS NULL;
       `);
+      // Why each skill was chosen for a job (0.74); older databases gain the column.
+      if (!this.db.prepare("SELECT 1 FROM pragma_table_info('skill_usage') WHERE name='reasons'").get()) this.db.exec('ALTER TABLE skill_usage ADD COLUMN reasons TEXT');
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
@@ -537,7 +593,7 @@ class SkillsEngine {
   }
   usage(limit = 100) {
     return this.db.prepare('SELECT * FROM skill_usage ORDER BY created_at DESC, rowid DESC LIMIT ?').all(integer(limit, 1, 500, 'Limit'))
-      .map(row => ({id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
+      .map(row => ({id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), reasons: row.reasons ? JSON.parse(row.reasons) : null, revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
   }
   lessons(status = null) {
     const rows = status
@@ -815,12 +871,12 @@ class SkillsEngine {
 
   // The compact brief that goes into a Claude system prompt. A skill that does not fit the byte
   // budget is dropped whole and counted, never trimmed mid-rule.
-  brief(taskKey, {familyId = null, byteBudget = TASK_BRIEF_BYTES[taskKey] || BRIEF_BYTE_BUDGET} = {}) {
+  brief(taskKey, {familyId = null, byteBudget = TASK_BRIEF_BYTES[taskKey] || BRIEF_BYTE_BUDGET, context = {}} = {}) {
     integer(byteBudget, 200, 20000, 'Brief byte budget');
-    const selected = this.select(taskKey, {familyId});
-    const entries = [], revisionIds = [], skillIds = [];
+    const selected = this.select(taskKey, {familyId}), {ordered, offFormat, alternatives} = rankSkills(selected, taskKey, context);
+    const entries = [], revisionIds = [], skillIds = [], reasons = [];
     let used = 0, dropped = 0;
-    for (const item of selected) {
+    for (const item of ordered) {
       const entry = {id: item.skill.id, title: item.skill.title, when: item.skill.when};
       // The rules, not the prose. A skill without do rules sends its steps instead, and one with neither its summary
       // (0.71: 75 such skills reached prompts with only their avoid list and checks).
@@ -833,11 +889,12 @@ class SkillsEngine {
       entries.push(entry);
       revisionIds.push(item.revisionId);
       skillIds.push(item.skill.id);
+      reasons.push({id: item.skill.id, ...item.why});
     }
     return {
       taskKey, familyId, sourceHierarchy: SOURCE_HIERARCHY, skills: entries,
       projectState: familyId ? this.openProjectState(familyId) : null,
-      revisionIds, skillIds, injectedBytes: used, dropped, available: selected.length, byteBudget,
+      revisionIds, skillIds, reasons, injectedBytes: used, dropped, offFormat, alternatives, available: selected.length, byteBudget,
     };
   }
   openProjectState(familyId) {
@@ -863,9 +920,9 @@ class SkillsEngine {
   recordUsage({jobId, familyId = null, room, taskKey, brief, outcome = null}) {
     object(brief, 'Skill brief');
     const id = randomUUID();
-    this.db.prepare('INSERT INTO skill_usage(id,job_id,family_id,room,task_key,revision_ids,skill_ids,injected_bytes,dropped,outcome,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,task_key) DO NOTHING')
+    this.db.prepare('INSERT INTO skill_usage(id,job_id,family_id,room,task_key,revision_ids,skill_ids,injected_bytes,dropped,outcome,created_at,reasons) VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(job_id,task_key) DO NOTHING')
       .run(id, text(jobId, 'Job ID', 1, 80), familyId, text(room, 'Room', 2, 40), choice(taskKey, TASK_KEYS, 'task key'),
-        JSON.stringify(brief.revisionIds), JSON.stringify(brief.skillIds), brief.injectedBytes, brief.dropped, outcome, now());
+        JSON.stringify(brief.revisionIds), JSON.stringify(brief.skillIds), brief.injectedBytes, brief.dropped, outcome, now(), brief.reasons ? JSON.stringify(brief.reasons) : null);
     return id;
   }
   settleUsage(jobId, outcome) {
@@ -967,7 +1024,8 @@ class SkillsEngine {
   // competitor blueprint attaches its script guidance.
   attach() {
     this.store.skillRuntime = {
-      brief: (taskKey, familyId) => this.promptBrief(taskKey, {familyId}),
+      // context (0.74): what this request is about, {text, format}, so the skills that fit it are chosen.
+      brief: (taskKey, familyId, context) => this.promptBrief(taskKey, {familyId, context}),
       recordUsage: args => this.recordUsage(args),
       // The approved skills that apply to a task, for rooms that follow skills in code rather than in a prompt.
       approved: (taskKey, familyId) => this.select(taskKey, {familyId}).map(item => ({id: item.skill.id, revisionId: item.revisionId})),
@@ -981,7 +1039,7 @@ class SkillsEngine {
 }
 
 module.exports = {
-  SkillsEngine, SkillError, validateSkill, skillHash, skillQuality, loadPacks, PACK_FILES,
+  SkillsEngine, SkillError, rankSkills, validateSkill, skillHash, skillQuality, loadPacks, PACK_FILES,
   TASK_KEYS, ROOMS, ROOM_TASKS, KINDS, ORIGINS, STATUSES, PROJECT_STATE_CATEGORIES,
   SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET, TASK_BRIEF_BYTES, RULES,
 };

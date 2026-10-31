@@ -129,7 +129,7 @@ class LocalizationRoom {
   packets(inputs, locale) {
     const latest = this.latestRow(inputs.content.id, locale);
     const keep = latest && latest.source_hash !== inputs.sourceHash ? L.carry(JSON.parse(latest.payload), JSON.parse(latest.source), inputs.source) : {sentences: [], visible: [], given: []};
-    const asked = inputs.source.sentences.filter(item => !keep.sentences.includes(item.n)), skills = this.store.skillRuntime?.brief('localization.check', inputs.family.id)?.prompt || null;
+    const asked = inputs.source.sentences.filter(item => !keep.sentences.includes(item.n)), skills = this.store.skillRuntime?.brief('localization.check', inputs.family.id, {text: [L.language(locale), inputs.family.niche].join(' ')})?.prompt || null;
     const parts = [];
     for (let k = 0; k === 0 || k < asked.length; k += PART_SENTENCES) {
       const chunk = new Set(asked.slice(k, k + PART_SENTENCES).map(item => item.n)), first = k === 0;
@@ -149,7 +149,7 @@ class LocalizationRoom {
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO edition_jobs(id,family_id,content_id,locale,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'queued',?,0,?,?,?)")
         .run(id, inputs.family.id, contentId, locale, JSON.stringify({contentRevision: inputs.content.revision, sourceHash: inputs.sourceHash, connector, parts, keep, tokenLimit}), by, at, at);
-      const brief = this.store.skillRuntime?.brief('localization.check', inputs.family.id);
+      const brief = this.store.skillRuntime?.brief('localization.check', inputs.family.id, {text: [L.language(locale), inputs.family.niche].join(' ')});
       if (brief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'localization', taskKey: 'localization.check', brief});
       this.store.event(`Queued Claude's ${L.language(locale)} adaptation of "${inputs.content.title}"${keep.sentences.length ? ` (${keep.sentences.length} unchanged sentences kept)` : ''}`);
       return this.publicJob(this.jobRow(id));

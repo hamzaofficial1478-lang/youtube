@@ -146,7 +146,7 @@ class PackagingRoom {
   // ------------------------------------------------------------ Claude drafts
   promptInput(inputs) {
     const shots = inputs.shots.length > MAX_SHOTS_IN_PROMPT ? Array.from({length: MAX_SHOTS_IN_PROMPT}, (_, k) => inputs.shots[Math.floor(k * inputs.shots.length / MAX_SHOTS_IN_PROMPT)]) : inputs.shots;
-    const skills = this.store.skillRuntime?.brief('packaging.title', inputs.family.id) || null;
+    const skills = this.store.skillRuntime?.brief('packaging.title', inputs.family.id, {text: [inputs.content.title, inputs.content.angle, inputs.family.niche].join(' '), format: ['long-form', 'shorts'].includes(inputs.family.format) ? inputs.family.format : null}) || null;
     return {family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, locale: inputs.family.primaryLocale, format: inputs.family.format, ...(inputs.family.writingVoice ? {writingVoice: inputs.family.writingVoice} : {})},
       video: {title: inputs.content.title, angle: inputs.content.angle, hook: inputs.content.hook, script: inputs.content.script},
       chapters: inputs.chapters.map(item => ({at: item.at, draftTitle: item.title})),

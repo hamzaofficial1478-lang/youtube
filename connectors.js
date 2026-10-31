@@ -58,23 +58,38 @@ class ConnectorSlots {
   }
   row(id){const row=this.db.prepare('SELECT * FROM connectors WHERE id=?').get(id);if(!row)throw new InputError('Connector not found.',404);return row;}
   public(row){return {...JSON.parse(row.payload),id:row.id,hasKey:!!row.secret,busy:this.busy.has(row.id),...(this.signIns?.has(row.id)?{signIn:{...this.signIns.get(row.id)}}:{})};}
-  // The ChatGPT subscription signs in through Codex's own login (owner review 2026-10-29); when it finishes, the
-  // connection test runs by itself (one tiny question on the plan). The sign-in state lives in memory only.
+  // The subscriptions sign in through their own apps (ChatGPT: Codex's login, owner review 2026-10-29; Claude: Claude
+  // Code's login, 0.74); when that finishes, the connection test runs by itself (one tiny question on the plan). The
+  // sign-in state lives in memory only.
   signIn(id,revision){
     const row=this.row(id);this.checkRevision(row,revision);const slot=JSON.parse(row.payload);
-    if(slot.provider!=='chatgpt')throw new InputError('Only the ChatGPT subscription signs in from here; other connections use their key.');
+    if(!['chatgpt','claude-code'].includes(slot.provider))throw new InputError('Only the Claude and ChatGPT subscriptions sign in from here; other connections use their key.');
     this.signIns||=new Map();
-    if(['waiting','testing'].includes(this.signIns.get(id)?.status))throw new InputError('The ChatGPT sign-in is already open in your browser.',409);
-    const state={status:'waiting',at:new Date().toISOString(),message:'ChatGPT\'s sign-in page is opening in your browser. Sign in there with your ChatGPT account, then come back here.',link:null};
+    if(['waiting','testing'].includes(this.signIns.get(id)?.status))throw new InputError('This sign-in is already open. Finish it in its window or browser tab.',409);
+    const claude=slot.provider==='claude-code',{Ai}=require('./ai'),ai=this.ai||new Ai(this);
+    const state={status:'waiting',at:new Date().toISOString(),message:claude?'Checking Claude Code on this PC...':'ChatGPT\'s sign-in page is opening in your browser. Sign in there with your ChatGPT account, then come back here.',link:null};
     this.signIns.set(id,state);
-    const {Ai}=require('./ai');
-    (this.ai||new Ai(this)).codex.login({onLink:link=>{state.link=link;}}).then(async()=>{
+    (claude?this.claudeSignIn(ai,state):ai.codex.login({onLink:link=>{state.link=link;}})).then(async()=>{
       state.status='testing';state.message='Signed in. Testing the connection with one tiny question...';
-      try{const tested=await this.test(id,revision);state.status=tested.connector.test?.status==='passed'?'done':'failed';state.message=tested.connector.test?.status==='passed'?'Signed in with ChatGPT and tested.':`Signed in, but the test did not pass: ${tested.connector.test?.message||'no answer'}`;}
-      catch(error){state.status='failed';state.message=`Signed in, but the test could not run: ${error.message}`;}
+      try{const tested=await this.test(id,revision);state.status=tested.connector.test?.status==='passed'?'done':'failed';state.message=tested.connector.test?.status==='passed'?`Signed in with ${claude?'your Claude subscription':'ChatGPT'} and tested.`:`Signed in, but the test did not pass: ${tested.connector.test?.message||'no answer'}`;}
+      catch(error){state.status='failed';state.message=`The test did not pass: ${error.message}`;}
       state.link=null;
     },error=>{state.status='failed';state.message=error.message;state.link=null;});
     return {connector:this.public(this.row(id)),signIn:{...state}};
+  }
+  // Claude Code signs in in a window of its own; whether it is signed in is read every few seconds (free, nothing is
+  // asked of Claude) until it is, for 10 minutes at most. Already signed in with the subscription: straight to the test.
+  async claudeSignIn(ai,state){
+    const billed=status=>['api_key','api_key_helper','third_party'].includes(status?.method),ready=status=>status?.loggedIn!==false&&!billed(status);
+    if(ready(await ai.claudeCode.status()))return;
+    ai.claudeCode.login();
+    state.message='A Claude Code window opened, with Claude\'s sign-in page in your browser. Sign in there with your Claude subscription (if the window asks for a code, paste it into the window). This card tests the connection by itself when you are done; then close the window.';
+    for(const until=Date.now()+(this.signInLimit||600000);Date.now()<until;){
+      await new Promise(resolve=>setTimeout(resolve,this.signInPoll||4000));
+      const now=await ai.claudeCode.status().catch(()=>null);
+      if(now&&now.loggedIn===true&&!billed(now))return;
+    }
+    throw new InputError('The Claude sign-in was not finished within 10 minutes. Click "Sign in to Claude" to start again.',408);
   }
   list(){return this.db.prepare('SELECT * FROM connectors ORDER BY rowid').all().map(row=>this.public(row));}
   idle(id){if(this.busy.has(id))throw new InputError('This connector is being tested. Wait before changing or deleting it.',409);}

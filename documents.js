@@ -146,4 +146,19 @@ function planningBlocks({family, content, limitations, exportedAt}) {
   return blocks;
 }
 
-module.exports = {extractText, docxText, docxFile, planningBlocks, unzip, zip, MAX_FILE};
+// ---------------------------------------------------------------- exports of a list (0.74)
+// CSV for spreadsheets: UTF-8 with a byte-order mark (Excel then reads every language), RFC 4180 quoting, and a cell that
+// would start a formula (=, +, -, @) is written as text, so a title from YouTube or Reddit can never run in a spreadsheet.
+function csvFile(columns, rows) {
+  const cell = value => { let text = String(value ?? ''); if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`; return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text; };
+  return Buffer.from(`\ufeff${[columns, ...rows].map(row => row.map(cell).join(',')).join('\r\n')}\r\n`, 'utf8');
+}
+// The same blocks as the Word file, as a page the browser prints to PDF (A4, the PC's own fonts, every language).
+const htmlSafe = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[char]));
+function blocksHtml(blocks, title) {
+  const tag = {title: 'h1', heading: 'h2', small: 'p class="small"', text: 'p'};
+  const body = blocks.map(({kind = 'text', text}) => { const open = tag[kind] || 'p'; return `<${open}>${htmlSafe(text).replace(/\n/g, '<br>')}</${open.split(' ')[0]}>`; }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${htmlSafe(title)}</title><style>@page{size:A4;margin:18mm}body{font-family:Segoe UI,Arial,sans-serif;font-size:11pt;line-height:1.45;color:#1d1d1d}h1{font-size:18pt;margin:0 0 6pt}h2{font-size:13pt;margin:14pt 0 4pt;break-after:avoid}p{margin:0 0 6pt;white-space:normal}.small{font-size:9pt;color:#666}</style></head><body>${body}</body></html>`;
+}
+
+module.exports = {extractText, docxText, docxFile, planningBlocks, csvFile, blocksHtml, unzip, zip, MAX_FILE};

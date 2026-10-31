@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/youtube-metadata-validator');
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount}=require('./writer');
+// What a script request is about, for choosing the skills that fit it (0.74).
+const skillFormat=family=>['long-form','shorts'].includes(family.format)?family.format:null;
+const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
 const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
 const Retention=require('./retention');
 const Delivery=require('./delivery');
@@ -254,7 +257,7 @@ class Store {
   event(message) { this.db.prepare('INSERT INTO events(created_at,message) VALUES(?,?)').run(now(),message); }
   hydrateFamily(f){const legacyChannels=Array.isArray(f.channels)&&f.channels.length?f.channels:[{language:'en',locale:f.englishLocale||'en-US',connection:'not_connected'},{language:'es',locale:f.spanishLocale||'es-419',connection:'not_connected'},{language:'it',locale:'it-IT',connection:'not_connected'}],locales=Array.isArray(f.locales)&&f.locales.length?f.locales:legacyChannels.map(channel=>channel.locale),channels=locales.map(locale=>{const previous=legacyChannels.find(channel=>channel.locale===locale);return {language:channelLanguage(locale),locale,connection:previous?.connection||'not_connected'};});return {...f,writingVoice:f.writingVoice||null,competitors:Array.isArray(f.competitors)?f.competitors:[],locales,primaryLocale:f.primaryLocale||locales[0],channels,tokenBudget:f.tokenBudget||{monthlyLimit:0,scriptJobLimit:6000,researchJobLimit:4000}};}
   families() { return this.db.prepare('SELECT payload FROM families ORDER BY rowid DESC').all().map(r=>this.hydrateFamily(JSON.parse(r.payload))); }
-  contents() { return this.db.prepare('SELECT payload FROM content ORDER BY rowid DESC').all().map(r=>{const c=JSON.parse(r.payload),family=this.family(c.familyId);return {...c,reviewIssues:reviewIssues(c,family.format,family.primaryLocale),craft:contentCraft(c,family)};}); }
+  contents() { return this.db.prepare('SELECT payload FROM content ORDER BY rowid DESC').all().map(r=>JSON.parse(r.payload)).filter(c=>!c.removedAt).map(c=>{const family=this.family(c.familyId);return {...c,reviewIssues:reviewIssues(c,family.format,family.primaryLocale),craft:contentCraft(c,family)};}); }
   family(id) { const r=this.db.prepare('SELECT payload FROM families WHERE id=?').get(id);requireValue(r,'Family not found.',404);return this.hydrateFamily(JSON.parse(r.payload)); }
   content(id) { const r=this.db.prepare('SELECT payload FROM content WHERE id=?').get(id);requireValue(r,'Draft not found.',404);return JSON.parse(r.payload); }
   version(record, expected) { requireValue(Number.isSafeInteger(expected) && expected === record.revision, 'This item changed in another tab. Reload before saving.',409); }
@@ -320,21 +323,14 @@ class Store {
       requireValue(typeof input.keep==='boolean','Choose whether to keep this channel\'s style and settings or delete everything.');
       requireValue(!input.keep||this.artifactRoot,'This workspace has no data folder to save the channel in.',409);
       const work=this.familyWork(id),rows=work.length?this.familyRows(id):new Map();
-      const busy=[...rows].filter(([table,ids])=>this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='status')&&this.db.prepare(`SELECT 1 FROM "${table}" WHERE status IN ('queued','running','uploading') AND rowid IN (SELECT value FROM json_each(?)) LIMIT 1`).get(JSON.stringify([...ids])));
-      requireValue(!busy.length,`${f.name} has work waiting or running (${busy.map(([table])=>table.replace(/_/g,' ')).join(', ')}). Let it finish or cancel it, then delete the family.`,409);
+      const busy=this.busyTables(rows);
+      requireValue(!busy.length,`${f.name} has work waiting or running (${busy.map(table=>table.replace(/_/g,' ')).join(', ')}). Let it finish or cancel it, then delete the family.`,409);
       const styles=this.familyStyles(f);folders=this.familyFolders(id);
       const saved=input.keep?this.saveFamilyRecord(f,rows,styles,folders):null;
       // Style copies another family still uses stay in either case.
       const dropStyles=input.keep?[]:styles.filter(style=>!this.db.prepare(`SELECT 1 FROM style_assignments WHERE family_id<>? AND revision_id IN (SELECT value FROM json_each(?)) LIMIT 1`).get(id,JSON.stringify(style.revisions.map(item=>item.id))));
       if(dropStyles.length){rows.set('style_revisions',new Set(this.db.prepare(`SELECT rowid AS r FROM style_revisions WHERE profile_id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(dropStyles.map(style=>style.id))).map(row=>row.r)));rows.set('style_profiles',new Set(this.db.prepare(`SELECT rowid AS r FROM style_profiles WHERE id IN (SELECT value FROM json_each(?))`).all(JSON.stringify(dropStyles.map(style=>style.id))).map(row=>row.r)));}
-      // History tables refuse deletes; their guard is lifted for this transaction only and comes back from its own SQL.
-      this.db.exec('PRAGMA defer_foreign_keys=ON');
-      for(const [table,ids] of rows){
-        const guards=this.db.prepare("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND sql LIKE '%BEFORE DELETE%'").all(table);
-        for(const guard of guards)this.db.exec(`DROP TRIGGER "${guard.name}"`);
-        this.db.prepare(`DELETE FROM "${table}" WHERE rowid IN (SELECT value FROM json_each(?))`).run(JSON.stringify([...ids]));
-        for(const guard of guards)this.db.exec(guard.sql);
-      }
+      this.dropRows(rows);
       this.db.prepare('DELETE FROM families WHERE id=?').run(id);
       const removed=[...rows.values()].reduce((sum,ids)=>sum+ids.size,0);
       this.event(input.keep?`Deleted family: ${f.name}; its style, settings and work are saved in ${saved}`:`Deleted family: ${f.name} with everything (${removed} records, ${dropStyles.length} style cop${dropStyles.length===1?'y':'ies'}, ${folders.length} folder${folders.length===1?'':'s'} of files)`);
@@ -367,6 +363,11 @@ class Store {
   // Every row that belongs to a family: rows with its family_id, then every row hanging off those through a foreign key.
   // shortcut: files in the data folder (renders, drawings, pictures) stay; a later clean-up can remove unreferenced ones.
   familyRows(id) {
+    const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'families'").all().map(row=>row.name);
+    return this.rowsFrom(tables.filter(table=>this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='family_id')).map(table=>[table,'family_id',[id]]));
+  }
+  // The rows of the seeds ([table, column, values]) and every row hanging off them through a foreign key, by table.
+  rowsFrom(seeds) {
     const tables=this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name<>'families'").all().map(row=>row.name),children={},rows=new Map();
     for(const table of tables)for(const key of this.db.prepare(`PRAGMA foreign_key_list("${table}")`).all())(children[key.table]||=[]).push({table,from:key.from,to:key.to||'id'});
     const mark=(table,column,values)=>{
@@ -374,9 +375,37 @@ class Store {
       for(const row of this.db.prepare(`SELECT rowid AS _r${keys.map(key=>`, "${key}"`).join('')} FROM "${table}" WHERE "${column}" IN (SELECT value FROM json_each(?))`).all(JSON.stringify(values)))if(!seen.has(row._r)){seen.add(row._r);fresh.push(row);}
       for(const child of fresh.length?children[table]||[]:[])mark(child.table,child.from,fresh.map(row=>row[child.to]).filter(value=>value!==null));
     };
-    for(const table of tables)if(this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='family_id'))mark(table,'family_id',[id]);
+    for(const [table,column,values] of seeds)mark(table,column,values);
     for(const [table,ids] of rows)if(!ids.size)rows.delete(table);
     return rows;
+  }
+  // Tables among the rows with work waiting or running (never deleted under it).
+  busyTables(rows){return [...rows].filter(([table,ids])=>this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='status')&&this.db.prepare(`SELECT 1 FROM "${table}" WHERE status IN ('queued','running','uploading','testing') AND rowid IN (SELECT value FROM json_each(?)) LIMIT 1`).get(JSON.stringify([...ids]))).map(([table])=>table);}
+  // Deletes the rows inside the caller's transaction. History tables refuse deletes; their guard is lifted for this
+  // transaction only and comes back from its own SQL.
+  dropRows(rows){
+    this.db.exec('PRAGMA defer_foreign_keys=ON');
+    for(const [table,ids] of rows){
+      const guards=this.db.prepare("SELECT name, sql FROM sqlite_master WHERE type='trigger' AND tbl_name=? AND sql LIKE '%BEFORE DELETE%'").all(table);
+      for(const guard of guards)this.db.exec(`DROP TRIGGER "${guard.name}"`);
+      this.db.prepare(`DELETE FROM "${table}" WHERE rowid IN (SELECT value FROM json_each(?))`).run(JSON.stringify([...ids]));
+      for(const guard of guards)this.db.exec(guard.sql);
+    }
+  }
+  // Content Studio "Delete" (0.74): a draft whose script never went further leaves every list. Its AI usage records stay,
+  // so the month's token count stays right, which is why the draft is marked removed rather than erased. A draft with
+  // narration, visuals, renders, packages, editions or uploads is the channel's work and stays.
+  removeContent(id){
+    const c=this.content(id);
+    if(c.removedAt)return {id,removed:true};
+    const rows=this.rowsFrom([['content','id',[id]],...this.db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map(row=>row.name).filter(table=>table!=='content'&&this.db.prepare(`PRAGMA table_info("${table}")`).all().some(column=>column.name==='content_id')).map(table=>[table,'content_id',[id]])]);
+    if(this.busyTables(rows).length)return {id,title:c.title,kept:'an AI job for it is waiting or running'};
+    const work=[...rows.keys()].filter(table=>!['content','jobs','script_candidates','llm_usage'].includes(table));
+    if(work.length)return {id,title:c.title,kept:`it already became a video (${work.slice(0,3).map(table=>table.replace(/_/g,' ')).join(', ')})`};
+    c.removedAt=now();
+    this.db.prepare('UPDATE content SET payload=? WHERE id=?').run(JSON.stringify(c),id);
+    this.event(`Removed draft from the lists: ${c.title}`);
+    return {id,removed:true};
   }
   archiveFamily(id, input) {
     object(input);return this.transaction(()=>{
@@ -395,6 +424,7 @@ class Store {
     const values=contentInput(input);
     return this.transaction(()=>{
       const old=id?this.content(id):null;if(old)this.version(old,input.revision);
+      requireValue(!old?.removedAt,'This draft was deleted. Reload the page.',409);
       const familyId=old?.familyId||text(input.familyId,'Family ID',1,80);
       if(old && input.familyId!==undefined)requireValue(input.familyId===familyId,'A draft cannot move between families.');
       const family=this.family(familyId);requireValue(!family.archived,'Restore this family before editing its drafts.',409);
@@ -460,7 +490,7 @@ class Store {
       // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
       const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
       // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
@@ -488,7 +518,7 @@ class Store {
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before retrying.');
       if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
       const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
@@ -576,7 +606,7 @@ class Store {
       selected.sort((left,right)=>left.id.localeCompare(right.id));
       const snapshot=selected.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}));
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate,sources:snapshot};
-      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id,{text:[family.niche,family.audience,...basePromptInput.sources.map(item=>item.title)].join(' '),format:skillFormat(family)})||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The approved skill set is part of the prompt, so it is part of the deduplication key.
       const evidenceHash=createHash('sha256').update(JSON.stringify([family.revision,...snapshot.map(item=>[item.recordId,item.revision]),...(skillBrief?.revisionIds||[])])).digest('hex');
       // The skill brief is added on top of the research limit (0.73), as for scripts: built-in skills come approved now.
@@ -601,7 +631,7 @@ class Store {
       requireValue(typeof input.connectorId==='string'&&typeof input.connectorRevision==='number','Choose the current tested Claude connection.');
       const sources=oldScope.evidence.map(reference=>{const current=this.researchEvidence(reference.id);requireValue(current.revision===reference.revision,'Research evidence changed. Queue a fresh daily brief instead.',409);requireValue(current.familyId===family.id&&!current.archived&&current.permission==='permitted'&&current.analysisMode==='brief_synthesis_permitted','Research evidence is no longer eligible for synthesis.',409);requireValue(current.expiresAt>=previous.brief_date,'Research evidence expired for this brief date. Queue a fresh daily brief with current evidence.',409);return current;});
       const basePromptInput={family:{name:family.name,audience:family.audience,countries:family.countries,niche:family.niche,format:family.format,timezone:family.timezone,locale:family.primaryLocale},briefDate:previous.brief_date,sources:sources.map((item,index)=>({id:`S${index+1}`,recordId:item.id,revision:item.revision,title:item.title,url:item.url,publisher:item.publisher,publishedAt:item.publishedAt,accessedAt:item.accessedAt,expiresAt:item.expiresAt,notes:item.notes,rightsNotes:item.rightsNotes}))};
-      const skillBrief=this.skillRuntime?.brief('research.brief',family.id)||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+      const skillBrief=this.skillRuntime?.brief('research.brief',family.id,{text:[family.niche,family.audience,...basePromptInput.sources.map(item=>item.title)].join(' '),format:skillFormat(family)})||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
       // The skill brief is added on top of the research limit (0.73), as for scripts: built-in skills come approved now.
       const jobLimit=family.tokenBudget.researchJobLimit+(skillBrief?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,2500);requireValue(maxCompletionTokens>=500,'Increase the research job token limit, or reduce the approved skills bound to research briefs.');
       const id=randomUUID(),at=now(),attempts=paidAttempt?previous.attempts+1:previous.attempts,evidenceHash=`${previous.evidence_hash}:retry:${id}`,scope={familyRevision:family.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:1,tokenLimit:jobLimit,evidence:oldScope.evidence,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};

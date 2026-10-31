@@ -1,5 +1,7 @@
 # Daily research and topic evidence briefs
 
+**What it is for (0.74, owner question 2026-10-31).** Trending topics shows what is popular on YouTube and Reddit; this page turns sources the owner trusts (articles, studies, official figures, news) into up to three dated, fact-based video ideas with hooks and an outline, every fact tied to a source. It is the path for factual channels that want ideas they can prove. The page now says this in a folded "What is this page for?" panel.
+
 Version 0.5 adds manually queued, family-local daily topic briefs. The feature is review-only. It cannot create or edit a content draft, approve work, schedule media, select credentials or publish.
 
 ## Workflow
@@ -15,7 +17,7 @@ Version 0.5 adds manually queued, family-local daily topic briefs. The feature i
 
 ## Durable records
 
-- `research_evidence`: family-scoped, revisioned records with archive/restore instead of deletion.
+- `research_evidence`: family-scoped, revisioned records with archive/restore; since 0.74 the owner can also delete ticked records or the whole list, and export them (and the briefs) as PDF, Word or CSV. Research jobs and their token usage are never deleted.
 - `research_jobs`: date, family revision, connector revision, evidence hash, prompt version, status and bounded retry chain.
 - `topic_briefs`: immutable review-only payloads with an evidence snapshot and quality result.
 - `research_usage`: reserved, settled, unknown or violating token usage per job and family-local month.

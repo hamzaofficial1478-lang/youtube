@@ -666,7 +666,7 @@ class CompetitorIntelligence {
       adjustableSettings: Object.keys(ADJUSTABLE),
       channels: full,
     };
-    const skillBrief = this.store.skillRuntime?.brief('competitors.blueprint', family.id) || null;
+    const skillBrief = this.store.skillRuntime?.brief('competitors.blueprint', family.id, {text: [family.niche, family.audience].join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null}) || null;
     if (skillBrief) input.skills = skillBrief.prompt;
     if (blend) {
       input.blend = blend;

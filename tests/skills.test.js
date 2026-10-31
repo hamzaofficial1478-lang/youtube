@@ -611,3 +611,35 @@ test('built-in skills are approved with the program; own skills still need the o
   assert.equal(skills.skills().find(item => item.id === 'script.owner-rule').latest.status, 'draft', 'a restart never approves an owner skill');
   assert.ok(!loadPacks(root).some(item => item.skill.id === 'script.owner-rule'));
 });
+
+test('0.74: each request gets the skills that fit it, never a fixed list, and the reasons are recorded', t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const engine = new SkillsEngine(store, {root}).attach();
+  const pick = (task, context) => engine.brief(task, {context});
+  const mystery = pick('script.candidate', {text: 'The ship that vanished: the unsolved mystery of the Mary Celeste, a true case file', format: 'long-form'});
+  const list = pick('script.candidate', {text: 'Top 5 money mistakes young adults make: a countdown list', format: 'shorts'});
+  // The structure that fits the topic comes first; the other structures stay out unless they fit too.
+  assert.equal(mystery.skillIds[0], 'story.case-file-mystery');
+  assert.deepEqual(mystery.reasons[0].matched, ['unsolved', 'mystery', 'case', 'file']);
+  assert.ok(list.skillIds.includes('story.counted-list') && !list.skillIds.includes('story.case-file-mystery'));
+  assert.ok(mystery.alternatives > 0);
+  assert.notDeepEqual(mystery.skillIds, list.skillIds, 'two different videos get different skills');
+  // Format: a long video never gets a Shorts-only skill, and a Short never gets a long-form-only one.
+  const skills = new Map(engine.select('script.candidate').map(item => [item.skill.id, item.skill]));
+  const shortsOnly = id => /^shorts\./.test(id) || skills.get(id).tags.includes('shorts');
+  assert.ok(mystery.offFormat > 0 && !mystery.skillIds.some(shortsOnly));
+  // Engine: a Stickman plan never carries the anime, whiteboard or footage rules; a documentary plan may.
+  const stick = pick('scene.plan', {text: 'The ship that vanished', style: 'engine stickman look classic', format: 'long-form'});
+  const doc = pick('scene.plan', {text: 'The rise and fall of a business, with maps and charts', style: 'engine montage design footage', format: 'long-form'});
+  assert.ok(!stick.skillIds.some(id => /^(anime|whiteboard|doc|hybrid|cinematic)\./.test(id)));
+  assert.ok(doc.skillIds.includes('scene.maps-carry-geography'));
+  // The core rule of the job still goes in, and the same request always picks the same skills.
+  assert.ok(mystery.skillIds.includes('script.never-invent-a-number'));
+  assert.deepEqual(pick('script.candidate', {text: 'The ship that vanished: the unsolved mystery of the Mary Celeste, a true case file', format: 'long-form'}).skillIds, mystery.skillIds);
+  // The job's record keeps why each skill was chosen.
+  store.skillRuntime.recordUsage({jobId: 'job-1', room: 'studio', taskKey: 'script.candidate', brief: mystery});
+  const used = engine.usage(5)[0];
+  assert.equal(used.reasons[0].id, 'story.case-file-mystery');
+  assert.equal(used.reasons[0].forJob, true);
+});
