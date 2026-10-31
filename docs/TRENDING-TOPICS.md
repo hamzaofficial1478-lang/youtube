@@ -47,6 +47,26 @@ out" lists them greyed with their reason. Claude only ever reads the kept videos
 must sit inside the niche and serve the family's audience; Reddit topic ideas carry the same rule with the family's
 niche. A scan where nothing was kept cannot be sent to Claude. Older scans have no niche and keep working as before.
 
+## A niche of subject and angle (0.76)
+
+Owner test 2026-10-31: a stickman "stone age finance" channel scanned the keywords "stone age" and "finance" and got
+"Global Finance Awards" and "Queens of the Stone Age". Two causes: each keyword is one YouTube search, so "finance" alone
+finds every finance video and "stone age" alone the band; and the niche filter kept a video that named any one niche
+word. Now:
+
+- **Topic words** (what the videos are about: finance, money, economy, trade) and **angle words** (what makes the niche
+  different: stone age, caveman, prehistoric). A video is kept only when its title or description names one of each;
+  a phrase counts only whole ("stone age", never "stone" alone) (`nicheMatch`, `phraseIn`). Without angle words a topic
+  word is enough. **Look words** (stickman, animation) mark videos "same look", with a Look filter on the card.
+- **Suggest words and keywords with AI** in the scan window: one small request (`suggestNiche`, family token
+  reservation kind `trend_niche`, never retried) reads the channel's niche, audience and assigned style (`styleOf`) and
+  fills the three word lists and 6-15 search phrases that join the subject and the angle ("history of money", "stone
+  age economy", "how money was invented"). It reads only the owner's own words, no YouTube data. The owner can change
+  everything before running the scan.
+- The keywords hint says to search joined phrases, not single broad words.
+- Claude's topic ideas get the topic, angle and look words and the channel's style: every idea must join the subject and
+  the angle and suit the look.
+
 ## Clearing and exporting (0.74)
 
 Scans and topic ideas have tick boxes and a toolbar: delete the ticked rows or every row shown, and export them as PDF,

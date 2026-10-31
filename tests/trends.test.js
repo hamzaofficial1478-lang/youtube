@@ -192,3 +192,38 @@ test('a scan stays inside the chosen niche and the owner\'s channel size, and Cl
   assert.throws(() => none.trends.queueTopics(empty.id, {familyId: none.family.id, count: 8, connector: none.ids.claude, requestedBy: 'Owner'}), /fits its niche/);
   assert.ok(store);
 });
+
+test('0.76: a niche of subject and angle keeps only videos that join them; the AI suggests the words and search phrases', async t => {
+  const {nicheMatch} = require('../trends');
+  const niche = {words: [], topicWords: ['finance', 'money', 'economy', 'trade'], angleWords: ['stone age', 'caveman', 'prehistoric'], lookWords: ['stickman', 'animation']};
+  // The owner's test scan: none of these joins money and the stone age.
+  for (const title of ['Global Finance Awards 2026.', 'Queens of the Stone Age: Where The Goth Girls At?', 'The Most Vicious Stone Age Weapon', 'Stone Age DB Heroes! + MORE D Billions Kids Songs'])
+    assert.equal(nicheMatch(title, niche), false, title);
+  for (const title of ['How Money Was Invented in the Stone Age', 'Caveman economics: the first trade', 'Prehistoric money explained (stickman animation)'])
+    assert.equal(nicheMatch(title, niche), true, title);
+  assert.equal(nicheMatch('A stone and the age of money', niche), false, '"stone age" counts only as a whole phrase');
+  // The AI turns the channel's niche and style into those words and search phrases, inside the channel's token limit.
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const connectors = new ConnectorSlots(store, protector, async () => { throw new Error('no network'); }), quota = new QuotaLedger(store);
+  let asked = null;
+  const ai = {team: () => ({claude: {id: 'claude-1', provider: 'claude-code'}}), complete: async ({messages}) => { asked = messages; return {content: JSON.stringify({topicWords: ['finance', 'money', 'Economy'], angleWords: ['stone age', 'caveman'], lookWords: ['stickman'], keywords: ['history of money', 'stone age economy', 'how money was invented'], why: 'Money told through the stone age.'}), usage: {promptTokens: 300, completionTokens: 120, totalTokens: 420}}; }};
+  const trends = new TrendScanner(store, connectors, quota, ai);
+  trends.styleOf = () => ({name: 'Stickman Sketch Explainer', look: 'classic'});
+  const family = store.saveFamily({name: 'Stone Age Money', tier: 'A', countries: ['United States'], audience: 'Adults who like money explained simply.', niche: 'Stickman stone age finance: finance explained through the stone age', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'long-form'});
+  const suggested = await trends.suggestNiche({requestedBy: 'Owner', familyId: family.id});
+  assert.deepEqual([suggested.topicWords, suggested.angleWords, suggested.keywords.length], [['finance', 'money', 'economy'], ['stone age', 'caveman'], 3]);
+  assert.match(JSON.stringify(asked[1].content), /stone age finance[\s\S]*Stickman Sketch Explainer/);
+  assert.equal(store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='trend_niche'").get().status, 'settled');
+  // A scan keeps only the videos that name both: the fixture's titles say "stoic", one description says Seneca.
+  const joined = setup(t, network());
+  joined.trends.queueScan({keywords: ['stoicism'], days: 7, perKeyword: 5, niche: {source: 'custom', text: 'Seneca and the stoics', topicWords: ['stoic'], angleWords: ['seneca'], lookWords: ['evening']}, connector: joined.ids.youtube, requestedBy: 'Owner'});
+  const scanned = await joined.trends.processNextScan();
+  assert.deepEqual(scanned.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(3)]);
+  assert.equal(scanned.result.videos.find(video => video.videoId === vid(3)).sameLook, true, 'the look words mark the same look');
+  // A scan stores the groups; angle words without topic words are refused.
+  const ids = joined.ids;
+  assert.throws(() => trends.nicheInput({source: 'family', familyId: family.id, angleWords: ['stone age']}), /topic words/);
+  assert.deepEqual(trends.nicheInput({source: 'family', familyId: family.id, topicWords: ['Finance', 'money'], angleWords: ['stone age'], lookWords: ['stickman']}).topicWords, ['finance', 'money']);
+  assert.ok(ids);
+});
