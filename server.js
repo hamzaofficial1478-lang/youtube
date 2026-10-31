@@ -77,7 +77,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   // 0.61: Freesound effects and Jamendo music, searched and added on the owner's click.
-  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);
+  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;

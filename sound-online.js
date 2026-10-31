@@ -158,18 +158,33 @@ class SoundOnline {
       return {...result, sound: this.library.publicSound(this.library.row(result.id))};
     } finally { fs.rmSync(file, {force: true}); }
   }
-  // Empty effect slots filled from Freesound: one search per slot (best rated short CC0/CC BY sound), then the add.
+  // How many library music tracks each mood family has (a track counts for every family its tags and title name).
+  moodCounts() {
+    const counts = Object.fromEntries(Object.keys(M.MOOD_TAGS).map(mood => [mood, 0]));
+    for (const track of this.library.tracks('music')) for (const mood of M.moodFamilies([...(track.tags || []), track.title].join(' '))) counts[mood]++;
+    return counts;
+  }
+  // Freesound fills the library by itself on one click (0.74, owner request 2026-10-31: "why do I have to find and add
+  // music and effects by hand"): every empty effect slot gets its most downloaded CC0/CC BY sound, and every mood family
+  // (all of them, or the moods of one video) gets music until it has `perMood` tracks. With a video named, its music
+  // is picked again from the library when the fill is done. One search per slot or mood, inside the hourly allowance.
   queueFill(input) {
     object(input);
     const by = person(input.requestedBy), ref = this.connection('freesound', input.connector), filled = M.pickEffects(this.library.tracks('sfx'));
-    const kinds = Object.keys(M.SFX).filter(kind => !filled[kind] && (!Array.isArray(input.kinds) || input.kinds.includes(kind)));
-    requireValue(kinds.length, 'Every effect slot already has a sound.', 409);
+    const kinds = input.effects === false ? [] : Object.keys(M.SFX).filter(kind => !filled[kind] && (!Array.isArray(input.kinds) || input.kinds.includes(kind)));
+    requireValue(input.music === undefined || input.music === 'all' || (Array.isArray(input.music) && input.music.length <= 40 && input.music.every(item => typeof item === 'string' && item.length <= 80)), 'Music must be "all" or a list of moods.');
+    const perMood = input.perMood === undefined ? 2 : input.perMood;
+    requireValue(Number.isSafeInteger(perMood) && perMood >= 1 && perMood <= 5, 'Tracks per mood must be 1 to 5.');
+    const wanted = input.music === 'all' ? Object.keys(M.MOOD_TAGS) : input.music ? M.moodFamilies(input.music.join(' ')) : [];
+    const counts = this.moodCounts(), moods = wanted.filter(mood => counts[mood] < perMood).map(mood => ({mood, need: perMood - counts[mood]}));
+    const contentId = typeof input.contentId === 'string' && input.contentId.length <= 80 ? input.contentId : null;
+    requireValue(kinds.length || moods.length, input.music ? 'Your library already has every effect and enough music for these moods.' : 'Every effect slot already has a sound.', 409);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM sound_imports WHERE status IN ('queued','running')").get(), 'An import is already running. Wait for it to finish.', 409);
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO sound_imports(id,folder,status,scope,progress,error,created_by,created_at,updated_at) VALUES(?,?,'queued',?,?,NULL,?,?,?)")
-        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, licence: 'CC0 or CC BY via Freesound', kind: 'sfx'}), JSON.stringify({total: kinds.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
-      this.store.event(`Queued Freesound sounds for ${kinds.length} empty effect slot(s), by ${by}`);
+        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, moods, contentId, licence: 'CC0 or CC BY via Freesound', kind: moods.length ? 'mixed' : 'sfx'}), JSON.stringify({total: kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
+      this.store.event(`Queued Freesound: ${kinds.length} empty effect slot(s)${moods.length ? `, music for ${moods.map(item => item.mood).join(', ')}` : ''}, by ${by}`);
       return this.library.publicImport(this.library.importRow(id));
     });
   }
@@ -178,7 +193,7 @@ class SoundOnline {
     const row = this.store.transaction(() => { const next = this.db.prepare("SELECT * FROM sound_imports WHERE status='queued' AND folder LIKE 'online:%' ORDER BY created_at, rowid LIMIT 1").get(); if (next) this.db.prepare("UPDATE sound_imports SET status='running', updated_at=? WHERE id=?").run(now(), next.id); return next; });
     if (!row) return null;
     this.busy = true;
-    const scope = JSON.parse(row.scope), progress = {total: scope.kinds.length, done: 0, added: 0, already: 0, failed: 0, problems: []};
+    const scope = JSON.parse(row.scope), moods = scope.moods || [], progress = {total: scope.kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []};
     const save = () => this.db.prepare('UPDATE sound_imports SET progress=?, updated_at=? WHERE id=?').run(JSON.stringify(progress), now(), row.id);
     try {
       const filled = M.pickEffects(this.library.tracks('sfx'));
@@ -186,7 +201,8 @@ class SoundOnline {
         try {
           if (filled[kind]) { progress.already++; continue; }
           const ref = this.connection('freesound', scope.connector);
-          const results = (await this.request('freesound', () => this.clientFor('freesound', ref.id).search(SLOT_QUERY[kind], {kind: 'sfx', limit: 15, sort: 'rating_desc'}))).filter(item => item.licence.ok && item.download && item.seconds <= Math.max(2, M.SFX[kind].seconds * 4));
+          // The most used: the most downloaded fitting sound (0.74; was the best rated).
+          const results = (await this.request('freesound', () => this.clientFor('freesound', ref.id).search(SLOT_QUERY[kind], {kind: 'sfx', limit: 15, sort: 'downloads_desc'}))).filter(item => item.licence.ok && item.download && item.seconds <= Math.max(2, M.SFX[kind].seconds * 4));
           requireValue(results.length, 'no CC0 or CC BY sound found');
           this.remember(results);
           const added = await this.add({requestedBy: row.created_by, ref: `freesound:${results[0].id}`, connector: scope.connector, kind: 'sfx', slot: kind});
@@ -194,6 +210,20 @@ class SoundOnline {
         } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${kind}: ${clean(error.message, 140)}`); }
         finally { progress.done++; save(); }
       }
+      // Music: the most downloaded CC0/CC BY tracks of at least 45 s for each mood, not already in the library.
+      for (const {mood, need} of moods) {
+        try {
+          const ref = this.connection('freesound', scope.connector);
+          const results = (await this.request('freesound', () => this.clientFor('freesound', ref.id).search(`${mood} music`, {kind: 'music', limit: 40, sort: 'downloads_desc'})))
+            .filter(item => item.licence.ok && item.download && item.seconds >= 45 && !this.db.prepare('SELECT 1 FROM sounds WHERE source=? AND page_url=?').get(item.provider, item.page)).slice(0, need);
+          requireValue(results.length, 'no CC0 or CC BY music found');
+          this.remember(results);
+          for (const item of results) { const added = await this.add({requestedBy: row.created_by, ref: `freesound:${item.id}`, connector: scope.connector, kind: 'music', slot: mood}); if (added.added) progress.added++; else progress.already++; }
+        } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${mood} music: ${clean(error.message, 140)}`); }
+        finally { progress.done++; save(); }
+      }
+      // The video it was asked for picks its music again from the fuller library.
+      if (scope.contentId && this.onFilled) { try { await this.onFilled(scope, row.created_by); } catch (error) { progress.problems.push(`picking the video's music again: ${clean(error.message, 140)}`); save(); } }
       this.db.prepare("UPDATE sound_imports SET status='completed', updated_at=? WHERE id=?").run(now(), row.id);
       return this.library.publicImport(this.library.importRow(row.id));
     } catch (error) {

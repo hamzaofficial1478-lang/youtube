@@ -184,3 +184,4 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .skill-why{margin:0;padding-left:16px;font-size:12px}.skill-why li{margin:2px 0}
 .list-tools{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;margin:8px 0 12px}.list-tick-label{display:inline-flex;align-items:center;margin-right:8px;vertical-align:middle;cursor:pointer}.list-tick{width:16px;height:16px;margin:0}
 .research-why>summary{padding:16px 24px;cursor:pointer}.research-why .panel-body{padding-top:0}
+.history-row:has(>.list-tick-label){grid-template-columns:auto 10px minmax(0,1fr)}.history-row:has(>.list-tick-label)>.row-end{grid-column:3}.history-row>.list-tick-label{margin:2px 0 0}

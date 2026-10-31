@@ -241,6 +241,18 @@ class SoundtrackRoom {
     return {id: row.id, contentId: row.content_id, revision: row.revision, source: row.source, note: row.note, createdBy: row.created_by, createdAt: row.created_at, voiceApprovalId: row.voice_approval_id,
       current: latest.id === row.id && voice?.approvalId === row.voice_approval_id, summary: payload.summary, durationSeconds: payload.durationSeconds, warnings: payload.warnings || [], cues, ready: cues.every(cue => cue.asset)};
   }
+  // The video's music picked again from the library (0.74: after Freesound added music for its moods). Same cues and
+  // timing, a new revision; nothing happens when the score is out of date or the tracks would not change.
+  repickTracks(contentId, by) {
+    const latest = this.latestScore(contentId);
+    if (!latest?.current) return null;
+    const inputs = this.scoreInputs(contentId), tracks = inputs.ready ? this.libraryTracks(inputs.family.id) : [];
+    if (!tracks.length) return null;
+    const row = this.scoreRow(latest.id), payload = JSON.parse(row.payload);
+    const cues = M.assignTracks(payload.cues.map(({track, offset, ...cue}) => cue), tracks, {recent: this.recentTracks(inputs.family.id, contentId)});
+    if (hash(cues.map(cue => cue.track)) === hash(payload.cues.map(cue => cue.track))) return latest;
+    return this.store.transaction(() => this.insertScore({inputs, score: {summary: payload.summary, cues}, warnings: payload.warnings || [], source: row.source, note: 'Music picked again after Freesound added tracks for this video', createdBy: by}));
+  }
   latestScore(contentId) { const row = this.db.prepare('SELECT id FROM scores WHERE content_id=? ORDER BY revision DESC LIMIT 1').get(contentId); return row ? this.score(row.id) : null; }
   editScore(id, input) {
     object(input);
