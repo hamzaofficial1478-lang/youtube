@@ -42,5 +42,10 @@ Windows 10 or 11, about 10 GB free (about 5 GB on a PC without an NVIDIA card, w
 
 1. Install VoiceStudio from its releases page and open it once (it downloads its Python and the first model).
 2. In VoiceStudio, pick an engine (PC without an NVIDIA card: KittenTTS, Supertonic-3 or PocketTTS) and accept the model's licence in the Model Manager.
-3. In the Control Room: Connections, add "VoiceStudio", Test.
+3. In the Control Room: Connections, add "VoiceStudio", Test. Since 0.77 the test says one word ("Test.") with each
+   engine your narrator profiles use (`tts-1` = the engine chosen in VoiceStudio), because VoiceStudio checks a model's
+   licence only when it speaks: listing voices passed while the Voice Room failed with "Licence not accepted for
+   k2-fsa/OmniVoice, eustlb/higgs-audio-v2-tokenizer". Accept those licences in VoiceStudio, Settings → Models (the
+   Model Catalogue), or choose an engine whose licence you accepted. A VoiceStudio take is free, so a failed one never
+   counts as a paid attempt.
 4. Voice Room, narrator: choose the VoiceStudio connection, model `tts-1` (the engine chosen in VoiceStudio) or an engine name such as `kittentts`, voice `default` or a VoiceStudio voice ID, tick the test-only box, save, then generate a narration as usual.

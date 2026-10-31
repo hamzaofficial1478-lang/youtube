@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const C = require('../craft');
-const {assessScriptQuality, scriptMessages} = require('../writer');
+const {assessScriptQuality, scriptMessages, critiqueMessages, reviseMessages} = require('../writer');
 const {Store} = require('../store');
 const {createApp} = require('../server');
 
@@ -160,6 +160,25 @@ test('the writing voice blocks banned words in candidates and reaches the writer
   assert.match(messages[0].content, /never use any of its neverWords/);
   assert.match(messages[1].content, /crumb check/);
   assert.doesNotMatch(scriptMessages({family: {format: 'shorts', locale: 'en-US'}, content: {kind: 'fiction'}, sources: []})[0].content, /writing voice/);
+});
+
+// 0.77 (owner review 2026-10-31: an 82-word hook scored weak and the writer was never told why): the writer gets the
+// hook rules and the order of a script; the second writer and the revision see what the free checks found.
+test('the writer is told how a script is built, and the revision sees what the checks found', () => {
+  const input = {family: {format: 'long-form', locale: 'en-US'}, content: {kind: 'fiction'}, sources: []};
+  const system = scriptMessages(input)[0].content;
+  for (const rule of [/9-24 words/, /\(2\) PROMISE/, /\(4\) RE-HOOK/, /\(5\) PAYOFF/, /Exactly one call to action, after 60%/]) assert.match(system, rule);
+  const hook = 'Imagine a world thousands of years ago, long before banks or coins, where a group of cavemen sat around a fire and decided that a shiny rock was worth more than a whole basket of berries.';
+  const draft = {title: 'Stone money', angle: 'How trade began', hook, script: `${hook} ${'The tribe traded stones for meat. '.repeat(30)}\n\nThat is how it went.`, claims: [], uncertainties: []};
+  const critique = critiqueMessages(input, draft);
+  assert.match(critique[0].content, /judge the draft against them: HOW TO WRITE IT/);
+  assert.match(critique[1].content, /Hook scored \d+ \(weak\); weakest: brevity\. Use 9 to 24 words/);
+  assert.match(critique[1].content, /A promise in the first minute/);
+  const revise = reviseMessages(input, draft, {verdict: 'Tighten it.', keep: [], fixes: [], hooks: [], facts: [], additions: []});
+  assert.match(revise[1].content, /CRAFT CHECKS FOUND IN YOUR DRAFT \(fix every one\):\n- Hook scored/);
+  // A strong draft adds no notes.
+  const good = 'You lose $40 every week on stale bread, but nobody tells you why bakery bread lasts 7 days.';
+  assert.doesNotMatch(critiqueMessages(input, {...draft, hook: good, script: `${good} x`})[1].content, /Hook scored/);
 });
 
 test('families store a validated writing voice and drafts carry craft advice', t => {

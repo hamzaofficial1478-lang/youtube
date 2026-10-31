@@ -186,3 +186,17 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .research-why>summary{padding:16px 24px;cursor:pointer}.research-why .panel-body{padding-top:0}
 .history-row:has(>.list-tick-label){grid-template-columns:auto 10px minmax(0,1fr)}.history-row:has(>.list-tick-label)>.row-end{grid-column:3}.history-row>.list-tick-label{margin:2px 0 0}
 .niche-words{display:grid;gap:10px;margin-top:10px}
+/* 0.77: a script row keeps its status and its button side by side; they move under the title together when the card is narrow. */
+.production-row{flex-wrap:wrap}.production-row>div:first-child{flex:1 1 240px;min-width:0}.production-row>.row-end{flex-wrap:nowrap;margin-left:auto}
+/* 0.77 live work: what runs now, its step, a bar, and when it last moved. */
+.live-strip{display:grid;gap:6px;margin:0 0 16px;padding:12px 14px;background:#f2f8f4;border:1px solid #cfe3d6;border-radius:10px}
+.live-strip>strong{display:flex;align-items:center;gap:8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#1f5a40}
+.live-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:13px}.live-row>span:first-child{flex:1 1 260px;min-width:0}
+.live-quiet{color:#a1520f;font-weight:600}
+.live-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#2f9e63;animation:live-pulse 1.4s ease-in-out infinite;flex-shrink:0}
+@keyframes live-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+@media(prefers-reduced-motion:reduce){.live-dot{animation:none}}
+.live-job{display:grid;gap:6px;margin:12px 0;padding:12px;border:1px solid #d7e6dc;border-radius:10px;background:#fbfdfb}
+.live-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.live-head .muted{font-size:12px}
+.live-preview{max-height:220px;overflow:auto;margin:0;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;background:#fff;border:1px solid #e4e9e1;border-radius:8px}
+.next-steps{margin:12px 0;padding:12px;border:1px solid #cfe3d6;border-radius:10px;background:#f2f8f4}.next-steps .card-actions{flex-wrap:wrap}

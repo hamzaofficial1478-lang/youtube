@@ -123,7 +123,7 @@ class ClaudeApi {
   constructor(key, fetchImpl = fetch) {
     this.client = new Anthropic({apiKey: key, fetch: fetchImpl, maxRetries: 0, timeout: 10 * 60 * 1000});
   }
-  async complete({model, system, prompt, maxTokens, effort, onStart = () => {}}) {
+  async complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null}) {
     const request = {
       model, max_tokens: maxTokens, messages: [{role: 'user', content: prompt}],
       ...(system ? {system} : {}),
@@ -137,7 +137,9 @@ class ClaudeApi {
       // Refusal fallback (server side): a policy decline is re-run on a fallback model inside the same call;
       // the served model is recorded with the result, so nothing switches silently.
       const [api, params] = model === 'claude-opus-4-8' ? [this.client.messages, request] : [this.client.beta.messages, {...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'}];
-      response = maxTokens > NON_STREAMING_MAX_TOKENS ? await api.stream(params).finalMessage() : await api.create(params);
+      // A streamed answer feeds the job's live view as it arrives (0.77).
+      if (maxTokens > NON_STREAMING_MAX_TOKENS) { const stream = api.stream(params); if (onProgress) { stream.on('text', delta => onProgress({text: delta})); stream.on('thinking', () => onProgress({thinking: true})); } response = await stream.finalMessage(); }
+      else response = await api.create(params);
     } catch (error) {
       if (error instanceof Anthropic.AuthenticationError) throw new AiError('Claude rejected the API key, so nothing was generated. Check it in Connections.', 401, {nothingUsed: true, kind: 'login'});
       if (error instanceof Anthropic.RateLimitError) throw new AiError('Claude is rate limiting this key, so nothing was generated. Wait, then try again.', 429, {nothingUsed: true});
@@ -195,7 +197,7 @@ class ClaudeCode {
     child.on('error', () => {});
     child.unref();
   }
-  complete({model, system, prompt, maxTokens, effort, onStart = () => {}}) {
+  complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null}) {
     if (!this.command) return Promise.reject(new AiError(CLAUDE_MISSING, 503, {nothingUsed: true}));
     // An empty working folder and safe mode keep the owner's personal Claude Code setup (CLAUDE.md, plugins,
     // hooks, skills, MCP servers) out of the program's calls; no tools, and nothing is saved as a session.
@@ -203,22 +205,39 @@ class ClaudeCode {
     const systemFile = path.join(dir, 'system.txt');
     fs.writeFileSync(systemFile, system || 'Follow the user message exactly.');
     const env = cliEnv({CLAUDE_CODE_MAX_OUTPUT_TOKENS: String(maxTokens)}); // the subscription login, never a stray key
-    // Images travel as one stream-json user message (still no tools); plain text keeps the simple JSON mode.
-    const blocks = Array.isArray(prompt);
-    const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', ...(blocks ? ['--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose'] : ['--output-format', 'json']), '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
+    // Images travel as one stream-json user message (still no tools); plain text keeps the simple JSON mode. A job that
+    // shows its progress live (0.77) reads the answer as it streams (partial messages).
+    const blocks = Array.isArray(prompt), stream = blocks || !!onProgress;
+    const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', ...(blocks ? ['--input-format', 'stream-json'] : []), ...(stream ? ['--output-format', 'stream-json', '--verbose', ...(onProgress ? ['--include-partial-messages'] : [])] : ['--output-format', 'json']), '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
     return new Promise((resolve, reject) => {
       const done = (error, value) => { clearTimeout(timer); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
       let child;
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, cliTimeoutMs(maxTokens));
-      let out = '', bytes = 0, err = '';
-      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); });
+      let out = '', bytes = 0, err = '', line = '';
+      // A job that shows its progress (0.77): each streamed piece of the answer (or of thinking) goes to the live view and
+      // is not kept, so a long streamed answer never counts against the reply size; every other line is kept as before.
+      const keep = text => { bytes += Buffer.byteLength(text); if (bytes <= MAX_REPLY_BYTES) out += text; else child.kill(); };
+      const seen = chunk => {
+        line += chunk;
+        if (line.length > MAX_REPLY_BYTES) { line = ''; return child.kill(); }
+        const lines = line.split('\n'); line = lines.pop();
+        for (const item of lines) {
+          let event = null; try { event = JSON.parse(item); } catch { /* kept as it is */ }
+          if (event?.type !== 'stream_event') { keep(`${item}\n`); continue; }
+          const delta = event.event?.type === 'content_block_delta' ? event.event.delta : null;
+          onProgress(delta?.type === 'text_delta' ? {text: delta.text} : {thinking: delta?.type === 'thinking_delta'});
+        }
+      };
+      child.stdout.setEncoding('utf8'); // a letter split across two chunks stays whole (Urdu, accents)
+      child.stdout.on('data', chunk => { if (onProgress) seen(chunk); else keep(chunk); });
       child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
+        if (onProgress && line) keep(line);
         let reply;
-        try { reply = blocks ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(bytes > MAX_REPLY_BYTES ? new AiError('Claude Code returned too much output.', 502) : code === null ? new AiError('Claude Code took too long and was stopped. Its usage may still count.', 502) : cliProblem(err, 'Claude Code') || new AiError('Claude Code returned no readable answer and gave no reason. Its usage may still count.', 502)); }
+        try { reply = stream ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(bytes > MAX_REPLY_BYTES ? new AiError('Claude Code returned too much output.', 502) : code === null ? new AiError('Claude Code took too long and was stopped. Its usage may still count.', 502) : cliProblem(err, 'Claude Code') || new AiError('Claude Code returned no readable answer and gave no reason. Its usage may still count.', 502)); }
         if (reply.is_error || reply.subtype !== 'success') return done(claudeCodeRefusal(reply.result, model));
         let value;
         try { value = finish({text: String(reply.result || ''), stop: reply.stop_reason, usage: usageOf(reply.usage), model: Object.keys(reply.modelUsage || {})[0] || model}); }
@@ -310,7 +329,7 @@ class CodexCli {
     });
   }
   // guard: a text answer is discarded when Codex used a tool; a picture request leaves Codex its image tool.
-  run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true}) {
+  run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true, onProgress = null}) {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app and sign in with your ChatGPT account.', 503, {nothingUsed: true}));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-codex-')), last = path.join(dir, 'answer.txt');
     const files = images.map((image, k) => { const file = path.join(dir, `image-${k + 1}.${/png/.test(image.media_type) ? 'png' : 'jpg'}`); fs.writeFileSync(file, Buffer.from(image.data, 'base64')); return file; });
@@ -322,10 +341,12 @@ class CodexCli {
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, timeoutMs);
-      let out = '', bytes = 0, err = '';
+      let out = '', bytes = 0, err = '', line = '';
+      // Each event is a sign of life for the job's live view (0.77); Codex sends its answer whole, at the end.
+      const seen = chunk => { line += chunk; const lines = line.split('\n'); line = lines.pop(); for (const item of lines) { try { const event = JSON.parse(item); onProgress({thinking: event.item?.type === 'reasoning', text: event.type === 'item.completed' && event.item?.type === 'agent_message' ? String(event.item.text || '') : ''}); } catch { /* not an event line */ } } };
       // Read-only still lets Codex open any file of this Windows account, and prompts carry outside text (Reddit,
       // competitors, screenshots): a tool call stops the run and its answer is thrown away, so nothing it read is saved.
-      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (guard && CODEX_TOOL.test(chunk)) child.kill(); });
+      child.stdout.on('data', chunk => { bytes += chunk.length; if (bytes <= MAX_REPLY_BYTES) out += chunk; else child.kill(); if (guard && CODEX_TOOL.test(chunk)) child.kill(); if (onProgress) seen(String(chunk)); });
       child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
@@ -350,10 +371,10 @@ class CodexCli {
       child.stdin.end(text);
     });
   }
-  async complete({model, system, prompt, maxTokens, effort, onStart}) {
+  async complete({model, system, prompt, maxTokens, effort, onStart, onProgress}) {
     const blocks = Array.isArray(prompt) ? prompt : [{type: 'text', text: String(prompt)}];
     const text = ['Answer directly from what is written here. Do not run commands, read or write files, browse or use tools.', system || '', blocks.filter(block => block.type === 'text').map(block => block.text).join('\n\n')].filter(Boolean).join('\n\n');
-    const reply = await this.run({text, images: blocks.filter(block => block.type === 'image').map(block => block.source), model, effort, timeoutMs: cliTimeoutMs(maxTokens), onStart});
+    const reply = await this.run({text, images: blocks.filter(block => block.type === 'image').map(block => block.source), model, effort, timeoutMs: cliTimeoutMs(maxTokens), onStart, onProgress});
     return finish({text: reply.answer, stop: null, usage: reply.usage, model: model || 'gpt (Codex default)', who: 'ChatGPT'});
   }
   // One picture from ChatGPT's image generation, copied to outFile. Codex keeps it under its own home, in a folder
@@ -403,13 +424,14 @@ class Ai {
     return {role, model: MODELS[chosen] ? chosen : slot.models?.[role] || DEFAULT_MODELS[role], effort: TASK_EFFORT[task] || EFFORT[role]};
   }
   // messages: [{role, content}]; returns {content, usage, model, provider}.
-  async complete({connectorId, task, messages, maxTokens, onStart}) {
+  // onProgress (0.77): called with each streamed piece of the answer, for the job's live view.
+  async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null}) {
     const {row, slot} = this.slot(connectorId), {role, model, effort} = this.model(slot, task), {system, prompt} = splitMessages(messages);
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 256) throw new AiError('This job leaves Claude too little room to answer. Raise its token limit.', 400);
     const client = slot.provider === 'claude' ? new ClaudeApi(this.connectors.key(connectorId), this.connectors.fetch) : slot.provider === 'chatgpt' ? this.codex : this.claudeCode;
     if (slot.provider === 'claude' && !row.secret) throw new AiError('Add the Claude API key in Connections first.', 409);
     // Claude and ChatGPT keep separate lanes, so they work side by side.
-    const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, onStart: started})));
+    const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
     return {...result, provider: slot.provider, role};
   }
   // The rooms' onStart means "this request may have cost something" (0.73): a refusal before anything was

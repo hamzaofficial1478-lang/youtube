@@ -22,5 +22,8 @@ process.stdin.on('end', () => {
   const {delayMs, body} = JSON.parse(fs.readFileSync(process.env.FAKE_CLAUDE_REPLY, 'utf8'));
   // stream-json mode (image prompts) prints one event per line and ends with the result event.
   const stream = args.includes('stream-json');
-  setTimeout(() => process.stdout.write(stream ? `${JSON.stringify({type: 'system', subtype: 'init'})}\n${JSON.stringify(body)}\n` : JSON.stringify(body)), delayMs || 0);
+  // With --include-partial-messages (0.77, live progress) the answer also arrives in pieces before the result event.
+  const text = String(body.result || ''), third = Math.ceil(text.length / 3);
+  const partial = args.includes('--include-partial-messages') ? [{type: 'stream_event', event: {type: 'content_block_delta', delta: {type: 'thinking_delta', thinking: '…'}}}, ...[0, 1, 2].map(k => ({type: 'stream_event', event: {type: 'content_block_delta', delta: {type: 'text_delta', text: text.slice(k * third, (k + 1) * third)}}}))].map(event => `${JSON.stringify(event)}\n`).join('') : '';
+  setTimeout(() => process.stdout.write(stream ? `${JSON.stringify({type: 'system', subtype: 'init'})}\n${partial}${JSON.stringify(body)}\n` : JSON.stringify(body)), delayMs || 0);
 });

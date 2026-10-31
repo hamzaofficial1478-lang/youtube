@@ -211,20 +211,26 @@ test('VoiceStudio: free local voices through its OpenAI-style API, keyless, save
   assert.deepEqual(body,{model:'tts-1',input:'Stone age people walked for days.',voice:'default',response_format:'wav',speed:1.05,instructions:'Warm and calm.'});
   assert.equal(SPEECH_CLIENTS.voicestudio,VoiceStudioSpeechClient);
   speech=()=>new Response(JSON.stringify({error:{message:'Accept the OmniVoice licence first.'}}),{status:403});
-  await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'omnivoice',voiceId:'default'}),/Model Manager and accept the model's licence\. Accept the OmniVoice licence first/);
+  await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'omnivoice',voiceId:'default'}),/Model Manager and accept the model's licence \(VoiceStudio: Settings → Models[^)]*\)\. Accept the OmniVoice licence first/);
   speech=()=>new Response('{}',{status:503});
   await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/still loading or downloading/);
   await assert.rejects(new VoiceStudioSpeechClient(null,async()=>{throw new TypeError('fetch failed');}).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/did not answer\. Open VoiceStudio/);
   assert.deepEqual(await voiceStudioVoices(fetchImpl),{voices:[{id:'v-1',name:'Narrator'}],engines:['omnivoice','kittentts']});
-  // The connection takes no key and is tested by asking VoiceStudio for its engines and voices.
+  // The connection takes no key and is tested by asking VoiceStudio for its engines and voices, then one spoken word.
+  speech=()=>new Response(audio,{status:200,headers:{'content-type':'audio/wav'}});
   const store=new Store(':memory:');t.after(()=>store.close());
   const slots=new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},fetchImpl);
   assert.throws(()=>slots.save({name:'Local voices',provider:'voicestudio',key:'some-key-0123456789'}),/takes no API key/);
   const slot=slots.save({name:'Local voices',provider:'voicestudio'});
   assert.equal(store.db.prepare('SELECT secret FROM connectors WHERE id=?').get(slot.id).secret,null);
   const tested=await slots.test(slot.id,slot.revision);
-  assert.match(tested.result.message,/2 ready engine\(s\) \(omnivoice, kittentts\) and 1 saved voice\(s\)\. Nothing was generated/);
-  assert.equal(calls.filter(item=>item.url.endsWith('/v1/audio/speech')).length,3,'the connection test generated nothing');
+  assert.match(tested.result.message,/2 ready engine\(s\) \(omnivoice, kittentts\) and 1 saved voice\(s\)\. It said one test word with "tts-1", so its licence is accepted/);
+  // 0.77: the test speaks one word, because VoiceStudio checks a model's licence only when it speaks.
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body),{model:'tts-1',input:'Test.',voice:'default',response_format:'wav'});
+  speech=()=>new Response(JSON.stringify({error:{message:'Licence not accepted for k2-fsa/OmniVoice. Review and accept it in Model Catalogue.'}}),{status:403});
+  await assert.rejects(slots.test(slot.id,slot.revision),/Engine "tts-1": VoiceStudio may not use this model yet[\s\S]*Settings → Models[\s\S]*Licence not accepted for k2-fsa\/OmniVoice/);
+  assert.equal(JSON.parse(store.db.prepare('SELECT payload FROM connectors WHERE id=?').get(slot.id).payload).test.status,'failed','Connections now fails where the Voice Room would');
+  speech=()=>new Response(audio,{status:200,headers:{'content-type':'audio/wav'}});
   await assert.rejects(new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},async()=>{throw new TypeError('fetch failed');}).test(slot.id,slot.revision+0),/not running on this PC/);
   // The narrator profile confirms test-only use instead of commercial use; an approved test narration never uploads.
   const env=setup(t,'voicestudio');env.store.db.prepare('UPDATE connectors SET secret=NULL WHERE id=?').run(env.connector.id);

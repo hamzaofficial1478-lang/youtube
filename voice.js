@@ -63,7 +63,7 @@ class FishAudioSpeechClient{
 const VOICESTUDIO='http://127.0.0.1:3900';
 async function voiceStudioError(response){
   let message='';try{const data=await response.json();message=String(data?.error?.message||data?.detail||'').replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300);}catch{/* no readable body */}
-  if(response.status===403)return `VoiceStudio may not use this model yet: open its Model Manager and accept the model's licence. ${message}`.trim();
+  if(response.status===403)return `VoiceStudio may not use this model yet: open its Model Manager and accept the model's licence (VoiceStudio: Settings → Models, the Model Catalogue; find each model named here, read its licence and press Accept). ${message}`.trim();
   if(response.status===503)return `VoiceStudio is still loading or downloading the voice model. Wait until its Model Manager shows it installed, then try again. ${message}`.trim();
   return `VoiceStudio returned HTTP ${response.status}. ${message}`.trim();
 }
@@ -73,6 +73,14 @@ async function voiceStudioVoices(fetchImpl=fetch){
   let data;try{data=await response.json();}catch{data=null;}
   if(!Array.isArray(data?.voices)||!Array.isArray(data?.engines))throw new InputError('VoiceStudio returned an unexpected voice list.',502);
   return {voices:data.voices.filter(item=>item?.type==='profile').slice(0,50).map(item=>({id:String(item.voice_id),name:String(item.name)})),engines:data.engines.filter(item=>item?.available).slice(0,40).map(item=>String(item.id))};
+}
+// One spoken test word (0.77, owner test 2026-10-31: Connections passed while the Voice Room failed). Listing voices never
+// asks a model to speak, and VoiceStudio checks a model's licence only when it speaks, so the test now speaks.
+async function voiceStudioSpeak(fetchImpl,model,voice){
+  let response;try{response=await fetchImpl(`${VOICESTUDIO}/v1/audio/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,input:'Test.',voice,response_format:'wav'}),redirect:'error',signal:AbortSignal.timeout(180000)});}
+  catch(error){throw new InputError(error?.name==='TimeoutError'?`VoiceStudio did not say one test word with "${model}" within 3 minutes. It is probably still loading the model: wait until VoiceStudio says it is ready, then test again.`:'VoiceStudio stopped answering during the test. Open VoiceStudio, wait until it is ready, then test again.',502);}
+  if(!response.ok)throw new InputError(`Engine "${model}": ${await voiceStudioError(response)}`,502);
+  await response.body?.cancel();
 }
 class VoiceStudioSpeechClient{
   constructor(key,fetchImpl=fetch){this.fetch=fetchImpl;}
@@ -179,4 +187,4 @@ class VoiceRuntime{
     }catch(error){if(final)fs.rmSync(final,{force:true});this.store.failVoiceAudition(job.id,error instanceof InputError?error.message:'Voice generation failed. Review the local logs before retrying.',{usageUnknown:requestStarted});return null;}finally{fs.rmSync(work,{recursive:true,force:true});this.running=false;}
   }
 }
-module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,FishAudioSpeechClient,VoiceStudioSpeechClient,voiceStudioVoices,SPEECH_CLIENTS,VoiceRuntime};
+module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,FishAudioSpeechClient,VoiceStudioSpeechClient,voiceStudioVoices,voiceStudioSpeak,SPEECH_CLIENTS,VoiceRuntime};

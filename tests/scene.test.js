@@ -988,9 +988,10 @@ test('HTTP routes need the local token and serve the scene state, previews and t
 
 test('atelier shots: Claude plans an art direction and frames, a frame worker designs each, the program checks it and Room 04 draws it', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
   const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#2A3350}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
-  let lastRaw = '', redesignFails = false;
+  let lastRaw = '', redesignFails = false, lastAsk = null;
   const asked = [], frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the number', roles: 'number = foreground subject', beats: [{show: 'the number counts up in the centre'}], motions: ['counting-dynamic-scale', 'not-a-rule'], type: 'evidence', persuasion: 'worked example', beat: `surprise ${n}`});
   const network = fakeNetwork({claudePlan: input => {
+    if (input.drawNow) lastAsk = input.ownerAsks || null;
     if (input.drawNow) return {report: 'Drew the shots that were not designed.', changes: input.drawNow.map(label => ({label, reason: 'A counter carries the number.', sketch: {engine: 'motion', elements: [{kind: 'text', style: 'counter', text: '45', x: 0.5, y: 0.4}]}}))};
     if (input.raw) {
       const packet = JSON.parse(input.raw.split('\n\n')[0]), retry = input.raw.includes('failed these checks');
@@ -1083,6 +1084,22 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   assert.deepEqual(shots(redrawn).filter(shot => shot.label !== 'S02A').map(shot => shot.frame?.html || null), shots(dropped).filter(shot => shot.label !== 'S02A').map(shot => shot.frame?.html || null));
   assert.ok(redrawn.plan.review.changes.some(item => item.label === 'S02A'));
   assert.throws(() => room.redrawUndesigned(redrawn.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: redrawn.revision}), /Every planned designed shot is designed/);
+  assert.equal(lastAsk, null, 'a plain redraw carries no request from the owner');
+  // 0.77: the owner changes one drawn shot with words; Claude draws only that shot again with the request.
+  const change = input => room.changeShot(redrawn.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: redrawn.revision, ...input});
+  assert.throws(() => change({label: 'S02A', ask: 'x'}), /what should change/);
+  const designedLabel = shots(redrawn).find(shot => shot.frame)?.label;
+  assert.ok(designedLabel, 'a designed shot is left to test');
+  assert.throws(() => change({label: designedLabel, ask: 'Show the whole chart'}), /Only a drawn shot changes with words/);
+  const changed = change({label: 'S02A', ask: 'Count up to 45 and make the number bigger'});
+  assert.equal(changed.job.status, 'queued');
+  await room.processNextPlan();
+  assert.equal(lastAsk, 'Count up to 45 and make the number bigger', 'the request reaches Claude as ownerAsks');
+  assert.equal(room.publicPlanJob(room.planJobRow(changed.job.id)).status, 'completed');
+  const afterChange = latestManifest(room, content.id);
+  assert.equal(afterChange.revision, redrawn.revision + 1);
+  assert.deepEqual(shots(afterChange).map(shot => shot.id), shots(redrawn).map(shot => shot.id), 'every shot keeps its ID');
+  assert.equal(require('../live').list().length, 0, 'the live view forgets the finished job');
 });
 
 test('0.39: approved skills travel with every scene plan and are logged; a style film look reaches the planner', t => {

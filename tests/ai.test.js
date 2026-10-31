@@ -43,6 +43,35 @@ test('the API-key connection calls Claude through the SDK with the chosen model,
   assert.equal(fenced.content, '{"a":1}');
 });
 
+// 0.77 (owner review 2026-10-31: show the live work): with onProgress the answer is read as it streams, piece by piece.
+test('a job that shows its progress reads Claude Code\'s answer as it streams', async t => {
+  const fake = fakeClaudeCode(t);
+  fake.reply({title: 'A stone that bought a meal', script: 'One stone, one meal.'}, {usage: {input_tokens: 500, output_tokens: 90}});
+  const pieces = [];
+  const result = await new ClaudeCode({command: fake.command, prefix: fake.prefix}).complete({model: 'claude-opus-5-5', system: 'Return JSON only.', prompt: 'The data.', maxTokens: 6000, effort: 'high', onProgress: update => pieces.push(update)});
+  assert.equal(result.content, '{"title":"A stone that bought a meal","script":"One stone, one meal."}', 'the final answer is the result event, as before');
+  const [call] = fake.calls();
+  assert.ok(call.args.join(' ').includes('--output-format stream-json --verbose --include-partial-messages'));
+  assert.equal(call.stdin, 'The data.', 'plain text still goes in as text');
+  assert.ok(pieces.some(item => item.thinking), 'thinking counts as a sign of life');
+  assert.equal(pieces.map(item => item.text || '').join(''), result.content, 'every piece of the answer reached the live view');
+  // Without onProgress nothing changes.
+  await new ClaudeCode({command: fake.command, prefix: fake.prefix}).complete({model: 'claude-opus-5-5', system: '', prompt: 'x', maxTokens: 6000, effort: 'high'});
+  assert.equal(fake.calls().at(-1).args[fake.calls().at(-1).args.indexOf('--output-format') + 1], 'json');
+  // The live list follows a job: steps, streamed words, quiet time, and it is gone when the job ends.
+  const live = require('../live');
+  live.start('job-1', {room: 'script', label: 'Writing the script', steps: 3, contentId: 'c-1'});
+  live.step('job-1', 2, 'The second writer reviews the draft', {expected: 3000});
+  live.follow('job-1')({text: 'Stone money '});live.follow('job-1')({text: 'was heavy.'});
+  const [entry] = live.list();
+  assert.deepEqual([entry.step, entry.steps, entry.stepLabel, entry.chars, entry.preview, entry.contentId], [2, 3, 'The second writer reviews the draft', 22, 'Stone money was heavy.', 'c-1']);
+  assert.ok(entry.quietSeconds <= 1 && entry.seconds >= 0);
+  live.note('job-1', 'Picture 2 of 5');
+  assert.deepEqual([live.list()[0].stepLabel, live.list()[0].chars], ['Picture 2 of 5', 0]);
+  live.end('job-1');
+  assert.deepEqual(live.list(), []);
+});
+
 test('the subscription connection runs Claude Code isolated: safe mode, no tools, empty folder, no stray key', async t => {
   const fake = fakeClaudeCode(t);
   fake.reply({title: 'ok'}, {usage: {input_tokens: 800, output_tokens: 120}});

@@ -141,6 +141,33 @@ OpenAI image generation through an API key stays the montage `ai-image` source.
   fewer tokens / fewest tokens). A job without a choice uses its connection's main or support model; ChatGPT jobs use
   the GPT model of their connection.
 
+## 4c. How a script is built, and watching it written (0.77)
+
+The owner's test (2026-10-31) scored a ChatGPT hook at 25: the "hook" was 82 words, and the writer had never been told
+what a hook is or in which order a script goes, although the program measures exactly that afterwards. Now
+`writer.js` `SCRIPT_CRAFT` goes to the writer in every request (alone or together), in this order:
+
+1. **Hook**: the hook field is only the first one or two spoken sentences, 9-24 words, and the script starts with it.
+   No greeting or channel name; "you" in the first six words, a number, name or date, what the viewer risks or gains,
+   and a question the video answers.
+2. **Promise** in the first minute: what the viewer will know by the end.
+3. **Value**: one beat per paragraph, strongest first, a concrete detail at least every 100 words, and at least 4 in
+   10 paragraphs ending on a pull forward (a question, a turn, a hint).
+4. **Re-hook** between a quarter and just past half way.
+5. **Payoff**: the last paragraph answers the hook, reuses its key word, and pays off.
+6. **One call to action**, after 60% of the script.
+
+These are the rules `craft.scoreHook` and `retention.check` read, so the writer aims at what it is measured on. When
+two AIs write together, the second writer judges the draft against them and gets `craftNotes` (what the free checks
+found: the hook score with its weakest part, and each failed retention check); the revision gets the same notes and
+fixes every one. The approved skills already reach both writers through the skill brief.
+
+The script appears as it is written (`live.js`): the job's steps (first draft, the second writer's review, the final
+version), a bar, how long it has run, when it last showed a sign of life, and the newest words. Claude Code streams its
+answer (`--include-partial-messages`, only for jobs that show progress); Codex sends its answer whole, so a ChatGPT step
+shows signs of life and thinking until the answer lands. Under the AI's script, "Edit draft" opens it for changes and
+"Approve script" makes it the approved script in one click after the owner confirms the rights (`approveCandidate`).
+
 ## 5. Tests
 
 `tests/ai-team.test.js` (fake Codex in `tests/fake-codex.js`: isolation flags, no stray key, usage, errors, image copy;
