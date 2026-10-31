@@ -54,6 +54,30 @@ otherwise the one connected does all of it; the card says which. "Add my script"
 type or paste it, or attach a .txt, .pdf or Word .docx file (`documents.js`, 10 MB at most; scanned PDFs without text
 and old .doc files are refused with what to do). The hook takes the script's first sentence when it is empty.
 
+**Connections that sign in and say why (0.74, owner report 2026-10-31: the ChatGPT test failed "after a while", the
+Claude test failed and Save did nothing).**
+
+- *ChatGPT signed out after a while.* ChatGPT's sign-in is refreshed with a token that works only once. The program
+  and the Codex app shared one sign-in file, so whichever refreshed second was signed out. The program now keeps its
+  own ChatGPT sign-in (`~/.control-room/codex`; `CONTROL_ROOM_CODEX_HOME` moves it), never the Codex app's. After the
+  update, click "Sign in again" on the ChatGPT card once. A sign-in that ran out is named as such ("Click Sign in again").
+- *Claude "not logged in" while signed in.* The program threw away everything Claude Code wrote on its error output,
+  so an old Claude Code that did not know a flag, or one refusing to start inside another Claude Code session (the
+  program started from a Claude Code terminal), looked like a missing sign-in. Now the CLIs start with a clean
+  environment (no variables of a parent Claude Code or Codex session, no API keys), their error output is read, and
+  the message says what happened: update Claude Code (`claude update`), start the program from its own shortcut, or sign in.
+- *Free checks first.* Both tests first ask the app, without asking the AI anything, for its version and whether it is
+  signed in (`claude auth status`, `codex login status`). A Claude Code signed in with an Anthropic Console key (billed
+  per use) is named instead of silently using it. Then each model gets its one tiny question.
+- *Save now does something.* Saving a Claude subscription connection checks the sign-in: signed in, it tests by
+  itself; not signed in, Claude Code's own sign-in opens in a window of its own (Claude's page in the browser; paste
+  a code into the window if it asks) and the card waits, checking every few seconds, then tests. "Sign in to Claude"
+  on the card does the same at any time.
+- *Found where it is.* Claude Code installed with npm (`claude.cmd`) is found and run through its JavaScript entry;
+  both apps are looked up again when they move (a Store update of the Codex app changes its folder).
+- *Errors on their card.* A test's result and error stay on that connection's card (they used to appear in the
+  YouTube research panel, out of sight), and cards test independently.
+
 ## 2. The team and its roles
 
 `Ai.team()` reads the tested Claude connection (API key or subscription) and the tested ChatGPT connection, and the

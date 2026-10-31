@@ -180,6 +180,15 @@ class MotionRenderer {
     await this.evaluate('document.fonts.ready.then(() => true)');
     return this.evaluate('__atelier.status()');
   }
+  // A page printed to PDF (0.74: list exports). Networking stays blocked; the page is written in, never loaded.
+  async pdf(html) {
+    await this.blank();
+    this.dirty = true;
+    await this.evaluate(`document.open(); document.write(${JSON.stringify(html)}); document.close(); true`);
+    await this.evaluate('document.fonts.ready.then(() => true)');
+    const result = await this.send('Page.printToPDF', {printBackground: true, preferCSSPageSize: true});
+    return Buffer.from(result.data, 'base64');
+  }
   // Layout findings at the given composition times: text off the frame, text in the caption band.
   async auditComposition(times) { return this.evaluate(`__atelier.audit(${JSON.stringify(times)})`); }
   // The times at which the loaded composition would fail the render's black-frame check.

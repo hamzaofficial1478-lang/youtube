@@ -92,6 +92,21 @@ concrete to act on.
    size and how many skills were dropped. The approved skill set is part of the job deduplication
    key, so changing the library produces a new job instead of reusing an old result.
 
+**How the skills for one request are chosen (0.74, owner question 2026-10-31: "is it fixed to the same 19?").** Not a
+fixed list. Each job passes what its request is about (`brief(task, familyId, {text, format, style})`): a script its
+title, angle, hook, niche, audience and kind; a scene plan its subject plus its engine and looks; voice, music,
+packaging, research, topic ideas, niches and editions their own words. `rankSkills` then weighs every approved skill
+of the job: words it shares with the request (rarer words count more; generic words such as video, look, engine and
+style do not count), whether it was written for this job, its priority, and its format. Areas are spread (each further
+skill from an area already taken counts 8% less), so hooks, structure, retention, voice and the rest all get a place.
+Templates are alternatives (a video follows one structure): the ones that fit the request go in, otherwise only the two
+best. A Shorts-only skill never reaches a long video, a long-form-only one never a Short, and skills made for one engine
+(`ENGINE_AREAS`: whiteboard, anime, cinematic, documentary footage, hybrid overlays) never reach another engine's plan.
+The owner's pinned and own skills stay first. The result is deterministic (the same request picks the same skills) and
+each job records why each skill was chosen (`skill_usage.reasons`, shown in Skills -> Usage). Example from the tests: a
+mystery script gets `story.case-file-mystery` first (it matches unsolved, mystery, case, file) and not the countdown
+structure; a "top 5" Short gets `story.counted-list` and none of the 14 long-form-only skills.
+
 **How many skills reach a job (0.73).** Measured with every skill approved, before 0.73 a script job carried 3 of the
 122 skills bound to it and a scene plan 13 of 140, because the old 1,800 and 9,000-byte briefs were full. Since 0.73 a
 script job carries 21 (19 of them written for scripts), a scene plan 21, voice direction 12, the music score 7 and the

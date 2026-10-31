@@ -6,6 +6,7 @@ const os=require('node:os');
 const {randomBytes,timingSafeEqual}=require('node:crypto');
 const {Store,InputError}=require('./store');
 const Documents=require('./documents');
+const {ListManager}=require('./manage');
 const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {ScriptWriter}=require('./writer');
@@ -50,6 +51,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const connectors=new ConnectorSlots(store,protector||new WindowsVault(dataRoot),providerFetch);
   // One AI layer for every room: Claude on the owner's chosen connection, one call per model at a time.
   const ai=new Ai(connectors,{claudeCode:claudeCode||new ClaudeCode()});connectors.ai=ai;
+  // List pages delete and export (0.74); a PDF is printed by this PC's own Edge or Chrome.
+  const lists=new ListManager(store,{pdf:async html=>{const {MotionRenderer}=require('./motion'),renderer=new MotionRenderer();try{await renderer.start();return await renderer.pdf(html);}finally{await renderer.close().catch(()=>{});}}});
   const backups=dataFile===':memory:'?null:new Backups(store,{dataRoot,dataFile:path.resolve(dataFile),busy:()=>{try{return !!store.db.prepare("SELECT 1 FROM render_jobs WHERE status='running' LIMIT 1").get();}catch{return false;}}});
   const requireBackups=()=>{if(!backups)throw new InputError('Backups need a data file on disk.',409);};
   const reasoning=new ScriptWriter(store,ai);
@@ -165,6 +168,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected))throw new InputError('Reload the app before saving.',403);
       const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:262144);let result;
       // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
+      const listAction=pathname.match(/^\/api\/manage\/([a-z-]+)\/(delete|export)$/);
+      if(listAction&&req.method==='POST'){if(listAction[2]==='delete')return json(res,200,lists.delete(listAction[1],body));const file=await lists.export(listAction[1],body);res.writeHead(200,{'Content-Type':file.type,'Content-Length':file.data.length,'Content-Disposition':`attachment; filename="${file.name}"`,'Cache-Control':'no-store'});return res.end(file.data);}
       if(pathname==='/api/script-file'&&req.method==='POST'){if(typeof body.data!=='string'||!/^[A-Za-z0-9+/=]+$/.test(body.data))throw new InputError('Attach a script file.');return json(res,200,await Documents.extractText({name:String(body.name||'').slice(0,200),data:Buffer.from(body.data,'base64')}));}
       if(pathname==='/api/connectors'&&req.method==='POST')return json(res,200,connectors.save(body));
       if(pathname==='/api/ai-roles'&&req.method==='POST')return json(res,200,connectors.saveAiRoles(body));

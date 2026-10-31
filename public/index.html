@@ -317,6 +317,22 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-setup-skip>Skip for now</button><button type="submit" class="button primary">Save and test</button></div>
     </form>
   </dialog>
+  <dialog id="export-dialog" aria-labelledby="export-heading">
+    <form id="export-form">
+      <div class="dialog-heading"><div><p class="eyebrow">SAVE A COPY</p><h2 id="export-heading">Export this list</h2></div><button type="button" class="icon-button" data-close="export-dialog" aria-label="Close export dialog">×</button></div>
+      <fieldset class="script-source"><legend>File type</legend>
+        <label class="radio-line"><input type="radio" name="format" value="pdf" checked><span><b>PDF</b> to read or print</span></label>
+        <label class="radio-line"><input type="radio" name="format" value="docx"><span><b>Word</b> (.docx) to edit</span></label>
+        <label class="radio-line"><input type="radio" name="format" value="csv"><span><b>CSV</b> for Excel or Google Sheets</span></label>
+      </fieldset>
+      <fieldset class="script-source"><legend>What to export</legend>
+        <label class="radio-line"><input type="radio" name="scope" value="ticked"><span id="export-ticked">The ticked rows</span></label>
+        <label class="radio-line"><input type="radio" name="scope" value="all" checked><span id="export-all">Everything in this list</span></label>
+      </fieldset>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="export-dialog">Cancel</button><button type="submit" class="button primary">Export</button></div>
+    </form>
+  </dialog>
   <dialog id="connector-dialog" aria-labelledby="connector-heading">
     <form id="connector-form">
       <div class="dialog-heading"><h2 id="connector-heading">Add connector slot</h2><button type="button" class="icon-button" data-close="connector-dialog" aria-label="Close connector dialog">×</button></div>
