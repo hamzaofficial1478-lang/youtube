@@ -31,7 +31,7 @@ function masterCard(job, latest) {
   const m = job.master || {}, result = job.result, progress = job.progress;
   const head = `<div class="production-card-head"><div><span class="micro-label">FINAL MASTER · ${esc(date(job.createdAt))}${latest ? '' : ' · EARLIER'}</span><h2>${esc(job.scope.styleName)} r${job.scope.styleRevision}</h2></div>${renderBadge(job.status)}</div>`;
   if (['queued', 'running'].includes(job.status)) {
-    return `<section class="production-card">${head}<div class="cap-row"><div><strong>${esc(progress?.stage || 'Waiting for the render worker')}</strong><small>Attempt ${job.attempts}/3${m.partsKept ? ` · ${m.partsKept} finished part${m.partsKept === 1 ? '' : 's'} checked and kept` : ''}</small></div></div><div class="card-actions">${action('Cancel', 'render-cancel', job.id, 'text-button danger')}</div></section>`;
+    return `<section class="production-card">${head}<div class="cap-row"><div><strong>${esc(progress?.stage || 'Waiting for the render worker')}</strong><small>Attempt ${job.attempts}/3 · ${renderAlive(job)}${m.partsKept ? ` · ${m.partsKept} finished part${m.partsKept === 1 ? '' : 's'} checked and kept` : ''}</small></div></div><div class="card-actions">${action('Cancel', 'render-cancel', job.id, 'text-button danger')}</div></section>`;
   }
   if (!result) {
     const retry = ['failed', 'interrupted', 'cancelled', 'stale'].includes(job.status) && job.attempts < 3;

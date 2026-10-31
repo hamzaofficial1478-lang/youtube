@@ -73,6 +73,18 @@ Monthly AI image budget (USD), OpenAI image model, default quality, image format
 - Video previews are thumbnails only; full playback arrives with the Editing Room.
 - Live verification with real Pexels, Pixabay and OpenAI keys is still pending. All automated and browser checks used fake providers and real FFmpeg/ffprobe on generated test media.
 
+## Live planning and "Change with words" (0.77)
+
+A scene plan shows its work live above the plan jobs: the story director's map, each part of the plan, the continuity
+review, each designed shot and each picture ("Picture 3 of 9"), with a bar, the running time, when it last showed a
+sign of life and the plan text as it arrives. Nothing of this view is stored; the job and its results are.
+
+Every drawn shot has **Change with words**: the owner types what should change ("show the caveman counting stones on a
+flat rock, and make him look worried"), and Claude draws that one shot again with the request (`changeShot`, a redraw
+job whose continuity review carries the request as `ownerAsks`; one answer inside the review limit). The new drawing is
+checked like every drawing and arrives as a new plan revision; every other shot keeps its ID, drawing and visual, and
+the owner approves the visuals as before. A designed shot keeps "Redesign"; a footage shot keeps "Edit" and "Change".
+
 ## Wikimedia Commons: licensed real images (0.57)
 
 Owner question 2026-10-22: "from where do others find the sources of the content?" History and documentary channels

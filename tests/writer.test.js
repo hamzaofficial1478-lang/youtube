@@ -106,6 +106,32 @@ test('reasoning job stores an immutable candidate and never overwrites the draft
   assert.equal(store.state().scriptCandidates.length, 1);
 });
 
+// 0.77 (owner review 2026-10-31): "Approve script" sits beside "Edit draft" under the AI's script; one click makes the
+// candidate the draft and approves it, after the owner confirms the rights. What blocks approval is named.
+test('a candidate is approved in one click, with the rights confirmed; a stale or blocked one is refused', async t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const family = store.saveFamily({name:'Stone Age Money',tier:'A',countries:['United States'],audience:'Adults who like history told simply.',niche:'Stone age finance',locales:['en-US'],timezone:'Asia/Karachi',monthlyBudget:100,cadence:2,format:'long-form'});
+  const content = store.saveContent({familyId:family.id,title:'The first casino',kind:'factual',angle:'',hook:'',script:'',sources:[{title:'Museum note',url:'https://example.com/stones',permission:'permitted',notes:'Describes stone tokens used in trade.'}],rightsConfirmed:false});
+  const hook='You trade one shiny stone for a whole meal, but why did anyone agree?';
+  const generated={title:'The first casino of the stone age',angle:'How early trade turned into the first games of chance.',hook,script:qualityScript(hook),claims:[{text:'Stone tokens were used in trade.',sourceIds:['S1']}],uncertainties:[]};
+  const slots = new ConnectorSlots(store, fixtureProtector, claudeFetch(() => claudeMessage(generated, {input_tokens:200, output_tokens:121})));
+  const connector = slots.save({name:'Claude',provider:'claude',notes:'Program Claude key',key});
+  await slots.test(connector.id, connector.revision);
+  const writer = new ScriptWriter(store, new Ai(slots));
+  writer.queue(content.id, {revision:content.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  await writer.processNext();
+  const [candidate] = store.scriptCandidates();
+  assert.equal(candidate.status, 'available');
+  assert.equal(require('../live').list().length, 0, 'the live view forgets a finished job');
+  assert.throws(() => store.approveCandidate(candidate.id, {revision:content.revision}), /Confirm that you read the script/);
+  assert.throws(() => store.approveCandidate(candidate.id, {revision:content.revision+1,rightsConfirmed:true}), /changed|revision|version/i);
+  const approved = store.approveCandidate(candidate.id, {revision:content.revision,rightsConfirmed:true});
+  assert.deepEqual([approved.state, approved.title, approved.hook, approved.script, approved.rightsConfirmed], ['approved', generated.title, hook, generated.script, true]);
+  assert.ok(approved.approvedAt);
+  assert.throws(() => store.approveCandidate(candidate.id, {revision:approved.revision,rightsConfirmed:true}), /already in review or approved/, 'an approved draft is not replaced by a candidate');
+});
+
 test('script claim and completion revalidate the Claude connection without a revision change', async t => {
   const store = new Store(':memory:');t.after(() => store.close());
   const family=store.saveFamily({name:'Connector checks',tier:'A',countries:['United States'],audience:'Adults reviewing original fictional explanations.',niche:'Fiction',spanishLocale:'es-419',englishLocale:'en-US',timezone:'Asia/Karachi',monthlyBudget:0,cadence:1,format:'long-form'});
@@ -161,7 +187,8 @@ test('Control Room HTTP queues Claude script writing and exposes only the review
   const ui = await (await fetch(base+'/app.js')).text();
   assert.match(ui,/Ask AI to write/);
   assert.match(ui,/ai-script/);
-  assert.match(ui,/Use candidate/);
+  assert.match(ui,/'Edit draft','use-claude-candidate'/);
+  assert.match(ui,/'Approve script','approve-candidate'/);
   assert.match(ui,/'Try again','retry-claude'/);
   assert.match(ui,/confirmInterrupted/);
   assert.match(ui,/Source IDs/);
