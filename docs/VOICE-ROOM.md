@@ -89,3 +89,26 @@ Narration WAV files are stored under `data/voice-artifacts/`. Working chunks are
 Automated coverage exercises profile revisioning, rights fields, approved-script admission, family-local character reservation, provider provenance, bounded retries, fixed endpoints, real FFmpeg analysis, human approval, revocation, migration, HTTP authorization, and downstream invalidation.
 
 A live paid-provider audition still requires an operator-configured tested connector and an explicit generate click. Fixture and local FFmpeg checks do not pretend to be a live commercial-provider verification.
+
+## Attaching your own voice-over, clearing attempts, live progress (0.78)
+
+The owner's review of 2026-10-31 asked for three things in this room.
+
+- **Attach my voice-over.** Each approved script has "Attach my voice-over" beside "Generate audition". The file (WAV,
+  MP3, M4A, AAC, FLAC, OGG, Opus or WebM, up to 500 MB) is sent as the raw body to
+  `POST /api/content/:id/narration-file` with the owner's name, the rights holder and the commercial-use confirmation
+  in the address, streamed into the data folder, turned into the same WAV a generated take uses, and checked by the
+  same real-audio checks, including the length against the script (a file far shorter or longer is the wrong file).
+  `VoiceRuntime.attach` and `store.recordUploadedNarration` record it as a take (provider `upload`, no connection, no
+  usage row, free) under the channel's narrator profile, so the narrator needs setting up once. It is approved like any
+  take, stays current while the script stays the same whatever narrator comes later, and is never a test voice:
+  `PublishingRoom.testVoice` reads the take's scope before the profile.
+- **Clear them.** Finished attempts that went nowhere (failed, retried, stale, failed checks, blocked by budget,
+  cancelled) can be cleared from the list (`clearVoiceJobs`, column `cleared_at`); nothing is deleted, an attempt with
+  an unknown charge stays, and a cleared attempt no longer blocks a fresh one.
+- **Live progress.** A narration shows each part as it is read ("Reading part 2 of 5 on this PC"), then joining and
+  the audio checks, with how long the step has run (`live.js`, room `voice`). A local voice answers only when a part is
+  finished, so the page explains a quiet stretch instead of calling it stuck.
+
+Scenes are planned after a narration is approved: the Scene & Visual Room times every scene on the approved
+narration's real words, so the approved take's card links straight there.

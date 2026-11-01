@@ -46,3 +46,10 @@ The owner's request (2026-10-09): the narrator's voice should change with the sc
 - Live ElevenLabs v4 performance with tags has not been heard yet; it needs the owner's ElevenLabs key.
 - Whether a tag is read as a direction or as a sound depends on the voice. ElevenLabs documents this, and descriptive tags are used where no documented tag exists.
 - Word-level timing inside a tagged sentence is still estimated, as before.
+
+## Room to answer (0.78)
+
+The owner's test of 2026-10-31 failed with "Claude did not return a usable voice direction". The answer had about 60
+tokens a sentence, and Claude's thinking counts against the same limit, so the answer was cut off mid-way and could not
+be read. It now has 8,000 tokens plus 150 a sentence (at most 64,000); only what is used is settled. A failed answer says
+why: empty, words instead of the direction's data, cut off after so many characters, or broken data.

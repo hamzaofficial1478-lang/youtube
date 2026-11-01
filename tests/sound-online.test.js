@@ -63,7 +63,7 @@ test('Freesound and Jamendo: the owner\'s confirmation, searches inside the hour
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
   const net = network(), connectors = new ConnectorSlots(store, protector, net.fetch), quota = new QuotaLedger(store);
   const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
-  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch, pauseMs: 0});
   // A connection needs the owner's confirmation of the platform's API terms.
   assert.throws(() => connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789'}), /allows your use of its API/);
   const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
@@ -129,7 +129,7 @@ test('0.74: one click fills the library: the most downloaded effects and music f
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
   const net = network(), connectors = new ConnectorSlots(store, protector, net.fetch), quota = new QuotaLedger(store);
   const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
-  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch, pauseMs: 0});
   const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
   const tested = await connectors.test(saved.id, saved.revision), ref = {id: tested.connector.id, revision: tested.connector.revision};
   // The whole library: 20 effect slots and the 11 moods, one search each.
@@ -151,4 +151,44 @@ test('0.74: one click fills the library: the most downloaded effects and music f
   await online.processNextFill();
   assert.deepEqual(picked, ['video-1']);
   assert.throws(() => online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 9}), /1 to 5/);
+});
+
+// 0.78 (owner test 2026-10-31: six music searches ended "Freesound did not answer"; "the program will find the music and
+// sfx as per the need of usage"): the cause is named, a slow or throttled search gets one more try, and a video's new
+// score asks Freesound by itself for the moods it needs.
+test('0.78: Freesound failures are named, a slow search is tried once more, and a new score fills the library by itself', async t => {
+  const timeout = async () => { throw new DOMException('slow', 'TimeoutError'); };
+  await assert.rejects(new FreesoundClient('free-key-0123456789', timeout).search('warm music'), error => /longer than 60 seconds/.test(error.message) && error.retryable === true);
+  const throttled = async () => new Response('{}', {status: 429, headers: {'retry-after': '7'}});
+  await assert.rejects(new FreesoundClient('free-key-0123456789', throttled).search('warm music'), error => /HTTP 429/.test(error.message) && error.retryAfter === 7);
+  await assert.rejects(new FreesoundClient('free-key-0123456789', async () => new Response('{}', {status: 403})).search('x'), error => /refused the API key/.test(error.message) && !error.retryable);
+
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sound-auto-'));
+  const store = new Store(':memory:', {artifactRoot: dataRoot});
+  t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
+  const net = network(), quota = new QuotaLedger(store);
+  // The first search for "warm music" is slow; its second try answers.
+  let slowOnce = true;
+  const flaky = async (url, options) => { if (slowOnce && String(url).includes('/apiv2/search/') && new URL(String(url)).searchParams.get('query') === 'warm music') { slowOnce = false; throw new DOMException('slow', 'TimeoutError'); } return net.fetch(url, options); };
+  const connectors = new ConnectorSlots(store, protector, flaky);
+  const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: flaky, pauseMs: 0});
+  assert.equal(online.autoFill('video-1', [{mood: 'warm', prompt: 'soft piano'}]), null, 'nothing happens without a Freesound connection');
+  const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
+  await connectors.test(saved.id, saved.revision);
+  const queued = online.autoFill('video-1', [{mood: 'warm', prompt: 'soft piano'}, {mood: 'tense', prompt: 'low pulse'}]);
+  assert.ok(queued, 'a new score with moods the library lacks asks Freesound by itself');
+  const scope = JSON.parse(store.db.prepare('SELECT scope, created_by FROM sound_imports WHERE id=?').get(queued.id).scope);
+  assert.equal(scope.contentId, 'video-1');
+  assert.ok(['warm', 'tense'].every(mood => scope.moods.some(item => item.mood === mood && item.need === 3)), JSON.stringify(scope.moods));
+  assert.equal(store.db.prepare('SELECT created_by FROM sound_imports WHERE id=?').get(queued.id).created_by, 'Program (automatic)');
+  assert.equal(online.autoFill('video-1', [{mood: 'warm'}]), null, 'quiet while an import already runs');
+  const done = await online.processNextFill();
+  assert.equal(done.progress.failed, 0, JSON.stringify(done.progress.problems));
+  assert.equal(net.calls.filter(call => new URL(call.url).searchParams.get('query') === 'warm music').length, 1, 'the slow search was asked once more and answered');
+  assert.ok(new URL(net.calls.find(call => call.url.includes('query=warm+music')).url).searchParams.get('page_size') <= 25, 'smaller music searches');
+  // The library says where its sounds came from.
+  const sources = library.state().bySource;
+  assert.equal(sources[0].id, 'freesound');
+  assert.ok(sources[0].music >= 6 && sources[0].sfx >= 1, JSON.stringify(sources));
 });

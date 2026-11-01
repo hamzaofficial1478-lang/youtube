@@ -182,3 +182,19 @@ Owner request 2026-10-31: "why do I have to find and add music and effects by ha
 The program never searches by itself without the click (each fill is a job the owner starts) and never retries a failed
 search on its own; a mood or slot with no usable result is listed under Imports.
 
+
+## Real sources, named Freesound failures, filling by need (0.78)
+
+- The soundtrack settings and the Audio Room name where the library's sounds really came from (`SoundLibrary.state`
+  `bySource`, e.g. "Freesound: 9 tracks, 40 effects; my own: 3 effects"). ElevenLabs generation is offered only once an
+  ElevenLabs connection is tested (or already chosen), and its fields show only when it is chosen.
+- A Freesound search that fails says why: slower than 60 seconds (its searches sorted by downloads can be slow), not
+  reachable, throttled (HTTP 429: a free key allows 60 requests a minute and 2,000 a day) or a problem on Freesound's
+  side. The owner's fill of 2026-10-31 lost six music searches to the old 30-second limit, not to a Freesound limit.
+  A fill now asks at most one search a second, music searches ask for 25 results instead of 40, and a slow, throttled
+  or failed-on-their-side search is tried once more after a pause; each try counts against the hourly allowance.
+- **Filling by need.** When a library family's video gets a new score (free or Claude's), `SoundtrackRoom.scored`
+  calls `SoundOnline.autoFill`: if a Freesound connection is tested and confirmed, the score's moods that have fewer than
+  three tracks and every empty effect slot are looked for on Freesound by themselves (the import is named "Program
+  (automatic)"), and the video's music is picked again when it is done. Nothing happens without a Freesound connection
+  or while another import runs; the buttons stay for filling the whole library or one video by hand.

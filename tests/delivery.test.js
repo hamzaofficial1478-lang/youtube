@@ -125,3 +125,22 @@ test('an audition performs the newest direction: tagged requests, varied speed, 
   assert.ok(measured.words.at(-1).start > 1, 'later parts start after the first take');
   assert.deepEqual(store.voiceDirectionLines(audition.id).lines.slice(0, 4).map(line => line.emotion), ['dramatic', 'curious', 'excited', 'somber'], 'the scene planner reads the performed direction');
 });
+
+// 0.78 (owner test 2026-10-31: "Claude did not return a usable voice direction"): thinking counts against the answer's
+// room, so the direction gets far more of it, and a failed answer says why it failed.
+test('the direction has room to answer, and an unreadable answer says why', async t => {
+  const {content, director, calls} = setup(t);
+  director.queue(content.id, {requestedBy: 'Owner', connector: {id: 'claude', revision: 1}});
+  await director.processNext();
+  assert.ok(calls[0].maxTokens >= 8000, `${calls[0].maxTokens} tokens leave room for thinking and the answer`);
+  const cut = async reply => {
+    director.ai = {complete: async () => ({content: reply, usage: {promptTokens: 900, completionTokens: 3000, totalTokens: 3900}, model: 'claude-opus-5-5'})};
+    const job = director.queue(content.id, {requestedBy: 'Owner', connector: {id: 'claude', revision: 1}});
+    await director.processNext();
+    return director.publicJob(director.jobRow(job.id));
+  };
+  const truncated = await cut('{"summary": "A calm start that builds", "lines": [{"n": 1, "emotion": "curious", "energy": 3, "pace": "norm');
+  assert.deepEqual([truncated.status, /was cut off after [\d,]+ characters/.test(truncated.error)], ['quality_failed', true]);
+  assert.match((await cut('I cannot help with that.')).error, /answered in words instead of the direction's data \(it began: "I cannot help/);
+  assert.match((await cut('')).error, /empty answer/);
+});

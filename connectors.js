@@ -12,7 +12,7 @@ const PROVIDERS = {
   // Owner request 2026-10-22: Fish Audio as a second narration provider (https://fish.audio, API key from its dashboard).
   'fish-audio': {name: 'Fish Audio', test: 'Reads your API credit balance; no generation', ready: true},
   // Owner request 2026-10-30: free voice models on this PC through VoiceStudio (no key), for testing only.
-  voicestudio: {name: 'VoiceStudio (free voices on this PC, for testing only)', test: 'Asks VoiceStudio on this PC for its engines and voices and has it say one test word (free)', ready: true, keyless: true},
+  voicestudio: {name: 'VoiceStudio (free voices on this PC, for testing only)', test: 'Asks VoiceStudio on this PC for its engines and voices and has it speak one test sentence (free)', ready: true, keyless: true},
   // 0.57: free-licence and public-domain images (no key).
   wikimedia: {name: 'Wikimedia Commons (free-licence and public-domain images)', test: 'One image search; nothing downloaded', ready: true, keyless: true},
   'claude-code': {name: 'Claude subscription (Claude Code on this PC)', test: 'Asks Claude Code one tiny question on your subscription', ready: true, keyless: true, ai: true},
@@ -195,8 +195,9 @@ class ConnectorSlots {
         // Each engine and voice the narrator profiles on this connection use says one word (tts-1 = VoiceStudio's active engine).
         const uses=new Map(this.db.prepare('SELECT payload FROM voice_profiles').all().map(item=>JSON.parse(item.payload)).filter(item=>item.connectorId===id).map(item=>[`${item.model}|${item.voiceId}`,item]));
         const tried=uses.size?[...uses.values()].slice(0,3).map(item=>[item.model,item.voiceId]):[['tts-1','default']];
-        for(const [model,voice] of tried)await voiceStudioSpeak(this.fetch,model,voice);
-        result={access:'local_voices',message:`VoiceStudio is running on this PC with ${engines.length} ready engine(s) (${engines.slice(0,6).join(', ')}) and ${voices.length} saved voice(s). It said one test word with ${tried.map(([model])=>`"${model}"`).join(', ')}, so its licence is accepted. Its voices are for testing only.`};
+        const timings=[];for(const [model,voice] of tried)timings.push([model,await voiceStudioSpeak(this.fetch,model,voice)]);
+        const slow=timings.map(([model,t])=>`"${model}" took ${t.seconds} s${t.cpu?' on the processor':''} (about ${t.minutesPerThousandWords} min per 1,000 words of script)`).join('; ');
+        result={access:'local_voices',message:`VoiceStudio is running on this PC with ${engines.length} ready engine(s) (${engines.slice(0,6).join(', ')}) and ${voices.length} saved voice(s). It spoke a test sentence, so the licence is accepted: ${slow}. Its voices are for testing only.`};
       }else if(slot.provider==='fish-audio'){
         let response;
         try{response=await this.fetch('https://api.fish.audio/wallet/self/api-credit',{headers:{Authorization:`Bearer ${key}`},redirect:'error',signal:AbortSignal.timeout(10000)});}

@@ -1,15 +1,17 @@
 'use strict';
 const fs=require('node:fs');
+const http=require('node:http');
 const path=require('node:path');
 const {randomUUID,createHash}=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
 const {InputError}=require('./store');
 const Delivery=require('./delivery');
+const live=require('./live');
 
 const execFileAsync=promisify(execFile);
 const MAX_AUDIO_BYTES=25*1024*1024;
-const PROVIDER_LIMITS={openai:4000,elevenlabs:9000,'fish-audio':3000,voicestudio:2500};
+const PROVIDER_LIMITS={openai:4000,elevenlabs:9000,'fish-audio':3000,voicestudio:1200};
 function boundedText(value,label,max,min=1){if(typeof value!=='string'||value.trim().length<min||value.length>max||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))throw new InputError(`Enter a valid ${label} (${min}–${max} characters).`);return value.trim();}
 function safeId(value,label){return boundedText(value,label,128).replace(/[A-Za-z0-9_.:-]/g,'').length===0?value.trim():(()=>{throw new InputError(`Enter a valid ${label}.`);})();}
 async function responseAudio(response){
@@ -61,6 +63,39 @@ class FishAudioSpeechClient{
 // test the program before paid voices. Loopback only, no key. Its default model weights are non-commercial, so every
 // VoiceStudio narration is a test voice that never reaches YouTube (publishing-room deliverable). No word timing.
 const VOICESTUDIO='http://127.0.0.1:3900';
+// VoiceStudio answers only when a whole part has been spoken, which takes many minutes on a laptop processor. Node's
+// built-in fetch gives up when no answer has started within 5 minutes (its headers timeout), so the program said "did
+// not answer" while VoiceStudio was still working (owner test 2026-10-31). Plain HTTP to this PC has no such limit:
+// the caller's AbortSignal is the only clock. Loopback only.
+function loopbackFetch(url,init={}){
+  return new Promise((resolve,reject)=>{
+    const target=new URL(url);
+    if(target.protocol!=='http:'||target.hostname!=='127.0.0.1')return reject(new TypeError('VoiceStudio is reached on this PC only.'));
+    if(init.signal?.aborted)return reject(init.signal.reason);
+    const request=http.request(target,{method:init.method||'GET',headers:init.headers||{}},response=>{
+      const chunks=[];let bytes=0;
+      response.on('data',chunk=>{bytes+=chunk.length;if(bytes>MAX_AUDIO_BYTES+1048576)request.destroy(new InputError('VoiceStudio audio exceeded the 25 MB safety limit.',502));else chunks.push(chunk);});
+      response.on('end',()=>{const status=response.statusCode,headers=Object.entries(response.headers).filter(([,value])=>value!==undefined).map(([name,value])=>[name,Array.isArray(value)?value.join(', '):String(value)]);resolve(new Response([204,304].includes(status)?null:Buffer.concat(chunks),{status,headers}));});
+      response.on('error',reject);
+    });
+    const stop=()=>request.destroy(init.signal.reason);
+    init.signal?.addEventListener('abort',stop,{once:true});
+    request.on('error',error=>{init.signal?.removeEventListener('abort',stop);reject(error);});
+    request.on('close',()=>init.signal?.removeEventListener('abort',stop));
+    request.end(init.body===undefined?undefined:init.body);
+  });
+}
+// The program's ordinary fetch is swapped for the loopback one; tests pass their own.
+const studioFetch=fetchImpl=>(!fetchImpl||fetchImpl===globalThis.fetch?loopbackFetch:fetchImpl);
+// Why VoiceStudio could not be reached, in plain words (the cause used to be hidden behind "did not answer").
+function studioDown(error,{waited,part}={}){
+  if(error instanceof InputError)return error;
+  const code=error?.code||error?.cause?.code||'';
+  if(error?.name==='TimeoutError')return new InputError(`VoiceStudio did not finish ${part||'speaking'} within ${waited}. On a PC without a strong graphics card its models read slowly: try an engine marked fast in VoiceStudio (KittenTTS, Supertonic-3 or PocketTTS) or a shorter script.`,504);
+  if(code==='ECONNREFUSED')return new InputError('VoiceStudio is not running on this PC (nothing answered at 127.0.0.1:3900). Open VoiceStudio, wait until it is ready, then try again.',502);
+  if(code==='ECONNRESET'||/socket hang up/i.test(error?.message||''))return new InputError('VoiceStudio closed the connection while it was working (it may have restarted or run out of memory). Look at VoiceStudio\'s window, then try again.',502);
+  return new InputError(`VoiceStudio stopped answering (${code||error?.message||'no reason given'}). Open VoiceStudio, wait until it is ready, then try again.`,502);
+}
 async function voiceStudioError(response){
   let message='';try{const data=await response.json();message=String(data?.error?.message||data?.detail||'').replace(/[\x00-\x1f\x7f]/g,' ').slice(0,300);}catch{/* no readable body */}
   if(response.status===403)return `VoiceStudio may not use this model yet: open its Model Manager and accept the model's licence (VoiceStudio: Settings → Models, the Model Catalogue; find each model named here, read its licence and press Accept). ${message}`.trim();
@@ -68,7 +103,7 @@ async function voiceStudioError(response){
   return `VoiceStudio returned HTTP ${response.status}. ${message}`.trim();
 }
 async function voiceStudioVoices(fetchImpl=fetch){
-  let response;try{response=await fetchImpl(`${VOICESTUDIO}/v1/audio/voices`,{redirect:'error',signal:AbortSignal.timeout(10000)});}catch{throw new InputError('VoiceStudio is not running on this PC (nothing answered at 127.0.0.1:3900). Open VoiceStudio, wait until it is ready, then test again.',502);}
+  let response;try{response=await studioFetch(fetchImpl)(`${VOICESTUDIO}/v1/audio/voices`,{redirect:'error',signal:AbortSignal.timeout(20000)});}catch(error){throw studioDown(error,{waited:'20 seconds',part:'listing its voices'});}
   if(!response.ok)throw new InputError(await voiceStudioError(response),502);
   let data;try{data=await response.json();}catch{data=null;}
   if(!Array.isArray(data?.voices)||!Array.isArray(data?.engines))throw new InputError('VoiceStudio returned an unexpected voice list.',502);
@@ -76,21 +111,29 @@ async function voiceStudioVoices(fetchImpl=fetch){
 }
 // One spoken test word (0.77, owner test 2026-10-31: Connections passed while the Voice Room failed). Listing voices never
 // asks a model to speak, and VoiceStudio checks a model's licence only when it speaks, so the test now speaks.
+// One spoken test sentence (0.77, owner test 2026-10-31: Connections passed while the Voice Room failed): listing voices
+// never asks a model to speak, and VoiceStudio checks a model's licence only when it speaks. 0.78: a sentence instead of
+// one word (very short text can trip some engines), up to 10 minutes for a model that still has to load, and the time it
+// took, so the owner knows how long a narration will take on this PC.
+const TEST_SENTENCE='This is a short test of the narrator voice for your channel.';
 async function voiceStudioSpeak(fetchImpl,model,voice){
-  let response;try{response=await fetchImpl(`${VOICESTUDIO}/v1/audio/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,input:'Test.',voice,response_format:'wav'}),redirect:'error',signal:AbortSignal.timeout(180000)});}
-  catch(error){throw new InputError(error?.name==='TimeoutError'?`VoiceStudio did not say one test word with "${model}" within 3 minutes. It is probably still loading the model: wait until VoiceStudio says it is ready, then test again.`:'VoiceStudio stopped answering during the test. Open VoiceStudio, wait until it is ready, then test again.',502);}
+  const started=Date.now();let response;
+  try{response=await studioFetch(fetchImpl)(`${VOICESTUDIO}/v1/audio/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model,input:TEST_SENTENCE,voice,response_format:'wav'}),redirect:'error',signal:AbortSignal.timeout(600000)});}
+  catch(error){throw studioDown(error,{waited:'10 minutes',part:`one test sentence with "${model}"`});}
   if(!response.ok)throw new InputError(`Engine "${model}": ${await voiceStudioError(response)}`,502);
   await response.body?.cancel();
+  const seconds=Math.max(.1,(Date.now()-started)/1000),routing=response.headers.get('x-omnivoice-routing')||'';
+  return {seconds:Math.round(seconds*10)/10,cpu:/cpu/i.test(routing),minutesPerThousandWords:Math.round(seconds/TEST_SENTENCE.split(' ').length*1000/60)};
 }
 class VoiceStudioSpeechClient{
-  constructor(key,fetchImpl=fetch){this.fetch=fetchImpl;}
+  constructor(key,fetchImpl=fetch){this.fetch=studioFetch(fetchImpl);}
   async synthesize(input){
     const text=boundedText(input.text,'speech text',4096),model=safeId(input.model,'VoiceStudio engine'),voiceId=safeId(input.voiceId,'VoiceStudio voice');
     const speed=Number(input.speed??1);if(!Number.isFinite(speed)||speed<.25||speed>4)throw new InputError('VoiceStudio speed must be between 0.25 and 4.');
     const body={model,input:text,voice:voiceId,response_format:'wav',speed};if(input.instructions)body.instructions=boundedText(input.instructions,'voice instructions',4096);
     // Free and local: onRequest is not called, so a failed part costs nothing and the narration can simply be asked again.
-    // A slow PC reads a long part on its processor, so a part may take many minutes.
-    let response;try{response=await this.fetch(`${VOICESTUDIO}/v1/audio/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(1800000)});}catch{throw new InputError('VoiceStudio did not answer. Open VoiceStudio on this PC, wait until it is ready, then try again.',502);}
+    // A slow PC reads a part on its processor, so a part may take many minutes (and a model may first have to load).
+    let response;try{response=await this.fetch(`${VOICESTUDIO}/v1/audio/speech`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(2700000)});}catch(error){throw studioDown(error,{waited:'45 minutes',part:'this part of the narration'});}
     if(!response.ok)throw new InputError(await voiceStudioError(response),502);
     const audio=await responseAudio(response);return {audio,extension:'wav',mime:'audio/wav',requestId:null};
   }
@@ -162,14 +205,15 @@ async function mergeToWav(inputs,output,ffmpeg='ffmpeg'){
 }
 // Speaks a narration's provider requests in order, one part file each (the Voice Room and the language editions, L02).
 // isCurrent is asked before every request, so a changed scope never starts another paid request.
-async function speak({client,requests,scope,work,isCurrent=()=>true,onRequest}){
+// onPart(index, total) tells the live view which part is being read (0.78).
+async function speak({client,requests,scope,work,isCurrent=()=>true,onRequest,onPart=()=>{}}){
   const parts=[],partWords=[],requestIds=[];
-  for(let index=0;index<requests.length;index++){if(!isCurrent())throw new InputError('Voice scope or connector changed before the next provider request.',409);const request=requests[index],speed=request.speed?Math.min(scope.provider==='openai'?4:1.2,Math.max(scope.provider==='openai'?.25:.7,Math.round(scope.delivery.pace*request.speed*100)/100)):scope.delivery.pace;const result=await client.synthesize({text:request.text,model:scope.model,voiceId:scope.voiceId,speed,instructions:request.instructions||scope.providerInstructions,stability:request.stability??scope.delivery.stability,similarity:scope.delivery.similarity,style:request.style??scope.delivery.style,onRequest});const part=path.join(work,`part-${String(index+1).padStart(3,'0')}.${result.extension}`);fs.writeFileSync(part,result.audio,{flag:'wx'});parts.push(part);partWords.push(result.words||null);if(result.requestId)requestIds.push(result.requestId);}
+  for(let index=0;index<requests.length;index++){if(!isCurrent())throw new InputError('Voice scope or connector changed before the next provider request.',409);onPart(index,requests.length);const request=requests[index],speed=request.speed?Math.min(scope.provider==='openai'?4:1.2,Math.max(scope.provider==='openai'?.25:.7,Math.round(scope.delivery.pace*request.speed*100)/100)):scope.delivery.pace;const result=await client.synthesize({text:request.text,model:scope.model,voiceId:scope.voiceId,speed,instructions:request.instructions||scope.providerInstructions,stability:request.stability??scope.delivery.stability,similarity:scope.delivery.similarity,style:request.style??scope.delivery.style,onRequest});const part=path.join(work,`part-${String(index+1).padStart(3,'0')}.${result.extension}`);fs.writeFileSync(part,result.audio,{flag:'wx'});parts.push(part);partWords.push(result.words||null);if(result.requestId)requestIds.push(result.requestId);}
   return {parts,partWords,requestIds};
 }
 // Joins the parts into one WAV, checks the real audio and keeps the measured word times (ElevenLabs).
-async function joinNarration({parts,partWords,final,scope,ffmpeg,ffprobe}){
-  await mergeToWav(parts,final,ffmpeg);const analysis=await analyzeAudio(final,{expectedDuration:scope.expectedDuration,ffmpeg,ffprobe});const measuredPace=pace(scope.script,analysis.durationSeconds);if(measuredPace)analysis.pace=measuredPace;
+async function joinNarration({parts,partWords,final,scope,ffmpeg,ffprobe,onJoined=()=>{}}){
+  await mergeToWav(parts,final,ffmpeg);onJoined();const analysis=await analyzeAudio(final,{expectedDuration:scope.expectedDuration,ffmpeg,ffprobe});const measuredPace=pace(scope.script,analysis.durationSeconds);if(measuredPace)analysis.pace=measuredPace;
   // Measured word timing when every part came with it (ElevenLabs): each part's words move by the parts before it.
   if(partWords.length&&partWords.every(Boolean)){let offset=0;const words=[];for(let k=0;k<parts.length;k++){for(const word of partWords[k])words.push({text:word.text,start:Math.round((word.start+offset)*1000)/1000,end:Math.round((word.end+offset)*1000)/1000});offset+=await probeSeconds(parts[k],ffprobe);}analysis.alignment={method:'measured',provider:scope.provider,words};}
   return {analysis,bytes:fs.readFileSync(final)};
@@ -181,10 +225,42 @@ class VoiceRuntime{
     if(this.running)return null;const job=this.store.claimVoiceAudition();if(!job)return null;this.running=true;let requestStarted=false,final=null;const work=path.join(this.artifactDir,'.working',job.id);
     try{
       fs.mkdirSync(work,{recursive:true});await this.preflight();const scope=job.scope,key=scope.provider==='voicestudio'?null:this.connectors.key(scope.connectorId),Client=SPEECH_CLIENTS[scope.provider]||ElevenLabsSpeechClient,client=new Client(key,this.connectors.fetch),text=applyLexicon(scope.script,scope.lexicon.entries),requests=scope.direction?Delivery.segments({script:scope.script,sentences:scope.direction.sentences,direction:scope.direction,provider:scope.provider,model:scope.model,base:{stability:scope.delivery.stability,style:scope.delivery.style,instructions:scope.providerInstructions},limit:Delivery.requestLimit(scope.provider,scope.model)}).map(item=>({...item,text:applyLexicon(item.text,scope.lexicon.entries)})):chunkText(text,scope.provider).map(chunk=>({text:chunk}));
-      const {parts,partWords,requestIds}=await speak({client,requests,scope,work,isCurrent:()=>this.store.voiceScopeCurrent(job,scope),onRequest:()=>{requestStarted=true;}});
-      const familyDir=path.join(this.artifactDir,scope.familyId,scope.contentId);final=path.join(familyDir,`${job.id}.wav`);fs.mkdirSync(familyDir,{recursive:true});const {analysis,bytes}=await joinNarration({parts,partWords,final,scope,ffmpeg:this.ffmpeg,ffprobe:this.ffprobe}),artifact={relativePath:path.relative(path.dirname(this.artifactDir),final).replaceAll('\\','/'),sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length,mime:'audio/wav'};
+      // The live view (0.78, owner request 2026-10-31): one step per part, then joining and the audio checks.
+      const local=scope.provider==='voicestudio';
+      live.start(job.id,{room:'voice',label:'Reading the narration',steps:requests.length+2,contentId:scope.contentId,familyId:scope.familyId,wait:local?'VoiceStudio sends a part back only when it is finished; on a PC without a strong graphics card a part can take several minutes.':'Each part comes back when the voice service has read it.'});
+      const {parts,partWords,requestIds}=await speak({client,requests,scope,work,isCurrent:()=>this.store.voiceScopeCurrent(job,scope),onRequest:()=>{requestStarted=true;},onPart:(index,total)=>live.step(job.id,index+1,`Reading part ${index+1} of ${total}${local?' on this PC':''} (${requests[index].text.length.toLocaleString()} characters)`)});
+      live.step(job.id,requests.length+1,'Joining the parts into one narration');
+      const familyDir=path.join(this.artifactDir,scope.familyId,scope.contentId);final=path.join(familyDir,`${job.id}.wav`);fs.mkdirSync(familyDir,{recursive:true});const joined=joinNarration({parts,partWords,final,scope,ffmpeg:this.ffmpeg,ffprobe:this.ffprobe,onJoined:()=>live.step(job.id,requests.length+2,'Checking the audio: decode, silence, clipping and loudness')}),{analysis,bytes}=await joined,artifact={relativePath:path.relative(path.dirname(this.artifactDir),final).replaceAll('\\','/'),sha256:createHash('sha256').update(bytes).digest('hex'),sizeBytes:bytes.length,mime:'audio/wav'};
       const saved=this.store.completeVoiceAudition(job.id,{artifact,analysis,provider:{requestIds,model:scope.model,voiceId:scope.voiceId,voiceVersion:scope.voiceVersion},settledCharacters:scope.characterCount});final=null;return saved;
-    }catch(error){if(final)fs.rmSync(final,{force:true});this.store.failVoiceAudition(job.id,error instanceof InputError?error.message:'Voice generation failed. Review the local logs before retrying.',{usageUnknown:requestStarted});return null;}finally{fs.rmSync(work,{recursive:true,force:true});this.running=false;}
+    }catch(error){if(final)fs.rmSync(final,{force:true});this.store.failVoiceAudition(job.id,error instanceof InputError?error.message:'Voice generation failed. Review the local logs before retrying.',{usageUnknown:requestStarted});return null;}finally{live.end(job.id);fs.rmSync(work,{recursive:true,force:true});this.running=false;}
   }
 }
-module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,FishAudioSpeechClient,VoiceStudioSpeechClient,voiceStudioVoices,voiceStudioSpeak,SPEECH_CLIENTS,VoiceRuntime};
+// The owner's own narration file (0.78): streamed from the page into the data folder (500 MB at most, audio types only),
+// turned into the same WAV the generated takes use, checked by the same real-audio checks, then recorded as a take.
+const UPLOAD_TYPES=/\.(wav|mp3|m4a|aac|flac|ogg|opus|webm)$/i,MAX_UPLOAD_BYTES=500*1024*1024;
+VoiceRuntime.prototype.attach=async function(contentId,stream,params){
+  const name=String(params.name||'').replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g,' ').trim().slice(0,120),by=String(params.by||'').trim(),holder=String(params.holder||'').trim(),revision=Number(params.revision);
+  if(!UPLOAD_TYPES.test(name))throw new InputError('Attach an audio file: WAV, MP3, M4A, AAC, FLAC, OGG, Opus or WebM.',415);
+  if(by.length<2||by.length>100)throw new InputError('Enter your name (2-100 characters).');
+  if(holder.length<2||holder.length>200)throw new InputError('Name who holds the rights to this voice-over (2-200 characters).');
+  if(params.rights!=='1')throw new InputError('Confirm that you own this voice-over or are licensed to use it commercially on your channels.');
+  const content=this.store.content(contentId);if(content.state!=='approved'||content.revision!==revision)throw new InputError('Attach the narration to the current approved script (reload the page).',409);
+  if(!this.store.voiceProfiles(content.familyId).length)throw new InputError('Set up the channel\'s narrator once (Configure narrator: name, language, pronunciation and rights) before attaching a file.',409);
+  await this.preflight();
+  const id=randomUUID(),work=path.join(this.artifactDir,'.working',`upload-${id}`),original=path.join(work,`original${path.extname(name).toLowerCase()}`);fs.mkdirSync(work,{recursive:true});
+  const familyDir=path.join(this.artifactDir,content.familyId,content.id),final=path.join(familyDir,`upload-${id}.wav`);let kept=false;
+  try{
+    let bytes=0;const out=fs.createWriteStream(original,{flags:'wx'}),hash=createHash('sha256');
+    await new Promise((resolve,reject)=>{stream.on('data',chunk=>{bytes+=chunk.length;if(bytes>MAX_UPLOAD_BYTES){stream.destroy();out.destroy();reject(new InputError('The file is larger than 500 MB. Export it as MP3 or a shorter WAV.',413));return;}hash.update(chunk);if(!out.write(chunk)){stream.pause();out.once('drain',()=>stream.resume());}});stream.on('end',()=>out.end(resolve));stream.on('error',reject);out.on('error',reject);});
+    if(bytes<1024)throw new InputError('The file is empty or too small to be a narration.',400);
+    fs.mkdirSync(familyDir,{recursive:true});
+    await run(this.ffmpeg,['-hide_banner','-nostdin','-loglevel','error','-i',original,'-vn','-map','0:a:0','-ac','2','-c:a','pcm_s16le','-y',final],{timeout:900000}).catch(()=>{throw new InputError('This file could not be read as audio. Export it again as WAV or MP3 and attach that.',415);});
+    // The same length check as a generated take: a file far shorter or longer than its script is the wrong file.
+    const words=(content.script.match(/[\p{L}\p{N}][\p{L}\p{N}'\u2019-]*/gu)||[]).length,estimated=words/145*60;
+    const analysis=await analyzeAudio(final,{expectedDuration:{min:Math.max(1,estimated*.45),max:estimated*2.1},ffmpeg:this.ffmpeg,ffprobe:this.ffprobe}),measured=pace(content.script,analysis.durationSeconds);if(measured)analysis.pace=measured;
+    const data=fs.readFileSync(final),artifact={relativePath:path.relative(path.dirname(this.artifactDir),final).replaceAll('\\','/'),sha256:createHash('sha256').update(data).digest('hex'),sizeBytes:data.length,mime:'audio/wav'};
+    const audition=this.store.recordUploadedNarration({contentId,revision,artifact,analysis,upload:{name,sizeBytes:bytes,originalSha256:hash.digest('hex'),attachedBy:by,rightsHolder:holder,commercialUseConfirmed:true,at:new Date().toISOString()}});
+    kept=true;return audition;
+  }finally{if(!kept)fs.rmSync(final,{force:true});fs.rmSync(work,{recursive:true,force:true});}
+};
+module.exports={pace,analyzeAudio,applyLexicon,chunkText,spokenWords,speak,joinNarration,checkTool,OpenAISpeechClient,ElevenLabsSpeechClient,FishAudioSpeechClient,VoiceStudioSpeechClient,voiceStudioVoices,voiceStudioSpeak,loopbackFetch,SPEECH_CLIENTS,VoiceRuntime};

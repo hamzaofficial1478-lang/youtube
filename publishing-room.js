@@ -161,6 +161,8 @@ class PublishingRoom {
   testVoice(renderId) {
     const scope = JSON.parse(this.renders.row(renderId).scope), id = scope.edition ? scope.edition.narrationId : scope.narration?.approvalId;
     if (!id) return false;
+    // An attached file (0.78) is the owner's own narration with its commercial rights confirmed, never a test voice.
+    if (!scope.edition && JSON.parse(this.db.prepare('SELECT j.input FROM voice_approvals v JOIN voice_auditions a ON a.id=v.audition_id JOIN voice_jobs j ON j.id=a.job_id WHERE v.id=?').get(id)?.input || '{}').upload) return false;
     const provider = scope.edition ? JSON.parse(this.db.prepare('SELECT scope FROM edition_narrations WHERE id=?').get(id)?.scope || '{}').provider
       : JSON.parse(this.db.prepare('SELECT p.payload FROM voice_approvals v JOIN voice_profiles p ON p.id=v.profile_id WHERE v.id=?').get(id)?.payload || '{}').provider;
     return provider === 'voicestudio';

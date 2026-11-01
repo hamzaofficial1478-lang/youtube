@@ -6,9 +6,10 @@
 const jobs = new Map();
 const PREVIEW = 1500;
 
-function start(id, {room, label, steps = 1, contentId = null, familyId = null}) {
+// wait: what a quiet stretch means for this job (a local voice reads a whole part before it answers).
+function start(id, {room, label, steps = 1, contentId = null, familyId = null, wait = null}) {
   const at = Date.now();
-  jobs.set(id, {id, room, label, contentId, familyId, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, thinking: false, preview: ''});
+  jobs.set(id, {id, room, label, contentId, familyId, wait, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, thinking: false, preview: ''});
 }
 // A new step starts with an empty preview; expected is the rough answer length in characters, for the bar.
 function step(id, index, stepLabel, {expected = null, steps} = {}) {
@@ -33,7 +34,7 @@ function list() {
   const at = Date.now();
   return [...jobs.values()].map(job => ({id: job.id, room: job.room, label: job.label, contentId: job.contentId, familyId: job.familyId, step: job.step, steps: job.steps, stepLabel: job.stepLabel,
     seconds: Math.round((at - job.startedAt) / 1000), stepSeconds: Math.round((at - job.stepAt) / 1000), quietSeconds: Math.round((at - job.at) / 1000),
-    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview}));
+    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview, wait: job.wait}));
 }
 
 module.exports = {start, step, note, tick, follow, end, list};

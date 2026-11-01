@@ -137,7 +137,15 @@ class SoundtrackRoom {
     let score = M.rulesScore({scenes: inputs.manifest.plan.scenes, durationSeconds: inputs.durationSeconds, moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche});
     const tracks = this.libraryTracks(inputs.family.id);
     if (tracks.length) score = {...score, cues: M.assignTracks(score.cues, tracks, {recent: this.recentTracks(inputs.family.id, contentId)})};
-    return this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: tracks.length ? 'Free score from the story sections, tracks from your sound library' : 'Free score from the story sections', createdBy: by}));
+    const created = this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: tracks.length ? 'Free score from the story sections, tracks from your sound library' : 'Free score from the story sections', createdBy: by}));
+    this.scored(inputs, created);
+    return created;
+  }
+  // After a new score (0.78): a library family's video asks Freesound by itself for the moods and effects it needs
+  // (onScored is SoundOnline.autoFill, wired in server.js; nothing happens without a tested Freesound connection).
+  scored(inputs, score) {
+    if (!this.onScored || this.settings(inputs.family.id).source !== 'library' || !score) return;
+    try { this.onScored(inputs.content.id, score.cues); } catch (error) { console.error('Automatic Freesound fill:', error.message); }
   }
   queueScore(contentId, input) {
     object(input);
@@ -208,12 +216,14 @@ class SoundtrackRoom {
       try { score = M.validate(raw, inputs.durationSeconds, {lenient: true, warn: message => warnings.push(message)}); } catch (error) { throw Object.assign(new AiError(`Claude's score was not usable: ${error.message}`), {quality: true}); }
       const tracks = job.scope.refs ? this.libraryTracks(inputs.family.id) : [];
       if (tracks.length) score = {...score, cues: M.assignTracks(score.cues, tracks, {recent: this.recentTracks(inputs.family.id, inputs.content.id)})};
-      return this.store.transaction(() => {
+      const saved = this.store.transaction(() => {
         const created = this.insertScore({inputs, score, warnings, source: 'claude', note: `Claude score (${reply.model})`, createdBy: job.created_by}), at = now();
         settle(Number.isSafeInteger(usage?.totalTokens) ? 'settled' : 'unknown', at);
         this.db.prepare("UPDATE score_jobs SET status='completed', score_id=?, updated_at=? WHERE id=?").run(created.id, at, job.id);
         return created;
       });
+      this.scored(inputs, saved);
+      return saved;
     } catch (error) {
       this.store.transaction(() => {
         const at = now(), message = error instanceof AiError || error instanceof InputError ? error.message : 'The music score failed.';

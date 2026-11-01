@@ -214,7 +214,12 @@ test('VoiceStudio: free local voices through its OpenAI-style API, keyless, save
   await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'omnivoice',voiceId:'default'}),/Model Manager and accept the model's licence \(VoiceStudio: Settings → Models[^)]*\)\. Accept the OmniVoice licence first/);
   speech=()=>new Response('{}',{status:503});
   await assert.rejects(new VoiceStudioSpeechClient(null,fetchImpl).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/still loading or downloading/);
-  await assert.rejects(new VoiceStudioSpeechClient(null,async()=>{throw new TypeError('fetch failed');}).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/did not answer\. Open VoiceStudio/);
+  await assert.rejects(new VoiceStudioSpeechClient(null,async()=>{throw new TypeError('fetch failed');}).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/stopped answering \(fetch failed\)/);
+  // 0.78: the cause is named: not running, closed while working, or too slow.
+  const failing=error=>async()=>{throw error;};
+  await assert.rejects(new VoiceStudioSpeechClient(null,failing(Object.assign(new Error('connect'),{code:'ECONNREFUSED'}))).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/not running on this PC/);
+  await assert.rejects(new VoiceStudioSpeechClient(null,failing(Object.assign(new Error('socket hang up'),{code:'ECONNRESET'}))).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/closed the connection while it was working/);
+  await assert.rejects(new VoiceStudioSpeechClient(null,failing(new DOMException('timed out','TimeoutError'))).synthesize({text:'x',model:'tts-1',voiceId:'default'}),/did not finish this part of the narration within 45 minutes/);
   assert.deepEqual(await voiceStudioVoices(fetchImpl),{voices:[{id:'v-1',name:'Narrator'}],engines:['omnivoice','kittentts']});
   // The connection takes no key and is tested by asking VoiceStudio for its engines and voices, then one spoken word.
   speech=()=>new Response(audio,{status:200,headers:{'content-type':'audio/wav'}});
@@ -224,14 +229,14 @@ test('VoiceStudio: free local voices through its OpenAI-style API, keyless, save
   const slot=slots.save({name:'Local voices',provider:'voicestudio'});
   assert.equal(store.db.prepare('SELECT secret FROM connectors WHERE id=?').get(slot.id).secret,null);
   const tested=await slots.test(slot.id,slot.revision);
-  assert.match(tested.result.message,/2 ready engine\(s\) \(omnivoice, kittentts\) and 1 saved voice\(s\)\. It said one test word with "tts-1", so its licence is accepted/);
-  // 0.77: the test speaks one word, because VoiceStudio checks a model's licence only when it speaks.
-  assert.deepEqual(JSON.parse(calls.at(-1).init.body),{model:'tts-1',input:'Test.',voice:'default',response_format:'wav'});
+  assert.match(tested.result.message,/2 ready engine\(s\) \(omnivoice, kittentts\) and 1 saved voice\(s\)\. It spoke a test sentence, so the licence is accepted: "tts-1" took [\d.]+ s \(about \d+ min per 1,000 words of script\)/);
+  // 0.77: the test speaks, because VoiceStudio checks a model's licence only when it speaks (0.78: a whole sentence, timed).
+  assert.deepEqual(JSON.parse(calls.at(-1).init.body),{model:'tts-1',input:'This is a short test of the narrator voice for your channel.',voice:'default',response_format:'wav'});
   speech=()=>new Response(JSON.stringify({error:{message:'Licence not accepted for k2-fsa/OmniVoice. Review and accept it in Model Catalogue.'}}),{status:403});
   await assert.rejects(slots.test(slot.id,slot.revision),/Engine "tts-1": VoiceStudio may not use this model yet[\s\S]*Settings → Models[\s\S]*Licence not accepted for k2-fsa\/OmniVoice/);
   assert.equal(JSON.parse(store.db.prepare('SELECT payload FROM connectors WHERE id=?').get(slot.id).payload).test.status,'failed','Connections now fails where the Voice Room would');
   speech=()=>new Response(audio,{status:200,headers:{'content-type':'audio/wav'}});
-  await assert.rejects(new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},async()=>{throw new TypeError('fetch failed');}).test(slot.id,slot.revision+0),/not running on this PC/);
+  await assert.rejects(new FishSlots(store,{transform:(op,input)=>Buffer.from(input)},async()=>{throw Object.assign(new TypeError('fetch failed'),{cause:{code:'ECONNREFUSED'}});}).test(slot.id,slot.revision+0),/not running on this PC/);
   // The narrator profile confirms test-only use instead of commercial use; an approved test narration never uploads.
   const env=setup(t,'voicestudio');env.store.db.prepare('UPDATE connectors SET secret=NULL WHERE id=?').run(env.connector.id);
   const base={model:'tts-1',voiceId:'default',commercialUseConfirmed:false,priceCentsPerMillionCharacters:0};
@@ -244,4 +249,81 @@ test('VoiceStudio: free local voices through its OpenAI-style API, keyless, save
     renders:{row:()=>({scope:JSON.stringify({narration:{approvalId:approval.id}})}),masterApproval:()=>({id:'master-approval',current:true})}});
   assert.equal(room.testVoice('m1'),true);
   assert.throws(()=>room.deliverable(env.content.id,'en-US'),/free VoiceStudio test voice[\s\S]*ElevenLabs, Fish Audio or OpenAI/);
+});
+
+// 0.78 (owner test 2026-10-31: "VoiceStudio did not answer" while it was still reading): VoiceStudio answers only when a
+// part is finished, so the program talks to it over plain HTTP on this PC, where the caller's clock is the only limit.
+test('VoiceStudio is reached over plain HTTP on this PC, waits for a slow answer and stops on its own clock',async t=>{
+  const http=require('node:http'),{loopbackFetch}=require('../voice');
+  const server=http.createServer((req,res)=>{let body='';req.on('data',c=>{body+=c;});req.on('end',()=>setTimeout(()=>{res.writeHead(req.url==='/slow'?200:403,{'content-type':'audio/wav','x-omnivoice-routing':'cpu_only'});res.end(req.url==='/slow'?Buffer.alloc(4096,7):JSON.stringify({error:{message:body}}));},req.url==='/never'?60000:300));});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  t.after(()=>{server.closeAllConnections();server.close();});
+  const base=`http://127.0.0.1:${server.address().port}`;
+  const slow=await loopbackFetch(`${base}/slow`,{method:'POST',headers:{'Content-Type':'application/json'},body:'{"input":"x"}',signal:AbortSignal.timeout(5000)});
+  assert.deepEqual([slow.status,slow.headers.get('x-omnivoice-routing'),(await slow.arrayBuffer()).byteLength],[200,'cpu_only',4096]);
+  const refused=await loopbackFetch(`${base}/licence`,{method:'POST',body:'Licence not accepted'});
+  assert.deepEqual([refused.ok,(await refused.json()).error.message],[false,'Licence not accepted']);
+  await assert.rejects(loopbackFetch(`${base}/never`,{signal:AbortSignal.timeout(200)}),error=>error.name==='TimeoutError','our own clock stops it');
+  await assert.rejects(loopbackFetch('https://example.com/v1/audio/speech'),/on this PC only/);
+});
+
+// 0.78 (owner requests 2026-10-31): attach your own voice-over, clear attempts that went nowhere, and watch the narration
+// being read part by part.
+test('an attached voice-over is checked like a generated take, approved the same way and never counted as a test voice',async t=>{
+  const {store,family,content,connector,artifactRoot}=setup(t,'voicestudio');store.db.prepare('UPDATE connectors SET secret=NULL WHERE id=?').run(connector.id);
+  const runtime=new VoiceRuntime(store,{key:()=>null,fetch:async()=>{throw new Error('no provider is asked');}},{artifactDir:path.join(artifactRoot,'voice-artifacts')});
+  const file=path.join(artifactRoot,'my-voice.flac');execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=300:duration=3','-af','volume=0.5','-ar','44100','-ac','1','-y',file]);
+  const params={revision:String(content.revision),by:'Hamza',holder:'Hamza',rights:'1',name:'my-voice.flac'};
+  await assert.rejects(runtime.attach(content.id,fs.createReadStream(file),params),/Set up the channel's narrator once/);
+  const profile=store.saveVoiceProfile(family.id,profileInput(connector,{model:'tts-1',voiceId:'default',commercialUseConfirmed:false,testOnlyConfirmed:true,priceCentsPerMillionCharacters:0}));
+  await assert.rejects(runtime.attach(content.id,fs.createReadStream(file),{...params,rights:'0'}),/own this voice-over or are licensed/);
+  await assert.rejects(runtime.attach(content.id,fs.createReadStream(file),{...params,name:'notes.txt'}),/Attach an audio file/);
+  await assert.rejects(runtime.attach(content.id,fs.createReadStream(file),{...params,revision:String(content.revision+1)}),/current approved script/);
+  // A 3-second file for a whole script is the wrong file: kept for listening, but it fails the length check.
+  const wrong=await runtime.attach(content.id,fs.createReadStream(file),params);
+  assert.deepEqual([wrong.status,wrong.analysis.checks.find(check=>check.name==='duration').passed],['validation_failed',false]);
+  const words=store.content(content.id).script.split(/\s+/).length,long=path.join(artifactRoot,'narration.flac');
+  execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i',`sine=frequency=300:duration=${Math.round(words/145*60)}`,'-af','volume=0.5','-ar','22050','-ac','1','-y',long]);
+  const audition=await runtime.attach(content.id,fs.createReadStream(long),{...params,name:'narration.flac'});
+  assert.deepEqual([audition.status,audition.provider.kind,audition.provider.voiceId,audition.scopeCurrent,audition.profileId],['validated','upload','narration.flac',true,profile.id]);
+  assert.equal(store.verifyVoiceArtifact(audition).ok,true,'kept in the data folder with its checksum');
+  assert.equal(store.voiceJobs()[0].provider,'upload');assert.equal(store.voiceUsage().length,0,'nothing is charged');
+  assert.equal(store.voiceJobs().find(job=>job.id===wrong.jobId).status,'validation_failed');
+  const approval=store.selectVoiceAudition(audition.id,{approvedBy:'Hamza',comparisonNotes:'My own recording of the approved script, listened to in full.',intelligibilityConfirmed:true});
+  assert.equal(store.voiceHandoffs(family.id)[0].ready,true,'the scenes can be planned on it');
+  // The narrator profile is a free test voice, but the attached file is the owner's own narration: it may be uploaded.
+  const {PublishingRoom}=require('../publishing-room');
+  const room=Object.assign(Object.create(PublishingRoom.prototype),{store,db:store.db,renders:{row:()=>({scope:JSON.stringify({narration:{approvalId:approval.id}})})}});
+  assert.equal(room.testVoice('m1'),false);
+  // A newer narrator profile does not make the attached take stale; a changed script does.
+  store.saveVoiceProfile(family.id,profileInput(connector,{revision:1,model:'tts-1',voiceId:'default',commercialUseConfirmed:false,testOnlyConfirmed:true,priceCentsPerMillionCharacters:0}));
+  assert.equal(store.voiceAudition(audition.id).scopeCurrent,true);
+  assert.equal(fs.readdirSync(path.join(artifactRoot,'voice-artifacts','.working')).length,0,'the uploaded original is not kept twice');
+});
+
+test('finished attempts that went nowhere can be cleared from the list; an unknown charge stays',async t=>{
+  const {store,family,content,connector}=setup(t),profile=store.saveVoiceProfile(family.id,profileInput(connector));
+  const queue=()=>store.queueVoiceAudition(content.id,{contentRevision:content.revision,profileId:profile.id,profileRevision:profile.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  const failed=queue();store.claimVoiceAudition();store.failVoiceAudition(failed.id,'VoiceStudio is not running on this PC.');
+  assert.throws(queue,/deliberate retry control/);
+  assert.deepEqual(store.clearVoiceJobs(family.id),{cleared:1});
+  // A cleared attempt no longer blocks a fresh one (the retry button left the list with it).
+  const unknown=queue();store.claimVoiceAudition();store.failVoiceAudition(unknown.id,'Lost the answer.',{usageUnknown:true});
+  assert.deepEqual(store.clearVoiceJobs(family.id),{cleared:0});
+  assert.deepEqual(store.voiceJobs().map(job=>[job.id,job.status]),[[unknown.id,'interrupted']]);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM voice_jobs').get().n,2,'nothing is deleted');
+  assert.equal(store.voiceUsage().length,2,'usage records stay');
+});
+
+test('a narration shows its parts live while it is read',async t=>{
+  const live=require('../live'),steps=[],seen=[];const step=live.step;live.step=(...args)=>{steps.push(args[2]);seen.push(live.list().map(item=>item.room));return step(...args);};t.after(()=>{live.step=step;});
+  const {store,family,content,connector,artifactRoot}=setup(t),profile=store.saveVoiceProfile(family.id,profileInput(connector));
+  store.queueVoiceAudition(content.id,{contentRevision:content.revision,profileId:profile.id,profileRevision:profile.revision,connectorId:connector.id,connectorRevision:connector.revision});
+  const sample=path.join(artifactRoot,'part.wav');execFileSync('ffmpeg',['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=380:duration=2','-af','volume=0.5','-ar','44100','-ac','1','-y',sample]);const bytes=fs.readFileSync(sample);
+  const runtime=new VoiceRuntime(store,{key:()=>'fixture-key',fetch:async()=>new Response(bytes,{status:200,headers:{'content-type':'audio/wav'}})},{artifactDir:path.join(artifactRoot,'artifacts')});
+  assert.ok(await runtime.processNext());
+  assert.match(steps[0],/^Reading part 1 of \d+ \(\d[\d,]* characters\)$/);
+  assert.deepEqual(steps.slice(-2),['Joining the parts into one narration','Checking the audio: decode, silence, clipping and loudness']);
+  assert.ok(seen.every(rooms=>rooms.includes('voice')),'the job is in the live list while it runs');
+  assert.equal(live.list().length,0,'and gone when it ends');
 });

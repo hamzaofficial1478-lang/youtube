@@ -17,7 +17,10 @@ const hash = value => createHash('sha256').update(JSON.stringify(value)).digest(
 const object = (value, label = 'Request') => { requireValue(value && typeof value === 'object' && !Array.isArray(value), `${label} must be a JSON object.`); return value; };
 const person = (value, label = 'Your name') => { requireValue(typeof value === 'string' && value.trim().length >= 2 && value.trim().length <= 80, `Enter ${label.toLowerCase()} (2-80 characters).`); return value.trim(); };
 // About 60 answer tokens per directed sentence, with room for the summary.
-const answerTokens = count => Math.min(64000, 1200 + count * 60);
+// Room to answer (0.78, owner test 2026-10-31: "Claude did not return a usable voice direction"): Claude's thinking counts
+// against the same limit, and 60 tokens a sentence left so little that the answer was cut off mid-way. Only what is used
+// is settled; the rest of the reservation is released.
+const answerTokens = count => Math.min(64000, 8000 + count * 150);
 
 class VoiceDirector {
   constructor(store, connectors, {ai = new Ai(connectors), competitorIntel = null, styles = null} = {}) {
@@ -129,7 +132,7 @@ class VoiceDirector {
       if (inputs.content.revision !== job.scope.contentRevision || !inputs.ready) throw Object.assign(new AiError('The script changed while Claude was directing. The direction was not saved.'), {quality: true, stale: true});
       let raw;
       try { raw = JSON.parse(reply.content); } catch { const text = String(reply.content), from = text.indexOf('{'), to = text.lastIndexOf('}'); try { raw = JSON.parse(text.slice(from, to + 1)); } catch { raw = null; } }
-      if (!raw) throw Object.assign(new AiError('Claude did not return a usable voice direction.'), {quality: true});
+      if (!raw) { const text = String(reply.content).trim(); throw Object.assign(new AiError(!text ? 'The AI returned an empty answer, so there is no voice direction.' : !text.includes('{') ? `The AI answered in words instead of the direction's data (it began: "${text.slice(0, 120)}").` : text.lastIndexOf('}') < text.lastIndexOf('"') || !/}\s*$/.test(text) ? `The AI's answer was cut off after ${text.length.toLocaleString()} characters, so it could not be read. Try again; it now has more room to answer.` : 'The AI\'s answer was not readable data (a broken quote or comma). Try again.'), {quality: true}); }
       const warnings = [];
       let direction;
       try { direction = D.validate(raw, inputs.sentences, {lenient: true, warn: message => warnings.push(message)}); } catch (error) { throw Object.assign(new AiError(`Claude's direction was not usable: ${error.message}`), {quality: true}); }
