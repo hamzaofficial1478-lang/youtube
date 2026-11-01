@@ -1346,7 +1346,11 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   const room = new SoundtrackRoom(store, new ConnectorSlots(store, {transform: (op, input) => input}), scenes, {dataRoot, ai, renders, sounds});
   editing.soundtrack = room;
   assert.equal(room.settings(family.id).source, 'library');
+  // 0.78: a new score of a library family asks Freesound by itself for its moods (SoundOnline.autoFill in the program).
+  const scoredFor = [];
+  room.onScored = (contentId, cues) => scoredFor.push([contentId, cues.length]);
   const free = room.rulesScore(content.id, {requestedBy: 'Owner'});
+  assert.deepEqual(scoredFor, [[content.id, free.cues.length]]);
   assert.equal(free.ready, true);
   assert.ok(free.cues.every(cue => cue.asset.library.source === 'pixabay'));
   assert.throws(() => room.queueMusic(free.id, {requestedBy: 'Owner', connector: {id: 'claude-1', revision: 1}, costConfirmed: true}), /sound library/);

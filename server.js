@@ -79,7 +79,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   // 0.61: Freesound effects and Jamendo music, searched and added on the owner's click.
-  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);
+  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);soundtrack.onScored=(contentId,cues)=>soundOnline.autoFill(contentId,cues);
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;
@@ -168,6 +168,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(!['POST','PUT'].includes(req.method))throw new InputError('Method not supported.',405);
       const supplied=Buffer.from(String(req.headers['x-local-token']||''));const expected=Buffer.from(token);
       if(supplied.length!==expected.length || !timingSafeEqual(supplied,expected))throw new InputError('Reload the app before saving.',403);
+      // 0.78: the owner's own narration file arrives as the raw body (up to 500 MB, streamed to disk), with its fields in the query.
+      const narrationFile=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/narration-file$/);
+      if(narrationFile&&req.method==='POST')return json(res,200,await voiceRuntime.attach(narrationFile[1],req,Object.fromEntries(url.searchParams)));
       const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:262144);let result;
       // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
       const listAction=pathname.match(/^\/api\/manage\/([a-z-]+)\/(delete|export)$/);
@@ -368,6 +371,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(researchRetry&&req.method==='POST')return json(res,200,researchReasoning.retry(researchRetry[1],body));
         const researchBrief=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/research-briefs$/);
         if(researchBrief&&req.method==='POST')return json(res,200,researchReasoning.queue(researchBrief[1],body));
+        const voiceClear=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/voice-jobs\/clear$/);
+        if(voiceClear&&req.method==='POST')return json(res,200,store.clearVoiceJobs(voiceClear[1]));
         const candidateApprove=pathname.match(/^\/api\/script-candidates\/([a-f0-9-]+)\/approve$/);
         if(candidateApprove&&req.method==='POST')return json(res,200,store.approveCandidate(candidateApprove[1],body));
         const retry=pathname.match(/^\/api\/script-jobs\/([a-f0-9-]+)\/retry$/);

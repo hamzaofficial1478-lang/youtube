@@ -195,7 +195,10 @@ class SoundLibrary {
   state() {
     const count = kind => this.db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(seconds),0) AS seconds FROM sounds WHERE kind=? AND enabled=1').get(kind);
     const music = count('music'), sfx = count('sfx');
-    return {music: music.n, musicSeconds: Math.round(music.seconds), sfx: sfx.n, off: this.db.prepare('SELECT COUNT(*) AS n FROM sounds WHERE enabled=0').get().n,
+    // Where the sounds in the library really came from (0.78, owner review 2026-10-31: the settings named Pixabay and
+    // the YouTube Audio Library while every sound had come from Freesound).
+    const bySource = this.db.prepare("SELECT source, SUM(kind='music') AS music, SUM(kind='sfx') AS sfx FROM sounds WHERE enabled=1 GROUP BY source ORDER BY COUNT(*) DESC").all().map(row => ({id: row.source, label: SOURCES[row.source]?.label || row.source, music: Number(row.music), sfx: Number(row.sfx)}));
+    return {music: music.n, musicSeconds: Math.round(music.seconds), sfx: sfx.n, bySource, off: this.db.prepare('SELECT COUNT(*) AS n FROM sounds WHERE enabled=0').get().n,
       sources: Object.entries(SOURCES).map(([id, item]) => ({id, label: item.label, licence: item.licence})),
       imports: this.db.prepare('SELECT * FROM sound_imports ORDER BY created_at DESC, rowid DESC LIMIT 5').all().map(row => this.publicImport(row))};
   }

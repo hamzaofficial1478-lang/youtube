@@ -48,6 +48,7 @@ async function readBounded(response, limit) {
   return Buffer.concat(chunks, bytes);
 }
 
+const pause = ms => (ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve());
 class FreesoundClient {
   constructor(key, fetchImpl = fetch) { requireValue(key, 'The Freesound API key is missing.'); Object.assign(this, {key, fetch: fetchImpl, requests: 0}); }
   async search(query, {kind = 'sfx', limit = 30, sort = 'score'} = {}) {
@@ -59,9 +60,13 @@ class FreesoundClient {
     url.searchParams.set('sort', sort);
     this.requests++;
     let response;
-    try { response = await this.fetch(url, {headers: {Authorization: `Token ${this.key}`, Accept: 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(30000)}); } catch { throw new InputError('Freesound did not answer.', 502); }
+    // 0.78 (owner test 2026-10-31: six music searches ended "Freesound did not answer"): the cause is named, and the
+    // ones worth one more try (slow, throttled, a hiccup on Freesound's side) say so.
+    try { response = await this.fetch(url, {headers: {Authorization: `Token ${this.key}`, Accept: 'application/json'}, redirect: 'error', signal: AbortSignal.timeout(60000)}); }
+    catch (error) { throw Object.assign(new InputError(error?.name === 'TimeoutError' ? 'Freesound took longer than 60 seconds to answer this search (its searches sorted by downloads can be slow).' : `Freesound could not be reached (${error?.cause?.code || error?.code || 'network error'}).`, 502), {retryable: true}); }
     if (response.status === 401 || response.status === 403) { await response.body?.cancel(); throw new InputError('Freesound refused the API key.', 502); }
-    if (!response.ok) { await response.body?.cancel(); throw new InputError(`Freesound returned HTTP ${response.status}.`, 502); }
+    if (response.status === 429) { await response.body?.cancel(); throw Object.assign(new InputError('Freesound is limiting requests right now (HTTP 429: a free key allows 60 a minute and 2,000 a day).', 502), {retryable: true, retryAfter: Number(response.headers.get('retry-after')) || 30}); }
+    if (!response.ok) { await response.body?.cancel(); throw Object.assign(new InputError(`Freesound returned HTTP ${response.status}.`, 502), {retryable: response.status >= 500}); }
     const data = await response.json();
     return (data.results || []).map(item => ({provider: 'freesound', id: String(item.id), title: clean(String(item.name || '').replace(/\.(wav|mp3|ogg|flac|aiff?)$/i, '').replace(/[-_]+/g, ' '), 120) || `Sound ${item.id}`, author: clean(item.username, 60) || 'unknown',
       seconds: Number(item.duration) || 0, tags: (item.tags || []).map(tag => clean(tag, 30).toLowerCase()).filter(Boolean).slice(0, 15), licence: licenceOf(item.license), page: String(item.url || `https://freesound.org/s/${item.id}/`),
@@ -87,7 +92,8 @@ class JamendoClient {
 const CLIENTS = {freesound: FreesoundClient, jamendo: JamendoClient};
 
 class SoundOnline {
-  constructor(store, connectors, library, quota, {fetch: fetchImpl = null, clientFor = null} = {}) {
+  constructor(store, connectors, library, quota, {fetch: fetchImpl = null, clientFor = null, pauseMs = 1100} = {}) {
+    this.pauseMs = pauseMs;
     Object.assign(this, {store, db: store.db, connectors, library, quota, busy: false});
     this.fetch = fetchImpl || connectors.fetch || fetch;
     this.clientFor = clientFor || ((provider, connectorId) => new CLIENTS[provider](this.connectors.key(connectorId), this.fetch));
@@ -105,6 +111,27 @@ class SoundOnline {
     const job = `sound-online:${provider}:${randomUUID()}`, reserved = this.store.transaction(() => this.quota.reserve(job, {[provider]: 1}));
     requireValue(reserved.ok, `The ${PROVIDERS[provider].label} hourly allowance (${reserved.cap} requests) is used up. Try again next hour.`, 409);
     try { const result = await work(); this.quota.settle(job, {[provider]: 1}); return result; } catch (error) { this.quota.settle(job, {[provider]: 1}); throw error; }
+  }
+  // A fill's search: at most one a second (Freesound allows 60 a minute) and one more try, after a pause, when Freesound
+  // was slow, throttled or had a hiccup. Each try counts against the hourly allowance.
+  async fillSearch(ref, query, options) {
+    const ask = () => this.request('freesound', () => this.clientFor('freesound', ref.id).search(query, options));
+    await pause(this.pauseMs);
+    try { return await ask(); }
+    catch (error) {
+      if (!error.retryable) throw error;
+      await pause(Math.min(30, error.retryAfter || 5) * 1000 * (this.pauseMs ? 1 : 0));
+      try { return await ask(); } catch (again) { throw again.retryable ? new InputError(`${again.message} It failed twice, so this one was skipped; press the fill button again later.`, 502) : again; }
+    }
+  }
+  // When a video's score needs moods or effects the library lacks (0.78, owner request 2026-10-31: "the program will find
+  // the music and sfx as per the need of usage"), Freesound is asked by itself, if it is connected and confirmed. Quiet
+  // when there is nothing to find, no connection, or another import already running.
+  autoFill(contentId, cues, by = 'Program (automatic)') {
+    const connector = this.connectors.list?.().find(item => item.provider === 'freesound' && item.test?.status === 'passed' && !item.busy);
+    if (!connector) return null;
+    try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, music: cues.map(cue => `${cue.mood || ''} ${cue.prompt || ''}`.trim()).filter(Boolean).slice(0, 40), perMood: 3, contentId}); }
+    catch (error) { if (error instanceof InputError) return null; throw error; }
   }
   remember(items) {
     const until = Date.now() + CACHE_MINUTES * 60000;
@@ -202,7 +229,7 @@ class SoundOnline {
           if (filled[kind]) { progress.already++; continue; }
           const ref = this.connection('freesound', scope.connector);
           // The most used: the most downloaded fitting sound (0.74; was the best rated).
-          const results = (await this.request('freesound', () => this.clientFor('freesound', ref.id).search(SLOT_QUERY[kind], {kind: 'sfx', limit: 15, sort: 'downloads_desc'}))).filter(item => item.licence.ok && item.download && item.seconds <= Math.max(2, M.SFX[kind].seconds * 4));
+          const results = (await this.fillSearch(ref, SLOT_QUERY[kind], {kind: 'sfx', limit: 15, sort: 'downloads_desc'})).filter(item => item.licence.ok && item.download && item.seconds <= Math.max(2, M.SFX[kind].seconds * 4));
           requireValue(results.length, 'no CC0 or CC BY sound found');
           this.remember(results);
           const added = await this.add({requestedBy: row.created_by, ref: `freesound:${results[0].id}`, connector: scope.connector, kind: 'sfx', slot: kind});
@@ -214,7 +241,7 @@ class SoundOnline {
       for (const {mood, need} of moods) {
         try {
           const ref = this.connection('freesound', scope.connector);
-          const results = (await this.request('freesound', () => this.clientFor('freesound', ref.id).search(`${mood} music`, {kind: 'music', limit: 40, sort: 'downloads_desc'})))
+          const results = (await this.fillSearch(ref, `${mood} music`, {kind: 'music', limit: 25, sort: 'downloads_desc'}))
             .filter(item => item.licence.ok && item.download && item.seconds >= 45 && !this.db.prepare('SELECT 1 FROM sounds WHERE source=? AND page_url=?').get(item.provider, item.page)).slice(0, need);
           requireValue(results.length, 'no CC0 or CC BY music found');
           this.remember(results);

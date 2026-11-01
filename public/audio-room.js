@@ -7,12 +7,18 @@ const stFamily = familyId => state.soundtrack?.families.find(item => item.family
 const stContent = contentId => state.soundtrack?.contents.find(item => item.contentId === contentId) || null;
 const stJobs = predicate => (state.soundtrack?.jobs || []).filter(predicate);
 
+// Where the library's sounds really come from, in words (0.78): "Freesound: 9 tracks, 40 effects; my own: 3 effects".
+function stSources(lib) {
+  const name = id => ({own: 'my own', other: 'another free library', 'youtube-audio-library': 'YouTube Audio Library', pixabay: 'Pixabay'}[id] || (lib.bySource.find(item => item.id === id)?.label ?? id));
+  const parts = (lib?.bySource || []).map(item => `${name(item.id)}: ${[item.music ? `${item.music} track${item.music === 1 ? '' : 's'}` : '', item.sfx ? `${item.sfx} effect${item.sfx === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ')}`);
+  return parts.length ? parts.join('; ') : 'empty so far';
+}
 function stSettingsCard(family) {
   const st = stFamily(family.id);
   if (!st) return '';
   const s = st.settings, u = st.usage, lib = state.soundtrack.sounds;
   if (s.source === 'library') return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">FAMILY · SOUND LIBRARY · FREE</span><h2>Music and sound effects</h2></div>${badge(lib ? `${lib.music} tracks · ${lib.sfx} effects` : 'Library', lib?.music ? 'green' : 'orange')}</div>
-    <p>Music and effects come from your sound library: the score picks a track for every part of the story and every effect slot gets the sound its name says. Nothing is generated or paid.</p>${lib && !lib.music ? '<p class="inline-warning">The library has no music yet. Import a folder of tracks on the Sound library page.</p>' : ''}
+    <p>Music and effects come from your sound library (${esc(stSources(lib))}): the score picks a track for every part of the story and every effect slot gets the sound its name says. When a video needs a mood or an effect the library lacks, the program looks for it on Freesound by itself. Nothing is generated or paid.</p>${lib && !lib.music ? '<p class="inline-warning">The library has no music yet. Import a folder of tracks on the Sound library page.</p>' : ''}
     <div class="card-actions"><a class="button secondary" href="#sounds">Open the sound library</a>${action('Soundtrack settings', 'audio-st-settings', family.id, 'text-button')}</div></section>`;
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">FAMILY · ELEVENLABS</span><h2>Music and sound-effect settings</h2></div>${badge(s.rights?.commercialUseConfirmed ? 'Commercial use confirmed' : 'Confirm commercial use', s.rights?.commercialUseConfirmed ? 'green' : 'orange')}</div>
     <p>${esc(s.musicModel)} · ${u.musicSeconds.toFixed(0)} of ${s.monthlyMusicSeconds} music seconds and ${u.sfx} of ${s.monthlySfx} effects used in ${esc(u.period)} · about $${(u.cents / 100).toFixed(2)} estimated</p>
@@ -157,15 +163,16 @@ function audioAction(command, id) {
   if (command === 'audio-st-settings') {
     const st = stFamily(id), s = st.settings;
     return renderDialog('st-settings', 'Music and sound-effect settings', 'FAMILY', `<div class="form-grid">${renderNameField()}
-      <label class="full">Music and effects come from<select name="source"><option value="library" ${s.source === 'library' ? 'selected' : ''}>My sound library (free: Pixabay, YouTube Audio Library, my own)</option><option value="elevenlabs" ${s.source === 'elevenlabs' ? 'selected' : ''}>ElevenLabs generation (paid per track and effect)</option></select></label>
-      <p class="hint full">The settings below are used only for ElevenLabs generation.</p>
+      <label class="full">Music and effects come from<select name="source"><option value="library" ${s.source === 'library' ? 'selected' : ''}>My sound library, free (${esc(stSources(state.soundtrack.sounds))})</option>${eleven().length || s.source === 'elevenlabs' ? `<option value="elevenlabs" ${s.source === 'elevenlabs' ? 'selected' : ''}>ElevenLabs generation (paid per track and effect)</option>` : ''}</select></label>
+      ${eleven().length || s.source === 'elevenlabs' ? '' : '<p class="hint full">ElevenLabs music generation is offered here once an ElevenLabs connection is tested in Connections.</p>'}
+      <div class="form-grid full st-eleven" ${s.source === 'elevenlabs' ? '' : 'hidden'}><p class="hint full">Used only for ElevenLabs generation.</p>
       <label>Music model<select name="musicModel">${state.soundtrack.musicModels.map(model => `<option ${model === s.musicModel ? 'selected' : ''}>${esc(model)}</option>`).join('')}</select></label>
       <label>Music seconds per month<input name="monthlyMusicSeconds" type="number" min="0" max="360000" required value="${s.monthlyMusicSeconds}"></label>
       <label>Sound effects per month<input name="monthlySfx" type="number" min="0" max="100000" required value="${s.monthlySfx}"></label>
       <label>Estimated cents per music minute<input name="centsPerMusicMinute" type="number" min="0" max="100000" step="0.1" required value="${s.centsPerMusicMinute}"></label>
       <label>Estimated cents per sound effect<input name="centsPerSfx" type="number" min="0" max="10000" step="0.1" required value="${s.centsPerSfx}"></label>
-      <label class="full">Note about your plan<input name="rightsNote" maxlength="300" value="${esc(s.rights?.note || '')}"></label></div>
-      <label class="checkbox-label"><input type="checkbox" name="commercialUseConfirmed" ${s.rights?.commercialUseConfirmed ? 'checked' : ''}>My ElevenLabs plan allows commercial use of generated music and sound effects on my channels.</label>`, 'Save settings', {familyId: id, revision: s.revision});
+      <label class="full">Note about your plan<input name="rightsNote" maxlength="300" value="${esc(s.rights?.note || '')}"></label>
+      <label class="checkbox-label full"><input type="checkbox" name="commercialUseConfirmed" ${s.rights?.commercialUseConfirmed ? 'checked' : ''}>My ElevenLabs plan allows commercial use of generated music and sound effects on my channels.</label></div></div>`, 'Save settings', {familyId: id, revision: s.revision});
   }
   if (command === 'audio-score-claude') {
     if (!connection()) return toast('Set up and test a Claude connection first.', true);
@@ -222,3 +229,6 @@ function audioAction(command, id) {
     <div class="form-grid"><label>Density<select name="sfxDensity">${state.soundtrack.densities.map(item => `<option ${item === sfx.density ? 'selected' : ''}>${item}</option>`).join('')}</select></label>
     <label>Effect level (dB peak)<input name="sfxLevel" type="number" min="-30" max="-3" step="0.5" required value="${sfx.levelDb}"></label></div>`, 'Save audio settings', {revisionId: edit.id, scoreId: score?.ready && score.current ? score.id : null});
 }
+
+// The ElevenLabs fields show only when ElevenLabs is chosen (0.78).
+document.addEventListener('change', event => { if (event.target.name === 'source' && event.target.form?.dataset.kind === 'st-settings') event.target.form.querySelector('.st-eleven').hidden = event.target.value !== 'elevenlabs'; });

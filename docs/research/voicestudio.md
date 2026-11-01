@@ -48,4 +48,13 @@ Windows 10 or 11, about 10 GB free (about 5 GB on a PC without an NVIDIA card, w
    k2-fsa/OmniVoice, eustlb/higgs-audio-v2-tokenizer". Accept those licences in VoiceStudio, Settings → Models (the
    Model Catalogue), or choose an engine whose licence you accepted. A VoiceStudio take is free, so a failed one never
    counts as a paid attempt.
+
+   0.78 (owner test 2026-10-31, "did not answer" after the licence was accepted): VoiceStudio sends nothing back until a
+   whole part has been spoken (its `/v1/audio/speech` encodes the finished audio, then answers), and on a PC without a
+   strong graphics card that takes many minutes. Node's built-in fetch stops waiting for an answer to start after 5
+   minutes, so the program gave up while VoiceStudio was still reading. The program now talks to VoiceStudio over plain
+   HTTP on this PC (`voice.js` `loopbackFetch`, 127.0.0.1 only), where its own clock is the only limit (45 minutes a
+   part), names the real cause (not running, closed while working, too slow), sends parts of at most 1,200 characters,
+   and the test speaks a whole sentence (up to 10 minutes for a model still loading) and says how long it took and
+   roughly how long 1,000 words of script will take on this PC.
 4. Voice Room, narrator: choose the VoiceStudio connection, model `tts-1` (the engine chosen in VoiceStudio) or an engine name such as `kittentts`, voice `default` or a VoiceStudio voice ID, tick the test-only box, save, then generate a narration as usual.

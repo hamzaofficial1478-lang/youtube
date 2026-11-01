@@ -200,3 +200,12 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .live-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.live-head .muted{font-size:12px}
 .live-preview{max-height:220px;overflow:auto;margin:0;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;background:#fff;border:1px solid #e4e9e1;border-radius:8px}
 .next-steps{margin:12px 0;padding:12px;border:1px solid #cfe3d6;border-radius:10px;background:#f2f8f4}.next-steps .card-actions{flex-wrap:wrap}
+/* 0.78 Voice Room: one card per script, its status top right, then two numbered steps on their own lines. */
+.voice-row{display:grid;gap:12px;padding:16px 0;border-bottom:1px solid #edf0eb}
+.voice-row-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}.voice-row-head>div{min-width:0}
+.voice-row-head h3{margin:0}.voice-row-head p{margin:5px 0 0;color:#728077;font-size:12px}.voice-row-head>.chip{flex-shrink:0}
+.voice-steps{display:grid;gap:8px}
+.voice-step{display:grid;gap:8px;padding:10px 12px;border:1px solid #e4e9e1;border-radius:10px;background:#fafbf8}
+.voice-step-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#56645b}
+.voice-step-actions,.voice-row .vd-block{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0}
+.voice-row .vd-block>.inline-warning{flex-basis:100%;margin:0}
