@@ -105,3 +105,23 @@ use public-domain paintings, maps, archive photos and freely licensed images. Th
   connection passes its test.
 - Not used: images from websites, social media or YouTube without a licence (copyright claims and strikes), Openverse
   (its search did not answer from this PC).
+
+## Storyboard with Claude or ChatGPT, who makes the pictures, switching AI (0.79)
+
+The owner's review of 2026-11-02: "Plan with Claude" showed while ChatGPT was connected too, the window said "Ask Claude
+to direct the scenes" even when GPT was picked, and a ChatGPT plan ended "interrupted, cost unknown" with Codex's
+"No such host is known".
+
+- Room 04 shows one **Storyboard with …** button for each connected AI (Claude, ChatGPT), so the owner picks who builds
+  it. The window says what the storyboard is (the plan of the whole video: scenes and shots, what is on screen in each,
+  the camera and the cut, timed on the narration's words) and what comes next in the same job (drawn shots are drawn by
+  the program's engine for free; the shots that deserve a detailed picture or painting get one from the picture AI).
+  With both AIs connected, the window asks who makes the pictures (ChatGPT paints, Claude draws vector art); that is the
+  AI team's picture setting (`/api/ai-roles`), so it also applies to later pictures.
+- A storyboard that failed (a usage limit, no connection, an unusable answer) offers **Continue with <the other AI>**:
+  nothing switches by itself, the owner's click is the permission. The job row names the AI that made it
+  (`publicPlanJob.provider`).
+- `ai.js` names the failures: a usage limit says so and suggests the other AI (`kind: 'limit'`); Codex's network
+  failures ("No such host is known", DNS, refused connections) are "ChatGPT could not be reached from this PC" and used
+  nothing (`kind: 'network'`, `nothingUsed`), so the job is a plain failure, not "interrupted, cost unknown".
+- The other Room 04 windows ask "Which AI" instead of "Claude connector".

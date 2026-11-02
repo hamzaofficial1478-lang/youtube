@@ -43,7 +43,10 @@ test('the ChatGPT connection runs Codex isolated: read-only, no saved settings, 
   fake.reply('', {fail: 'Not logged in. Run codex login.'});
   await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /not signed in/);
   fake.reply('', {fail: 'You have hit your usage limit.'});
-  await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /usage limit/);
+  await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), error => /usage limit[\s\S]*continue with Claude/.test(error.message) && error.kind === 'limit' && error.nothingUsed === true);
+  // 0.79 (owner test 2026-11-02): no connection to OpenAI is a plain failure that used nothing, not "interrupted, cost unknown".
+  fake.reply('', {fail: 'Reconnecting... 2/5 (stream disconnected before completion: No such host is known. (os error 11001))'});
+  await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), error => /could not be reached from this PC[\s\S]*Nothing was generated/.test(error.message) && error.kind === 'network' && error.nothingUsed === true);
   fake.reply('   ');
   await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /ChatGPT returned an empty answer/);
   // Outside text may tell the model to read a file: any tool use throws the whole answer away.
@@ -51,7 +54,7 @@ test('the ChatGPT connection runs Codex isolated: read-only, no saved settings, 
     fake.reply('{"title":"the file said ..."}', {tool});
     await assert.rejects(codex.complete({model: null, prompt: 'x', maxTokens: 400}), /tried to run a command, read a file or browse/, tool);
   }
-  assert.equal(fake.calls().length, 9, 'one call per request');
+  assert.equal(fake.calls().length, 10, 'one call per request');
   await assert.rejects(new CodexCli({command: null}).complete({prompt: 'x', maxTokens: 400}), /not found/);
 });
 

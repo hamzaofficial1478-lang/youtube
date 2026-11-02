@@ -643,3 +643,25 @@ test('0.74: each request gets the skills that fit it, never a fixed list, and th
   assert.equal(used.reasons[0].id, 'story.case-file-mystery');
   assert.equal(used.reasons[0].forJob, true);
 });
+
+// 0.79 (owner question 2026-11-02: "why some skills show completed and some pending?"): only script jobs wrote an
+// outcome, so most records said "pending" for good. Each record now reads how its own job ended and which video it was for.
+test('each skill use shows how its job really ended and which video it was for', t => {
+  const app = createApp({dataFile: ':memory:', worker: false, protector: {transform: (operation, input) => input}});
+  t.after(() => app.store.close());
+  const store = app.store, skills = app.skills || new SkillsEngine(store, {root});
+  const family = store.saveFamily({name: 'Stone Age Money', tier: 'A', countries: ['United States'], audience: 'Adults who like history told simply.', niche: 'Stone age finance', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 0, cadence: 2, format: 'long-form'});
+  const content = store.saveContent({familyId: family.id, kind: 'fiction', title: 'The first casino', angle: '', hook: '', script: '', sources: [], rightsConfirmed: false});
+  const brief = {revisionIds: ['r1'], skillIds: ['hooks.five-mechanisms'], injectedBytes: 100, dropped: 0, reasons: [{id: 'hooks.five-mechanisms', forJob: true}]};
+  const at = new Date().toISOString();
+  store.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,created_at,updated_at) VALUES('job-script',?,1,'ai_script:x','failed',?,?)").run(content.id, at, at);
+  store.db.prepare("INSERT INTO voice_direction_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES('job-voice',?,?,'completed','{}',1,'Owner',?,?)").run(family.id, content.id, at, at);
+  skills.recordUsage({jobId: 'job-script', familyId: family.id, room: 'script', taskKey: 'script.candidate', brief});
+  skills.recordUsage({jobId: 'job-voice', familyId: family.id, room: 'voice', taskKey: 'voice.direction', brief});
+  skills.recordUsage({jobId: 'gone', familyId: family.id, room: 'scene', taskKey: 'scene.plan', brief});
+  const byJob = Object.fromEntries(skills.usage(10).map(item => [item.jobId, item]));
+  assert.deepEqual([byJob['job-script'].jobStatus, byJob['job-script'].contentId], ['failed', content.id]);
+  assert.deepEqual([byJob['job-voice'].jobStatus, byJob['job-voice'].contentId], ['completed', content.id]);
+  assert.deepEqual([byJob.gone.jobStatus, byJob.gone.contentId], [null, null]);
+  assert.ok(store.state() && app.store, 'the page state still builds');
+});

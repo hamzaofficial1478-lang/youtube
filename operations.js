@@ -32,7 +32,7 @@ function report(db, {days = 14, at = new Date(), quota = null} = {}) {
   const families = new Map(tables.has('families') ? db.prepare('SELECT id, payload FROM families').all().map(row => [row.id, json(row.payload)?.name || 'A family']) : []);
 
   // Reliability: how every kind of work ended.
-  const problems = [];
+  const problems = [], running = [];
   const work = WORK.filter(([table]) => tables.has(table)).map(([table, label]) => {
     const counts = {done: 0, problem: 0, limited: 0, open: 0, setAside: 0}, statuses = {};
     for (const row of db.prepare(`SELECT status, COUNT(*) AS n FROM ${table} WHERE created_at >= ? GROUP BY status`).all(since)) { counts[outcome(row.status)] += row.n; statuses[row.status] = row.n; }
@@ -40,6 +40,12 @@ function report(db, {days = 14, at = new Date(), quota = null} = {}) {
       const has = columns(table);
       for (const row of db.prepare(`SELECT status, ${has.has('error') ? 'error' : 'NULL AS error'}, ${has.has('updated_at') ? 'updated_at' : 'created_at'} AS at FROM ${table} WHERE created_at >= ? AND status IN (${[...PROBLEM].map(() => '?').join(',')}) ORDER BY at DESC LIMIT 5`).all(since, ...PROBLEM))
         problems.push({work: label, status: row.status, at: row.at, error: String(json(row.error)?.message || row.error || '').slice(0, 240) || null});
+    }
+    // What is running or waiting right now (0.79, owner request 2026-11-02: the "Running now" count opens into this list).
+    if (counts.open) {
+      const has = columns(table), started = has.has('updated_at') ? 'updated_at' : 'created_at';
+      for (const row of db.prepare(`SELECT ${has.has('id') ? 'id' : has.has('job_id') ? 'job_id AS id' : 'rowid AS id'}, status, created_at, ${started} AS at, ${has.has('family_id') ? 'family_id' : 'NULL AS family_id'} FROM ${table} WHERE created_at >= ? AND status IN (${[...OPEN].map(() => '?').join(',')}) ORDER BY created_at DESC LIMIT 20`).all(since, ...OPEN))
+        running.push({work: label, table, id: String(row.id), status: row.status, since: row.created_at, at: row.at, family: families.get(row.family_id) || null, quietHours: Math.round((at - new Date(row.at)) / 3600000 * 10) / 10});
     }
     const finished = counts.done + counts.problem;
     return {table, label, ...counts, statuses, reliability: finished ? counts.done / finished : null};
@@ -101,7 +107,7 @@ function report(db, {days = 14, at = new Date(), quota = null} = {}) {
   return {
     days, since, at: at.toISOString(),
     reliability: {done: sum('done'), problems: sum('problem'), limited: sum('limited'), open: sum('open'), setAside: sum('setAside'), rate: finished ? sum('done') / finished : null},
-    work, problems: problems.slice(0, 12), renders,
+    work, problems: problems.slice(0, 12), running: running.sort((a, b) => String(b.since).localeCompare(String(a.since))), renders,
     usage: {tokens: Object.values(tokens).sort((a, b) => b.tokens - a.tokens), paid, cents: paid.voice.cents + paid.audio.cents + paid.pictures.cents, data, families: Object.values(byFamily).sort((a, b) => b.tokens - a.tokens)},
     quota, languages: Object.values(languages).sort((a, b) => a.locale.localeCompare(b.locale)), channels,
   };

@@ -454,6 +454,8 @@ const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.pla
   ['audio.mix', 'Music score'], ['competitors.blueprint', 'Competitor blueprint'], ['niche.evaluate', 'Niche go/no-go'], ['niche.discover', 'Niche suggestions'],
   ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Editing brain (in code)']]);
 
+// The record of each job that receives a skill brief, by the job it is for (0.79).
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.
@@ -591,9 +593,25 @@ class SkillsEngine {
       : this.db.prepare('SELECT * FROM skill_bindings WHERE family_id IS NULL OR family_id=? ORDER BY created_at').all(familyId);
     return rows.map(row => ({id: row.id, skillId: row.skill_id, familyId: row.family_id, taskKey: row.task_key, mode: row.mode, position: row.position, note: row.note, createdBy: row.created_by, createdAt: row.created_at}));
   }
+  // How the job that received a brief really ended, and which video it was for (0.79, owner question 2026-11-02: "why
+  // some skills show completed and some pending?"). Only script jobs and language checks wrote an outcome, so every
+  // other record said "pending" forever; the job's own record is read instead.
+  jobOf(taskKey, jobId) {
+    if (taskKey === 'editing.plan') { const row = this.tableHas('edit_revisions') && this.tableHas('edit_timelines') ? this.db.prepare('SELECT t.content_id FROM edit_revisions r JOIN edit_timelines t ON t.id=r.timeline_id WHERE r.id=?').get(jobId) : null; return row ? {status: 'completed', contentId: row.content_id} : null; }
+    const table = USAGE_JOBS[taskKey];
+    if (!table || !this.tableHas(table)) return null;
+    const row = this.db.prepare(`SELECT status${this.tableHas(table, 'content_id') ? ', content_id' : ''} FROM ${table} WHERE id=?`).get(jobId);
+    return row ? {status: row.status, contentId: row.content_id || null} : null;
+  }
+  tableHas(table, column = null) {
+    this.columnsCache ||= new Map();
+    if (!this.columnsCache.has(table)) this.columnsCache.set(table, new Set(this.db.prepare('SELECT name FROM pragma_table_info(?)').all(table).map(item => item.name)));
+    const columns = this.columnsCache.get(table);
+    return column ? columns.has(column) : columns.size > 0;
+  }
   usage(limit = 100) {
     return this.db.prepare('SELECT * FROM skill_usage ORDER BY created_at DESC, rowid DESC LIMIT ?').all(integer(limit, 1, 500, 'Limit'))
-      .map(row => ({id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), reasons: row.reasons ? JSON.parse(row.reasons) : null, revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
+      .map(row => ({...(() => { const job = this.jobOf(row.task_key, row.job_id); return {jobStatus: job?.status || null, contentId: job?.contentId || null}; })(), id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), reasons: row.reasons ? JSON.parse(row.reasons) : null, revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
   }
   lessons(status = null) {
     const rows = status
