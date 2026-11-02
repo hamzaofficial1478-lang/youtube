@@ -81,10 +81,12 @@ const SETTINGS_DEFAULTS = {
   storyMap: true, designedPerMinute: 2,
   // Pictures (0.33): shots that carry an illustration Claude draws for them (paid in tokens), per minute of video,
   // and each picture's own token limit. The rest of every drawn shot is drawn by the program for free.
-  picturesPerMinute: 3, pictureTokenLimit: 40000,
+  // Quality first (0.80, owner rule 2026-11-02): the picture budgets are ceilings, high enough that every shot which
+  // needs a detailed picture can have one; the planner decides where.
+  picturesPerMinute: 12, pictureTokenLimit: 40000,
   // Natural paintings (0.63): how many realistic scenes ChatGPT may paint per minute of a natural or mixed video
   // (shots of one scene in one place share a painting).
-  naturalPerMinute: 8,
+  naturalPerMinute: 15,
 };
 const STOPWORDS = new Set(('about above after again against because been before being below between both but by could did does doing down during each few from further have having here hers herself himself into itself just more most must myself once only other ought ours ourselves over same should some such than that their theirs them themselves then there these they this those through under until very were what when where which while whom with would your yours yourself yourselves also every never always still even many much like make made thing things people really today first last next another years year time times something someone anything nothing because without within will shall cannot might around across toward towards whose ever upon onto kept keep keeps came come comes went goes became become began begin said says took take takes gave give gives used uses using found find told tell know knew'
 ).split(' '));
@@ -357,7 +359,7 @@ function planMessages(input) {
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
     ...(input.style.adaptive ? [input.design ? 'DESIGN THIS VIDEO: the video already has its design (input "design": colours, fonts, pace, energy, captions); plan this part by it and do not return a new one.' : DESIGN_LINE] : []),
     ...(input.style.naturalPaintings ? [`NATURAL PAINTINGS (paid, ChatGPT): up to ${input.style.naturalPaintings} paintings ${input.part ? 'in this part' : 'in this video'}; shots that repeat a scene's backdrop "describe" word for word share one painting and count once. Spend new paintings where the place, the moment or the action changes; frame a shared painting differently in each shot (focus, camera) and keep the motion layer moving over it.`] : []),
-    ...(input.style.pictures ? [`PICTURES (paid): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration drawn for that shot by an illustrator and traced by the hand (it costs Claude tokens; everything else in a shot is drawn free by the program). Spend them where a rich picture tells the line better than the program's own drawing: a whole place or a dramatic moment, a complex object or machine, a crowd, an emotional close-up, anything the drawing vocabulary cannot show well. Draw the rest free: characters acting, simple objects, numbers, words, diagrams, comparisons. Spread them across the video (one per scene before a second in any scene), put free labels, arrows, keywords or effects around a picture when they help, and say in the shot's notes why it is worth a picture. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Keep the rhythm alive: a picture holds the eye, so follow it with free shots that act, count or move, never a run of pictures in a row. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
+    ...(input.style.pictures ? [`PICTURES (paid, QUALITY FIRST - the owner's rule): up to ${input.style.pictures} drawn shots ${input.part ? 'in this part ' : ''}may carry one "picture" element: a detailed illustration made for that shot by the picture AI (it costs that AI's tokens or plan allowance; everything else in a shot is drawn free by the program). Never trade quality for savings: give a picture to every shot whose free drawing would look poorer than a detailed picture - a whole place or a dramatic moment, a person or a face up close, a complex object or machine, a crowd, an emotional beat, the hook and the payoff, anything the drawing vocabulary cannot show well. Draw free only what the program's own drawing shows just as well: words, numbers, charts, maps, timelines, diagrams, comparisons, and simple acting in a stick-figure look. The number above is a ceiling, not a target, and it is high on purpose: use it where the shots need it and nowhere else. Put free labels, arrows, keywords or effects around a picture when they help, and say in every shot's notes why it has a picture or why its free drawing is enough. A picture is drawn in its shot's engine and look (stick characters in a stickman shot, flat design in a motion shot, whiteboard art in a hand-drawn shot). Pictures may follow each other when each shot needs one; keep each alive with the camera, words or effects. A picture of a whole place is the place: give its shot the set "none" and the picture size xl; a picture of one thing (a machine, an object, a person) may sit inside the shot's place. Keep other drawings beside a picture, not on top of it.`] : []),
     ...(input.kit || input.world ? ['Build every shot inside the video\'s world (input "world": era, place and rules; plain physics: people stand on ground or floors, ships float on the surface, under water only when diving). Use its kit (input "kit": "kit:<id>" props, sets and outfits) for the things the vocabulary lacks; do not design new kit items. What the words name is what is shown.']
       : input.style.sources.includes('generated-graphics') && !input.part ? ['WORLD: build the story\'s world first - its era and place decide the people, places and objects, and everything obeys plain physics (people stand on ground or floors, ships float on the surface, under water only when diving). What the words name is what is shown: a train is a train, not a door. Return "world": {"era": one of ' + JSON.stringify(D.ERAS) + ', "place", "rules": [up to 8 short rules]} and, when the story needs things the vocabulary lacks, "kit": [kit items].', Kit.promptGuide()] : []),
     // The look's visual rules (visual-dna.js): every place, object and picture is planned in this look.
@@ -508,6 +510,8 @@ class SceneRoom {
     // 0.33: a finished continuity review and finished pictures are kept with their job, so a retry after a stop
     // never pays for them again.
     if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'reviewed')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN reviewed TEXT');
+    // 0.80: finished storyboard jobs the owner cleared from the list (the rows and their usage stay).
+    if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'cleared_at')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN cleared_at TEXT');
     this.db.exec('CREATE TABLE IF NOT EXISTS plan_pictures(job_id TEXT NOT NULL, key TEXT NOT NULL, art TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(job_id, key))');
     const at = now();
     this.store.transaction(() => {
@@ -740,7 +744,10 @@ class SceneRoom {
       return {input, maxTokens};
     })() : null;
     return this.store.transaction(() => {
-      requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
+      // 0.80 (owner review 2026-11-02): a second storyboard for the same script needs the owner's yes; it waits for the
+      // first and the newer plan becomes the current one (the other stays in the plan's history).
+      const busy = this.db.prepare("SELECT scope FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").all(content.id);
+      requireValue(!busy.length || input.alsoWhileRunning === true, 'A storyboard is already being built for this script. Tick "also build this one" to build a second one after it.', 409);
       const id = randomUUID(), at = now();
       // The planner token limit applies to each part (and the story director); the job reserves it once each.
       // A drawing style gets the continuity review: one more Claude answer per part, reserved up front.
@@ -754,6 +761,13 @@ class SceneRoom {
       this.store.event(`Queued Claude scene plan for "${content.title}"${parts.length > 1 ? ` in ${parts.length} parts` : ''}`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
     });
+  }
+  // "Clear them" for the finished storyboard jobs of one script (0.80, owner request 2026-11-02): they leave the
+  // list; nothing is deleted, usage records stay, and waiting or running jobs are never touched.
+  clearPlanJobs(contentId) {
+    this.store.content(contentId);
+    const result = this.db.prepare("UPDATE scene_plan_jobs SET cleared_at=? WHERE content_id=? AND cleared_at IS NULL AND status NOT IN ('queued','running')").run(now(), contentId);
+    return {cleared: Number(result.changes)};
   }
   planJobRow(id) { const row = this.db.prepare('SELECT * FROM scene_plan_jobs WHERE id=?').get(id); requireValue(row, 'Scene plan job not found.', 404); return row; }
   publicPlanJob(row) {
@@ -791,7 +805,7 @@ class SceneRoom {
       if (!current) { this.db.prepare("UPDATE scene_plan_jobs SET status='stale', error='The script, narration, style or Claude connection changed before planning. Nothing was sent.', updated_at=? WHERE id=?").run(at, row.id); return null; }
       const summary = this.store.usageSummary(inputs.family.id);
       if (summary.settledTokens + summary.reservedTokens + scope.tokenLimit > inputs.family.tokenBudget.monthlyLimit) {
-        this.db.prepare("UPDATE scene_plan_jobs SET status='blocked_budget', error='The family monthly token limit cannot reserve this plan. Raise it or wait for next month.', updated_at=? WHERE id=?").run(at, row.id);
+        this.db.prepare("UPDATE scene_plan_jobs SET status='blocked_budget', error=?, updated_at=? WHERE id=?").run(this.store.budgetMessage(inputs.family.id, scope.tokenLimit, 'This storyboard'), at, row.id);
         return null;
       }
       this.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'scene_plan',?,'reserved',?,?,?)").run(row.id, inputs.family.id, this.store.tokenPeriod(inputs.family), scope.tokenLimit, at, at);
@@ -2173,7 +2187,7 @@ class SceneRoom {
           manifests, selections, candidateCounts: counts,
           assets: this.db.prepare('SELECT * FROM visual_assets WHERE content_id=? ORDER BY created_at DESC').all(content.id).map(row => this.publicAsset(row)),
           jobs: this.db.prepare('SELECT * FROM visual_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 80').all(content.id).map(row => this.publicJob(row)),
-          planJobs: this.db.prepare('SELECT * FROM scene_plan_jobs WHERE content_id=? ORDER BY created_at DESC LIMIT 6').all(content.id).map(row => this.publicPlanJob(row)),
+          planJobs: this.db.prepare('SELECT * FROM scene_plan_jobs WHERE content_id=? AND cleared_at IS NULL ORDER BY created_at DESC LIMIT 12').all(content.id).map(row => this.publicPlanJob(row)),
           approvals, handoff: this.handoff(content.id),
         };
       }),

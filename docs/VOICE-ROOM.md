@@ -112,3 +112,16 @@ The owner's review of 2026-10-31 asked for three things in this room.
 
 Scenes are planned after a narration is approved: the Scene & Visual Room times every scene on the approved
 narration's real words, so the approved take's card links straight there.
+
+## The voice VoiceStudio uses (0.80)
+
+The owner asked whether the program tells VoiceStudio what kind of voice to use. It sent the engine (`tts-1` =
+VoiceStudio's chosen engine), the voice (`default`), the pace of each part and the voice direction's written
+instructions. VoiceStudio's default engine, OmniVoice, keeps only a closed list of voice-design tags from those
+instructions and drops prose, so the written direction never reached the voice: a narration came out in the engine's
+own default voice at the profile's pace.
+
+A VoiceStudio narrator profile now has "The voice VoiceStudio uses": gender, age, pitch and accent pickers with the
+tags OmniVoice understands (`store.VOICE_DESIGN`, validated by `voiceDesignInput`: one per group, unknown tags
+refused). They are saved as `voiceDesign` and sent first in every part's instructions, before the direction. Other
+engines may ignore them; pace still applies. Measured word times are still not available from VoiceStudio.
