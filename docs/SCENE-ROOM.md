@@ -125,3 +125,35 @@ to direct the scenes" even when GPT was picked, and a ChatGPT plan ended "interr
   failures ("No such host is known", DNS, refused connections) are "ChatGPT could not be reached from this PC" and used
   nothing (`kind: 'network'`, `nothingUsed`), so the job is a plain failure, not "interrupted, cost unknown".
 - The other Room 04 windows ask "Which AI" instead of "Claude connector".
+
+## A second storyboard, "over budget", clearing jobs, quality-first pictures (0.80)
+
+The owner's review of 2026-11-02: a ChatGPT storyboard started while Claude was still building one for the same
+script; two jobs said "over budget" although both AI plans had daily and weekly room left; the window's "GPT paints
+them / Claude draws them" was unclear; the job messages took too much room; and "I do not want to compromise on
+quality ... no matter if the whole video needs the model painted scenes".
+
+- **A second storyboard needs a yes.** When a storyboard is waiting or being built for the script, the window says
+  which AI is building it and that a second one starts after it and becomes the plan shown (the first stays in the
+  plan's history). Only a ticked "also build this one" sends it (`alsoWhileRunning`); without it the server refuses
+  with 409.
+- **"Over budget" is the program's own limit, not the AI plan.** Each channel has a monthly AI token limit in the
+  program ("Monthly LLM token limit", default 1,000,000). A storyboard holds its planner limit for every part (and the
+  story map) plus the review's limit while it runs, and gives back what it did not use. The message now gives the
+  numbers (`store.budgetMessage`: what the job holds, the limit, used this month, held by unfinished jobs or unknown
+  answers) and says it is not the Claude or ChatGPT plan; the row offers "Raise the channel's limit". Script and voice
+  direction jobs say the same. Jobs that never reached the AI (Codex: "No such host is known", os error 11001) were
+  recorded before 0.79 as unknown charges and kept holding their tokens; `store.repairUnreachedJobs` turns them into
+  plain failures and releases the hold at every start.
+- **Who makes the pictures.** The storyboard AI plans the video; the pictures inside the shots are a second job. The
+  window's choice reads "Detailed pictures inside the shots are made by: ChatGPT (painted, detailed images) / Claude
+  (clean vector drawings)" and explains that the two can be different AIs.
+- **Job history folds away.** The newest job shows; earlier attempts sit in a closed "Earlier attempts (n)" list.
+  "Clear them" removes finished jobs from the list (`clearPlanJobs`, column `cleared_at`; nothing deleted, usage stays,
+  waiting or running jobs untouched; `POST /api/content/:id/scene-plan-jobs/clear`).
+- **Quality first.** The PICTURES planner line now says: never trade quality for savings; a picture for every shot
+  whose free drawing would look poorer (a whole place or a dramatic moment, a person or a face up close, a complex
+  object or machine, a crowd, an emotional beat, the hook and the payoff); free drawing only for words, numbers, charts, maps, timelines, diagrams,
+  comparisons and simple stick-figure acting; the number is a ceiling, not a target; every shot's notes say why it has
+  a picture or why the free drawing is enough. New defaults: 12 pictures and 15 natural paintings per minute at most.
+  Visual settings saved earlier keep their own numbers; raise them in Visual settings.

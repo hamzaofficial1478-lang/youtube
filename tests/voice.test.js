@@ -327,3 +327,21 @@ test('a narration shows its parts live while it is read',async t=>{
   assert.ok(seen.every(rooms=>rooms.includes('voice')),'the job is in the live list while it runs');
   assert.equal(live.list().length,0,'and gone when it ends');
 });
+
+// 0.80 (owner question 2026-11-02: "does our program lead VoiceStudio on which voice we want?"): VoiceStudio's default
+// engine follows voice-design tags only and drops written moods, so a VoiceStudio narrator can name gender, age, pitch
+// and accent, and they go first in every request.
+test('a VoiceStudio narrator names the voice in tags the engine follows, sent first in every request',t=>{
+  const env=setup(t,'voicestudio');env.store.db.prepare('UPDATE connectors SET secret=NULL WHERE id=?').run(env.connector.id);
+  const base={model:'tts-1',voiceId:'default',commercialUseConfirmed:false,testOnlyConfirmed:true,priceCentsPerMillionCharacters:0};
+  assert.throws(()=>env.store.saveVoiceProfile(env.family.id,profileInput(env.connector,{...base,voiceDesign:'male, sounds friendly'})),/"sounds friendly" is not a voice-design tag/);
+  assert.throws(()=>env.store.saveVoiceProfile(env.family.id,profileInput(env.connector,{...base,voiceDesign:'male, female'})),/one gender only/);
+  const profile=env.store.saveVoiceProfile(env.family.id,profileInput(env.connector,{...base,voiceDesign:'Male, middle-aged, low pitch, british accent'}));
+  assert.equal(profile.voiceDesign,'male, middle-aged, low pitch, british accent');
+  const job=env.store.queueVoiceAudition(env.content.id,{contentRevision:env.content.revision,profileId:profile.id,profileRevision:profile.revision,connectorId:env.connector.id,connectorRevision:env.connector.revision});
+  const scope=JSON.parse(env.store.db.prepare('SELECT input FROM voice_jobs WHERE id=?').get(job.id).input);
+  assert.match(scope.providerInstructions,/^male, middle-aged, low pitch, british accent, /);
+  // Other providers keep their own instructions; the tags belong to VoiceStudio only.
+  const other=setup(t,'openai'),plain=other.store.saveVoiceProfile(other.family.id,profileInput(other.connector,{voiceDesign:'male'}));
+  assert.equal(plain.voiceDesign,undefined);
+});

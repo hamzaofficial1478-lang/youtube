@@ -112,7 +112,7 @@ class VoiceDirector {
       if (this.store.content(row.content_id).revision !== scope.contentRevision) return stop('stale', 'The script changed before Claude started. Nothing was sent.');
       if (!connectorCurrent(this.connectors, scope.connector, 'ai')) return stop('stale', 'The Claude connection changed or is not tested. Nothing was sent.');
       const summary = this.store.usageSummary(family.id);
-      if (summary.settledTokens + summary.reservedTokens + scope.tokenLimit > family.tokenBudget.monthlyLimit) return stop('blocked_budget', 'The family monthly token limit cannot reserve this direction. Raise it or wait for next month.');
+      if (summary.settledTokens + summary.reservedTokens + scope.tokenLimit > family.tokenBudget.monthlyLimit) return stop('blocked_budget', this.store.budgetMessage(family.id, scope.tokenLimit, 'This voice direction'));
       this.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'voice_direction',?,'reserved',?,?,?)").run(row.id, family.id, this.store.tokenPeriod(family), scope.tokenLimit, at, at);
       this.db.prepare("UPDATE voice_direction_jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?").run(at, row.id);
       return {...row, scope};

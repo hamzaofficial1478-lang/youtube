@@ -1152,3 +1152,34 @@ test('anime atelier: the planner hears the finish, the frame worker gets the col
   assert.deepEqual([packets[0].finish, packets[0].fps, packets[0].colourScript.sky, packets.find(item => item.drawingBudget.shot === 'sakuga').drawingBudget.uniqueDrawings], ['anime', 30, '#24143A', 8], 'the frame worker gets the finish, frame rate, script and budget');
   assert.ok(list.every(shot => shot.frame.html), 'compositions in the script that swap drawings pass');
 });
+
+// 0.80 (owner review 2026-11-02): a second storyboard for the same script needs a yes; an over-budget plan says whose
+// limit it is with its numbers; finished jobs can be cleared; a job that never reached the AI holds nothing.
+test('a second storyboard needs a yes, the budget message names the channel limit, and finished jobs can be cleared', async t => {
+  const {room, content, ids, store, family} = setup(t, fakeNetwork());
+  const plan = extra => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude, ...extra});
+  const first = plan();
+  assert.throws(() => plan(), /already being built for this script[\s\S]*also build this one/);
+  const second = plan({alsoWhileRunning: true});
+  assert.notEqual(second.job.id, first.job.id);
+  // The channel's own monthly limit is too small for a storyboard: the job says so, with numbers, not "over budget".
+  const f = store.family(family.id);
+  store.saveFamily({name: f.name, tier: f.tier, countries: f.countries, audience: f.audience, niche: f.niche, locales: f.locales, timezone: f.timezone, monthlyBudget: f.budgetCents / 100, cadence: f.cadence, format: f.format, revision: f.revision, monthlyTokenLimit: 1000, scriptTokenLimit: f.tokenBudget.scriptJobLimit, researchTokenLimit: f.tokenBudget.researchJobLimit}, f.id);
+  assert.equal(room.claimPlan(), null);
+  const blocked = room.publicPlanJob(room.planJobRow(first.job.id));
+  assert.equal(blocked.status, 'blocked_budget');
+  assert.match(blocked.error, /holds up to [\d,]+ tokens[\s\S]*this channel's own monthly AI token limit in the program is 1,000[\s\S]*not your Claude or ChatGPT plan/);
+  // Clearing takes the finished jobs off the list and never a waiting one.
+  assert.deepEqual(room.clearPlanJobs(content.id), {cleared: 1});
+  const listed = room.state().contents.find(item => item.contentId === content.id).planJobs.map(job => job.id);
+  assert.deepEqual(listed, [second.job.id]);
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM scene_plan_jobs').get().n, 2, 'nothing is deleted');
+  // A plan that never reached the AI (before 0.79) is repaired on the next start: failed, its reservation freed.
+  store.db.prepare("UPDATE scene_plan_jobs SET status='interrupted', error='Codex returned no readable answer. Its usage may still count. Codex said: \"Reconnecting... (No such host is known. (os error 11001))\"' WHERE id=?").run(first.job.id);
+  store.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'scene_plan',?,'unknown',170000,?,?)").run(first.job.id, family.id, store.tokenPeriod(store.family(family.id)), new Date().toISOString(), new Date().toISOString());
+  assert.equal(store.repairUnreachedJobs(), 1);
+  const fixed = store.db.prepare('SELECT status, error FROM scene_plan_jobs WHERE id=?').get(first.job.id), usage = store.db.prepare('SELECT status, reserved_tokens FROM intelligence_usage WHERE job_id=?').get(first.job.id);
+  assert.deepEqual([fixed.status, /never reached, so nothing was used/.test(fixed.error)], ['failed', true]);
+  assert.deepEqual([usage.status, usage.reserved_tokens], ['released', 0]);
+  assert.equal(store.repairUnreachedJobs(), 0, 'once only');
+});

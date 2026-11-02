@@ -31,6 +31,8 @@ Windows 10 or 11, about 10 GB free (about 5 GB on a PC without an NVIDIA card, w
 - The narrator profile confirms **test-only use** instead of commercial use. Room 11 refuses to upload any video narrated by a VoiceStudio voice, master or language edition, and says to narrate it again with ElevenLabs, Fish Audio or OpenAI.
 - Everything else of the Voice Room is unchanged: the same real-audio checks, the monthly character limit, listening and approval by name.
 
+- Since 0.80 a VoiceStudio narrator names its voice with OmniVoice's own voice-design tags (gender, age, pitch, accent), sent first in every part. OmniVoice drops written moods, so before 0.80 the voice was the engine's default.
+
 ## What it did not take, and why
 
 - **Voice cloning and voice design.** Cloning needs the voice owner's consent; the owner's own voice could be cloned later, but the weights licence would still need checking before real videos.

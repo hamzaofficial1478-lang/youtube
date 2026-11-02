@@ -79,7 +79,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   // 0.61: Freesound effects and Jamendo music, searched and added on the owner's click.
-  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);soundtrack.onScored=(contentId,cues)=>soundOnline.autoFill(contentId,cues);
+  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);try{store.repairUnreachedJobs();}catch(error){console.error('Repairing unreached jobs:',error.message);}soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);soundtrack.onScored=(contentId,cues)=>soundOnline.autoFill(contentId,cues);
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;
@@ -287,6 +287,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(renderAction&&req.method==='POST'){const [,id,kind]=renderAction;return json(res,200,kind==='cancel'?renderRoom.cancel(id,body):kind==='retry'?renderRoom.retry(id,body):kind==='master'?renderRoom.queueMaster(id,body):kind==='approve-master'?renderRoom.approveMaster(id,body):renderRoom.review(id,body));}
         const visualSettings=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/visual-settings$/);
         if(visualSettings&&req.method==='POST')return json(res,200,sceneRoom.saveSettings(visualSettings[1],body));
+        const planClear=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plan-jobs\/clear$/);
+        if(planClear&&req.method==='POST')return json(res,200,sceneRoom.clearPlanJobs(planClear[1]));
         const scenePlan=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plans$/);
         if(scenePlan&&req.method==='POST')return json(res,200,sceneRoom.createPlan(scenePlan[1],body));
         const planRetry=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/retry$/);
