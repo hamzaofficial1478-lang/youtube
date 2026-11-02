@@ -10,6 +10,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const {spawn, execFile, execFileSync} = require('node:child_process');
+const dns = require('node:dns');
+const net = require('node:net');
 const Anthropic = require('@anthropic-ai/sdk').default;
 
 // The AI connections every room may use (owner request 2026-10-22: Claude and/or the ChatGPT plan).
@@ -42,6 +44,47 @@ const MAX_REPLY_BYTES = 8 * 1024 * 1024;
 class AiError extends Error {
   constructor(message, status = 502, {nothingUsed = false, kind = null} = {}) { super(message); this.status = status; this.nothingUsed = nothingUsed; this.kind = kind; }
 }
+// A lost or missing internet connection (0.81, owner review 2026-11-02: "what if the user lost the connection to the
+// internet"). Named as such, so a storyboard pauses and waits for the owner instead of failing. Unreached: the
+// request never left this PC (the AI's server could not be found or refused the connection), so nothing was used.
+const NET_UNREACHED = /no such host|getaddrinfo|ENOTFOUND|EAI_AGAIN|os error 1100[14]|dns error|failed to lookup address|name or service not known|network is unreachable|ENETUNREACH|connection refused|ECONNREFUSED|unable to connect/i;
+const NET_DROPPED = /connection error|ECONNRESET|socket hang up|ETIMEDOUT|request timed out|stream disconnected|error sending request|fetch failed|network error|connection (was )?(reset|closed|aborted|lost)|EPIPE/i;
+function networkError(said, who) {
+  const text = String(said || ''), quoted = saidText(text) ? ` ${who === 'ChatGPT' ? 'Codex' : who === 'Claude' ? 'Claude Code' : who} said: "${saidText(text)}"` : '';
+  if (NET_UNREACHED.test(text)) return new AiError(`${who} could not be reached from this PC: no internet, or the connection dropped before the request left. Nothing was generated or used.${quoted}`, 503, {nothingUsed: true, kind: 'network'});
+  if (NET_DROPPED.test(text)) return new AiError(`The internet connection dropped while ${who} was answering, so that answer was lost. Its use may still count.${quoted}`, 503, {kind: 'network'});
+  return null;
+}
+// The owner pressed Stop (0.81): the AI app is ended at once. used: it had already started answering.
+const stoppedError = used => new AiError(`Stopped by you.${used ? ' The answer in progress was dropped; it may still count against the plan.' : ''} Everything finished before it is kept.`, 499, {nothingUsed: !used, kind: 'stopped'});
+// Is the AI's server reachable from this PC? Free and quick: its name is looked up (no internet = not found). Only a
+// clear "not found" counts as offline, so an unusual network never blocks work. probe() also times a connection,
+// for the page's "Check my connection" (information only: a proxy can block it while the AI apps still work).
+const AI_HOSTS = Object.freeze({claude: 'api.anthropic.com', 'claude-code': 'api.anthropic.com', chatgpt: 'chatgpt.com'});
+async function reachable(provider, {lookup = dns.promises.lookup, timeoutMs = 6000} = {}) {
+  const host = AI_HOSTS[provider];
+  if (!host) return null;
+  let timer;
+  try {
+    const result = await Promise.race([lookup(host).then(() => 'found'), new Promise(resolve => { timer = setTimeout(() => resolve('slow'), timeoutMs); })]);
+    return result === 'found';
+  } catch (error) { return ['ENOTFOUND', 'EAI_AGAIN', 'ESERVFAIL', 'ECONNREFUSED', 'ETIMEOUT'].includes(error?.code) ? false : null; }
+  finally { clearTimeout(timer); }
+}
+async function probe(provider, {timeoutMs = 6000} = {}) {
+  const host = AI_HOSTS[provider], started = Date.now();
+  if (!host) return {host: null, found: null, connected: null, ms: null};
+  const found = await reachable(provider, {timeoutMs});
+  if (!found) return {host, found, connected: false, ms: null};
+  const connected = await new Promise(resolve => {
+    const socket = net.connect({host, port: 443});
+    const finish = ok => { socket.destroy(); resolve(ok); };
+    socket.setTimeout(timeoutMs, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+  return {host, found, connected, ms: connected ? Date.now() - started : null};
+}
 // What a CLI said, cleaned for a message: one line, no control characters, at most 240 characters.
 const saidText = value => String(value || '').replace(/[\x00-\x1f\x7f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 240);
 // Claude Code's own result text when it refused (0.73): a model the plan does not include mentions "/login" too
@@ -49,6 +92,8 @@ const saidText = value => String(value || '').replace(/[\x00-\x1f\x7f]+/g, ' ').
 function claudeCodeRefusal(said, model) {
   const words = saidText(said), name = MODELS[model] || model, quoted = words ? ` Claude Code said: "${words}"` : '';
   if (/output token maximum/i.test(words)) return new AiError('Claude needed more room than this job allows. Raise the family token limit for this kind of job.', 413);
+  const offline = networkError(said, 'Claude');
+  if (offline) return offline;
   if (/not available (with|on|for|in)|may not exist|not have access|invalid model|unknown model|model\b.*\bnot (found|supported|allowed)|issue with the selected model/i.test(words)) return new AiError(`Your Claude plan cannot use ${name} in Claude Code, so nothing was generated.${quoted} Choose a model your plan includes for this kind of job (Connections: your Claude connection's models, or the AI team), then try again.`, 403, {nothingUsed: true, kind: 'model'});
   if (/not logged in|log ?in|authenticat|oauth|invalid api key|unauthori[sz]ed|credentials/i.test(words)) return new AiError(`Claude Code is not signed in on this PC, so nothing was generated.${quoted} Click "Sign in to Claude" on your Claude connection in Connections (or run claude auth login in a terminal), then test it again.`, 401, {nothingUsed: true, kind: 'login'});
   if (/usage limit|rate limit|limit reached|too many requests|overloaded/i.test(words)) return new AiError(`Your Claude plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later, or continue with ChatGPT if it is connected.`, 429, {nothingUsed: true, kind: 'limit'});
@@ -90,6 +135,8 @@ function cliProblem(stderr, app) {
   if (!said) return null;
   const quoted = ` ${app} said: "${said}"`, update = app === 'Claude Code' ? 'open a terminal and run: claude update' : 'update the Codex app';
   if (/unknown option|unknown argument|unexpected argument|unrecognized|invalid option|error: option/i.test(said)) return new AiError(`${app} on this PC is older than this program needs, so nothing was generated.${quoted} To fix it, ${update}, then test the connection again.`, 503, {nothingUsed: true, kind: 'version'});
+  const offline = networkError(lines.join(' '), app === 'Codex' ? 'ChatGPT' : 'Claude');
+  if (offline) return offline;
   if (/another claude code session|nested session/i.test(said)) return new AiError(`Claude Code refused to start inside another Claude Code session, so nothing was generated.${quoted} Start the Control Room with its own Start Control Room shortcut, not from a Claude Code terminal.`, 503, {nothingUsed: true});
   if (/refresh token|token .*(expired|revoked|already used)|re-?authenticate/i.test(said)) return new AiError(`The program's ChatGPT sign-in has run out, so nothing was generated.${quoted} Click "Sign in again" on your ChatGPT connection.`, 401, {nothingUsed: true, kind: 'login'});
   if (/not logged in|log ?in|sign ?in|authenticat|unauthori[sz]ed|credentials/i.test(said)) return new AiError(`${app} is not signed in on this PC, so nothing was generated.${quoted} Click "Sign in" on its connection in Connections.`, 401, {nothingUsed: true, kind: 'login'});
@@ -123,7 +170,8 @@ class ClaudeApi {
   constructor(key, fetchImpl = fetch) {
     this.client = new Anthropic({apiKey: key, fetch: fetchImpl, maxRetries: 0, timeout: 10 * 60 * 1000});
   }
-  async complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null}) {
+  async complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null, signal = null}) {
+    if (signal?.aborted) throw stoppedError(false);
     const request = {
       model, max_tokens: maxTokens, messages: [{role: 'user', content: prompt}],
       ...(system ? {system} : {}),
@@ -138,13 +186,14 @@ class ClaudeApi {
       // the served model is recorded with the result, so nothing switches silently.
       const [api, params] = model === 'claude-opus-4-8' ? [this.client.messages, request] : [this.client.beta.messages, {...request, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'}];
       // A streamed answer feeds the job's live view as it arrives (0.77).
-      if (maxTokens > NON_STREAMING_MAX_TOKENS) { const stream = api.stream(params); if (onProgress) { stream.on('text', delta => onProgress({text: delta})); stream.on('thinking', () => onProgress({thinking: true})); } response = await stream.finalMessage(); }
-      else response = await api.create(params);
+      if (maxTokens > NON_STREAMING_MAX_TOKENS) { const stream = api.stream(params, {signal}); if (onProgress) { stream.on('text', delta => onProgress({text: delta})); stream.on('thinking', () => onProgress({thinking: true})); } response = await stream.finalMessage(); }
+      else response = await api.create(params, {signal});
     } catch (error) {
+      if (error instanceof Anthropic.APIUserAbortError || signal?.aborted) throw stoppedError(true);
       if (error instanceof Anthropic.AuthenticationError) throw new AiError('Claude rejected the API key, so nothing was generated. Check it in Connections.', 401, {nothingUsed: true, kind: 'login'});
       if (error instanceof Anthropic.RateLimitError) throw new AiError('Claude is rate limiting this key, so nothing was generated. Wait, then try again.', 429, {nothingUsed: true});
       if (error instanceof Anthropic.APIError && [400, 403, 404].includes(error.status)) throw new AiError(`Claude refused the request (HTTP ${error.status}), so nothing was generated. Check the model chosen for this kind of job and the key's access.`, error.status, {nothingUsed: true});
-      if (error instanceof Anthropic.APIConnectionError) throw new AiError('Claude could not be reached or the request timed out. Its billing outcome may be unknown.', 502);
+      if (error instanceof Anthropic.APIConnectionError) throw new AiError('Claude could not be reached or the internet connection dropped while it answered. Its billing outcome may be unknown.', 503, {kind: 'network'});
       if (error instanceof Anthropic.APIError) throw new AiError(`Claude returned HTTP ${error.status}. Its billing outcome may be unknown.`, 502);
       throw new AiError('The Claude request failed after it started. Its billing outcome may be unknown.', 502);
     }
@@ -197,8 +246,9 @@ class ClaudeCode {
     child.on('error', () => {});
     child.unref();
   }
-  complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null}) {
+  complete({model, system, prompt, maxTokens, effort, onStart = () => {}, onProgress = null, signal = null}) {
     if (!this.command) return Promise.reject(new AiError(CLAUDE_MISSING, 503, {nothingUsed: true}));
+    if (signal?.aborted) return Promise.reject(stoppedError(false));
     // An empty working folder and safe mode keep the owner's personal Claude Code setup (CLAUDE.md, plugins,
     // hooks, skills, MCP servers) out of the program's calls; no tools, and nothing is saved as a session.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-claude-'));
@@ -210,8 +260,10 @@ class ClaudeCode {
     const blocks = Array.isArray(prompt), stream = blocks || !!onProgress;
     const args = [...this.prefix, '-p', '--safe-mode', '--tools', '', '--no-session-persistence', ...(blocks ? ['--input-format', 'stream-json'] : []), ...(stream ? ['--output-format', 'stream-json', '--verbose', ...(onProgress ? ['--include-partial-messages'] : [])] : ['--output-format', 'json']), '--model', model, '--effort', effort, '--system-prompt-file', systemFile];
     return new Promise((resolve, reject) => {
-      const done = (error, value) => { clearTimeout(timer); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
-      let child;
+      let child, stopped = false;
+      const onAbort = () => { stopped = true; child?.kill(); };
+      signal?.addEventListener('abort', onAbort, {once: true});
+      const done = (error, value) => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, cliTimeoutMs(maxTokens));
@@ -235,6 +287,7 @@ class ClaudeCode {
       child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Claude Code app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
+        if (stopped) return done(stoppedError(true));
         if (onProgress && line) keep(line);
         let reply;
         try { reply = stream ? out.trim().split('\n').map(line => JSON.parse(line)).findLast(item => item.type === 'result') : JSON.parse(out); if (!reply) throw new Error('no result'); } catch { return done(bytes > MAX_REPLY_BYTES ? new AiError('Claude Code returned too much output.', 502) : code === null ? new AiError('Claude Code took too long and was stopped. Its usage may still count.', 502) : cliProblem(err, 'Claude Code') || new AiError('Claude Code returned no readable answer and gave no reason. Its usage may still count.', 502)); }
@@ -329,15 +382,18 @@ class CodexCli {
     });
   }
   // guard: a text answer is discarded when Codex used a tool; a picture request leaves Codex its image tool.
-  run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true, onProgress = null}) {
+  run({text, images = [], model, effort, timeoutMs, onStart = () => {}, guard = true, onProgress = null, signal = null}) {
     if (!this.command) return Promise.reject(new AiError('The Codex app (ChatGPT) was not found on this PC. Install the Codex app and sign in with your ChatGPT account.', 503, {nothingUsed: true}));
+    if (signal?.aborted) return Promise.reject(stoppedError(false));
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'control-room-codex-')), last = path.join(dir, 'answer.txt');
     const files = images.map((image, k) => { const file = path.join(dir, `image-${k + 1}.${/png/.test(image.media_type) ? 'png' : 'jpg'}`); fs.writeFileSync(file, Buffer.from(image.data, 'base64')); return file; });
     const env = cliEnv({CODEX_HOME: this.homeDir}); // the program's own ChatGPT sign-in, never a stray key
     const args = [...this.prefix, 'exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only', '-C', dir, '-o', last, ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), ...files.flatMap(file => ['-i', file]), '-'];
     return new Promise((resolve, reject) => {
-      const done = (error, value) => { clearTimeout(timer); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
-      let child;
+      let child, stopped = false;
+      const onAbort = () => { stopped = true; child?.kill(); };
+      signal?.addEventListener('abort', onAbort, {once: true});
+      const done = (error, value) => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})); }
       const timer = setTimeout(() => { child.kill(); }, timeoutMs);
@@ -350,6 +406,7 @@ class CodexCli {
       child.stderr.on('data', chunk => { err = (err + chunk).slice(-4000); });
       child.on('error', () => done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})));
       child.on('close', code => {
+        if (stopped) return done(stoppedError(true));
         const events = out.split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
         if (guard && events.some(event => CODEX_TOOL_ITEMS.includes(event.item?.type))) return done(new AiError('ChatGPT tried to run a command, read a file or browse, so its answer was thrown away and nothing was saved. Its usage may still count.', 502));
         const failed = events.find(event => event.type === 'turn.failed' || event.type === 'error');
@@ -358,6 +415,9 @@ class CodexCli {
           // Nothing on the event stream: Codex stopped before the request (an old version, no sign-in); stderr says why.
           if (!events.length && code !== null) { const problem = cliProblem(err, 'Codex'); if (problem) return done(problem); }
           const quoted = saidText(said) ? ` Codex said: "${saidText(said)}"` : '';
+          // 0.81: a lost connection is named first (an offline sign-in refresh mentions the token, but nothing is wrong with it).
+          const offline = networkError(said, 'ChatGPT');
+          if (offline) return done(offline);
           if (/refresh token|already used|re-?authenticate/i.test(said)) return done(new AiError(`The program's ChatGPT sign-in has run out, so nothing was generated.${quoted} Click "Sign in again" on your ChatGPT connection.`, 401, {nothingUsed: true, kind: 'login'}));
           if (/log ?in|auth|sign in|unauthori/i.test(said)) return done(new AiError(`Codex is not signed in, so nothing was generated.${quoted} Sign in again from Connections (your ChatGPT connection), then test it.`, 401, {nothingUsed: true, kind: 'login'}));
           if (/usage limit|rate limit|limit reached|quota/i.test(said)) return done(new AiError(`Your ChatGPT plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later, or continue with Claude if it is connected.`, 429, {nothingUsed: true, kind: 'limit'}));
@@ -374,19 +434,19 @@ class CodexCli {
       child.stdin.end(text);
     });
   }
-  async complete({model, system, prompt, maxTokens, effort, onStart, onProgress}) {
+  async complete({model, system, prompt, maxTokens, effort, onStart, onProgress, signal = null}) {
     const blocks = Array.isArray(prompt) ? prompt : [{type: 'text', text: String(prompt)}];
     const text = ['Answer directly from what is written here. Do not run commands, read or write files, browse or use tools.', system || '', blocks.filter(block => block.type === 'text').map(block => block.text).join('\n\n')].filter(Boolean).join('\n\n');
-    const reply = await this.run({text, images: blocks.filter(block => block.type === 'image').map(block => block.source), model, effort, timeoutMs: cliTimeoutMs(maxTokens), onStart, onProgress});
+    const reply = await this.run({text, images: blocks.filter(block => block.type === 'image').map(block => block.source), model, effort, timeoutMs: cliTimeoutMs(maxTokens), onStart, onProgress, signal});
     return finish({text: reply.answer, stop: null, usage: reply.usage, model: model || 'gpt (Codex default)', who: 'ChatGPT'});
   }
   // One picture from ChatGPT's image generation, copied to outFile. Codex keeps it under its own home, in a folder
   // named after the request's thread.
   // references: image files attached to the request (the video's style key), so every picture shares one style.
-  async image({prompt, outFile, model, references = [], onStart}) {
+  async image({prompt, outFile, model, references = [], onStart, signal = null}) {
     const text = `Generate exactly one image with your image generation tool. ${prompt}\nDo not run commands, read or write files, or ask questions. When the image is made, reply with only the word DONE.`;
     const images = references.map(file => ({media_type: /\.png$/i.test(file) ? 'image/png' : 'image/jpeg', data: fs.readFileSync(file).toString('base64')}));
-    const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart, guard: false});
+    const reply = await this.run({text, images, model, effort: 'medium', timeoutMs: 8 * 60 * 1000, onStart, guard: false, signal});
     const folder = reply.thread ? path.join(this.homeDir, 'generated_images', reply.thread) : null;
     let made = [];
     try { made = fs.readdirSync(folder).filter(name => /\.(png|jpe?g|webp)$/i.test(name)).map(name => path.join(folder, name)).sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs); } catch { /* none */ }
@@ -400,8 +460,10 @@ class CodexCli {
 // ---------------------------------------------------------------- the layer the rooms use
 
 class Ai {
-  constructor(connectors, {claudeCode = new ClaudeCode(), codex = new CodexCli()} = {}) {
+  // reach (0.81): the server passes the real reachability check; tests leave it out.
+  constructor(connectors, {claudeCode = new ClaudeCode(), codex = new CodexCli(), reach = null} = {}) {
     this.connectors = connectors;
+    this.reach = reach;
     this.claudeCode = claudeCode;
     this.codex = codex;
     this.lanes = {};
@@ -428,13 +490,14 @@ class Ai {
   }
   // messages: [{role, content}]; returns {content, usage, model, provider}.
   // onProgress (0.77): called with each streamed piece of the answer, for the job's live view.
-  async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null}) {
+  async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null, signal = null}) {
     const {row, slot} = this.slot(connectorId), {role, model, effort} = this.model(slot, task), {system, prompt} = splitMessages(messages);
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 256) throw new AiError('This job leaves Claude too little room to answer. Raise its token limit.', 400);
+    await this.offline(slot.provider);
     const client = slot.provider === 'claude' ? new ClaudeApi(this.connectors.key(connectorId), this.connectors.fetch) : slot.provider === 'chatgpt' ? this.codex : this.claudeCode;
     if (slot.provider === 'claude' && !row.secret) throw new AiError('Add the Claude API key in Connections first.', 409);
     // Claude and ChatGPT keep separate lanes, so they work side by side.
-    const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
+    const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, signal, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
     return {...result, provider: slot.provider, role};
   }
   // The rooms' onStart means "this request may have cost something" (0.73): a refusal before anything was
@@ -453,10 +516,15 @@ class Ai {
     }
   }
   // A painted picture from ChatGPT's image generation (ChatGPT connections only).
-  async image({connectorId, prompt, outFile, references = [], onStart}) {
+  async image({connectorId, prompt, outFile, references = [], onStart, signal = null}) {
     const {slot} = this.slot(connectorId);
     if (slot.provider !== 'chatgpt') throw new AiError('Painted pictures need a ChatGPT connection.', 400);
-    return this.counted(connectorId, onStart, started => this.lane('gpt:image', () => this.codex.image({prompt, outFile, model: slot.models?.main || null, references, onStart: started})));
+    await this.offline(slot.provider);
+    return this.counted(connectorId, onStart, started => this.lane('gpt:image', () => this.codex.image({prompt, outFile, model: slot.models?.main || null, references, onStart: started, signal})));
+  }
+  // No internet (0.81): said at once, before anything is sent, instead of after the AI app's own reconnect attempts.
+  async offline(provider) {
+    if (this.reach && await this.reach(provider) === false) throw new AiError(`This PC is not connected to the internet right now (${provider === 'chatgpt' ? 'ChatGPT' : 'Claude'}'s server could not be found), so nothing was sent or used. Check the connection, then continue.`, 503, {nothingUsed: true, kind: 'network'});
   }
   // The AI team (owner request 2026-10-22): the tested Claude and ChatGPT connections and the roles the owner set.
   // Pictures go to ChatGPT when it is connected (it paints); scripts are written together when both are.
@@ -507,4 +575,4 @@ class Ai {
   }
 }
 
-module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, cliEnv, cliProblem, codexHome, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};
+module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, reachable, probe, networkError, cliTimeoutMs, AI_HOSTS, cliEnv, cliProblem, codexHome, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};

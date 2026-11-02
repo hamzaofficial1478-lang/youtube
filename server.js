@@ -11,7 +11,7 @@ const {WindowsVault,YouTubeResearch}=require('./youtube');
 const {ConnectorSlots,PROVIDERS}=require('./connectors');
 const {ScriptWriter}=require('./writer');
 const {ResearchReasoning}=require('./research');
-const {Ai,ClaudeCode,MODELS,DEFAULT_MODELS,MODEL_GROUPS,MODEL_WEIGHT,TASK_ROLE}=require('./ai');
+const {Ai,ClaudeCode,MODELS,DEFAULT_MODELS,MODEL_GROUPS,MODEL_WEIGHT,TASK_ROLE,reachable,probe}=require('./ai');
 const {VoiceRuntime}=require('./voice');
 const {StyleLibrary}=require('./style');
 const {QuotaLedger}=require('./intel-sources');
@@ -41,7 +41,7 @@ const {getFFmpegPath}=require('./vendor/youtube-automation-agent/ffmpeg');
 const root=__dirname;
 const APP_VERSION=JSON.parse(fs.readFileSync(path.join(__dirname,'package.json'),'utf8')).version;
 const files={ '/audio-room.js':['public/audio-room.js','text/javascript; charset=utf-8'], '/packaging-room.js':['public/packaging-room.js','text/javascript; charset=utf-8'], '/master-room.js':['public/master-room.js','text/javascript; charset=utf-8'], '/localization-room.js':['public/localization-room.js','text/javascript; charset=utf-8'], '/publishing-room.js':['public/publishing-room.js','text/javascript; charset=utf-8'], '/voice-direction.js':['public/voice-direction.js','text/javascript; charset=utf-8'], '/review-room.js':['public/review-room.js','text/javascript; charset=utf-8'], '/':['public/index.html','text/html; charset=utf-8'], '/app.js':['public/app.js','text/javascript; charset=utf-8'], '/style-room.js':['public/style-room.js','text/javascript; charset=utf-8'], '/intelligence.js':['public/intelligence.js','text/javascript; charset=utf-8'], '/scene-room.js':['public/scene-room.js','text/javascript; charset=utf-8'], '/render-room.js':['public/render-room.js','text/javascript; charset=utf-8'], '/editing-room.js':['public/editing-room.js','text/javascript; charset=utf-8'], '/skills-room.js':['public/skills-room.js','text/javascript; charset=utf-8'], '/style.css':['public/style.css','text/css; charset=utf-8'] };
-function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={},claudeCode=null}={}) {
+function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker=true,research=null,protector=null,providerFetch=fetch,voiceOptions={},claudeCode=null,reach=null}={}) {
   // In-memory fixtures must never share media, recovery cleanup or credentials with the owner's program.
   const dataRoot=dataFile===':memory:'?fs.mkdtempSync(path.join(os.tmpdir(),'control-room-memory-')):path.dirname(path.resolve(dataFile));
   // A02: a restore the owner asked for happens now, before the database opens.
@@ -50,7 +50,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   research ||= new YouTubeResearch(new WindowsVault(dataRoot));
   const connectors=new ConnectorSlots(store,protector||new WindowsVault(dataRoot),providerFetch);
   // One AI layer for every room: Claude on the owner's chosen connection, one call per model at a time.
-  const ai=new Ai(connectors,{claudeCode:claudeCode||new ClaudeCode()});connectors.ai=ai;
+  // reach (0.81): no internet is said at once, before anything is sent; the program passes the real check, tests do not.
+  const ai=new Ai(connectors,{claudeCode:claudeCode||new ClaudeCode(),reach});connectors.ai=ai;
   // List pages delete and export (0.74); a PDF is printed by this PC's own Edge or Chrome.
   const lists=new ListManager(store,{pdf:async html=>{const {MotionRenderer}=require('./motion'),renderer=new MotionRenderer();try{await renderer.start();return await renderer.pdf(html);}finally{await renderer.close().catch(()=>{});}}});
   const backups=dataFile===':memory:'?null:new Backups(store,{dataRoot,dataFile:path.resolve(dataFile),busy:()=>{try{return !!store.db.prepare("SELECT 1 FROM render_jobs WHERE status='running' LIMIT 1").get();}catch{return false;}}});
@@ -107,6 +108,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       if(req.method==='GET'){
         if(Object.hasOwn(files,pathname)){const [filename,mime]=files[pathname],body=fs.readFileSync(path.join(root,filename));res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store'});return res.end(body);}
         if(pathname==='/favicon.ico'){res.writeHead(204);return res.end();}
+        // "Check my connection" (0.81): can this PC reach the AI's server now? Information only, nothing is sent to the AI.
+        if(pathname==='/api/net-check'){const provider=url.searchParams.get('provider');return json(res,200,await probe(['claude','claude-code','chatgpt'].includes(provider)?provider:'claude-code'));}
         // A03 (0.59): the operations report, counted from the program's own records; read-only.
         if(pathname==='/api/operations')return json(res,200,Operations.report(store.db,{days:Number(url.searchParams.get('days'))||14,quota:quota.summary()}));
         // What deleting a family would also delete (the warning before the owner ticks it).
@@ -291,6 +294,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(planClear&&req.method==='POST')return json(res,200,sceneRoom.clearPlanJobs(planClear[1]));
         const scenePlan=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plans$/);
         if(scenePlan&&req.method==='POST')return json(res,200,sceneRoom.createPlan(scenePlan[1],body));
+        // Stop and Resume of a storyboard (0.81).
+        const planPause=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/(stop|resume)$/);
+        if(planPause&&req.method==='POST')return json(res,200,planPause[2]==='stop'?sceneRoom.stopPlan(planPause[1]):sceneRoom.resumePlan(planPause[1],body));
         const planRetry=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/retry$/);
         if(planRetry&&req.method==='POST')return json(res,200,sceneRoom.retryPlan(planRetry[1],body));
         const manifestAction=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/(revisions|review|search-all|pick-top|generate-all|draw-all|visual-approval|redesign-frame|redraw-undesigned|shot-picture|change-shot)$/);
@@ -409,7 +415,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
 if(require.main===module){
   const port=Number(process.env.PORT||3456);
   if(!Number.isInteger(port)||port<1024||port>65535)throw new Error('PORT must be a whole number between 1024 and 65535.');
-  const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined});
+  const {server}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined,reach:reachable});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
   server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room ${APP_VERSION}\nOpen http://127.0.0.1:${port}\nLocal production with named approvals; uploads happen only from Room 11 (or its locked autopilot) after the video is approved.`));
   for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>server.close());

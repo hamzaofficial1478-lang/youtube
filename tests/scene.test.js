@@ -534,8 +534,10 @@ test('a plan stopped mid-way marks its picture and frame reservations unknown to
   store.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES('job1',?,?,'running','{}',1,'Owner',?,?)").run(family.id, content.id, at, at);
   for (const key of ['job1', 'job1:picture:S01A:1:1', 'job1:frame:S02A:1:1', 'other']) store.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'picture','2026-10','reserved',1000,?,?)").run(key, family.id, at, at);
   room.recoverInterrupted();
-  assert.equal(room.planJobRow('job1').status, 'interrupted');
-  assert.deepEqual(store.db.prepare('SELECT job_id, status FROM intelligence_usage ORDER BY job_id').all().map(row => `${row.job_id} ${row.status}`), ['job1 unknown', 'job1:frame:S02A:1:1 unknown', 'job1:picture:S01A:1:1 unknown', 'other reserved']);
+  // 0.81: a storyboard the program closed on is paused (Resume goes on); its run's record leaves the job's own id.
+  assert.equal(room.planJobRow('job1').status, 'paused');
+  assert.equal(JSON.parse(room.planJobRow('job1').pause).kind, 'closed');
+  assert.deepEqual(store.db.prepare('SELECT job_id, status FROM intelligence_usage ORDER BY job_id').all().map(row => `${row.job_id} ${row.status}`), ['job1:frame:S02A:1:1 unknown', 'job1:picture:S01A:1:1 unknown', 'job1:run1 unknown', 'other reserved']);
 });
 
 test('a plan answer cut off because Claude thought too long says so, with the setting that fixes it; plans get up to 64,000 tokens', async t => {
@@ -669,8 +671,13 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   assert.equal(job.status, 'quality_failed');
   assert.match(job.quality.issues[0], /must start at sentence 1/);
   assert.equal(job.usage.status, 'settled');
-  assert.equal(store.usageSummary(family.id).settledTokens, 13000);
-  const chat = network.calls.find(call => call.path === '/v1/messages');
+  // 0.81: the answer is checked as it arrives and asked once more with what the checks found, then the job stops.
+  assert.equal(store.usageSummary(family.id).settledTokens, 26000);
+  const asked = network.calls.filter(call => call.path === '/v1/messages');
+  assert.equal(asked.length, 2);
+  assert.match(asked[1].body.system, /YOUR LAST ANSWER FOR THIS PART FAILED THESE CHECKS[\s\S]*must start at sentence 1/);
+  assert.doesNotMatch(asked[0].body.system, /FAILED THESE CHECKS/);
+  const chat = asked[0];
   const sent = JSON.parse(chat.body.messages[0].content);
   assert.equal(sent.style.sources.includes('maps-and-diagrams'), false, 'only executable sources are offered');
   assert.ok(chat.body.max_tokens >= 600);
@@ -1184,4 +1191,84 @@ test('a second storyboard needs a yes, the budget message names the channel limi
   assert.deepEqual([fixed.status, /never reached, so nothing was used/.test(fixed.error)], ['failed', true]);
   assert.deepEqual([usage.status, usage.reserved_tokens], ['released', 0]);
   assert.equal(store.repairUnreachedJobs(), 0, 'once only');
+});
+
+// 0.81 (owner review 2026-11-02: a retry started again from part 1, no Stop button, weak internet, a camera move
+// threw two whole ChatGPT storyboards away).
+test('Stop really stops the AI, the storyboard pauses with every finished part, and Resume (also after no internet) goes on from the next part', async t => {
+  const {AiError} = require('../ai');
+  const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
+  const asked = [], usage = {promptTokens: 9000, completionTokens: 4000, totalTokens: 13000};
+  let mode = 'hold', started = () => {};
+  const plan = input => {
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    // ChatGPT wrote "push-in": not one of the style's moves. It is mended (named), never a reason to lose the plan.
+    for (let start = first; start <= last; start += 2) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 1), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show the records.', onScreenText: '', shots: [{source: 'stock-video', query: 'clay records', prompt: '', motion: 'push-in', notes: ''}]});
+    return {summary: `Part ${input.part.index}`, scenes};
+  };
+  const ai = {team: () => ({}), complete: ({messages, signal, onStart}) => {
+    const input = JSON.parse(messages[1].content);
+    asked.push(input.part.index);
+    if (input.part.index === 2 && mode === 'offline') return Promise.reject(new AiError('This PC is not connected to the internet right now, so nothing was sent or used.', 503, {nothingUsed: true, kind: 'network'}));
+    if (input.part.index === 2 && mode === 'hold') return new Promise((resolve, reject) => { signal.addEventListener('abort', () => { onStart(); reject(new AiError('Stopped by you.', 499, {kind: 'stopped'})); }, {once: true}); started(); });
+    onStart();
+    return Promise.resolve({content: JSON.stringify(plan(input)), usage, model: 'gpt', provider: 'chatgpt'});
+  }};
+  const base = setup(t, fakeNetwork(), {scriptText: longScript, targetMinutes: 14, storyMap: false});
+  const {store, content, ids, family} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  const busy = new Promise(resolve => { started = resolve; }), run = room.processNextPlan();
+  await busy;
+  assert.equal(room.stopPlan(queued.job.id).stopping, true);
+  await run;
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.deepEqual([job.status, job.pause.kind, job.attempts], ['paused', 'owner', 1]);
+  assert.deepEqual(job.parts, {total: 3, done: 1}, 'part 1 is kept');
+  assert.throws(() => room.retryPlan(queued.job.id, {}), /cannot be retried/);
+  // The stopped run: part 1 counts as it is; the answer in flight is held at most one answer's limit, not the whole job.
+  const first = store.db.prepare('SELECT * FROM intelligence_usage WHERE job_id=?').get(`${queued.job.id}:run1`);
+  assert.equal(first.status, 'unknown');
+  assert.equal(first.total_tokens, 13000);
+  assert.ok(first.reserved_tokens > 13000 && first.reserved_tokens <= 13000 + 100000, String(first.reserved_tokens));
+  assert.equal(job.usage.total, 13000, 'the page shows what the run used');
+  // Resume while offline: refused before anything was sent, paused again, nothing held for it.
+  mode = 'offline';
+  room.resumePlan(queued.job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.deepEqual([job.status, job.pause.kind, job.attempts], ['paused', 'network', 1]);
+  assert.match(job.error, /not connected to the internet/);
+  assert.deepEqual({...store.db.prepare('SELECT status, reserved_tokens FROM intelligence_usage WHERE job_id=?').get(`${queued.job.id}:run2`)}, {status: 'released', reserved_tokens: 0});
+  // Back online: Resume goes on from part 2 on the same attempt; part 1 is never asked (or paid for) again.
+  mode = 'go';
+  room.resumePlan(queued.job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.equal(job.attempts, 1);
+  assert.deepEqual(asked, [1, 2, 2, 2, 3]);
+  const done = latestManifest(room, content.id);
+  assert.equal(done.plan.scenes.length, 90);
+  assert.ok(done.plan.scenes.every(scene => scene.shots.every(shot => shot.motion !== 'push-in')), 'every camera move is the style\'s');
+  assert.ok(done.warnings.some(item => /camera move "push-in" is not in the style/.test(item)), 'the change is named');
+  assert.equal(store.usageSummary(family.id).settledTokens, 2 * 13000, 'the last run settles the two parts it made');
+});
+
+test('a part that breaks the style\'s rules is asked again alone with what failed, numbered as the video\'s scenes', async t => {
+  const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
+  let broken = true;
+  const network = fakeNetwork({claudePlan: input => {
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start += 2) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 1), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show the records.', onScreenText: '', shots: [{source: 'stock-video', query: 'clay records', prompt: '', motion: 'static', notes: ''}]});
+    // A source the style does not have and no drawing to fall back on: it cannot be mended.
+    if (input.part?.index === 2 && broken) { broken = false; scenes[0].shots[0].source = 'ai-video'; }
+    return {summary: 'x', scenes};
+  }});
+  const {room, content, ids} = setup(t, network, {scriptText: longScript, targetMinutes: 14, storyMap: false});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const calls = network.calls.filter(call => call.path === '/v1/messages');
+  assert.deepEqual(calls.map(call => JSON.parse(call.body.messages[0].content).part.index), [1, 2, 2, 3]);
+  assert.match(calls[2].body.system, /FAILED THESE CHECKS[\s\S]*Scene 31 shot 1 uses a visual source/);
 });

@@ -194,11 +194,14 @@ function research(){
 const LIVE_ROOM={script:'Content Studio',scene:'Scene & Visual Room',voice:'Voice Room'};
 function liveClock(s){return s<60?`${s} s`:`${Math.floor(s/60)} min ${String(s%60).padStart(2,'0')} s`;}
 function liveFor(contentId,room){return (state.live||[]).filter(item=>(!contentId||item.contentId===contentId)&&(!room||item.room===room));}
-function liveBlock(item,{preview=true}={}){
+function liveBlock(item,{preview=true,actions=''}={}){
   const part=item.expected?Math.min(.95,item.chars/item.expected):item.chars?.5:0,pct=Math.round((item.step-1+part)/item.steps*100);
   const status=item.thinking?'Thinking…':item.chars?(item.room==='script'?`About ${Math.round(item.chars/6).toLocaleString()} words written so far`:`${item.chars.toLocaleString()} characters of the plan received so far`):item.wait?`This step has run ${liveClock(item.stepSeconds)}. ${item.wait}`:'Waiting for the first words';
-  const quiet=item.quietSeconds>=120&&!item.wait?`<p class="inline-warning">No sign of life for ${liveClock(item.quietSeconds)}. A long answer can think quietly for a while; if nothing moves for much longer, the job stops by itself and says why.</p>`:'';
-  return `<div class="live-job"><div class="live-head"><span class="live-dot" aria-hidden="true"></span><strong>${esc(item.stepLabel)}</strong><span class="muted">Step ${item.step} of ${item.steps} · running ${liveClock(item.seconds)} · last sign of life ${item.quietSeconds<3?'just now':`${liveClock(item.quietSeconds)} ago`}</span></div>${intelMeter(pct,100,false)}<small class="muted">${status}</small>${quiet}${preview&&item.preview?`<pre class="live-preview" aria-label="The newest words of the answer">${esc(item.preview)}</pre>`:''}</div>`;
+  // 0.81 (owner question 2026-11-02: "what is meant by this line?"): what a quiet stretch means, the step's real time
+  // limit, and what Stop keeps.
+  const who=item.who||'The AI',limit=item.limit?` This step may take up to ${liveClock(item.limit)}; after that the program stops it by itself and keeps everything already finished.`:'';
+  const quiet=item.quietSeconds>=120&&!item.wait?`<p class="inline-warning">Nothing new has come from ${esc(who)} for ${liveClock(item.quietSeconds)}. That is normal while it thinks before a long answer: the words arrive when it starts writing.${limit}${item.stoppable?' You can press Stop at any time without losing finished work.':''}</p>`:'';
+  return `<div class="live-job"><div class="live-head"><span class="live-dot" aria-hidden="true"></span><strong>${esc(item.stepLabel)}</strong><span class="muted">Step ${item.step} of ${item.steps} · running ${liveClock(item.seconds)} · last sign of life ${item.quietSeconds<3?'just now':`${liveClock(item.quietSeconds)} ago`}</span></div>${intelMeter(pct,100,false)}<small class="muted">${status}</small>${quiet}${preview&&item.preview?`<pre class="live-preview" aria-label="The newest words of the answer">${esc(item.preview)}</pre>`:''}${actions}</div>`;
 }
 // The strip on top of every page: everything running anywhere, with a link to its room.
 function liveStrip(){

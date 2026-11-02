@@ -23,7 +23,7 @@ function masterGateCard(content) {
     ${row(!!preview, 'Approved preview (Room 08)', preview ? `Approved by ${esc(preview.review?.reviewer || '')} · ${esc(date(preview.review?.at || preview.createdAt))} · ${esc(preview.scope.styleName)} r${preview.scope.styleRevision}` : 'Render the edit and approve it in Room 08 (Review & QC).')}
     ${row(!!from.packageApproval, 'Approved package (Room 09)', from.packageApproval ? `Package r${from.packageApproval.revision} approved by ${esc(from.packageApproval.approvedBy)}` : 'Approve the title, thumbnail and description for the approved preview in Room 09.')}
     ${row(!!pin && state.renders.pinMatchesLatest, 'Pinned FFmpeg build', pin ? `FFmpeg ${esc(pin.version)} · the master uses the same build as the preview` : 'Check and pin FFmpeg in Room 05.')}
-    <div class="card-actions">${ready && !active ? action('Render the final master', 'master-start', preview.id, 'primary') : ''}${!preview ? `<button class="secondary" data-production-room="qc">Open Room 08</button>` : !from.packageApproval ? `<button class="secondary" data-production-room="packaging">Open Room 09</button>` : ''}</div>
+    <div class="card-actions">${ready && !active ? action('Render the final master', 'master-start', preview.id, 'primary') : ''}${!preview ? `<button type="button" class="button secondary" data-production-room="qc">Open Room 08</button>` : !from.packageApproval ? `<button type="button" class="button secondary" data-production-room="packaging">Open Room 09</button>` : ''}</div>
     <p class="hint">Rendering is local and free. A long video can take a long time at full quality; you can close the page, and if the PC restarts, retrying continues from the finished parts.</p></section>`;
 }
 
