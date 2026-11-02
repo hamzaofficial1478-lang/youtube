@@ -710,11 +710,13 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   const failing = setup(t, fakeNetwork({failChat: true}));
   const failed = failing.room.createPlan(failing.content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: failing.content.revision, connector: failing.ids.claude});
   await failing.room.processNextPlan();
-  const interrupted = failing.room.publicPlanJob(failing.room.planJobRow(failed.job.id));
-  assert.equal(interrupted.status, 'interrupted');
-  assert.equal(interrupted.usage.status, 'unknown');
-  assert.throws(() => failing.room.retryPlan(failed.job.id, {}), /Confirm the deliberate retry/);
-  assert.equal(failing.room.retryPlan(failed.job.id, {confirmInterrupted: true}).status, 'queued');
+  // 0.81: a connection that dropped while Claude answered pauses the storyboard (it may have used tokens, held as
+  // unknown); Resume goes on, a retry is not needed.
+  const paused = failing.room.publicPlanJob(failing.room.planJobRow(failed.job.id));
+  assert.deepEqual([paused.status, paused.pause.kind], ['paused', 'network']);
+  assert.equal(paused.usage.status, 'unknown');
+  assert.throws(() => failing.room.retryPlan(failed.job.id, {}), /cannot be retried/);
+  assert.equal(failing.room.resumePlan(failed.job.id, {}).status, 'queued');
 });
 
 test('a long summary, direction or note from Claude is trimmed at a word and an extra field is dropped, never a reason to lose the plan', async t => {

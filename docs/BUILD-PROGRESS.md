@@ -185,7 +185,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
   my connection" (`/api/net-check`); the busy AI's button off with a note, a coloured warning box, Stop under the live
   progress, paused rows with Resume, asked and last-run times, folded lists kept open across refreshes, styled
   room-link buttons in five rooms, an honest quiet message with the step's real time limit.
-- **Tested:** `npm run check`; the full `npm test` (result below); new unit tests (Stop ends a running Claude Code app
+- **Tested:** `npm run check`; the full `npm test` (417 tests: 413 pass, 3 skipped because they need Windows, 1 failed: an older test still expected a dropped connection to mark the storyboard interrupted; it now expects the pause and Resume, and the scene file passed again, 30 of 30); new unit tests (Stop ends a running Claude Code app
   within moments and an already stopped job starts nothing; "Connection error" is named as a dropped connection and an
   offline OAuth refresh as unreached, not as a sign-in; offline is refused before anything is started; the DNS check's
   answers; a storyboard stopped during part 2 pauses with part 1 kept and at most one answer's limit held, resumes
