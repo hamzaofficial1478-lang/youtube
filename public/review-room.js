@@ -29,7 +29,7 @@ function qcRoomView(family) {
   const content = contents.find(item => item.contentId === renderContentId);
   const picker = contents.length > 1 ? `<div class="production-toolbar"><div><label for="render-content">Script</label><select id="render-content">${contents.map(item => `<option value="${item.contentId}" ${item.contentId === content.contentId ? 'selected' : ''}>${esc(item.title)}</option>`).join('')}</select></div></div>` : '';
   const job = content.renders.find(item => item.status === 'completed');
-  if (!job) return `${hero}${picker}<section class="production-card"><h3>No finished render</h3><p>Render the edit in Room 05 (or its narration preview in Room 07). The review reads the real file.</p><button class="secondary" data-production-room="editing">Open Editing Room</button></section>`;
+  if (!job) return `${hero}${picker}<section class="production-card"><h3>No finished render</h3><p>Render the edit in Room 05 (or its narration preview in Room 07). The review reads the real file.</p><button type="button" class="button secondary" data-production-room="editing">Open Editing Room</button></section>`;
   const entry = qcReportFor(job, content);
   if (entry.loading) return `${hero}${picker}<section class="production-card"><p class="muted">Checking the render files and building the review…</p></section>`;
   if (entry.error) return `${hero}${picker}<section class="production-card"><p class="inline-warning">${esc(entry.error)}</p></section>`;

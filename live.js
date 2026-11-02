@@ -7,15 +7,16 @@ const jobs = new Map();
 const PREVIEW = 1500;
 
 // wait: what a quiet stretch means for this job (a local voice reads a whole part before it answers).
-function start(id, {room, label, steps = 1, contentId = null, familyId = null, wait = null}) {
+// who: the AI doing the work; stoppable: the page offers Stop (0.81); limit: the step's time limit in seconds.
+function start(id, {room, label, steps = 1, contentId = null, familyId = null, wait = null, who = null, stoppable = false}) {
   const at = Date.now();
-  jobs.set(id, {id, room, label, contentId, familyId, wait, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, thinking: false, preview: ''});
+  jobs.set(id, {id, room, label, contentId, familyId, wait, who, stoppable, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, limit: null, thinking: false, preview: ''});
 }
 // A new step starts with an empty preview; expected is the rough answer length in characters, for the bar.
-function step(id, index, stepLabel, {expected = null, steps} = {}) {
+function step(id, index, stepLabel, {expected = null, steps, limit = null} = {}) {
   const job = jobs.get(id);
   if (!job) return;
-  Object.assign(job, {step: index, stepLabel, stepAt: Date.now(), at: Date.now(), chars: 0, expected, thinking: false, preview: ''}, steps ? {steps} : {});
+  Object.assign(job, {step: index, stepLabel, stepAt: Date.now(), at: Date.now(), chars: 0, expected, limit, thinking: false, preview: ''}, steps ? {steps} : {});
 }
 // Called as the answer streams in: text is the newest piece of the answer; any call is a sign of life.
 function tick(id, {text = '', thinking = false} = {}) {
@@ -34,7 +35,7 @@ function list() {
   const at = Date.now();
   return [...jobs.values()].map(job => ({id: job.id, room: job.room, label: job.label, contentId: job.contentId, familyId: job.familyId, step: job.step, steps: job.steps, stepLabel: job.stepLabel,
     seconds: Math.round((at - job.startedAt) / 1000), stepSeconds: Math.round((at - job.stepAt) / 1000), quietSeconds: Math.round((at - job.at) / 1000),
-    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview, wait: job.wait}));
+    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview, wait: job.wait, who: job.who, stoppable: job.stoppable, limit: job.limit}));
 }
 
 module.exports = {start, step, note, tick, follow, end, list};

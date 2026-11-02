@@ -61,7 +61,7 @@ function renderDetail(content, job) {
       <div class="qc-checks">${qc}</div>${result.qc.filter(check => !check.passed).map(check => `<p class="inline-warning"><b>${esc(check.name)}:</b> ${esc(check.detail)}</p>`).join('')}
       <p class="hint">Every command, input checksum and log is in the <a href="${esc(result.manifestUrl)}" target="_blank" rel="noopener">render manifest ↗</a>.</p></div></div>
     ${result.sheetUrl ? `<h3 class="intel-subhead">Contact sheet · one frame every ${result.sheet.everySeconds} s</h3><img class="contact-sheet" src="${esc(result.sheetUrl)}" alt="Contact sheet of the proxy">` : ''}
-    ${job.review ? `<div class="handoff-rule"><strong>${job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested'} by ${esc(job.review.reviewer)} · ${esc(date(job.review.at))}</strong><p>${esc(job.review.notes || 'No notes.')}</p></div>` : `<div class="card-actions">${job.current ? '<button class="primary" data-production-room="qc">Review and record the verdict in Room 08</button>' : '<span class="muted">The visuals or narration changed after this render. Render again to review it.</span>'}</div>`}
+    ${job.review ? `<div class="handoff-rule"><strong>${job.review.decision === 'passed' ? 'Style proof passed' : 'Changes requested'} by ${esc(job.review.reviewer)} · ${esc(date(job.review.at))}</strong><p>${esc(job.review.notes || 'No notes.')}</p></div>` : `<div class="card-actions">${job.current ? '<button type="button" class="button primary" data-production-room="qc">Review and record the verdict in Room 08</button>' : '<span class="muted">The visuals or narration changed after this render. Render again to review it.</span>'}</div>`}
   </section>`;
 }
 function renderHistory(content) {

@@ -157,3 +157,46 @@ quality ... no matter if the whole video needs the model painted scenes".
   comparisons and simple stick-figure acting; the number is a ceiling, not a target; every shot's notes say why it has
   a picture or why the free drawing is enough. New defaults: 12 pictures and 15 natural paintings per minute at most.
   Visual settings saved earlier keep their own numbers; raise them in Visual settings.
+
+## Stop, Resume, weak internet, and checks that keep finished work (0.81)
+
+The owner's review of 2026-11-02 (five screenshots): a retry started again from part 1 although the job had reached the
+last step; there was no way to stop a storyboard; two ChatGPT storyboards (about 100,000 tokens each) ended "Blocked by
+checks: Scene 1 shot 1 uses a camera move the style does not allow"; a second storyboard could still be started while
+one ran; and the questions of what happens when the internet drops or the program is closed.
+
+- **Why the work was thrown away.** For a drawn-only style (Stickman) the planner was never told which camera moves
+  are allowed, yet every shot had to name one and the final check refused unknown ones. Claude happened to guess an
+  allowed one; ChatGPT did not. And a plan that failed the final check cleared every finished part (`parts=NULL`), so
+  the retry began at part 1. Now the planner is told the moves (drawn shots get the default, since they move with
+  `sketch.camera`), and `mendShots` brings an AI plan's moves and sources inside the style before the check (a drawn
+  shot silently, a footage or image move to its nearest allowed one with a named warning; owner edits stay strict).
+- **Each part is checked as it arrives** (`partFindings`: the same structural checks on that part alone, with the
+  video's own scene numbers). A part that breaks the style's rules is asked once more with the findings (the way
+  pictures and designed shots already are: `planMessages(input, {findings})`); a second miss stops the job with every
+  earlier part kept, so a retry asks only that part again. If the finished plan still fails, the parts are kept: with a
+  continuity review only the review runs again; without one only the part holding the named scene is asked again.
+- **Stop and Resume.** "Stop" under the live progress ends the AI at once (`AbortSignal` through `Ai.complete` and
+  `Ai.image` to Claude Code and Codex, whose process is killed, and to the SDK). The job becomes `paused` with
+  everything finished kept: the story map, finished parts, the continuity review chunk by chunk (`reviewed.partial`)
+  and finished pictures (`plan_pictures`). "Resume" (or "Resume with the other AI", which switches `scope.connector`)
+  goes on from the next step on the same attempt (`runs` counts runs, `job.tag` keys each run's picture and frame
+  records). A queued job can be stopped too. Retry stays for failed jobs.
+- **Honest usage for a stopped run** (`endRun`, `spent` saved after every answer): the answers that arrived count as
+  they are; an answer in flight may have used at most one answer's limit (`callLimit`), so only that is held as unknown.
+  Before 0.81 the whole job's reservation (a 3-part storyboard: about 610,000 tokens) stayed held, which made later
+  storyboards "over budget". A resumed run reserves only what is left (`planNeed`).
+- **Closed program.** A storyboard running when the program closed is `paused` (`kind: 'closed'`) at the next start,
+  with the same kept work and honest usage; Resume goes on from there. Before 0.81 it was "interrupted" and its
+  retry started from the last kept part with the whole reservation held.
+- **Weak or lost internet.** `ai.js` names lost connections (`networkError`: never reached = nothing used; dropped while
+  answering = may count), before any sign-in check (an offline token refresh mentions OAuth). The program passes a free
+  reachability check (`reachable`: the AI server's name is looked up; only a clear "not found" counts as offline) so no
+  request is sent while offline. A storyboard that loses the connection, or whose AI plan reaches its usage limit,
+  pauses instead of failing, with "Check my connection" (`GET /api/net-check`: a name lookup and a timed connection,
+  information only) and Resume. Nothing retries by itself.
+- **The screen.** While an AI builds, its button is off ("ChatGPT is building…") and a note says so; the other AI's
+  button still works and its window warns in a coloured box and asks. The quiet message says what a quiet stretch
+  means and the step's real time limit (`live` `who`, `limit`, `stoppable`). Job rows say when the storyboard was asked
+  for and when it last ran; "Earlier attempts" stays open while the page refreshes (`keepOpen`). Clear never hides a
+  paused job.

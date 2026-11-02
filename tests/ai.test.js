@@ -263,3 +263,30 @@ test('0.74: Claude Code and Codex say why they stopped, run apart from a parent 
   await assert.rejects(codex.complete({model: null, system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => /ChatGPT sign-in has run out[\s\S]*Sign in again/.test(error.message) && error.nothingUsed && error.kind === 'login');
   assert.match(require('../ai').codexHome(null), /\.control-room[\\/]codex$/);
 });
+
+// 0.81 (owner review 2026-11-02: "make sure the stop button must stop the process"; weak internet).
+test('Stop ends the AI app at once, a lost connection is named as one, and no internet is said before anything is sent', async t => {
+  const fake = fakeClaudeCode(t), client = new ClaudeCode({command: fake.command, prefix: fake.prefix});
+  fake.reply({title: 'slow'}, {delayMs: 20000});
+  const controller = new AbortController(), began = Date.now();
+  setTimeout(() => controller.abort(), 300);
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low', signal: controller.signal}), error => error.kind === 'stopped' && /Stopped by you/.test(error.message) && !error.nothingUsed);
+  assert.ok(Date.now() - began < 10000, 'the app was ended, not waited for');
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low', signal: controller.signal}), error => error.kind === 'stopped' && error.nothingUsed, 'an already stopped job starts nothing');
+  fake.reply('API Error: Connection error.', {error: true});
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => error.kind === 'network' && !error.nothingUsed && /internet connection dropped while Claude was answering/.test(error.message));
+  // An offline sign-in refresh mentions OAuth, but it is the connection, not the sign-in.
+  fake.reply('OAuth token refresh failed: getaddrinfo ENOTFOUND api.anthropic.com', {error: true});
+  await assert.rejects(client.complete({model: 'claude-opus-4-8', system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => error.kind === 'network' && error.nothingUsed && /could not be reached from this PC/.test(error.message));
+  const before = fake.calls().length;
+  const connectors = {row: () => ({payload: JSON.stringify({provider: 'claude-code', models: {}}), secret: null}), aiRoles: () => ({})};
+  const offline = new Ai(connectors, {claudeCode: client, reach: async () => false});
+  await assert.rejects(offline.complete({connectorId: 'c', task: 'scenes', messages: [{role: 'user', content: 'x'}], maxTokens: 1000}), error => error.kind === 'network' && error.nothingUsed && /not connected to the internet/.test(error.message));
+  assert.equal(fake.calls().length, before, 'nothing was started while offline');
+  // The free check only says offline for a clear "not found".
+  const {reachable} = require('../ai');
+  assert.equal(await reachable('chatgpt', {lookup: async () => ({address: '1.2.3.4'})}), true);
+  assert.equal(await reachable('chatgpt', {lookup: async () => { throw Object.assign(new Error('x'), {code: 'ENOTFOUND'}); }}), false);
+  assert.equal(await reachable('chatgpt', {lookup: async () => { throw Object.assign(new Error('x'), {code: 'EPERM'}); }}), null);
+  assert.equal(await reachable('chatgpt', {lookup: () => new Promise(() => {}), timeoutMs: 50}), false, 'a lookup that never answers is offline');
+});
