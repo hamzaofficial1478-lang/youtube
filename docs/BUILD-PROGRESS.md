@@ -179,7 +179,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
   quality-first with a reason per shot and the ceilings raised (12 pictures, 15 natural paintings a minute); a
   VoiceStudio narrator's "The voice VoiceStudio uses" (gender, age, pitch, accent; `voiceDesign`, validated, sent
   first in every part).
-- **Tested:** `npm run check`; the full `npm test` (result below); new unit tests (a second storyboard needs the yes,
+- **Tested:** `npm run check`; the full `npm test` (414 tests: 411 pass, 3 skipped because they need Windows; two older scene tests first failed on the new wording and the new picture ceiling, were updated, and the scene file passed again, 28 of 28); new unit tests (a second storyboard needs the yes,
   the budget message names the channel limit, cleared jobs leave the list, unreached jobs are released once; the
   VoiceStudio voice tags are validated and sent first); a Playwright check on a throwaway workspace (only the newest
   job shows, "Earlier attempts (2)", "Clear them", "Raise the channel's limit" and the words "not your Claude or

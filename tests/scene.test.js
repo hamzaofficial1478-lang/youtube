@@ -286,12 +286,14 @@ test('pictures (paid): Claude spends the video\'s picture budget, the illustrato
   }});
   const {room, content, ids, store, family, narrate} = setup(t, network, {styleKey: 'hand-drawn-canvas', withVoice: false, storyMap: false});
   narrate(40);
+  // A low ceiling (the default is 12 a minute since 0.80), so the planner asks for more pictures than it allows.
+  room.saveSettings(family.id, {...room.settings(family.id), picturesPerMinute: 3, revision: room.settings(family.id).revision});
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();
   const job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);
   const plans = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
-  assert.ok(plans.every(text => /PICTURES \(paid\): up to \d+ drawn shots/.test(text) && /"kind": "picture"/.test(text)), 'the planner knows the budget and the picture element');
+  assert.ok(plans.every(text => /PICTURES \(paid[^)]*\): up to \d+ drawn shots/.test(text) && /"kind": "picture"/.test(text)), 'the planner knows the budget and the picture element');
   const manifest = latestManifest(room, content.id), pictured = shots(manifest).filter(shot => shot.sketch?.elements.some(item => item.kind === 'picture'));
   const budget = Math.round(40 / 60 * room.settings(family.id).picturesPerMinute);
   assert.equal(pictured.length, budget, 'the budget holds');
@@ -661,7 +663,7 @@ test('Claude scene director: structural failures are blocked, timing issues stay
   const {room, content, ids, store, family} = setup(t, network);
   assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision}), /Claude/);
   const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
-  assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude}), /already being prepared/);
+  assert.throws(() => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude}), /already being built/);
   await room.processNextPlan();
   let job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'quality_failed');
