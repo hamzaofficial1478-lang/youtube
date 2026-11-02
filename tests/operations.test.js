@@ -43,6 +43,11 @@ test('reliability, render capacity, what was used, language review load and each
   assert.deepEqual([row('render_jobs').done, row('render_jobs').problem, row('render_jobs').reliability], [2, 1, 2 / 3], 'the render of 20 days ago is outside the window');
   assert.deepEqual([row('visual_jobs').done, row('visual_jobs').problem], [3, 1]);
   assert.deepEqual([row('intelligence_usage').done, row('intelligence_usage').problem, row('intelligence_usage').open], [2, 1, 1], 'an AI answer that never came back is a problem; one under way is open');
+  // 0.79: "Running now" opens into the list of what runs, with its family and how long since it last changed.
+  const open = r.running.filter(item => item.table === 'intelligence_usage');
+  assert.equal(open.length, 1);
+  assert.deepEqual([open[0].work, open[0].status, typeof open[0].quietHours], ['AI answers inside rooms', 'reserved', 'number']);
+  assert.ok(open[0].quietHours >= 23, 'a day old: the page names it as probably left over from a stop');
   assert.equal(row('publications').problem, 1);
   assert.ok(r.problems.some(item => item.work === 'Renders' && /FFmpeg stopped/.test(item.error)));
   assert.equal(r.reliability.problems, 4);

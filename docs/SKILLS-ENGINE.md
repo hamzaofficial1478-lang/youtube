@@ -252,3 +252,13 @@ opened in the Skills room. It is never a gate. `skillQuality` notes:
 
 Of the 420 builtin skills, 101 have no stated reason and 58 are long. The studio-craft pack passes. Testing a skill with and
 without it against a blind judge (skill-creator's evaluation loop) is the next step and needs the owner's go-ahead on token cost.
+
+## How each use ended, and the skills of each video (0.79)
+
+The owner asked (2026-11-02) why some uses said "completed" and others "pending". Only script jobs and language checks
+wrote an outcome on their skill-use record, so every other room's records said "pending" for good. Each record now
+reads its own job (`SkillsEngine.jobOf`, `USAGE_JOBS`: scripts, research, competitor analyses, storyboards, music scores,
+voice directions, niche suggestions, language jobs; edits through their timeline) and says in words how it ended
+(used, failed, stopped half-way, not usable, waiting, running, set aside) and which video it was for. Content Studio
+shows on each draft "Skills chosen for this video", job by job: the skills are chosen again for every job of every
+video from what that job is about (0.74 `rankSkills`), never fixed per channel.

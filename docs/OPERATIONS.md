@@ -37,3 +37,9 @@ the rooms already record; it never starts, retries or changes anything (`operati
   measurement windows from the owner's own channel reports).
 - It sets no alarms. The publishing autopilot keeps its own gate and alerts (PUBLISHING.md "Y03").
 - Its numbers are only as complete as the records: work done before a room recorded its outcome is not counted.
+
+## What is running now (0.79)
+
+The four tiles at the top are buttons. "Running now" opens the list of work that is running or waiting (`report`
+`running`: the kind of work, its status, family, when it started and when it last changed); work with no change for
+two hours or more is named as probably left over from a stop or a restart. "Problems" jumps to the latest problems.

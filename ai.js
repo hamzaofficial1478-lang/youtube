@@ -51,7 +51,7 @@ function claudeCodeRefusal(said, model) {
   if (/output token maximum/i.test(words)) return new AiError('Claude needed more room than this job allows. Raise the family token limit for this kind of job.', 413);
   if (/not available (with|on|for|in)|may not exist|not have access|invalid model|unknown model|model\b.*\bnot (found|supported|allowed)|issue with the selected model/i.test(words)) return new AiError(`Your Claude plan cannot use ${name} in Claude Code, so nothing was generated.${quoted} Choose a model your plan includes for this kind of job (Connections: your Claude connection's models, or the AI team), then try again.`, 403, {nothingUsed: true, kind: 'model'});
   if (/not logged in|log ?in|authenticat|oauth|invalid api key|unauthori[sz]ed|credentials/i.test(words)) return new AiError(`Claude Code is not signed in on this PC, so nothing was generated.${quoted} Click "Sign in to Claude" on your Claude connection in Connections (or run claude auth login in a terminal), then test it again.`, 401, {nothingUsed: true, kind: 'login'});
-  if (/usage limit|rate limit|limit reached|too many requests|overloaded/i.test(words)) return new AiError(`Your Claude plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later.`, 429, {nothingUsed: true});
+  if (/usage limit|rate limit|limit reached|too many requests|overloaded/i.test(words)) return new AiError(`Your Claude plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later, or continue with ChatGPT if it is connected.`, 429, {nothingUsed: true, kind: 'limit'});
   return new AiError(`Claude Code reported an error. Its usage may still count.${quoted}`, 502);
 }
 
@@ -360,7 +360,10 @@ class CodexCli {
           const quoted = saidText(said) ? ` Codex said: "${saidText(said)}"` : '';
           if (/refresh token|already used|re-?authenticate/i.test(said)) return done(new AiError(`The program's ChatGPT sign-in has run out, so nothing was generated.${quoted} Click "Sign in again" on your ChatGPT connection.`, 401, {nothingUsed: true, kind: 'login'}));
           if (/log ?in|auth|sign in|unauthori/i.test(said)) return done(new AiError(`Codex is not signed in, so nothing was generated.${quoted} Sign in again from Connections (your ChatGPT connection), then test it.`, 401, {nothingUsed: true, kind: 'login'}));
-          if (/usage limit|rate limit|limit reached|quota/i.test(said)) return done(new AiError(`Your ChatGPT plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later.`, 429, {nothingUsed: true}));
+          if (/usage limit|rate limit|limit reached|quota/i.test(said)) return done(new AiError(`Your ChatGPT plan has reached its usage limit for now, so nothing was generated.${quoted} Try again later, or continue with Claude if it is connected.`, 429, {nothingUsed: true, kind: 'limit'}));
+          // 0.79 (owner test 2026-11-02: "Reconnecting... 2/5 (stream disconnected before completion: No such host is
+          // known. (os error 11001))"): this PC could not reach OpenAI at all, so nothing was generated or used.
+          if (/no such host|getaddrinfo|ENOTFOUND|os error 1100[14]|dns error|failed to lookup address|name or service not known|network is unreachable|connection refused/i.test(said)) return done(new AiError(`ChatGPT could not be reached from this PC: it could not find or connect to OpenAI's server (no internet, a blocked or slow connection, or a DNS problem). Nothing was generated.${quoted} Check the internet connection, then try again, or continue with Claude if it is connected.`, 503, {nothingUsed: true, kind: 'network'}));
           return done(new AiError(`${code === null ? 'Codex took too long and was stopped.' : 'Codex returned no readable answer.'} Its usage may still count.${quoted}`, 502));
         }
         let answer = events.filter(event => event.type === 'item.completed' && event.item?.type === 'agent_message').map(event => event.item.text).at(-1) || '';

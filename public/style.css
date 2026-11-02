@@ -209,3 +209,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .voice-step-label{font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:#56645b}
 .voice-step-actions,.voice-row .vd-block{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0}
 .voice-row .vd-block>.inline-warning{flex-basis:100%;margin:0}
+/* 0.79: the Operations tiles are buttons that open what they count. */
+.stat-button{font:inherit;text-align:left;color:inherit;cursor:pointer;width:100%}.stat-button:hover,.stat-button.active{border-color:#2f7d58;box-shadow:0 0 0 2px rgba(47,125,88,.18)}
+/* 0.79: a job row's actions (retry, continue with the other AI) sit together under its text. */
+.history-row>.row-end{grid-column:2;justify-self:start;display:flex;flex-wrap:wrap;gap:4px 12px;margin-left:0}.history-row>.row-end:empty{display:none}
