@@ -25,6 +25,9 @@ const PRESETS = {
   proxy: {name: 'proxy', label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
   // A sharper preview the owner can choose (0.57): the same preview, at 720p.
   proxy720: {name: 'proxy', label: 'Preview 720p', 'long-form': {width: 1280, height: 720}, shorts: {width: 720, height: 1280}, crf: 22, x264: 'veryfast', audioKbps: 160, maxFps: 30},
+  // 0.83 (owner request 2026-11-03): sharper previews at 1080p and 1440p, still quick to encode.
+  proxy1080: {name: 'proxy', label: 'Preview 1080p', 'long-form': {width: 1920, height: 1080}, shorts: {width: 1080, height: 1920}, crf: 21, x264: 'veryfast', audioKbps: 192, maxFps: 30},
+  proxy1440: {name: 'proxy', label: 'Preview 1440p', 'long-form': {width: 2560, height: 1440}, shorts: {width: 1440, height: 2560}, crf: 20, x264: 'veryfast', audioKbps: 192, maxFps: 30},
   // P11: the final master at YouTube's recommended upload settings (H.264 High, closed GOP of half the frame rate,
   // two B-frames, 4:2:0, BT.709, AAC-LC 48 kHz stereo at 384 kb/s, moov atom first), at the style's own frame rate.
   master: {name: 'master', label: 'Final master 1080p', 'long-form': {width: 1920, height: 1080}, shorts: {width: 1080, height: 1920}, crf: 17, x264: 'slow', audioKbps: 384, maxFps: 60, profile: 'high', halfSecondGop: true, stereo: true},
@@ -365,7 +368,9 @@ function deliveryCheck(streams, atoms, {width, height, fps}) {
 // The master is compared frame by frame with the approved preview, scaled down to it (SSIM). The same picture at two
 // sizes scores about 0.98; a different shot about 0.5. A run of frames below 0.8 for a quarter of a second or more
 // means the master shows something the owner did not approve.
-const ssimArgs = (master, preview, {width, height}, statsFile) => ['-hide_banner', '-nostdin', '-i', master, '-i', preview, '-an', '-lavfi', `[0:v]settb=AVTB,setpts=PTS-STARTPTS,scale=${width}:${height}:flags=area,format=yuv420p,setsar=1[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS,format=yuv420p,setsar=1[b];[a][b]ssim=stats_file=${statsFile}`, '-f', 'null', '-'];
+// Both sides at the 360p comparison size (0.83: a 720p, 1080p or 1440p preview could not be compared before; the
+// scale is a no-op for a 360p preview).
+const ssimArgs = (master, preview, {width, height}, statsFile) => ['-hide_banner', '-nostdin', '-i', master, '-i', preview, '-an', '-lavfi', `[0:v]settb=AVTB,setpts=PTS-STARTPTS,scale=${width}:${height}:flags=area,format=yuv420p,setsar=1[a];[1:v]settb=AVTB,setpts=PTS-STARTPTS,scale=${width}:${height}:flags=area,format=yuv420p,setsar=1[b];[a][b]ssim=stats_file=${statsFile}`, '-f', 'null', '-'];
 // exempt: [[from, to]] seconds whose picture is random by design (FFmpeg's dissolve draws new noise at every size;
 // 2026-10-21 a master could never be approved because its dissolve differed from the preview's).
 function previewMatch(stats, fps, {exempt = []} = {}) {

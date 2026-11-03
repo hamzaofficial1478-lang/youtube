@@ -61,6 +61,9 @@ function pick(object, paths) {
   }
   return null;
 }
+// search.list sends titles HTML-escaped ("I&#39;m", "&amp;"); videos.list does not.
+const ENTITIES = {amp: '&', lt: '<', gt: '>', quot: '"', apos: "'"};
+const htmlText = value => (typeof value === 'string' ? value.replace(/&(#\d{1,7}|#x[0-9a-f]{1,6}|amp|lt|gt|quot|apos);/gi, (match, code) => (code[0] === '#' ? (n => (n > 0 && n <= 0x10ffff ? String.fromCodePoint(n) : match))(code[1].toLowerCase() === 'x' ? parseInt(code.slice(2), 16) : Number(code.slice(1))) : ENTITIES[code.toLowerCase()])) : value);
 function cleanText(value, max) {
   if (typeof value !== 'string') return null;
   const result = value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -312,14 +315,16 @@ class YouTubePublicClient {
       comments: typeof item.statistics?.commentCount === 'string' ? item.statistics.commentCount : null,
     }));
   }
-  // R07: the most-viewed videos for one keyword since a date (YouTube's own order).
+  // R07: videos for one keyword since a date, in YouTube's relevance order; the scan sorts them by views itself.
+  // 0.83 (owner test 2026-11-03): order=viewCount returned the most-viewed videos that share any one word ("money
+  // before coins" found gold-coin and crypto videos), so almost nothing was left inside the niche.
   async search(query, {publishedAfter, maxResults, videoDuration = 'any'}) {
-    const params = {part: 'snippet', q: query, type: 'video', order: 'viewCount', publishedAfter, maxResults, fields: 'items(id/videoId,snippet(publishedAt,channelId,channelTitle,title,description))'};
+    const params = {part: 'snippet', q: query, type: 'video', order: 'relevance', publishedAfter, maxResults, fields: 'items(id/videoId,snippet(publishedAt,channelId,channelTitle,title,description))'};
     if (videoDuration !== 'any') params.videoDuration = videoDuration;
     const data = await this.call('search', params, 100);
     return (Array.isArray(data?.items) ? data.items : []).filter(item => VIDEO_ID.test(item?.id?.videoId || '') && CHANNEL_ID.test(item?.snippet?.channelId || '')).map(item => ({
-      videoId: item.id.videoId, title: cleanText(item.snippet.title, 200), channelId: item.snippet.channelId,
-      channelTitle: cleanText(item.snippet.channelTitle, 120), publishedAt: isoDate(item.snippet.publishedAt), description: cleanText(item.snippet.description, 400),
+      videoId: item.id.videoId, title: cleanText(htmlText(item.snippet.title), 200), channelId: item.snippet.channelId,
+      channelTitle: cleanText(htmlText(item.snippet.channelTitle), 120), publishedAt: isoDate(item.snippet.publishedAt), description: cleanText(htmlText(item.snippet.description), 400),
     }));
   }
   // Up to 50 IDs per call; matched by ID, never by position.

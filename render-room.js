@@ -8,6 +8,8 @@ const os = require('node:os');
 const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const R = require('./render');
+// Preview sizes the owner can choose (0.57: 720p; 0.83: 1080p and 1440p); 360p is the default proxy.
+const PREVIEW_SIZES = {720: 'proxy720', 1080: 'proxy1080', 1440: 'proxy1440'};
 const T = require('./transitions');
 const B = require('./editing-brain');
 const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
@@ -170,7 +172,7 @@ class RenderRoom {
     const current = !!(visual.ready && visual.approvalId === row.visual_approval_id && content && content.revision === scope.contentRevision && (!scope.edit || this.editing?.isLatest(scope.edit.revisionId)));
     return {id: row.id, familyId: row.family_id, contentId: row.content_id, visualApprovalId: row.visual_approval_id, preset: row.preset, status: row.status, attempts: row.attempts,
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
-      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg,
+      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg, ...(scope.resolution ? {resolution: scope.resolution} : {}),
         edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, criticals: scope.edit.criticals, verdict: scope.edit.critiqueVerdict, graphics: scope.edit.timeline.graphics.filter(item => item.status === 'accepted').length} : null},
       ...(row.preset === 'master' ? {master: {sourceRenderId: scope.source.renderId, sourceReviewer: scope.source.reviewer, partsKept: this.stagesOf(row.id), ...this.masterStatus(row), approval: this.masterApproval(row)}} : {}),
       result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, hookUrl: result.hook ? `/api/renders/${row.id}/hook` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
@@ -213,7 +215,7 @@ class RenderRoom {
         narration: {approvalId: inputs.voice.approvalId, relativePath: inputs.voice.artifact.relativePath, sha256: inputs.voice.artifact.sha256, durationSeconds: inputs.voice.analysis.durationSeconds},
         style: {revisionId: revision.id, revision: revision.revision, name: inputs.spec.name, specHash: revision.spec_hash, spec: inputs.spec},
         ffmpeg: {version: pin.version, sha256: pin.ffmpegSha256, pinId: pin.id}, rendererVersion: R.RENDERER_VERSION, format: inputs.family.format, shots, edit,
-        ...(input.resolution === undefined || input.resolution === 360 ? {} : (() => { requireValue(input.resolution === 720, 'A preview renders at 360p or 720p.'); return {resolution: 720}; })()),
+        ...(input.resolution === undefined || input.resolution === 360 ? {} : (() => { requireValue(PREVIEW_SIZES[input.resolution], 'A preview renders at 360p, 720p, 1080p or 1440p.'); return {resolution: input.resolution}; })()),
       };
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'proxy','queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, inputs.visual.approvalId, JSON.stringify(scope), by, at, at);
@@ -361,7 +363,7 @@ class RenderRoom {
     const logs = [], started = Date.now(), scope = job.scope, total = scope.shots.length + 4;
     // P11: a master renders at the master preset and keeps its verified parts until it finishes or is cancelled.
     // L03: a language edition renders and resumes like a master (it has no preview of its own to match).
-    const preset = job.preset === 'proxy' && scope.resolution === 720 ? R.PRESETS.proxy720 : R.PRESETS[job.preset === 'edition' ? 'master' : job.preset] || R.PRESETS.proxy, master = job.preset === 'master' || job.preset === 'edition';
+    const preset = job.preset === 'proxy' && PREVIEW_SIZES[scope.resolution] ? R.PRESETS[PREVIEW_SIZES[scope.resolution]] : R.PRESETS[job.preset === 'edition' ? 'master' : job.preset] || R.PRESETS.proxy, master = job.preset === 'master' || job.preset === 'edition';
     let keepWork = false;
     // Runs a part, or reuses it when a master already finished it (same command, same checksum).
     const part = async (key, file, command, make) => {

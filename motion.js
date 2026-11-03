@@ -265,4 +265,4 @@ async function inspectBrowser({browser = findBrowser()} = {}) {
   return report;
 }
 
-module.exports = {MotionRenderer, inspectBrowser, findBrowser, TEMPLATE_FILES};
+module.exports = {MotionRenderer, inspectBrowser, findBrowser, TEMPLATE_FILES, pageScript};

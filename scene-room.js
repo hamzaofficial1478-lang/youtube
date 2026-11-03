@@ -1175,6 +1175,14 @@ class SceneRoom {
     requireValue(name, 'A painted picture is missing from the data folder.', 409);
     return path.join(dir, name);
   }
+  // One painted picture by its checksum, for the Editing Room's live player (0.83); checked like artImages.
+  artForPlayer(sha) {
+    requireValue(/^[a-f0-9]{64}$/.test(String(sha)), 'Picture not found.', 404);
+    const dir = path.join(this.dataRoot, 'generated-art'), name = ['png', 'jpg', 'webp'].map(ext => `${sha}.${ext}`).find(file => fs.existsSync(path.join(dir, file)));
+    const bytes = name ? fs.readFileSync(path.join(dir, name)) : null;
+    requireValue(bytes && createHash('sha256').update(bytes).digest('hex') === sha, 'This painted picture is missing or changed.', 404);
+    return {bytes, mime: name.endsWith('png') ? 'image/png' : name.endsWith('jpg') ? 'image/jpeg' : 'image/webp'};
+  }
   // The painted pictures a drawing needs, checked by their SHA-256, as data the drawing page can show.
   artImages(sketch) {
     const out = {}, dir = path.join(this.dataRoot, 'generated-art');

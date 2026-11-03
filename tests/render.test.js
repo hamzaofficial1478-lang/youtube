@@ -285,3 +285,30 @@ test('the preview match skips random-noise transitions and still catches a real 
   assert.equal(one.passed, false);
   assert.match(one.detail, /frames of random-noise transitions not compared/);
 });
+
+// 0.83 (owner request 2026-11-03): previews at 1080p and 1440p; the master's comparison scales both sides, so a sharper
+// preview can be compared (a 720p preview could not be compared before: FFmpeg's ssim needs the same size).
+test('previews render at the chosen size and a sharper preview can still be compared with the master', {skip}, async t => {
+  const env = setup(t, {seconds: 8});
+  const {renders, content, dataRoot} = env;
+  const {approval} = await approvedBoard(env);
+  await ready(renders);
+  assert.throws(() => renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, resolution: 1000}), /360p, 720p, 1080p or 1440p/);
+  const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, resolution: 1080});
+  assert.equal(queued.scope.resolution, 1080);
+  await renders.processNext();
+  const result = JSON.parse(renders.row(queued.id).result);
+  assert.deepEqual([result.video.probe.width, result.video.probe.height], [1080, 1920], 'this family makes Shorts, so 1080p is 1080x1920');
+  const big = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, resolution: 1440});
+  assert.equal(big.scope.resolution, 1440);
+  renders.cancel(big.id, {requestedBy: 'Owner'});
+  // The same picture at two sizes compares as the same picture.
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'ssim-'));
+  t.after(() => fs.rmSync(work, {recursive: true, force: true}));
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30', '-t', '1', '-pix_fmt', 'yuv420p', '-y', path.join(work, 'master.mp4')]);
+  ffmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=30', '-t', '1', '-vf', 'scale=640:360', '-pix_fmt', 'yuv420p', '-y', path.join(work, 'preview360.mp4')]);
+  execFileSync('ffmpeg', R.ssimArgs(path.join(work, 'master.mp4'), path.join(work, 'master.mp4'), R.PRESETS.proxy['long-form'], 'same.log'), {cwd: work, stdio: 'ignore'});
+  execFileSync('ffmpeg', R.ssimArgs(path.join(work, 'master.mp4'), path.join(work, 'preview360.mp4'), R.PRESETS.proxy['long-form'], 'small.log'), {cwd: work, stdio: 'ignore'});
+  for (const log of ['same.log', 'small.log']) assert.equal(R.previewMatch(fs.readFileSync(path.join(work, log), 'utf8'), 30).passed, true, log);
+  assert.ok(dataRoot);
+});
