@@ -200,3 +200,32 @@ one ran; and the questions of what happens when the internet drops or the progra
   means and the step's real time limit (`live` `who`, `limit`, `stoppable`). Job rows say when the storyboard was asked
   for and when it last ran; "Earlier attempts" stays open while the page refreshes (`keepOpen`). Clear never hides a
   paused job.
+
+## From storyboard to editing: the road, drawing Stop and Resume, long shots (0.82)
+
+The owner's review of 2026-11-02: the 34 scenes were built but could not be found on the page; the storyboard buttons
+looked as if nothing was done; the "9 warnings" and "4 fixed before you saw it" lists closed by themselves; "Draw all
+scenes" stayed after every scene was drawn, with no Stop; and there was no way on to editing, because the plan could not
+be approved (drawn shots held far longer than the video's own pace) and nothing said so.
+
+- **What happens next** (`sceneRoad`): five steps at the top of the room (the storyboard, approve it, draw the scenes,
+  approve the visuals, edit the video), each with its state and the one button that moves it on; the last opens the
+  Editing Room.
+- **The storyboard** has its own heading above the board (`#scene-board`); "See the storyboard" in the inputs card and
+  the road jumps there. Once a storyboard is built the card says so and the AI buttons read "Build again with …".
+  Problems name their shots as links that jump to the scene.
+- **Dropdowns** stay as the owner left them across every redraw of the page (`render` keeps each `details` open or
+  closed by its key or its title without numbers; program-wide).
+- **Drawing** (`drawState` in each script's state: drawn with today's drawing, out of date, missing, being drawn): the
+  row says "Drawing now: 30 of 76 done", "Draw the remaining 46", "All 76 drawn ✓" or names out-of-date drawings.
+  "Stop drawing" (`stopDrawing`, `POST /api/scene-manifests/:id/draw-stop`) stops the waiting drawings (status
+  `cancelled`; the one being drawn finishes); "Draw the remaining" goes on from there, since a finished drawing is never
+  drawn again; "Draw them all again" (`draw-all` with `again`) only when everything is drawn. Drawing is local and needs
+  no internet.
+- **Long shots.** For an adaptive style the planner was told shots may last 0.8-10 s while its own design then set a
+  much shorter pace (3.3 s in the owner's video), and a drawn shot more than a quarter over the pace blocks approval.
+  The planner is now told the design's pace is binding; `partFindings` flags a scene whose shots would each hold more
+  than a quarter over the pace, so that part is asked again with it. For a plan that already has such problems, "Fix
+  the long shots with …" (`fixLongShots`, `POST /api/scene-manifests/:id/fix-long-shots`) adds the shots each scene
+  needs (edit `add-shots`: copies of the scene's last shot without its cue, one new revision) and queues one redraw job
+  in which the AI draws only the new shots on their own words; every other shot keeps its ID, drawing and visual.
