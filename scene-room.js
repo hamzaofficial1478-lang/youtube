@@ -493,9 +493,11 @@ function callLimit(scope) {
 }
 // What a run still needs reserved (0.81): only the steps not finished yet, so a resumed storyboard does not hold its
 // whole first reservation again.
+// A redraw's finished drawings (0.82.2): kept only when the AI drew something, so a retry after "no drawings" asks again.
+const keptDrawings = reviewed => { const kept = reviewed ? JSON.parse(reviewed) : null; return kept && !kept.partial && kept.review?.changes?.length ? kept : null; };
 function planNeed(row, scope) {
   const parts = scope.parts?.length || 0;
-  if (!parts) return scope.tokenLimit;
+  if (!parts) return keptDrawings(row.reviewed) ? 0 : scope.tokenLimit;
   const review = scope.review ? scope.review.tokenLimit : 0, planner = Math.round((scope.tokenLimit - review * parts) / (parts + (scope.map ? 1 : 0)));
   const done = row.parts ? JSON.parse(row.parts).length : 0, reviewed = row.reviewed ? JSON.parse(row.reviewed) : null;
   const reviewLeft = !scope.review || (reviewed && !reviewed.partial) ? 0 : scope.review.chunks - (reviewed?.k || 0);
@@ -828,13 +830,13 @@ class SceneRoom {
     const scope = JSON.parse(row.scope), done = row.parts ? JSON.parse(row.parts).length : 0;
     // A redesign's tokens are its frame answers (reserved one by one).
     const redesign = scope.redesign ? {label: scope.redesign.label, reason: scope.redesign.reason, tokens: this.db.prepare("SELECT COALESCE(SUM(total_tokens), 0) AS total FROM intelligence_usage WHERE job_id LIKE ?").get(`${row.id}:frame:%`).total}  : null;
-    const redraw = scope.redraw ? {count: scope.redraw.labels.length} : null;
+    const redraw = scope.redraw ? {count: scope.redraw.labels.length, purpose: scope.redraw.purpose || (scope.redraw.ask ? 'change' : 'undesigned'), ...(scope.redraw.ask && scope.redraw.labels.length === 1 ? {label: scope.redraw.labels[0]} : {})} : null;
     const picture = scope.picture ? {label: scope.picture.label, tokens: this.db.prepare("SELECT COALESCE(SUM(total_tokens), 0) AS total FROM intelligence_usage WHERE job_id LIKE ?").get(`${row.id}:picture:%`).total} : null;
     // Which AI planned it (0.79): the page offers the other one when a plan fails.
     let provider = null; try { provider = JSON.parse(this.connectors.row(scope.connector.id).payload).provider; } catch { /* connection removed */ }
     // How far it got (0.81), so a paused or failed job says what Resume or a retry keeps.
     const reviewed = row.reviewed ? JSON.parse(row.reviewed) : null, pause = row.pause ? JSON.parse(row.pause) : null;
-    const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare('SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=?').get(row.id).n};
+    const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%'").get(row.id).n};
     return {id: row.id, provider, ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       usage: usage ? {status: usage.status, reserved: usage.reserved_tokens, total: usage.total_tokens, prompt: usage.prompt_tokens, completion: usage.completion_tokens} : null};
   }
@@ -894,7 +896,7 @@ class SceneRoom {
     // the AI and each step's time limit (0.81), so a quiet stretch can be explained honestly.
     let provider = null; try { provider = JSON.parse(this.connectors.row(job.scope.connector.id).payload).provider; } catch { /* connection removed */ }
     const limitOf = maxTokens => (provider === 'claude' ? 600 : Math.round(cliTimeoutMs(maxTokens) / 1000));
-    const single = job.scope.redesign ? 'Redesigning one shot' : job.scope.picture ? 'Making a paid picture for one shot' : job.scope.redraw ? (job.scope.redraw.ask ? 'Changing a shot as you asked' : 'Drawing the undesigned shots') : null;
+    const single = job.scope.redesign ? 'Redesigning one shot' : job.scope.picture ? 'Making a paid picture for one shot' : job.scope.redraw ? (job.scope.redraw.purpose === 'long' ? 'Drawing the new shots (long-shot fix)' : job.scope.redraw.ask ? 'Changing a shot as you asked' : 'Drawing the undesigned shots') : null;
     const steps = single ? 1 : (job.scope.map ? 1 : 0) + parts.length + (job.scope.review ? 1 : 0) + (job.scope.compose ? 1 : 0) + 1;
     let stepNo = 0;
     const next = (label, expected = null, maxTokens = null) => live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null});
@@ -1114,7 +1116,9 @@ class SceneRoom {
         const frameId = shot.label.toLowerCase(), duration = shot.durationSeconds, index = framed.findIndex(item => item.shot === shot);
         const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + duration - 0.01).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
         const neighbours = {before: framed[index - 1]?.shot.label, after: framed[index + 1]?.shot.label};
-        let findings = [], html = null;
+        // A design finished before a stop is kept with the job (0.82.2), so a resume goes on with the next shot.
+        const keptKey = `frame:${hash({label: shot.label, frame: shot.frame, ask: ask || null})}`, keptFrame = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, keptKey);
+        let findings = [], html = keptFrame ? JSON.parse(keptFrame.art).html : null;
         for (let attempt = 1; attempt <= 2 && !html; attempt++) {
           const key = `${job.id}:frame:${shot.label}:${job.tag ?? job.attempts}:${attempt}`, limit = job.scope.compose.tokenLimit;
           if (!reserve(key, limit)) { notes.push(`${shot.label}: the family's monthly token limit could not reserve this shot; it is drawn from its words.`); break; }
@@ -1145,7 +1149,7 @@ class SceneRoom {
               await renderer.close(); rendererReady = false;
             }
           }
-          if (!findings.length) html = checked.html;
+          if (!findings.length) { html = checked.html; this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, keptKey, JSON.stringify({html}), now()); }
         }
         const target = plan.scenes[si].shots[hi];
         if (html) { target.frame = {...target.frame, html, frameId, composedSeconds: round(duration, 3), words: spoken, version: At.VERSION}; report.designed++; }
@@ -1348,8 +1352,8 @@ class SceneRoom {
     const all = built.payload.scenes, scenes = only ? all.filter(scene => scene.shots.some(shot => only.includes(shot.label))) : all;
     if (!scenes.length) return {plan, review: null};
     const chunks = Math.min(job.scope.review.chunks, scenes.length), size = Math.ceil(scenes.length / chunks), reports = resume ? [...(resume.reports || [])] : [];
-    // 0.81: each finished chunk is saved with the job (not for a redraw, which is one short step).
-    const save = k => { if (!only) this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({partial: true, k, plan, reports, review: {changes, notes}}), now(), job.id); };
+    // 0.81: each finished chunk is saved with the job; 0.82.2: a redraw's too (a long-shot fix can cover many scenes).
+    const save = k => { this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({partial: true, k, plan, reports, review: {changes, notes}}), now(), job.id); };
     for (let k = resume?.k || 0; k < chunks; k++) {
       stopCheck(job.signal);
       const slice = scenes.slice(k * size, (k + 1) * size);
@@ -1585,7 +1589,7 @@ class SceneRoom {
     const fresh = this.manifestRow(edited.id), fp = JSON.parse(fresh.payload), content = this.store.content(fresh.content_id), inputs = this.inputs(content);
     const before = new Set(payload.scenes.flatMap(scene => scene.shots.map(shot => shot.id))), labels = fp.scenes.flatMap(scene => scene.shots).filter(shot => !before.has(shot.id)).map(shot => shot.label);
     const ask = `These shots are new: the shot before each of them held longer than the video's pace (at most ${Math.min(...long.map(item => item.limit))} s a shot), so it was split. Draw each new shot for the words it now covers so the scene moves on with them: the same place and characters, a new framing, action or key word in each shot. Keep each new shot's cue.`;
-    return {manifest: edited, added: labels.length, ...(full.length ? {full} : {}), ...this.queueRedraw({row: fresh, content, inputs, payload: fp, labels, input, createdBy, ask})};
+    return {manifest: edited, added: labels.length, ...(full.length ? {full} : {}), ...this.queueRedraw({row: fresh, content, inputs, payload: fp, labels, input, createdBy, ask, purpose: 'long'})};
   }
   // Room 04 "Change with words" (0.77, owner review 2026-10-31: change any scene by command). The owner says what should
   // change in one drawn shot; Claude draws that shot again with the request, checked like every drawing, as a redraw job
@@ -1605,7 +1609,7 @@ class SceneRoom {
     requireValue(shot.source === 'generated-graphics' && shot.sketch, 'Only a drawn shot changes with words. A designed shot has "Redesign"; a footage shot has "Edit" and "Change".', 409);
     return this.queueRedraw({row, content, inputs, payload, labels: [shot.label], input, createdBy, ask});
   }
-  queueRedraw({row, content, inputs, payload, labels, input, createdBy, ask = null}) {
+  queueRedraw({row, content, inputs, payload, labels, input, createdBy, ask = null, purpose = null}) {
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true), settings = this.settings(inputs.family.id);
     const scenes = payload.scenes.filter(scene => scene.shots.some(shot => labels.includes(shot.label))).length, chunks = Math.ceil(scenes / 8);
     const review = {chunks, tokenLimit: settings.reviewTokenLimit ?? SETTINGS_DEFAULTS.reviewTokenLimit};
@@ -1616,7 +1620,7 @@ class SceneRoom {
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
       const id = randomUUID(), at = now();
-      const jobScope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: review.tokenLimit * chunks, parts: [], review, ...(illustrate ? {illustrate} : {}), redraw: {manifestId: row.id, revision: row.revision, labels, ...(ask ? {ask} : {})}};
+      const jobScope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: review.tokenLimit * chunks, parts: [], review, ...(illustrate ? {illustrate} : {}), redraw: {manifestId: row.id, revision: row.revision, labels, ...(purpose ? {purpose} : {}), ...(ask ? {ask} : {})}};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(jobScope), createdBy, at, at);
       this.store.event(ask ? `Queued a change to ${labels[0]} of "${content.title}": ${ask.slice(0, 120)}` : `Queued drawings for ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'} of "${content.title}"`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
@@ -1634,7 +1638,12 @@ class SceneRoom {
     const shotOf = (shot, withId) => ({...(withId ? {id: shot.id} : {}), source: shot.source, query: shot.query, prompt: shot.prompt, motion: shot.motion, notes: shot.notes, ...(shot.cue ? {cue: shot.cue} : {}), ...(shot.sketch ? {sketch: shot.sketch} : {}), ...(shot.frame ? {frame: shot.frame} : {})});
     const sceneOf = (scene, withIds, shots) => ({...(withIds ? {id: scene.id} : {}), sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, purpose: scene.purpose, direction: scene.direction, onScreenText: scene.onScreenText, ...(scene.setting ? {setting: scene.setting} : {}), ...(scene.transition ? {transition: scene.transition} : {}), shots});
     const merged = {summary: payload.summary, ...(payload.cast ? {cast: payload.cast} : {}), ...(payload.direction ? {direction: payload.direction} : {}), scenes: payload.scenes.map(scene => sceneOf(scene, false, scene.shots.map(shot => shotOf(shot, false))))};
-    const reviewed = await this.reviewPlan(job, merged, spent, onStart, {only: labels, ask}), review = reviewed.review;
+    // 0.82.2 (owner test 2026-11-03: stopped at picture 2 of 5, resumed at picture 1): the AI's drawings are kept with
+    // the job, so a resume never asks for them again; the pictures are keyed by their words, so the finished ones are
+    // found again too.
+    const kept = keptDrawings(job.reviewed), saved = job.reviewed ? JSON.parse(job.reviewed) : null;
+    const reviewed = kept || await this.reviewPlan(job, merged, spent, onStart, {only: labels, ask, resume: saved?.partial ? saved : null}), review = reviewed.review;
+    if (!kept) this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({plan: reviewed.plan, review}), now(), job.id);
     const {plan, pictures} = await this.illustrate(job, reviewed.plan, onStart);
     return this.store.transaction(() => {
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
