@@ -223,3 +223,15 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .live-actions{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}.live-actions .hint{margin:0}
 .button.stop-button{border-color:#c98b78;color:#8e3b28}.button.stop-button:hover{background:#fbeee9}
 .sound-fold{margin:6px 0 10px;border:1px solid #e3e8df;border-radius:8px;background:#fbfcf9}.sound-fold>summary{cursor:pointer;padding:10px 12px;font-weight:600;font-size:13px}.sound-fold[open]>summary{border-bottom:1px solid #e3e8df}.sound-fold>.st-library,.sound-fold>.st-cues{padding:10px}
+/* 0.82 (owner review 2026-11-02): the road from storyboard to editing, the storyboard's own heading, problems that jump
+   to their scene, and a short highlight where a jump lands. */
+.scene-road{margin-bottom:16px}.road-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
+.road-steps>li{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #e3e8df;border-radius:10px;background:#fbfcf9}
+.road-steps>li.done{background:#f1f7f2;border-color:#cfe2d6}.road-steps>li.now{border-color:#c46b2c;background:#fff8ef;box-shadow:0 0 0 1px #e3b98f}
+.road-mark{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:#e3e8df;color:#2c3b33}.road-steps>li.done .road-mark{background:#2f6b4f;color:#fff}.road-steps>li.now .road-mark{background:#c46b2c;color:#fff}
+.road-steps strong{display:block;font-size:13px}.road-steps small{display:block;color:#5d6a62;font-size:12px;line-height:1.45;margin-top:2px}.road-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.road-actions:empty{display:none}
+.built-note{margin:12px 0 4px;padding:9px 12px;border-radius:8px;background:#f1f7f2;border:1px solid #cfe2d6;font-size:12px;color:#28463a;line-height:1.5}
+.board-title{margin:22px 0 10px;padding-top:14px;border-top:1px solid #e3e8df;font-size:17px}
+.scene-jump{border:0;background:none;padding:0;font:inherit;font-weight:700;color:#8e3b28;text-decoration:underline;cursor:pointer}
+.flash{animation:flash 1.6s ease-out}@keyframes flash{0%{box-shadow:0 0 0 4px #e3b98f}100%{box-shadow:0 0 0 0 transparent}}
+.road-steps>li{min-width:0}.road-steps>li>div{min-width:0}.road-actions .button,.handoff-record .text-button{white-space:normal;text-align:left;max-width:100%}

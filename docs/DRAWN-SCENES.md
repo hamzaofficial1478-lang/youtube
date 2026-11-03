@@ -752,3 +752,23 @@ engine ... name the anime as html render and also make this too so user can also
   stick figures.
 - Tested in tests/atelier.test.js (mix direction, frames, `frameFinish`, the contract per frame, the guide, the style);
   the channel window offers the three finishes in a real browser.
+
+## 35. Pictures appear the way their look draws (0.82.0)
+
+The owner's review of 2026-11-02: a Stickman video with the Classic and Storybook looks ticked came out looking
+hand-drawn. Two things could do that. A picture element always entered with `draw`, so in the Stickman looks its
+outlines were traced line by line with the colour washing in behind, like whiteboard animation; with quality-first
+pictures (0.80) many shots carry one. And the style's drawing hand (`drawing.hand`, which makes every figure, object
+and word draw on line by line) was never shown in the channel style window, so a hand switched on earlier stayed on
+whatever looks were ticked later.
+
+- `autoEnter` for a picture now follows the look: traced (`draw`) only where a hand draws (`PEN`), in the hand-drawn
+  engine and the hand-made finishes (`wb`, `ink`, `board`, `doodle`); motion designs (`flat`, `paint`) keep building
+  it shape by shape; Storybook (`story`) washes it in (`fade`); Classic and the other cartoon finishes pop it in. An
+  entrance the planner chose for an element is kept.
+- The drawing guide no longer tells the planner that pictures are "traced by the hand".
+- The channel style window shows "A hand draws each scene" for the Stickman and Hand-drawn engines and saves it.
+- Room 04's inputs card says what will be drawn before anything is drawn (`inputs.style.drawing`: the ticked looks,
+  whether a hand draws, film looks, the picture type) and warns, with a link to the channel's style, when a hand draws
+  in looks that are not Whiteboard.
+- `drawn-scene/29`: drawings made before are out of date and are drawn again by "Draw the remaining".

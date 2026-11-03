@@ -1274,3 +1274,58 @@ test('a part that breaks the style\'s rules is asked again alone with what faile
   assert.deepEqual(calls.map(call => JSON.parse(call.body.messages[0].content).part.index), [1, 2, 2, 3]);
   assert.match(calls[2].body.system, /FAILED THESE CHECKS[\s\S]*Scene 31 shot 1 uses a visual source/);
 });
+
+// 0.82 (owner review 2026-11-02: "all scenes are drawn, why does the button still say draw all scenes", no Stop for the
+// drawing, and a storyboard that could not be approved because drawn shots held longer than the video's pace).
+test('drawings are counted, Stop stops the waiting ones and Draw the remaining goes on; long shots are fixed with new shots the AI draws', async t => {
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', storyMap: false});
+  const {store, ids} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, browser: process.execPath});
+  const content = store.content(base.content.id), inputs = room.inputs(content);
+  // Thirty scenes of two sentences (about 9 s) with one drawn shot each, against the style's 4.5 s shot limit.
+  const scenes = Array.from({length: 30}, (_, k) => ({id: `sc-fixture-${k}`, sentenceStart: 2 * k + 1, sentenceEnd: 2 * k + 2, purpose: k === 0 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: [{id: `sh-fixture-${k}`, source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: ''}]}));
+  store.transaction(() => room.insertManifest({inputs, content, scenes, summary: 'Long shots', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  const manifest = latestManifest(room, content.id), drawing = () => room.state().contents.find(item => item.contentId === content.id).drawing;
+  assert.ok(manifest.issues.some(item => /^S01A would hold [\d.]+ s, above the style's 4\.5 s shot limit/.test(item)), manifest.issues[0]);
+  assert.deepEqual(drawing(), {total: 30, current: 0, outdated: 0, missing: 30, active: 0});
+  assert.equal(room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, 30);
+  assert.equal(drawing().active, 30);
+  assert.deepEqual(room.stopDrawing(manifest.id), {stopped: 30, finishing: 0});
+  assert.equal(drawing().active, 0);
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM visual_jobs WHERE content_id=? AND status='cancelled'").get(content.id).n, 30);
+  assert.equal(room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, 30, '"Draw the remaining" goes on after a stop');
+  room.stopDrawing(manifest.id);
+  // Fix the long shots: the scenes get the shots their length needs, the AI is asked to draw only the new ones.
+  assert.throws(() => room.fixLongShots(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision - 1}), /another tab/);
+  const result = room.fixLongShots(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  const fixed = latestManifest(room, content.id);
+  assert.equal(fixed.revision, manifest.revision + 1);
+  assert.ok(!fixed.issues.some(item => /would hold/.test(item)), fixed.issues.join(' '));
+  assert.ok(fixed.plan.scenes.every((scene, k) => scene.shots.length >= 2 && scene.shots[0].id === `sh-fixture-${k}`), 'every scene got shots; the old shot keeps its ID and drawing');
+  assert.equal(result.added, fixed.shotCount - 30);
+  const job = room.planJobRow(result.job.id), scope = JSON.parse(job.scope);
+  assert.equal(job.status, 'queued');
+  assert.equal(scope.redraw.labels.length, result.added);
+  assert.ok(scope.redraw.labels.every(label => !/A$/.test(label)), 'only the new shots are drawn again');
+  assert.match(scope.redraw.ask, /These shots are new/);
+  assert.throws(() => room.fixLongShots(fixed.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: fixed.revision}), /No shot of this plan holds longer|being built|running/);
+});
+
+test('a part whose shots would hold longer than the video\'s pace is asked again with what was too long', async t => {
+  const seen = {};
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const index = input.part?.index ?? 1, again = (seen[index] = (seen[index] || 0) + 1) > 1;
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    // First answer: one shot for two sentences (about 9 s); asked again: two shots.
+    for (let start = first; start <= last; start += 2) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 1), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: Array.from({length: again && start + 1 <= last ? 2 : 1}, () => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: ''}))});
+    return {summary: 'x', scenes};
+  }});
+  const {room, content, ids} = setup(t, network, {styleKey: 'stickman-sketch-explainer', storyMap: false});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const asks = network.calls.filter(call => call.path === '/v1/messages' && /You direct the scenes/.test(call.body.system));
+  assert.equal(seen[1], 2, 'part 1 was asked again');
+  assert.match(asks[1].body.system, /FAILED THESE CHECKS[\s\S]*over the video's pace of 4\.5 s a shot/);
+  assert.ok(!latestManifest(room, content.id).issues.some(item => /would hold/.test(item)));
+});

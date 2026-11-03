@@ -575,13 +575,16 @@ function familyStyleBody(form) {
   }).join('');
   // 0.63: the engine's picture type, for every look it uses: tick Cartoon, Natural, or both for a mix chosen per scene.
   const types = (v.pictureTypeAdapters || []).includes(adapter) ? `<div class="full"><span class="field-label">Picture type <span class="hint">For every look of this engine. Cartoon: drawn pictures. Natural: realistic scenes painted by ChatGPT (not photos). Both: the AI chooses per scene.</span></span>${styleChecks('fs.types', ['cartoon', 'natural'], fsTypes(spec), typeLabel)}</div>` : '';
+  // 0.82 (owner review 2026-11-02: Classic and Storybook scenes came out hand-drawn): the drawing hand was kept from an
+  // earlier revision without being shown here. It is shown and saved now, so what is drawn is what is chosen.
+  const hand = ['ffmpeg-sketch', 'canvas-frames'].includes(adapter) ? `<label class="checkbox-label full"><input type="checkbox" name="fs.hand" ${spec.drawing?.hand ? 'checked' : ''}>A hand draws each scene <span class="hint">Every figure, object and word is drawn line by line by a hand, like whiteboard animation, and the scenes look hand-drawn. Leave it off for Classic, Storybook and Doodle unless you want that feel.</span></label>` : '';
   // 0.64: Claude designs each video (colours, fonts, pace, energy, captions); on unless the owner said no.
   const adaptive = `<label class="checkbox-label full"><input type="checkbox" name="fs.adaptive" ${spec.adaptive !== false ? 'checked' : ''}>Let the AI design each video <span class="hint">Colours, fonts, pace, energy, transitions and caption look are chosen for every story, so no two videos are a template. This style's own settings stay the starting point.</span></label>`;
   const films = adapter === 'cinematic-hybrid' ? '' : `<div class="full"><span class="field-label">Film looks <span class="hint">None: no film look. One: every drawn shot in it. Two or more: Claude chooses one of them for each video.</span></span>${styleChecks('fs.films', (v.drawingFilms || []).filter(value => !['none', 'choose'].includes(value)), fsTicked(spec, 'films', 'film', []).filter(value => value !== 'choose'), filmLabel)}</div>`;
   // 0.68: the Motion Graphics (atelier) engine's finish (motion graphics, HTML render or a mix, 0.70) and its colour script.
   const finish = ['atelier', 'story-mix'].includes(adapter) ? `<label>Motion Graphics finish<select name="fs.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">HTML render draws cel-anime characters and places; Mix uses motion graphics and HTML render, one per scene.</span></label><label>Colour script (HTML render)<select name="fs.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select></label>` : '';
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
-  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${types}${finish}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
+  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${hand}${types}${finish}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }
 function familyStyleDialog(familyId) {
   const form = $('#family-style-form'), current = styleActive(familyId), found = current && styleRevisionById(current.revisionId);
@@ -606,6 +609,8 @@ function familyStyleSpec(form, base) {
   }
   const adaptive = form.querySelector('input[name="fs.adaptive"]');
   if (adaptive) spec.adaptive = adaptive.checked;
+  const hand = form.querySelector('input[name="fs.hand"]');
+  if (hand) { spec.drawing ||= {look: 'classic', hand: false}; spec.drawing.hand = hand.checked; }
   const finish = form.elements['fs.atelierFinish'];
   if (finish) { if (finish.value === 'motion' && form.elements['fs.atelierScript'].value === 'choose') delete spec.atelier; else spec.atelier = {finish: finish.value, script: form.elements['fs.atelierScript'].value}; }
   const types = boxes('fs.types');

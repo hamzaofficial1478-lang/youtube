@@ -5,7 +5,7 @@
 
 let sceneContentId = '', sceneShot = null, scenePoll = null;
 const SCENE_PURPOSE = {hook: 'Hook', context: 'Context', explain: 'Explain', example: 'Example', evidence: 'Evidence', turn: 'Turn', recap: 'Recap', close: 'Close', 'call-to-action': 'Call to action'};
-const SCENE_JOB = {queued: ['Queued', 'orange'], running: ['Running', 'orange'], paused: ['Paused', 'orange'], completed: ['Done', 'green'], failed: ['Failed', 'gray'], interrupted: ['Interrupted · cost unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Hourly cap reached', 'orange'], blocked_budget: ['Over budget', 'orange'], quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange']};
+const SCENE_JOB = {queued: ['Queued', 'orange'], running: ['Running', 'orange'], paused: ['Paused', 'orange'], cancelled: ['Stopped', 'gray'], completed: ['Done', 'green'], failed: ['Failed', 'gray'], interrupted: ['Interrupted · cost unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Hourly cap reached', 'orange'], blocked_budget: ['Over budget', 'orange'], quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange']};
 // What was already fixed before the owner sees the plan: shots Claude's continuity review redrew, and the
 // continuity the program mended.
 // The video's art direction (atelier shots design to it) and how the designs went.
@@ -92,12 +92,37 @@ function sceneRoomView(family) {
   return `<section class="voice-hero"><div><span class="stage-kicker">ROOM 04 · SCENES & VISUALS</span><h2>Scene & Visual Room</h2><p>Plan scenes from the approved narration, then pick one rights-recorded visual per shot from Pexels, Pixabay or AI images. Nothing is bought or used until you approve it.</p></div><div class="voice-health"><span class="health-light ${content.handoff.ready ? 'ready' : ''}"></span><strong>${content.handoff.ready ? 'Visuals approved' : ready ? 'Inputs ready' : 'Setup required'}</strong><small>${esc(content.handoff.ready ? `${content.handoff.shots} shots handed to editing` : ready ? 'Script, narration and style are locked' : content.inputs.blockers[0])}</small></div></section>
     ${picker}
     <div class="production-kpis"><div><span>Scenes</span><strong>${manifest ? manifest.sceneCount : '—'}</strong><small>${manifest ? `${sceneClock(manifest.narrationSeconds)} narration` : 'No plan yet'}</small></div><div><span>Shots with a visual</span><strong>${manifest ? `${filled}/${shots.length}` : '—'}</strong><small>${manifest ? `${Math.round(filled / Math.max(1, shots.length) * 100)}% of shots ready` : ''}</small></div><div><span>AI images ${esc(usage.period)}</span><strong>${money(usage.settledCents + usage.reservedCents)}</strong><small>of ${money(usage.budgetCents)} budget · ${usage.images} image${usage.images === 1 ? '' : 's'}</small></div><div><span>Stock requests this hour</span><strong>${quota.pexels.used + quota.pixabay.used}</strong><small>Pexels ${quota.pexels.used}/${quota.pexels.cap} · Pixabay ${quota.pixabay.used}/${quota.pixabay.cap}</small></div></div>
+    ${sceneRoad(content, manifest)}
     <div class="scene-cards">${sceneInputsCard(content)}${manifest ? sceneBatchCard(content, manifest, family) + sceneApprovalCard(content, manifest) : ''}</div>
     ${manifest ? scenePlanCard(content, manifest) : sceneEmptyPlan(content)}`;
 }
 
+// What happens next (0.82, owner question 2026-11-02: "now all scenes are drawn, how will the editing proceed? there is no
+// approval button or anything that says move to editing"): the five steps from the storyboard to the Editing Room, each
+// with its state and the one button that moves it on.
+function sceneRoad(content, manifest) {
+  if (!content.inputs.ready) return '';
+  const d = content.drawing || {total: 0, current: 0, outdated: 0, missing: 0, active: 0}, shots = manifest ? sceneShots(manifest) : [], filled = shots.filter(shot => content.selections[shot.id]).length;
+  const longShots = manifest ? manifest.issues.filter(item => SCENE_LONG.test(item)).length : 0;
+  const steps = [
+    ['The storyboard', manifest && manifest.source !== 'rules', manifest ? `Built: revision ${manifest.revision}, ${manifest.sceneCount} scenes, ${manifest.shotCount} shots.` : 'Not built yet.', manifest ? action('See the storyboard', 'scene-goto-board', '', 'secondary') : ''],
+    ['Approve the storyboard', manifest?.status === 'approved', !manifest ? 'After the storyboard is built.' : manifest.status === 'approved' ? 'Approved.' : !manifest.scope.current ? 'Out of date: refresh it first.' : manifest.issues.length ? `${manifest.issues.length} problem${manifest.issues.length === 1 ? '' : 's'} to fix first${longShots ? ` (${longShots === 1 ? '1 shot holds' : `${longShots} shots hold`} longer than the video's pace)` : ''}.` : 'Read it, then approve it.',
+      manifest && manifest.status !== 'approved' && manifest.scope.current ? (manifest.issues.length ? (longShots ? sceneFixButtons(manifest, true) : '') + action('Show the problems', 'scene-goto-board', 'problems', 'text-button') : action('Review and approve', 'scene-review', manifest.id, 'primary')) : ''],
+    ['Draw the scenes', d.total > 0 && !d.missing && !d.outdated && !d.active, !d.total ? 'Nothing to draw (no drawn shots).' : d.active ? `Drawing now: ${d.current} of ${d.total} done.` : !d.missing && !d.outdated ? `All ${d.total} drawn.` : `${d.current} of ${d.total} drawn${d.outdated ? `, ${d.outdated} out of date` : ''}.`, ''],
+    ['Approve the visuals', content.handoff.ready, content.handoff.ready ? 'Approved: the board is handed to editing.' : `${filled} of ${shots.length} shots have a visual.`, manifest && manifest.status === 'approved' && manifest.scope.current && filled === shots.length && !content.handoff.ready ? action('Approve visuals', 'scene-approve', manifest.id, 'primary') : ''],
+    ['Edit the video', false, content.handoff.ready ? 'Ready: the Editing Room builds the edit from this board.' : 'Opens when the visuals are approved.', content.handoff.ready ? '<button type="button" class="button primary" data-production-room="editing">Go to the Editing Room →</button>' : ''],
+  ];
+  const next = steps.findIndex(([, done]) => !done);
+  return `<section class="production-card scene-road"><div class="production-card-head"><div><span class="micro-label">WHAT HAPPENS NEXT</span><h2>From storyboard to editing</h2></div></div><ol class="road-steps">${steps.map(([title, done, detail, button], k) => `<li class="${done ? 'done' : k === next ? 'now' : ''}"><span class="road-mark">${done ? '✓' : k + 1}</span><div><strong>${title}</strong><small>${esc(detail)}</small>${k === next || (k === 0 && done) ? `<div class="road-actions">${button}</div>` : ''}</div></li>`).join('')}</ol></section>`;
+}
+const SCENE_LONG = /^S\d+[A-Z] would hold [\d.]+ s, above the style's [\d.]+ s shot limit/;
+const sceneFixButtons = (manifest, short = false) => sceneAis().map(ai => action(short ? `Fix with ${ai.name}` : `Fix the long shots with ${ai.name}`, 'scene-fix-long', `${manifest.id}|${ai.id}`, 'primary')).join('');
+// Labels like S33A in a problem jump to their scene on the board.
+const sceneLinked = text => esc(text).replace(/\b(S\d{2,})([A-H])?\b/g, (match, scene) => `<button type="button" class="scene-jump" data-action="scene-goto" data-id="${scene}">${match}</button>`);
 function sceneInputsCard(content) {
   const busy = content.planJobs.find(job => ['queued', 'running'].includes(job.status) && !job.picture && !job.redesign && !job.redraw);
+  // 0.82 (owner review 2026-11-02): once a storyboard is built the buttons say so.
+  const latest = sceneLatest(content), built = latest && latest.source !== 'rules' ? latest : null;
   const inputs = content.inputs, row = (ok, title, detail) => `<div class="handoff-record"><span>${ok ? '✓' : '○'}</span><div><strong>${title}</strong><p>${detail}</p></div></div>`;
   // 0.80 (owner request 2026-11-02): the newest job shows; earlier ones fold away with "Clear them".
   // 0.81: the row says when the storyboard was asked for and when it last ran (a retry hours later showed only the
@@ -111,10 +136,22 @@ function sceneInputsCard(content) {
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">INPUTS & GATE</span><h2>Locked inputs</h2></div>${badge(inputs.ready ? 'Ready' : 'Blocked', inputs.ready ? 'green' : 'gray')}</div>
     ${row(content.contentState === 'approved', `Approved script v${content.contentRevision}`, esc(content.title))}
     ${row(inputs.voice.ready, 'Approved narration', inputs.voice.ready ? `${sceneClock(inputs.voice.durationSeconds)} · timing source for every scene` : esc(inputs.voice.blocker || 'Approve a narration in the Voice Room.'))}
-    ${row(inputs.style.ready, inputs.style.ready ? `${esc(inputs.style.name)} r${inputs.style.revision}` : 'Family style', inputs.style.ready ? `Sources: ${esc(inputs.sources.map(styleLabel).join(', '))}` : esc(inputs.style.blocker || 'Assign a style in Room 03.'))}
+    ${row(inputs.style.ready, inputs.style.ready ? `${esc(inputs.style.name)} r${inputs.style.revision}` : 'Family style', inputs.style.ready ? `Sources: ${esc(inputs.sources.map(styleLabel).join(', '))}${sceneDrawing(inputs.style.drawing, content.familyId)}` : esc(inputs.style.blocker || 'Assign a style in Room 03.'))}
     ${busy ? `<p class="busy-note"><strong>${esc(sceneAiName(busy.provider))} is ${busy.status === 'queued' ? 'about to build' : 'building'} this script's storyboard now.</strong> Its button is off until it finishes. ${sceneAis().length > 1 ? `The other AI's button still works: it asks first, then builds a second storyboard after this one.` : ''} Stop it below if you want to keep your tokens.</p>` : ''}
-    <div class="card-actions">${inputs.ready ? action('Rough free draft (test only)', 'scene-plan-rules', content.contentId, 'secondary') + sceneAis().map(ai => busy && sceneAiName(busy.provider) === ai.name ? `<button type="button" class="button primary" disabled title="${esc(ai.name)} is building this storyboard now">${esc(ai.name)} is building…</button>` : action(`Storyboard with ${ai.name}`, 'scene-plan-claude', `${content.contentId}|${ai.id}`, 'primary')).join('') : ''}${inputs.ready && !sceneAis().length ? '<span class="muted">Connect and test Claude or ChatGPT in Connections to build the storyboard.</span>' : ''}</div>
+    ${built ? `<p class="built-note"><strong>The storyboard is built:</strong> revision ${built.revision}, ${built.sceneCount} scenes, ${built.shotCount} shots. Building it again makes a new revision; this one stays in the history.</p>` : ''}
+    <div class="card-actions">${built ? action(`See the storyboard (${built.sceneCount} scenes)`, 'scene-goto-board', '', 'primary') : ''}${inputs.ready ? action('Rough free draft (test only)', 'scene-plan-rules', content.contentId, 'secondary') + sceneAis().map(ai => busy && sceneAiName(busy.provider) === ai.name ? `<button type="button" class="button primary" disabled title="${esc(ai.name)} is building this storyboard now">${esc(ai.name)} is building…</button>` : action(built ? `Build again with ${ai.name}` : `Storyboard with ${ai.name}`, 'scene-plan-claude', `${content.contentId}|${ai.id}`, built ? 'secondary' : 'primary')).join('') : ''}${inputs.ready && !sceneAis().length ? '<span class="muted">Connect and test Claude or ChatGPT in Connections to build the storyboard.</span>' : ''}</div>
     ${typeof liveFor === 'function' ? liveFor(content.contentId, 'scene').map(item => liveBlock(item, {actions: item.stoppable ? `<div class="live-actions">${action('Stop', 'scene-plan-stop', item.id, 'secondary stop-button')}<span class="hint">Stops ${esc(item.who || 'the AI')} at once. Everything finished is kept; Resume goes on from there.</span></div>` : ''})).join('') : ''}${planJobs ? `<div class="history-list">${planJobs}</div>` : ''}</section>`;
+}
+// What the drawings will look like (0.82, owner review 2026-11-02: "I chose classic cartoon and storybook but it made me
+// hand-drawn scenes"): the ticked looks, the drawing hand and the film looks, said before anything is drawn.
+function sceneDrawing(d, familyId) {
+  if (!d) return '';
+  const looks = d.looks?.length ? d.looks : d.boards?.length ? d.boards : d.designs?.length ? d.designs : [d.look || d.board || d.design].filter(Boolean);
+  const mixed = looks.length > 1 || [d.look, d.board, d.design].includes('mix');
+  const films = d.films?.length ? d.films.map(filmLabel).join(', ') : d.film && !['none', 'choose'].includes(d.film) ? filmLabel(d.film) : null;
+  const parts = [`${looks.map(styleLabel).join(' + ') || 'the engine\'s own look'}${mixed ? ' (the AI picks one per scene)' : ''}`, d.hand ? 'a hand draws every scene' : 'no drawing hand', ...(films ? [`film look: ${films}`] : []), ...(d.pictureType && d.pictureType !== 'cartoon' ? [`pictures: ${d.pictureType}`] : [])];
+  const handWarn = d.hand && !looks.includes('whiteboard') ? `<br><span class="inline-warning">A hand draws every scene line by line, so the scenes look hand-drawn even in ${esc(looks.map(styleLabel).join(' and '))}. ${action('Change it in this channel\'s editing style', 'family-style', familyId, 'text-button')}</span>` : '';
+  return `<br>Draws: ${esc(parts.join(' · '))}${handWarn}`;
 }
 // A paused storyboard (0.81): why it paused, what is kept, and the buttons that go on from there.
 function scenePaused(content, job) {
@@ -145,7 +182,7 @@ function scenePlanCard(content, manifest) {
   ].join('');
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'claude' ? 'Claude' : manifest.source === 'hermes' ? 'Earlier AI planner' : manifest.source === 'rules' ? 'Rough free draft' : 'Edited')}</div></div>
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
-    ${manifest.issues.length ? `<div class="checks"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${esc(item)}</li>`).join('')}</ul></div>` : ''}
+    ${manifest.issues.length ? `<div class="checks" id="scene-problems"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${sceneLinked(item)}</li>`).join('')}</ul>${manifest.scope.current && manifest.issues.some(item => SCENE_LONG.test(item)) ? `<p class="hint">Shots that hold longer than the video's pace: the program adds the shots each scene needs and the AI draws only the new ones (one answer per eight scenes). Everything else keeps its drawing.</p><div class="card-actions">${sceneFixButtons(manifest)}</div>` : ''}</div>` : ''}
     ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
     ${sceneStory(manifest.plan)}${sceneUndesigned(manifest)}${sceneDirection(manifest.plan)}${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
@@ -154,12 +191,13 @@ function scenePlanCard(content, manifest) {
     <p class="hint">${esc(manifest.plan.timing.note)} Every edit creates a new revision; untouched shots keep their IDs and visuals.</p>
     <div class="card-actions">${actions}</div>
     <details class="scene-history"><summary>Revision history (${content.manifests.length})</summary><ul class="intel-list">${history}</ul></details>
+    <h3 class="board-title" id="scene-board">The storyboard · ${manifest.sceneCount} scenes · ${manifest.shotCount} shots</h3>
     <div class="scene-board">${manifest.plan.scenes.map(scene => sceneRow(content, manifest, scene)).join('')}</div></section>`;
 }
 function sceneRow(content, manifest, scene) {
   const editable = manifest.scope.current;
   const last = manifest.plan.scenes.at(-1).id === scene.id;
-  return `<article class="scene-row"><div class="scene-head"><span class="room-number">${esc(scene.label)}</span><div><strong>${esc(SCENE_PURPOSE[scene.purpose] || scene.purpose)} · ${sceneClock(scene.startSeconds)}–${sceneClock(scene.startSeconds + scene.durationSeconds)}</strong><small>${sceneSeconds(scene.durationSeconds)} · sentence${scene.sentenceStart === scene.sentenceEnd ? ` ${scene.sentenceStart}` : `s ${scene.sentenceStart}–${scene.sentenceEnd}`} · ${scene.shots.length} shot${scene.shots.length === 1 ? '' : 's'}</small></div>
+  return `<article class="scene-row" id="scene-row-${esc(scene.label)}"><div class="scene-head"><span class="room-number">${esc(scene.label)}</span><div><strong>${esc(SCENE_PURPOSE[scene.purpose] || scene.purpose)} · ${sceneClock(scene.startSeconds)}–${sceneClock(scene.startSeconds + scene.durationSeconds)}</strong><small>${sceneSeconds(scene.durationSeconds)} · sentence${scene.sentenceStart === scene.sentenceEnd ? ` ${scene.sentenceStart}` : `s ${scene.sentenceStart}–${scene.sentenceEnd}`} · ${scene.shots.length} shot${scene.shots.length === 1 ? '' : 's'}</small></div>
       ${editable ? `<div class="scene-tools">${action('Edit', 'scene-edit', scene.id, 'text-button')}${scene.sentenceEnd > scene.sentenceStart ? action('Split', 'scene-split', scene.id, 'text-button') : ''}${!last ? action('Merge next', 'scene-merge', scene.id, 'text-button') : ''}${scene.shots.length < 8 ? action('+ Shot', 'scene-add-shot', scene.id, 'text-button') : ''}</div>` : ''}</div>
     <p class="scene-narration">${esc(sceneNarration(manifest, scene))}</p>
     ${scene.direction || scene.onScreenText ? `<p class="scene-direction">${scene.direction ? `<span>Direction:</span> ${esc(scene.direction)} ` : ''}${scene.onScreenText ? `<span>On screen:</span> “${esc(scene.onScreenText)}”` : ''}</p>` : ''}
@@ -202,9 +240,18 @@ function sceneBatchCard(content, manifest, family) {
     <div class="batch-list">
       <div><strong>${stockEmpty} stock shot${stockEmpty === 1 ? '' : 's'} empty</strong><small>One search each with your first tested stock library (${esc(settings.stockOrder.join(' → '))}).</small>${manifest.scope.current && stockEmpty ? action('Search all', 'scene-search-all', manifest.id, 'secondary') : ''}</div>
       <div><strong>${withResults} empty shot${withResults === 1 ? '' : 's'} with results</strong><small>Downloads the top result for each, with its license evidence.</small>${manifest.scope.current && withResults ? action('Use top results', 'scene-pick-top', manifest.id, 'secondary') : ''}</div>
-      ${drawn ? `<div><strong>${drawnEmpty} of ${drawn} drawn shot${drawn === 1 ? '' : 's'} to draw</strong><small>The program draws each shot's figures, props and labels itself, stroke by stroke. Free and local; a changed drawing is drawn again.</small>${manifest.scope.current ? action('Draw all scenes', 'scene-draw-all', manifest.id, 'primary') : ''}</div>` : ''}
+      ${drawn ? sceneDrawRow(content, manifest) : ''}
       <div><strong>${aiEmpty} AI shot${aiEmpty === 1 ? '' : 's'} empty</strong><small>${manifest.status === 'approved' ? `About ${money(aiEmpty * settings.priceCents[settings.imageQuality])} at ${esc(settings.imageQuality)} quality.` : 'Approve the plan before spending on AI images.'}</small>${manifest.scope.current && aiEmpty && manifest.status === 'approved' ? action('Generate all', 'scene-generate-all', manifest.id, 'secondary') : ''}</div>
     </div></section>`;
+}
+// Drawing the scenes (0.82, owner review 2026-11-02: the button still said "Draw all scenes" after everything was drawn,
+// and there was no Stop): drawn with today's drawing, out of date, not drawn yet; Stop while it draws; "Draw the
+// remaining" goes on from where it stopped; "Draw them all again" only when everything is drawn.
+function sceneDrawRow(content, manifest) {
+  const d = content.drawing || {total: 0, current: 0, outdated: 0, missing: 0, active: 0}, left = d.missing + d.outdated, ok = manifest.scope.current;
+  const title = d.active ? `Drawing now: ${d.current} of ${d.total} done, ${d.active} to go` : !left ? `All ${d.total} drawn shots are drawn ✓` : left === d.total && !d.outdated ? `${d.total} drawn shots to draw` : `${left} of ${d.total} drawn shots still to draw${d.outdated ? ` (${d.outdated} out of date: the drawing or the drawing engine changed)` : ''}`;
+  const button = !ok ? '' : d.active ? action('Stop drawing', 'scene-draw-stop', manifest.id, 'secondary stop-button') : !left ? action('Draw them all again', 'scene-draw-again', manifest.id, 'text-button') : action(left === d.total && !d.outdated ? `Draw all ${d.total} scenes` : `Draw the remaining ${left}`, 'scene-draw-all', manifest.id, 'primary');
+  return `<div><strong>${title}</strong><small>${d.active ? 'Stop keeps every finished drawing; "Draw the remaining" goes on from there.' : 'The program draws each shot itself on this PC. Free; no internet needed. Finished drawings are kept, so it always goes on from where it stopped.'}</small>${button}</div>`;
 }
 function sceneApprovalCard(content, manifest) {
   const shots = sceneShots(manifest), filled = shots.filter(shot => content.selections[shot.id]).length;
@@ -348,6 +395,24 @@ function sceneAction(command, id, button) {
     const pexels = intelConnectors('pexels'), pixabay = intelConnectors('pixabay'), wikimedia = intelConnectors('wikimedia');
     return sceneDialog('search-all', 'Search stock for every empty shot', 'FREE API · HOURLY CAPS', `<div class="form-grid"><label>Pexels connector<select name="pexels">${sceneConnectorOptions('pexels', true)}</select></label><label>Pixabay connector<select name="pixabay">${sceneConnectorOptions('pixabay', true)}</select></label><label>Archive images (Wikimedia Commons)<select name="wikimedia">${sceneConnectorOptions('wikimedia', true)}</select></label>${scenePersonField()}</div>${!pexels.length && !pixabay.length && !wikimedia.length ? '<p class="inline-warning">Add and test a Pexels, Pixabay or Wikimedia Commons connector in Connections first.</p>' : ''}<p class="hint">Archive shots search Wikimedia Commons: public domain, CC0 and CC BY files only, each with its licence and credit line kept for the description.</p><p class="hint">One request per shot, counted against your hourly caps. Identical searches within 24 hours reuse cached results.</p>`, 'Search', {manifestId: id});
   }
+  if (command === 'scene-goto-board' || command === 'scene-goto') {
+    const target = document.getElementById(command === 'scene-goto' ? `scene-row-${id}` : id === 'problems' ? 'scene-problems' : 'scene-board');
+    if (target) { target.scrollIntoView({behavior: 'smooth', block: 'start'}); target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'), 1600); }
+    return;
+  }
+  if (command === 'scene-draw-stop') {
+    if (button) button.disabled = true;
+    return api(`/api/scene-manifests/${id}/draw-stop`, {}).then(result => { toast(`Stopped ${result.stopped} waiting drawing${result.stopped === 1 ? '' : 's'}.${result.finishing ? ' The one being drawn now finishes first.' : ''} "Draw the remaining" goes on from here.`); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
+  }
+  if (command === 'scene-draw-again') {
+    if (!confirm('Draw every scene again? Every shot is already drawn with today\'s drawing, so this only helps after a change you made outside the plan. It is free and runs on this PC.')) return;
+    if (button) button.disabled = true;
+    return api(`/api/scene-manifests/${id}/draw-all`, {requestedBy: scenePerson() || 'Owner', again: true}).then(result => { toast(`${result.queued} scene${result.queued === 1 ? '' : 's'} queued for drawing.`); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
+  }
+  if (command === 'scene-fix-long') {
+    const [manifestId, aiId] = String(id).split('|'), ai = sceneAis().find(item => item.id === aiId);
+    return sceneDialog('fix-long', `Fix the long shots with ${ai?.name || 'the AI'}`, 'NEW SHOTS · ONE ANSWER PER EIGHT SCENES', `<p class="hint">Some shots hold longer than this video's pace, so the storyboard cannot be approved. The program adds the shots each of those scenes needs (as a new revision), then ${esc(ai?.name || 'the AI')} draws only the new shots, each on its own words, in the same place with the same characters. Every other shot keeps its drawing. Afterwards press "Draw the remaining" to draw the new shots.</p><div class="form-grid">${scenePersonField()}</div>`, 'Fix them', {manifestId, connector: aiId});
+  }
   if (command === 'scene-draw-all') { if (button) button.disabled = true; return api(`/api/scene-manifests/${id}/draw-all`, {requestedBy: scenePerson() || 'Owner'}).then(result => { toast(`${result.queued} scene${result.queued === 1 ? '' : 's'} queued for drawing.`); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }
   if (command === 'scene-pick-top') return sceneDialog('pick-top', 'Use the top result for every empty shot', 'DOWNLOAD WITH LICENSE EVIDENCE', `<p class="hint">Downloads the first result of each shot's latest search. You can change any shot before approving the board.</p><div class="form-grid">${scenePersonField()}</div>`, 'Download', {manifestId: id});
   if (command === 'scene-generate-all') {
@@ -396,6 +461,7 @@ document.getElementById('scene-form').addEventListener('submit', event => {
       await api('/api/quota-settings', {revision: data.quotaRevision, pexelsHourlyRequestCap: Number(value('pexelsCap')), pixabayHourlyRequestCap: Number(value('pixabayCap'))});
       return;
     }
+    if (kind === 'fix-long') { const result = await api(`/api/scene-manifests/${data.manifestId}/fix-long-shots`, {requestedBy: person, connector: sceneConnectorRef(data.connector), expectedRevision: sceneLatest(content).revision}); message = `${result.added} shot${result.added === 1 ? '' : 's'} added; the AI is drawing them now.`; return; }
     if (kind === 'redraw') { await api(`/api/scene-manifests/${data.manifestId}/redraw-undesigned`, {requestedBy: person, connector: sceneConnectorRef(value('connector')), expectedRevision: sceneLatest(content).revision}); message = 'Drawings queued. They arrive as a new plan revision.'; return; }
     if (kind === 'shot-picture') { await api(`/api/scene-manifests/${data.manifestId}/shot-picture`, {shotId: data.shotId, describe: value('describe'), size: value('size'), replace: checked('replace'), requestedBy: person, connector: sceneConnectorRef(value('connector')), expectedRevision: sceneLatest(content).revision}); message = 'Picture queued. It arrives as a new plan revision.'; return; }
     if (kind === 'change-shot') { await api(`/api/scene-manifests/${data.manifestId}/change-shot`, {label: data.label, ask: value('ask'), requestedBy: person, connector: sceneConnectorRef(value('connector')), expectedRevision: sceneLatest(content).revision}); message = 'Change queued. Watch it live above; the new drawing arrives as a new plan revision.'; return; }

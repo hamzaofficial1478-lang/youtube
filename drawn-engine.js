@@ -36,7 +36,10 @@
 
   // ------------------------------------------------------------ layout and timing (once per shot)
   function autoEnter(el, engine) {
-    if (el.kind === 'picture') return 'draw';
+    // A picture appears the way its look draws (0.82, owner review 2026-11-02: Classic and Storybook scenes looked
+    // hand-drawn): traced line by line only where a hand draws or the look is made by hand; motion designs build it shape
+    // by shape; Storybook washes it in; Classic and the cartoon looks pop it in.
+    if (el.kind === 'picture') return engine === 'handdrawn' || PEN || ['wb', 'ink', 'board', 'doodle', 'flat', 'paint'].includes(K.FIN) ? 'draw' : K.FIN === 'story' ? 'fade' : 'pop';
     if (['chart', 'timeline', 'network', 'map', 'crowd', 'quote', 'document', 'gauge', 'loupe', 'ruler'].includes(el.kind) || (el.kind === 'text' && ['statement', 'poster'].includes(el.style))) return 'none';
     if (el.kind === 'text' && ['chapter', 'versus'].includes(el.style)) return 'none';
     if (engine === 'handdrawn' || PEN || K.FIN === 'ink') return el.kind === 'fx' ? 'pop' : 'draw';

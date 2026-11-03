@@ -366,7 +366,7 @@ function planMessages(input, {findings = []} = {}) {
     'Return only one JSON object: {"summary": string, ' + (input.style.grade === 'choose' ? '"grade": one grade key, ' : '') + (input.style.adaptive && !input.design ? '"design": the video design (see DESIGN THIS VIDEO), ' : '') + (input.style.sources.includes('generated-graphics') ? '"cast": [characters], ' + (input.style.frames === false ? '' : '"direction"?: art direction (required when any shot has a frame), ') : '') + '"scenes": [{"sentenceStart": integer, "sentenceEnd": integer, "purpose": one of ' + JSON.stringify(PURPOSES) + ', "direction": string, "onScreenText": string, "transition"?: string, ' + (input.style.sources.includes('generated-graphics') ? '"setting"?: {"set", "mood"}, ' : '') + '"shots": [{"source": string, "query": string, "prompt": string, "motion": string, "notes": string, "cue"?: string' + (input.style.sources.includes('generated-graphics') ? ', "sketch"?: drawing' + (input.style.frames === false ? '' : ', "frame"?: atelier shot (instead of a sketch)') : '') + '}]}]}. A shot\'s "cue" is the first words spoken when it starts (shots after the first in a scene); without cues the shots share their scene evenly.',
     input.part ? `This is part ${input.part.index} of ${input.part.of} of one video. Cover sentences ${input.part.firstSentence}-${input.part.lastSentence} exactly once, in order, with whole sentences per scene; keep the supplied sentence numbers. ${input.part.index === 1 ? 'The first scene is the hook.' : 'The video is already under way: do not open with a hook scene.'} The neighbouring sentences are given only for continuity.`
       : 'Cover every numbered sentence exactly once, in order, with whole sentences per scene. The first scene is the hook.',
-    `Keep each scene between ${input.style.sceneSeconds.min} and ${input.style.sceneSeconds.max} seconds using the supplied sentence seconds. Shots split their scene evenly; keep every shot between ${input.style.shotSeconds.min} and ${input.style.shotSeconds.max} seconds (1-${MAX_SHOTS_PER_SCENE} shots per scene).`,
+    `Keep each scene between ${input.style.sceneSeconds.min} and ${input.style.sceneSeconds.max} seconds using the supplied sentence seconds. Shots split their scene evenly; keep every shot between ${input.style.shotSeconds.min} and ${input.style.shotSeconds.max} seconds (1-${MAX_SHOTS_PER_SCENE} shots per scene).${input.style.adaptive ? ` Your video design's pace is binding too: no shot longer than its shotMaxSeconds${input.design?.pace?.shotMaxSeconds ? ` (${input.design.pace.shotMaxSeconds} s)` : ''}, so a scene longer than that gets more shots.` : ''}`,
     `Use only these sources: ${input.style.sources.join(', ')}; prefer ${input.style.primarySource}. Every shot's "motion" is one of: ${input.style.cameraMoves.join(', ')}${input.style.sources.some(source => source !== 'generated-graphics') ? ' (the camera move on footage and images)' : ''}.${input.style.sources.includes('generated-graphics') ? ` Drawn shots move with their own sketch.camera: give them "motion": "${input.style.cameraMoves.includes('static') ? 'static' : input.style.cameraMoves[0]}".` : ''}`,
     ...(input.style.transitions?.length ? [`A scene's "transition" is how the edit enters it from the scene before: "cut" or one of ${T.guide(input.style.transitions)}. Choose what each change means for the story and the viewer (a cut keeps the pace, a transition marks a change); use any variety that serves the video. Without one the editing brain decides.`] : []),
     'For stock sources write 2-6 generic search words in English (no people names, brands, logos or channel names). For ai-image write an original image prompt (no real people, logos, brands, artists, copyrighted characters or channel names; no text in the image).',
@@ -641,7 +641,8 @@ class SceneRoom {
     return {
       family, ready: !blockers.length, blockers,
       voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, auditionId: voice.auditionId || null, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
-      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
+      // 0.82: what the drawings will look like (looks, the drawing hand, film looks), shown in Room 04 before anything is drawn.
+      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
       spec, sources, engine: planner.engine, primarySource: planner.primarySource, scope: planner.scope || null,
     };
   }
@@ -998,7 +999,19 @@ class SceneRoom {
       mendShots(raw.scenes, sources, motions);
       const shifted = raw.scenes.map(scene => ({...scene, sentenceStart: scene.sentenceStart - offset, sentenceEnd: scene.sentenceEnd - offset}));
       structural(shifted, last - offset, sources, motions, {primary: style.engine || 'stickman', cast: Sk.validateCast(cast, {lenient: true, kit}), kit});
-      return [];
+      // 0.82 (owner review 2026-11-02: approval was blocked by drawn shots held far longer than the video's own pace): a
+      // scene whose shots must each hold more than a quarter over the pace needs more shots; checked on the estimated
+      // sentence times, the way the finished plan is checked.
+      const pace = [parsed.design?.pace?.shotMaxSeconds, promptInput.design?.pace?.shotMaxSeconds, style.adaptive ? null : style.shotSeconds?.max].find(value => Number.isFinite(value) && value > 0);
+      if (!pace) return [];
+      const seconds = new Map(promptInput.sentences.map(item => [item.n, Number(item.seconds) || 0]));
+      const long = raw.scenes.map((scene, k) => {
+        let total = 0;
+        for (let n = scene.sentenceStart; n <= scene.sentenceEnd; n++) total += seconds.get(n) || 0;
+        const each = total / Math.max(1, scene.shots.length);
+        return each > pace * 1.25 && scene.shots.length < MAX_SHOTS_PER_SCENE ? `Scene ${k + 1 + sceneOffset} lasts about ${total.toFixed(1)} s with ${scene.shots.length} shot${scene.shots.length === 1 ? '' : 's'}, so each holds about ${each.toFixed(1)} s, over the video's pace of ${pace} s a shot: give it ${Math.min(MAX_SHOTS_PER_SCENE, Math.ceil(total / pace))} shots, each with its own drawing on its own words.` : null;
+      }).filter(Boolean);
+      return long.slice(0, 6);
     } catch (error) {
       if (error instanceof InputError || error instanceof AiError) return [String(error.message).replace(/\bScene (\d+)/g, (match, n) => `Scene ${Number(n) + sceneOffset}`)];
       console.error('Checking a plan part failed:', error);
@@ -1523,6 +1536,28 @@ class SceneRoom {
     requireValue(labels.length, 'Every planned designed shot is designed.', 409);
     return this.queueRedraw({row, content, inputs, payload, labels, input, createdBy});
   }
+  // "Fix the long shots" (0.82, owner review 2026-11-02: drawn shots held far longer than the video's pace, which blocks
+  // approval, and there was no way on): each scene with such a shot gets as many shots as its length needs, as a new plan
+  // revision; then the AI draws only those new shots, in their scene and on their own words (one redraw job). Every
+  // other shot keeps its ID, drawing and visual.
+  fixLongShots(manifestId, input) {
+    object(input);
+    const createdBy = person(input.requestedBy), row = this.manifestRow(manifestId);
+    requireValue(this.latestManifestRow(row.content_id).id === row.id && input.expectedRevision === row.revision, 'The plan changed in another tab. Reload first.', 409);
+    const payload = JSON.parse(row.payload), checks = JSON.parse(row.checks), limits = new Map();
+    for (const item of checks.issues) { const found = String(item).match(/^(S\d+)[A-Z] would hold [\d.]+ s, above the style's ([\d.]+) s shot limit/); if (found) limits.set(found[1], Math.min(limits.get(found[1]) ?? Infinity, Number(found[2]))); }
+    requireValue(limits.size, 'No shot of this plan holds longer than the video\'s pace.', 409);
+    const additions = payload.scenes.filter(scene => limits.has(scene.label)).map(scene => ({sceneId: scene.id, label: scene.label, count: Math.min(MAX_SHOTS_PER_SCENE, Math.ceil(scene.durationSeconds / limits.get(scene.label))) - scene.shots.length})).filter(item => item.count > 0);
+    requireValue(additions.length, `Those scenes already have the most shots a scene can have (${MAX_SHOTS_PER_SCENE}); split them instead.`, 409);
+    // Checked before the plan changes, so a refused job never leaves the copied shots behind.
+    connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
+    requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(row.content_id), 'A storyboard job is running for this script. Fix the long shots when it has finished.', 409);
+    const edited = this.editManifest(row.id, {op: 'add-shots', additions, createdBy, expectedRevision: row.revision});
+    const fresh = this.manifestRow(edited.id), fp = JSON.parse(fresh.payload), content = this.store.content(fresh.content_id), inputs = this.inputs(content);
+    const labels = additions.flatMap(item => { const scene = fp.scenes.find(other => other.id === item.sceneId); return scene.shots.slice(scene.shots.length - item.count).map(shot => shot.label); });
+    const ask = `These shots are new: the shot before them held longer than the video's pace (at most ${Math.min(...limits.values())} s a shot). Draw each new shot for the words it now covers so the scene moves on with them: the same place and characters, a new framing, action or key word in each shot, and a cue on its first words.`;
+    return {manifest: edited, added: labels.length, ...this.queueRedraw({row: fresh, content, inputs, payload: fp, labels, input, createdBy, ask})};
+  }
   // Room 04 "Change with words" (0.77, owner review 2026-10-31: change any scene by command). The owner says what should
   // change in one drawn shot; Claude draws that shot again with the request, checked like every drawing, as a redraw job
   // (one answer). Every other shot keeps its ID, drawing and visual; the result is a new plan revision to approve.
@@ -1651,6 +1686,19 @@ class SceneRoom {
       const base = scene.shots.at(-1);
       scene.shots.push({...base, id: shortId('sh'), notes: ''});
       note = `Added a shot to ${payload.scenes.find(item => item.id === scene.id).label}`;
+    } else if (op === 'add-shots') {
+      // 0.82: "Fix the long shots" adds shots to several scenes in one revision (copies of each scene's last shot,
+      // without its cue, drawn again by the AI afterwards).
+      requireValue(Array.isArray(input.additions) && input.additions.length >= 1 && input.additions.length <= MAX_SCENES, 'Name the scenes to add shots to.');
+      let added = 0;
+      for (const item of input.additions) {
+        const scene = scenes[sceneIndex(item?.sceneId)], count = Number(item?.count);
+        requireValue(Number.isSafeInteger(count) && count >= 1 && scene.shots.length + count <= MAX_SHOTS_PER_SCENE, `A scene can have at most ${MAX_SHOTS_PER_SCENE} shots.`);
+        const {cue, ...base} = scene.shots.at(-1);
+        for (let k = 0; k < count; k++) scene.shots.push({...base, id: shortId('sh'), notes: ''});
+        added += count;
+      }
+      note = `Added ${added} shot${added === 1 ? '' : 's'} where shots held longer than the video's pace`;
     } else if (op === 'remove-shot') {
       const {scene, index} = findShot(input.shotId);
       requireValue(scene.shots.length > 1, 'A scene needs at least one shot.');
@@ -1894,8 +1942,38 @@ class SceneRoom {
     });
   }
   // P06c: draw every drawn shot that has no drawing of its current sketch yet (free, local).
+  // How far the drawings of a plan are (0.82, owner review 2026-11-02: "all scenes are drawn, why does the button still say
+  // draw all scenes"): drawn with today's drawing, out of date (the drawing or the engine changed, so "Draw the remaining"
+  // draws it again), or not drawn yet, and how many are being drawn now.
+  drawState(contentId, payload) {
+    const rights = new Map(this.db.prepare('SELECT s.shot_id, a.rights FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=?').all(contentId).map(row => [row.shot_id, row.rights]));
+    const active = this.db.prepare("SELECT COUNT(*) AS n FROM visual_jobs WHERE content_id=? AND kind='draw' AND status IN ('queued','running')").get(contentId).n;
+    let total = 0, current = 0, outdated = 0;
+    for (const shot of payload.scenes.flatMap(scene => scene.shots)) {
+      if (shot.source !== 'generated-graphics') continue;
+      total++;
+      const raw = rights.get(shot.id);
+      if (!raw) continue;
+      let r = {};
+      try { r = JSON.parse(raw); } catch { /* counted as out of date */ }
+      const same = shot.frame?.html ? r.compositionHash === hash({html: shot.frame.html, engine: At.VERSION}) : r.sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION});
+      if (same) current++; else outdated++;
+    }
+    return {total, current, outdated, missing: total - current - outdated, active};
+  }
+  // Stop drawing (0.82): the drawings still waiting are stopped (nothing is lost; "Draw the remaining" goes on from there);
+  // the one being drawn finishes first (a few seconds).
+  stopDrawing(manifestId) {
+    const row = this.manifestRow(manifestId);
+    const result = this.db.prepare("UPDATE visual_jobs SET status='cancelled', error='Stopped by you before it was drawn.', updated_at=? WHERE content_id=? AND kind='draw' AND status='queued'").run(now(), row.content_id);
+    const finishing = this.db.prepare("SELECT COUNT(*) AS n FROM visual_jobs WHERE content_id=? AND kind='draw' AND status='running'").get(row.content_id).n;
+    this.store.event(`Stopped ${result.changes} waiting drawing${result.changes === 1 ? '' : 's'} for plan ${manifestId}`);
+    return {stopped: Number(result.changes), finishing};
+  }
+  // again (0.82): draw every drawn shot again, also those already drawn with today's drawing.
   queueDrawAll(manifestId, input) {
     object(input);
+    const again = input.again === true;
     const createdBy = person(input.requestedBy);
     requireValue(this.browser, 'Drawn scenes are drawn in Microsoft Edge or Google Chrome, and neither was found on this PC.', 503);
     return this.store.transaction(() => {
@@ -1906,11 +1984,11 @@ class SceneRoom {
         const selected = this.db.prepare('SELECT a.rights FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=? AND s.shot_id=?').get(row.content_id, shot.id);
         if (shot.frame?.html) {
           const composition = {html: shot.frame.html, frameId: shot.frame.frameId, composedSeconds: shot.frame.composedSeconds, words: shot.frame.words || [], canvas: mctx.payload.direction?.palette.canvas || '#FFFFFF'}, compositionHash = hash({html: composition.html, engine: At.VERSION});
-          if (selected && JSON.parse(selected.rights).compositionHash === compositionHash) continue;
+          if (!again && selected && JSON.parse(selected.rights).compositionHash === compositionHash) continue;
           ids.push(this.insertJob({ctx: this.shotIn(mctx, shot.id), kind: 'draw', capabilityId: 'drawn-scene', scope: {composition, compositionHash, durationSeconds: shot.durationSeconds, capability: VS.capability('drawn-scene')}, createdBy}));
           continue;
         }
-        if (selected && JSON.parse(selected.rights).sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION})) continue;
+        if (!again && selected && JSON.parse(selected.rights).sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION})) continue;
         const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
         ids.push(this.insertJob({ctx: this.shotIn(mctx, shot.id), kind: 'draw', capabilityId: 'drawn-scene', scope: {sketch: shot.sketch, sketchHash: hash({sketch: shot.sketch, engine: Sk.VERSION}), times: Sk.timing(Sk.validate(shot.sketch, {primary: mctx.payload.engine || 'stickman', lenient: true}), spoken), durationSeconds: shot.durationSeconds, capability: VS.capability('drawn-scene')}, createdBy}));
       }
@@ -2366,7 +2444,7 @@ class SceneRoom {
         return {
           contentId: content.id, familyId: content.familyId, title: content.title, contentRevision: content.revision, contentState: content.state,
           inputs: {ready: inputs.ready, blockers: inputs.blockers, voice: inputs.voice, style: inputs.style, sources: inputs.sources, format: inputs.family.format},
-          manifests, selections, candidateCounts: counts,
+          manifests, selections, candidateCounts: counts, ...(latest ? {drawing: this.drawState(content.id, JSON.parse(latest.payload))} : {}),
           assets: this.db.prepare('SELECT * FROM visual_assets WHERE content_id=? ORDER BY created_at DESC').all(content.id).map(row => this.publicAsset(row)),
           jobs: this.db.prepare('SELECT * FROM visual_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 80').all(content.id).map(row => this.publicJob(row)),
           planJobs: this.db.prepare('SELECT * FROM scene_plan_jobs WHERE content_id=? AND cleared_at IS NULL ORDER BY created_at DESC LIMIT 12').all(content.id).map(row => this.publicPlanJob(row)),
