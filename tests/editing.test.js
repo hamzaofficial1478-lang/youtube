@@ -1177,6 +1177,46 @@ test('the live player gets the edit as the render draws it: drawn shots, moves, 
   assert.ok(live.length > 20000, 'a drawn frame, not a blank one');
 });
 
+// 0.84 (owner test 2026-11-03: a preview stopped at drawing 69 of 77 started again at 1 on Retry): every render keeps its
+// finished parts, and a drawing browser that stops answering is restarted for the shot instead of failing the render.
+test('a preview render that stops keeps its finished drawings and continues from them, the same file to the byte', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, content, renders, dataRoot} = env;
+  const {approval} = await drawnBoard(env);
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const report = await renders.checkReadiness({requestedBy: 'Owner'});
+  renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the preview recovery test.'});
+  const once = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  assert.equal((await renders.processNext()).status, 'completed');
+  const whole = JSON.parse(renders.row(once.id).result).video.sha256;
+  // The second render: the drawing browser stalls twice on its first shot (restarted each time), then the program
+  // stops right after the first drawn shot is kept.
+  const original = MotionRenderer.prototype.render;
+  let stalls = 0;
+  MotionRenderer.prototype.render = function (...args) { if (stalls < 2) { stalls++; return Promise.reject(Object.assign(new Error('The browser did not answer Runtime.evaluate in time.'), {name: 'InputError'})); } return original.apply(this, args); };
+  t.after(() => { MotionRenderer.prototype.render = original; });
+  const record = renders.stageRecord.bind(renders);
+  renders.stageRecord = (...args) => { record(...args); if (args[1].startsWith('drawn:')) throw new Error('simulated power cut'); };
+  const second = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  assert.equal(await renders.processNext(), null);
+  renders.stageRecord = record; MotionRenderer.prototype.render = original;
+  assert.equal(stalls, 2, 'the stalled browser was restarted, not the render failed');
+  assert.equal(renders.row(second.id).status, 'failed');
+  assert.equal(renders.stagesOf(second.id), 1, 'the finished drawing is kept');
+  assert.match(renders.row(second.id).error, /1 finished part is kept; a retry continues from them/);
+  assert.ok(fs.existsSync(path.join(dataRoot, 'renders', '.work', second.id)), 'with its file');
+  // A restart in between keeps it too.
+  env.store.db.prepare("UPDATE render_jobs SET status='running' WHERE id=?").run(second.id);
+  renders.recoverInterrupted();
+  assert.match(renders.row(second.id).error, /finished parts are kept/);
+  renders.retry(second.id, {requestedBy: 'Owner'});
+  assert.equal((await renders.processNext()).status, 'completed', renders.row(second.id).error);
+  const result = JSON.parse(renders.row(second.id).result);
+  assert.equal(result.logs.filter(item => /^reused drawn:/.test(item.step) || /reused drawing/.test(item.step)).length, 1, 'the kept drawing was reused, not drawn again');
+  assert.equal(result.video.sha256, whole, 'a resumed preview is the preview made in one go');
+  assert.equal(renders.stagesOf(second.id), 0, 'a finished render clears its kept parts');
+});
+
 test('full control (0.54): every drawn shot is shown and changed inside the edit, any moment previews as a frame, typed commands become checked operations', {skip: skip || noBrowser}, async t => {
   const env = setup(t, {seconds: 20});
   const {editing, scenes, store, content, renders} = env;

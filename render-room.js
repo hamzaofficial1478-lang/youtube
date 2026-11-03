@@ -10,6 +10,8 @@ const {InputError} = require('./store');
 const R = require('./render');
 // Preview sizes the owner can choose (0.57: 720p; 0.83: 1080p and 1440p); 360p is the default proxy.
 const PREVIEW_SIZES = {720: 'proxy720', 1080: 'proxy1080', 1440: 'proxy1440'};
+// The drawing browser stopped answering, crashed or lost its local connection (it is restarted for the shot).
+const BROWSER_LOST = /did not answer|did not start|did not become available|Could not connect to the browser|Target crashed|Target closed|WebSocket/i;
 const T = require('./transitions');
 const B = require('./editing-brain');
 const {MotionRenderer, inspectBrowser, findBrowser} = require('./motion');
@@ -60,13 +62,14 @@ class RenderRoom {
       CREATE TRIGGER IF NOT EXISTS master_approvals_final BEFORE UPDATE ON master_approvals BEGIN SELECT RAISE(ABORT, 'A master approval is immutable.'); END;
     `);
   }
-  // Rendering is local: an interrupted render cost nothing and may be retried, but never silently. A final master
-  // (P11) keeps its finished parts: each was recorded with its checksum when it finished, so a retry reuses only parts
-  // that are still exactly what was made; anything that was running when the program stopped is made again.
+  // Rendering is local: an interrupted render cost nothing and may be retried, but never silently. Every render keeps
+  // its finished parts (P11 for masters; 0.84 for previews too, owner test 2026-11-03: a preview stopped at drawing 69
+  // of 77 started again at 1): each was recorded with its checksum when it finished, so a retry reuses only parts that
+  // are still exactly what was made; anything that was running when the program stopped is made again.
   recoverInterrupted() {
     for (const row of this.db.prepare("SELECT id, preset FROM render_jobs WHERE status='running'").all())
-      this.db.prepare("UPDATE render_jobs SET status='interrupted', error=?, updated_at=? WHERE id=?").run(['master', 'edition'].includes(row.preset) ? 'The program stopped during this master render. Its finished parts are kept with their checksums; a retry checks them and continues from there.' : 'The program stopped during this render. Partial files were discarded; retry when ready.', now(), row.id);
-    const keep = new Set(this.db.prepare("SELECT id FROM render_jobs WHERE preset IN ('master','edition') AND status IN ('interrupted','failed','queued')").all().map(row => row.id)), workRoot = path.join(this.renderDir, '.work');
+      this.db.prepare("UPDATE render_jobs SET status='interrupted', error=?, updated_at=? WHERE id=?").run('The program stopped during this render. Its finished parts are kept with their checksums; a retry checks them and continues from there.', now(), row.id);
+    const keep = new Set(this.db.prepare("SELECT id FROM render_jobs WHERE status IN ('interrupted','failed','queued')").all().map(row => row.id)), workRoot = path.join(this.renderDir, '.work');
     for (const name of fs.existsSync(workRoot) ? fs.readdirSync(workRoot) : []) if (!keep.has(name)) fs.rmSync(path.join(workRoot, name), {recursive: true, force: true});
     for (const row of this.db.prepare('SELECT DISTINCT job_id FROM render_stages').all()) if (!keep.has(row.job_id)) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(row.job_id);
   }
@@ -172,7 +175,7 @@ class RenderRoom {
     const current = !!(visual.ready && visual.approvalId === row.visual_approval_id && content && content.revision === scope.contentRevision && (!scope.edit || this.editing?.isLatest(scope.edit.revisionId)));
     return {id: row.id, familyId: row.family_id, contentId: row.content_id, visualApprovalId: row.visual_approval_id, preset: row.preset, status: row.status, attempts: row.attempts,
       progress: row.progress ? JSON.parse(row.progress) : null, error: row.error, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
-      review: row.review ? JSON.parse(row.review) : null, current, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg, ...(scope.resolution ? {resolution: scope.resolution} : {}),
+      review: row.review ? JSON.parse(row.review) : null, current, partsKept: ['failed', 'interrupted', 'queued'].includes(row.status) ? this.stagesOf(row.id) : 0, scope: {manifestRevision: scope.manifestRevision, shots: scope.edit ? scope.edit.timeline.clips.length : scope.shots.length, styleName: scope.style.name, styleRevision: scope.style.revision, narrationSeconds: scope.narration.durationSeconds, ffmpeg: scope.ffmpeg, ...(scope.resolution ? {resolution: scope.resolution} : {}),
         edit: scope.edit ? {revisionId: scope.edit.revisionId, revision: scope.edit.revision, criticals: scope.edit.criticals, verdict: scope.edit.critiqueVerdict, graphics: scope.edit.timeline.graphics.filter(item => item.status === 'accepted').length} : null},
       ...(row.preset === 'master' ? {master: {sourceRenderId: scope.source.renderId, sourceReviewer: scope.source.reviewer, partsKept: this.stagesOf(row.id), ...this.masterStatus(row), approval: this.masterApproval(row)}} : {}),
       result: result ? {...result, plan: undefined, logs: undefined, videoUrl: `/api/renders/${row.id}/video`, audioUrl: result.audio ? `/api/renders/${row.id}/audio` : null, sheetUrl: result.sheet ? `/api/renders/${row.id}/sheet` : null, hookUrl: result.hook ? `/api/renders/${row.id}/hook` : null, manifestUrl: `/api/renders/${row.id}/manifest`, commands: result.plan?.commands?.length || 0} : null};
@@ -219,6 +222,11 @@ class RenderRoom {
       };
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO render_jobs(id,family_id,content_id,visual_approval_id,preset,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,'proxy','queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, inputs.visual.approvalId, JSON.stringify(scope), by, at, at);
+      // A new preview supersedes the stopped ones of this video: their kept parts are let go, so they never fill the disk.
+      for (const old of this.db.prepare("SELECT id FROM render_jobs WHERE content_id=? AND preset='proxy' AND id<>? AND status IN ('failed','interrupted')").all(content.id, id)) {
+        this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(old.id);
+        fs.rmSync(path.join(this.renderDir, '.work', old.id), {recursive: true, force: true});
+      }
       this.store.event(edit ? `Queued edit r${edit.revision} render for "${content.title}" (${edit.timeline.clips.length} clips)` : `Queued proxy render for "${content.title}" (${shots.length} shots)`);
       return this.publicJob(this.row(id));
     });
@@ -296,7 +304,7 @@ class RenderRoom {
       requireValue(['failed', 'interrupted', 'cancelled', 'stale'].includes(row.status), `A ${row.status} render cannot be retried.`, 409);
       requireValue(row.attempts < 3, 'This render already used 3 attempts. Start a new render.', 409);
       this.db.prepare("UPDATE render_jobs SET status='queued', error=NULL, progress=NULL, updated_at=? WHERE id=?").run(now(), id);
-      this.store.event(row.preset === 'master' ? `Requeued the final master ${id.slice(0, 8)} (finished parts are checked and reused)` : `Requeued proxy render ${id}`);
+      this.store.event(`Requeued ${row.preset === 'master' ? 'the final master' : 'render'} ${id.slice(0, 8)} (${this.stagesOf(id)} finished parts are checked and reused)`);
       return this.publicJob(this.row(id));
     });
   }
@@ -307,7 +315,7 @@ class RenderRoom {
     requireValue(ACTIVE.includes(row.status), 'Only a queued or running render can be cancelled.', 409);
     if (row.status === 'queued') {
       this.db.prepare("UPDATE render_jobs SET status='cancelled', error=?, updated_at=? WHERE id=? AND status='queued'").run(`Cancelled by ${by} before it started.`, now(), id);
-      // A cancelled master gives up the parts it kept from an earlier attempt.
+      // A cancelled render gives up the parts it kept from an earlier attempt.
       this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(id);
       fs.rmSync(path.join(this.renderDir, '.work', id), {recursive: true, force: true});
     } else if (this.current?.id === id) {
@@ -367,10 +375,10 @@ class RenderRoom {
     let keepWork = false;
     // Runs a part, or reuses it when a master already finished it (same command, same checksum).
     const part = async (key, file, command, make) => {
-      const done = master ? this.stageDone(job.id, key, file, command) : null;
+      const done = this.stageDone(job.id, key, file, command);
       if (done) { logs.push({step: `reused ${key}`, ok: true, stderr: ''}); return done.meta; }
       const meta = await make();
-      if (master) this.stageRecord(job.id, key, file, command, meta || null);
+      this.stageRecord(job.id, key, file, command, meta || null);
       return meta;
     };
     const exec = async (label, command, args, timeout, cwd) => {
@@ -387,7 +395,7 @@ class RenderRoom {
       }
     };
     try {
-      if (!master || !this.stagesOf(job.id)) fs.rmSync(work, {recursive: true, force: true});
+      if (!this.stagesOf(job.id)) fs.rmSync(work, {recursive: true, force: true});
       fs.mkdirSync(work, {recursive: true});
       // 1. Every input must still match the checksum recorded when it was approved.
       let narrationFile = this.localFile(scope.narration.relativePath);
@@ -487,15 +495,17 @@ class RenderRoom {
                 vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
               }
             };
-            const kept = master ? this.stageDone(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}) : null;
+            const kept = this.stageDone(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION});
             if (kept) { files[clipId] = path.join(work, file); drawnInfo.push({clipId, label: clip.label, ...kept.meta, index: k}); logs.push({step: `reused drawing ${clip.label}`, ok: true, stderr: ''}); this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total); return; }
+            // 0.84: a browser that stalls, crashes or drops its connection is restarted up to three times for a shot.
             let drawn;
-            try { drawn = await drawIt(); } catch (error) {
-              if (!/did not answer|did not start/i.test(String(error.message))) throw error;
-              await renderer.close(); await renderer.start();
-              fs.rmSync(path.join(work, folder), {recursive: true, force: true});
-              logs.push({step: `redraw ${clip.label} after a stalled browser`, ok: true, stderr: ''});
-              drawn = await drawIt();
+            for (let tries = 1; !drawn; tries++) {
+              try { drawn = await drawIt(); } catch (error) {
+                if (tries > 3 || this.current.cancelledBy || !BROWSER_LOST.test(String(error.message))) throw error;
+                await renderer.close(); await renderer.start();
+                fs.rmSync(path.join(work, folder), {recursive: true, force: true});
+                logs.push({step: `redraw ${clip.label} after the drawing browser stopped answering (${tries} of 3)`, ok: true, stderr: ''});
+              }
             }
             const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
             const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});
@@ -503,7 +513,7 @@ class RenderRoom {
             fs.rmSync(path.join(work, folder), {recursive: true, force: true});
             files[clipId] = path.join(work, file);
             drawnInfo.push({clipId, label: clip.label, frames: drawn.frames, framesSha256: drawn.sha256, index: k});
-            if (master) this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}, {frames: drawn.frames, framesSha256: drawn.sha256});
+            this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}, {frames: drawn.frames, framesSha256: drawn.sha256});
             this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total);
           };
           try {
@@ -534,7 +544,7 @@ class RenderRoom {
               this.progress(job.id, `drawing ${graphic.template} ${k + 1} of ${canvasGraphics.length}`, 0, total);
               const frames = Math.max(1, Math.round(graphic.frames * fps / scope.edit.timeline.fps)), dir = path.join(work, `graphic-${k + 1}`);
               const graphicCommand = {graphic: createHash('sha256').update(JSON.stringify(graphic)).digest('hex'), size, fps, frames, style: scope.style.specHash};
-              const keptGraphic = master ? this.stageDone(job.id, `graphic:${graphic.id}`, path.join(work, `graphic-${k + 1}.mov`), graphicCommand) : null;
+              const keptGraphic = this.stageDone(job.id, `graphic:${graphic.id}`, path.join(work, `graphic-${k + 1}.mov`), graphicCommand);
               if (keptGraphic) { overlays.push({file: `graphic-${k + 1}.mov`, start: graphic.start, frames, graphicId: graphic.id, template: graphic.template, framesSha256: keptGraphic.meta.framesSha256}); continue; }
               const drawn = await renderer.render({template: graphic.template, data: B.canvasData(graphic.template, graphic.title, graphic.lines), finish: graphic.finish || 'clean', vertical: scope.format === 'shorts',
                 palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'},
@@ -543,7 +553,7 @@ class RenderRoom {
               await exec(`pack ${graphic.template}`, job.paths.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(`graphic-${k + 1}`, 'f%05d.png'), '-c:v', 'png', '-pix_fmt', 'rgba', '-fflags', '+bitexact', '-map_metadata', '-1', '-y', clip], Math.max(60000, frames * 200), work);
               fs.rmSync(dir, {recursive: true, force: true});
               overlays.push({file: clip, start: graphic.start, frames, graphicId: graphic.id, template: graphic.template, framesSha256: drawn.sha256});
-              if (master) this.stageRecord(job.id, `graphic:${graphic.id}`, path.join(work, clip), graphicCommand, {framesSha256: drawn.sha256});
+              this.stageRecord(job.id, `graphic:${graphic.id}`, path.join(work, clip), graphicCommand, {framesSha256: drawn.sha256});
             }
             motionInfo = {browser: renderer.version, path: path.basename(this.browser), graphics: overlays.map(item => ({graphicId: item.graphicId, template: item.template, frames: item.frames, framesSha256: item.framesSha256}))};
           } finally {
@@ -694,7 +704,7 @@ class RenderRoom {
       this.store.transaction(() => {
         this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
         this.store.event(`${job.preset === 'edition' ? `${scope.edition.language} edition` : master ? 'Final master' : 'Proxy render'} ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
-        if (master) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
+        this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
       });
       // Claude's frame scan reviews previews; the master is compared with the reviewed preview instead.
       if (!master) this.onRendered?.(job.id);
@@ -705,10 +715,10 @@ class RenderRoom {
       // "The render failed." and its cause could not be found).
       if (!cancelled && !(error instanceof InputError)) console.error(`${now()} Render ${job.id} failed:`, error?.stack || error);
       const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : `The render failed: ${String(error?.message || error).slice(0, 200)}`;
-      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', master && !cancelled ? `${message} Finished parts are kept; a retry continues from them.` : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
+      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', !cancelled ? `${message} ${this.stagesOf(job.id)} finished part${this.stagesOf(job.id) === 1 ? ' is' : 's are'} kept; a retry continues from them.` : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
       fs.rmSync(finalDir, {recursive: true, force: true});
-      if (master && cancelled) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
-      keepWork = master && !cancelled;
+      if (cancelled) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
+      keepWork = !cancelled;
       return null;
     } finally {
       if (!keepWork) fs.rmSync(work, {recursive: true, force: true});

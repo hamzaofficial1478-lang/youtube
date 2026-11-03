@@ -483,6 +483,8 @@ function sumUsage(list) {
 const answerTokens = text => Math.round(String(text || '').length / 3.3);
 // Stop pressed between two steps (0.81): the next step does not start; nothing of it was used.
 const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
+// How long a storyboard paused by a lost connection waits for it, and how often it goes on by itself (0.84).
+const NET_WAIT_MINUTES = 30, NET_AUTO = 5;
 const stopCheck = signal => { if (signal?.aborted) throw new AiError('Stopped by you. Everything finished before it is kept.', 499, {nothingUsed: true, kind: 'stopped'}); };
 // The most one AI answer of this plan may use (0.81): what a stopped answer may have used is held at most this.
 function callLimit(scope) {
@@ -837,7 +839,7 @@ class SceneRoom {
     // How far it got (0.81), so a paused or failed job says what Resume or a retry keeps.
     const reviewed = row.reviewed ? JSON.parse(row.reviewed) : null, pause = row.pause ? JSON.parse(row.pause) : null;
     const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%'").get(row.id).n};
-    return {id: row.id, provider, ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    return {id: row.id, provider, ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       usage: usage ? {status: usage.status, reserved: usage.reserved_tokens, total: usage.total_tokens, prompt: usage.prompt_tokens, completion: usage.completion_tokens} : null};
   }
   retryPlan(id, input) {
@@ -1022,7 +1024,8 @@ class SceneRoom {
   }
   // A run that stops before its plan is made (0.81): the job pauses with every finished step kept.
   pauseRun(job, spent, {kind, message, inFlight}) {
-    const at = now(), pause = {kind, at, message};
+    // How often the program already went on by itself after a lost connection stays with the job (0.84).
+    const before = job.pause ? JSON.parse(job.pause) : null, at = now(), pause = {kind, at, message, ...(before?.auto ? {auto: before.auto} : {})};
     this.store.transaction(() => {
       this.db.prepare("UPDATE scene_plan_jobs SET status='paused', pause=?, error=?, updated_at=? WHERE id=?").run(JSON.stringify(pause), message, at, job.id);
       this.endRun(this.planJobRow(job.id), job.scope, spent, inFlight, job.runs || 1);
@@ -1055,6 +1058,24 @@ class SceneRoom {
     this.store.event(`Stopped scene plan ${id}`);
     return {stopping: false, job: this.publicPlanJob(this.planJobRow(id))};
   }
+  // Waiting for the internet (0.84, owner request 2026-11-03: "wait instead of cancelling the whole work, and start from
+  // the point it was left"): a storyboard paused by a lost connection is checked every 30 s, and when its AI's server
+  // can be reached again it goes on by itself from its last finished step, for NET_WAIT_MINUTES after the pause and at
+  // most NET_AUTO times per storyboard. Nothing is sent while the connection is down (the check is a name look-up).
+  async resumeWhenOnline(at = Date.now()) {
+    const reach = this.ai?.reach;
+    if (!reach) return [];
+    const resumed = [];
+    for (const row of this.db.prepare("SELECT id, scope, pause FROM scene_plan_jobs WHERE status='paused' ORDER BY updated_at").all()) {
+      const pause = row.pause ? JSON.parse(row.pause) : null;
+      if (pause?.kind !== 'network' || (pause.auto || 0) >= NET_AUTO || at - Date.parse(pause.at) > NET_WAIT_MINUTES * 60000) continue;
+      let provider;
+      try { provider = JSON.parse(this.connectors.row(JSON.parse(row.scope).connector.id).payload).provider; } catch { continue; }
+      if (await reach(provider) !== true) continue;
+      try { this.resumePlan(row.id, {auto: true}); resumed.push(row.id); } catch { /* another storyboard of this script runs; the next check tries again */ }
+    }
+    return resumed;
+  }
   // Resume (0.81): a paused storyboard goes on from its last finished step, on its own AI or on the other one (the
   // owner's choice; the click is the permission). It is the same attempt: nothing finished is asked for again.
   resumePlan(id, input = {}) {
@@ -1065,8 +1086,8 @@ class SceneRoom {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND id<>? AND status IN ('queued','running')").get(row.content_id, id), 'Another storyboard is being built for this script. Resume this one when it has finished, or stop that one first.', 409);
       if (input.connector) scope.connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
       const pause = row.pause ? JSON.parse(row.pause) : {kind: 'owner'};
-      this.db.prepare("UPDATE scene_plan_jobs SET status='queued', scope=?, pause=?, error=NULL, quality=NULL, updated_at=? WHERE id=?").run(JSON.stringify(scope), JSON.stringify({...pause, resumed: now()}), now(), id);
-      this.store.event(`Resumed scene plan ${id}`);
+      this.db.prepare("UPDATE scene_plan_jobs SET status='queued', scope=?, pause=?, error=NULL, quality=NULL, updated_at=? WHERE id=?").run(JSON.stringify(scope), JSON.stringify({...pause, resumed: now(), ...(input.auto ? {auto: (pause.auto || 0) + 1} : {})}), now(), id);
+      this.store.event(input.auto ? `The internet is back: scene plan ${id} goes on by itself` : `Resumed scene plan ${id}`);
       return this.publicPlanJob(this.planJobRow(id));
     });
   }
