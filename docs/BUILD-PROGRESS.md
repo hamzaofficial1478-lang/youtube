@@ -167,7 +167,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
   the plan check times them; the next shot keeps its cue); evenly shared scenes get the shots their length needs; a scene
   really at 8 shots is named with "split it". Every step's button lives only in the road; the cards keep their facts.
   Compact steps in one row; "Story & engines" folded with its chapters as their own dropdown.
-- **Tested:** `npm run check`; the full `npm test` (result below); a new unit test (a scene of 11 s whose second shot
+- **Tested:** `npm run check`; the full `npm test` (420 tests: 417 pass, 3 skipped because they need Windows, none failed); a new unit test (a scene of 11 s whose second shot
   starts on "market 2 kept", so its first shot holds about 7 s: the fix inserts a shot right after it on its own words,
   both old shots keep their IDs and the cue, the plan has no hold problems, the redraw asks for only the new shot, no
   other scene changes) beside the 0.82 fix test; a Playwright check (12 checks: Fix buttons only in the road, one draw
