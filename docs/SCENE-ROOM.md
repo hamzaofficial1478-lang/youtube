@@ -263,3 +263,14 @@ long-shot fix stopped at picture 2 of 5 started again at picture 1 on Resume.
   are kept only when the AI drew something: a deliberate retry after "Claude returned no drawings" asks again. Designed frames are kept per job too, so a resumed compose never designs
   a finished shot twice. The job's row says what it is: "Drawing 4 new shots (long-shot fix)", "Changing S12B as you
   asked" or "Drawings for 3 undesigned shots".
+
+### Waiting for the internet (0.84)
+
+The owner's review of 2026-11-03: "the program can wait instead of cancelling the whole work, and when it goes on it should
+start from the point it was left". A storyboard paused by a lost connection (since 0.81 it pauses instead of failing and
+keeps every finished step) now waits: `SceneRoom.resumeWhenOnline` runs every 30 seconds from the server's timer, looks up
+the AI's server name (`Ai.reach`, nothing is sent), and when it can be reached again the storyboard goes on by itself from
+its last finished step on the same attempt (`resumePlan` with `auto`, counted in `pause.auto`). It waits 30 minutes after
+each pause (`NET_WAIT_MINUTES`) and goes on by itself at most 5 times per storyboard (`NET_AUTO`); after that the owner
+presses Resume. The paused row says the program is waiting and until when (`pause.waitUntil`).
+

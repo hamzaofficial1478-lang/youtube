@@ -23,7 +23,7 @@ The master is refused when:
 
 | | Preview (`proxy`) | Master (`master`) |
 |---|---|---|
-| Size | 640x360 / 360x640 | 1920x1080 / 1080x1920 |
+| Size | 640x360 / 360x640 (720p, 1080p or 1440p on request since 0.57/0.83) | 1920x1080 / 1080x1920 |
 | Frame rate | the edit's, at most 30 | the edit's, at most 60 |
 | Video | H.264, CRF 26, veryfast | H.264 High, CRF 17, slow, two B-frames, closed GOP of half the frame rate |
 | Audio | AAC 128 kb/s | AAC-LC 384 kb/s, 48 kHz, stereo |
@@ -71,6 +71,13 @@ its words and size, and the engine version. For the final file it also includes 
 - Renders are deterministic: seeded drawing and grain, bit-exact encoder flags. A resumed master is therefore byte for byte the
   master made in one go (tested).
 - **Cancelling** a master deletes its kept parts. A finished master leaves no work files or records.
+- **Previews too (0.84, owner test 2026-11-03: a preview stopped at drawing 69 of 77 and started again at 1):** every render,
+  preview or master, keeps its finished parts the same way. A stopped or failed preview says how many are kept, its button
+  reads "Continue from the N finished parts", and the retry reuses them (a resumed preview is byte for byte the one made in
+  one go, tested). Rendering runs on this PC and uses no internet: the "connection" that can drop is the program's link to the
+  local browser that draws the shots. A browser that stops answering, crashes or drops that link is restarted for the shot
+  up to three times (`BROWSER_LOST`) before the render stops; it used to be once. Starting a new preview of the same video
+  lets go of the parts kept by its earlier stopped previews, so they never fill the disk.
 
 ## The approval and when it goes out of date
 

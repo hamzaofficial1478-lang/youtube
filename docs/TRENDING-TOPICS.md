@@ -67,6 +67,28 @@ word. Now:
 - Claude's topic ideas get the topic, angle and look words and the channel's style: every idea must join the subject and
   the angle and suit the look.
 
+## What counts as trending: views, proven demand, interest (0.84)
+
+Owner review 2026-11-03: "trending means the title with many views, not a video with 57 views; viewership, growing
+viewership and the audience's interest are the main thing". The page now says what counts, in three measures:
+
+1. **Many views.** A scan keeps only videos with at least the views chosen (`minViews`; 10,000 by default in the form;
+   any, 1,000, 10,000, 50,000, 100,000 or 1 million). Fewer is left out as "too few views" (`leftOut.views`). This filters
+   YouTube's own numbers, so it needs no approval.
+2. **Far above its channel's usual (proven demand).** With "Measure demand with NexLev" (a tested NexLev connector, about
+   10 requests reserved from the monthly NexLev cap), the channels inside the niche (best views first, at most
+   `DEMAND_CHANNELS` 10) are asked of NexLev for their outliers (`channelOutliers`, 2x and more). Outliers inside the niche
+   with enough views are kept (at most 5 a channel, 40 in all, best first, refs D1...; `demandOf`, `result.demand`).
+   These are NexLev's measure, not numbers worked out from YouTube's data, so Claude's topic ideas may use them without
+   YouTube's derived-use approval: with 3 or more, "Topic ideas with Claude" works and Claude gets only the proven demand
+   (`demandOnly`; YouTube's own list stays on the page). With the approval it gets both. The prompt tells Claude to weigh
+   proven demand above videos that only match the niche (PROVEN DEMAND line, T# or D# refs).
+3. **Rising fast and interest.** Views a day, views per subscriber and interest (likes and comments per 1,000 views) are
+   worked out from YouTube's numbers, so they show only after the approval for derived use is recorded (Settings).
+
+Measuring growth over days (the same videos read again later) would also be worked out from YouTube's data; it is not
+built and would need the same approval.
+
 ## Searching inside a small niche (0.83)
 
 Owner test 2026-11-03: a "stone age finance" scan of 14 days kept 2 of 24 videos (55 and 9 views), "money before coins"

@@ -1241,9 +1241,17 @@ test('Stop really stops the AI, the storyboard pauses with every finished part, 
   assert.deepEqual([job.status, job.pause.kind, job.attempts], ['paused', 'network', 1]);
   assert.match(job.error, /not connected to the internet/);
   assert.deepEqual({...store.db.prepare('SELECT status, reserved_tokens FROM intelligence_usage WHERE job_id=?').get(`${queued.job.id}:run2`)}, {status: 'released', reserved_tokens: 0});
-  // Back online: Resume goes on from part 2 on the same attempt; part 1 is never asked (or paid for) again.
+  // 0.84: the program waits for the internet and goes on by itself when it is back (owner request 2026-11-03).
+  assert.ok(Date.parse(job.pause.waitUntil) - Date.parse(job.pause.at) === 30 * 60000, 'it waits 30 minutes for the connection');
+  let online = false;
+  ai.reach = async provider => { assert.equal(provider, 'claude'); return online; };
+  assert.deepEqual(await room.resumeWhenOnline(), [], 'still offline: it keeps waiting and sends nothing');
+  online = true;
+  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 31 * 60000), [], 'after the wait the owner resumes it');
+  // Back online: it goes on by itself from part 2 on the same attempt; part 1 is never asked (or paid for) again.
   mode = 'go';
-  room.resumePlan(queued.job.id, {});
+  assert.deepEqual(await room.resumeWhenOnline(), [queued.job.id]);
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).pause.auto, 1);
   await room.processNextPlan();
   job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);

@@ -165,7 +165,7 @@ test('a scan stays inside the chosen niche and the owner\'s channel size, and Cl
   const scan = await trends.processNextScan();
   assert.equal(net.calls.find(call => call.path === '/youtube/v3/search').query.maxResults, '50');
   assert.deepEqual(scan.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(6), vid(4), vid(2)], 'channels of 2,400 subscribers fit; hidden sizes are left out');
-  assert.deepEqual(scan.result.leftOut, {niche: 0, bigger: 0, hidden: 3});
+  assert.deepEqual(scan.result.leftOut, {niche: 0, bigger: 0, hidden: 3, views: 0});
   assert.deepEqual(scan.result.keywords.map(item => [item.count, item.kept]), [[5, 2], [5, 3]], 'each keyword says how many of its videos fit');
   assert.ok(scan.result.videos.every(video => video.description === undefined), 'the description excerpt is used for the match, not stored');
   trends.saveSettings({revision: 0, topicTokenLimit: 16000, youtubeDerivedUse: {approved: true, approvedOn: '2026-10-20', reference: 'Google case 12345', confirmedBy: 'Owner'}});
@@ -252,4 +252,54 @@ test('0.83: searches go by relevance with readable titles, and an idea outside t
   const done = await trends.processNextTopics();
   assert.equal(done.status, 'completed', done.error);
   assert.deepEqual(done.result.topics.map(topic => !!topic.offNiche), [false, false, false, false, true], 'the breakfast idea names neither the subject nor the angle');
+});
+
+// 0.84 (owner review 2026-11-03: "trending means many views, growing viewership and the audience's interest, not a video
+// with 57 views that only matches the topic").
+test('0.84: a trend needs views, and NexLev\'s proven demand becomes topic ideas without the YouTube approval', async t => {
+  const NEXLEV = 'nexlev-fixture-key-0123456789';
+  let asked = null;
+  const demandTopics = ['Stoic tools for a hard week at work', 'How a stoic gets through a hard week', 'One stoic question for every hard week', 'The hard week a stoic emperor survived', 'A stoic evening after a hard week'];
+  const net = network({perSearch: 5, claude: body => { asked = body; return topicAnswer(5, {themes: [{name: 'Hard weeks', why: 'The outliers are about getting through a hard week.', refs: ['D1']}], topics: demandTopics.map(title => ({title, promise: 'You will leave with one practice you can try tonight.', whyClick: 'It names one concrete practice instead of a vague mindset.', hook: 'He ruled an empire, and every night he wrote three lines to himself.', angle: 'Shows the practice with a real day, not quotes alone.', format: 'long-form', refs: ['D1'], confidence: 'medium'}))}); }});
+  const youtubeFetch = net.fetch, nexlevAsked = [];
+  // NexLev answers each channel's outliers: two in the niche with views, one off the niche, one with almost no views.
+  net.fetch = async (url, options = {}) => {
+    const target = new URL(String(url));
+    if (target.origin !== 'https://prod.dashboard.nexlev.io') return youtubeFetch(url, options);
+    assert.equal(options.headers['x-api-key'], NEXLEV);
+    assert.equal(target.pathname, '/api/external/channels/outliers');
+    const id = target.searchParams.get('id');
+    nexlevAsked.push(id);
+    const k = CH.indexOf(id);
+    return json({videos: [{videoId: vid(40 + k), title: `Stoic habits for a hard week ${k}`, views: 250000 - k, outlierScore: 6.5 - k}, {videoId: vid(50 + k), title: `The stoic hard week reset ${k}`, views: 90000, outlierScore: 4.1 - k}, {videoId: vid(60 + k), title: 'A cooking vlog', views: 900000, outlierScore: 9}, {videoId: vid(70 + k), title: 'A stoic hard week, small', views: 50, outlierScore: 3}]});
+  };
+  const {trends, ids, family, store, quota} = setup(t, net);
+  const slot = trends.connectors.save({name: 'NexLev fixture', provider: 'nexlev', notes: '', key: NEXLEV});
+  const payload = JSON.parse(trends.connectors.row(slot.id).payload);
+  store.db.prepare('UPDATE connectors SET payload=? WHERE id=?').run(JSON.stringify({...payload, test: {status: 'passed', at: new Date().toISOString(), message: 'fixture'}}), slot.id);
+  const niche = {source: 'custom', text: 'Stoicism for hard weeks', topicWords: ['stoic'], angleWords: ['hard week']};
+  const queued = trends.queueScan({keywords: ['stoicism'], days: 90, perKeyword: 5, niche, minViews: 35000, nexlevConnector: {id: slot.id, revision: slot.revision}, connector: ids.youtube, requestedBy: 'Owner'});
+  assert.equal(queued.scope.plannedUnits.nexlev, 10);
+  const scan = await trends.processNextScan();
+  assert.equal(scan.status, 'completed', scan.error);
+  assert.deepEqual(scan.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(5), vid(4)], 'videos under 35,000 views are left out');
+  assert.equal(scan.result.leftOut.views, 3);
+  assert.deepEqual([...nexlevAsked].sort(), [...CH].sort(), 'each channel inside the niche is asked once');
+  assert.deepEqual(scan.result.demand.videos.map(video => [video.ref, video.outlierScore]), [['D1', 6.5], ['D2', 5.5], ['D3', 4.1], ['D4', 3.1]], 'only outliers inside the niche with enough views, best first');
+  assert.equal(scan.result.usage.nexlev, 2);
+  assert.equal(quota.summary().nexlev.used, 2);
+  // No YouTube approval: NexLev's demand alone goes to Claude; YouTube's list stays on the page.
+  trends.saveSettings({revision: 0, topicTokenLimit: 16000, youtubeDerivedUse: {approved: false}});
+  const job = trends.queueTopics(scan.id, {familyId: family.id, count: 5, connector: ids.claude, requestedBy: 'Owner'});
+  assert.deepEqual(Object.keys(job.refIndex), ['D1', 'D2', 'D3', 'D4']);
+  const done = await trends.processNextTopics();
+  assert.equal(done.status, 'completed', done.error);
+  const sent = JSON.stringify(asked.messages), system = asked.system.map ? asked.system.map(block => block.text).join('') : asked.system;
+  assert.match(system, /PROVEN DEMAND/);
+  assert.match(sent, /Stoic habits for a hard week/);
+  assert.doesNotMatch(sent, /Trending stoic lesson/, 'YouTube\'s own list is not sent without the approval');
+  // A scan without NexLev and without the approval stays display-only.
+  const plain = trends.queueScan({keywords: ['marcus aurelius'], days: 90, perKeyword: 5, niche, connector: ids.youtube, requestedBy: 'Owner'});
+  await trends.processNextScan();
+  assert.throws(() => trends.queueTopics(plain.id, {familyId: family.id, count: 5, connector: ids.claude, requestedBy: 'Owner'}), /display-only/);
 });

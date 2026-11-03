@@ -270,3 +270,9 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .tl-transport .button{min-width:96px}.tl-transport .tl-clock{margin-left:auto;font-size:14px}
 .tl-rendered{margin-top:8px;border:1px solid #e3e8df;border-radius:8px;background:#fff}.tl-rendered>summary{cursor:pointer;padding:8px 10px;font-size:13px;font-weight:600}.tl-rendered>video,.tl-rendered>p{margin:0 10px 10px;width:calc(100% - 20px)}
 @media (max-width:900px){.tl-viewer{position:static}.tl-inspector{max-height:none}}
+
+/* 0.84 (owner review 2026-11-03): what counts as trending, as three measures side by side. */
+.trend-meaning{margin-bottom:16px}.trend-measures{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:8px}
+.trend-measures>div{border:1px solid #e1e7df;border-radius:10px;padding:10px 12px;background:#fbfcfa}.trend-measures b{font-size:13px}
+.trend-measures p{margin:4px 0 0;font-size:12px;line-height:1.5;color:#5d6a62}
+@media (max-width:900px){.trend-measures{grid-template-columns:1fr}}
