@@ -229,3 +229,20 @@ be approved (drawn shots held far longer than the video's own pace) and nothing 
   the long shots with …" (`fixLongShots`, `POST /api/scene-manifests/:id/fix-long-shots`) adds the shots each scene
   needs (edit `add-shots`: copies of the scene's last shot without its cue, one new revision) and queues one redraw job
   in which the AI draws only the new shots on their own words; every other shot keeps its ID, drawing and visual.
+
+### The long-shot fix splits the shot itself; one button per step (0.82.1)
+
+The owner's test of 2026-11-03: "Fix with ChatGPT" answered "Those scenes already have the most shots a scene can have
+(8)" for S33A. S33's shots start on their own words (cues), and its second shot's cue came late, so the first shot held
+6.5 s; the scene did not lack shots, and 0.82's fix only appended copies at the end of a scene.
+
+- `fixLongShots` now works on the long shot itself. In a scene whose shots start on cues it inserts the shots needed
+  right after the long one, each starting on its own words at even points of its span (a phrase of 2-4 words that is
+  spoken first at that moment, checked with `Sk.matchPhrase` the way the plan check does); the shot after it keeps its
+  cue. In a scene whose shots share it evenly it adds the shots the scene's length needs. Edit `add-shots` takes
+  `afterShotId` and `cues`. A scene that really has 8 shots is named, with "split it into two scenes".
+- One button per job (owner review 2026-11-03): the road holds every step's button: See the storyboard, Fix with
+  Claude / ChatGPT and Show the problems, Draw the remaining / Stop drawing / Draw them all again, Approve visuals, Go to
+  the Editing Room. The inputs card, the plan card, the drawing row and the approval card keep their facts and point to
+  the road. The road's five steps sit in one row where there is room, each as tall as its content, with small buttons.
+- "Story & engines" starts folded, and its chapter list is a dropdown of its own.

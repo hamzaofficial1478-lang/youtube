@@ -1,7 +1,7 @@
 {
-  "version": "0.82.0",
+  "version": "0.82.1",
   "updated": "2026-11-03",
-  "nextAction": "The owner pulls 0.82.0, checks the drawing line in Room 04 (hand off unless wanted), fixes the long shots with Claude or ChatGPT, draws the remaining, approves the storyboard and the visuals, and goes on to the Editing Room. Nothing has run against a live channel.",
+  "nextAction": "The owner pulls 0.82.1, fixes the long shot with Claude or ChatGPT in step 2 of Room 04's road, draws the remaining, approves the storyboard and the visuals, and goes on to the Editing Room. Nothing has run against a live channel.",
   "repositories": [
     {
       "name": "YouTube Automation Agent",
@@ -708,7 +708,8 @@
     "2026-11-02: The owner chooses which connected AI builds each storyboard and who makes the pictures; when one fails or hits its limit, the other is offered on the failed job and runs only on the owner's click. Skill choices stay per job and per video, never fixed per channel, and each record shows how its job ended.",
     "2026-11-02: Quality first for pictures: the planner gives a detailed picture to every shot whose free drawing would look poorer and draws free only what the program draws just as well, with a reason per shot; picture budgets are ceilings. A second storyboard for the same script starts only after a warning and the owner's yes. \"Over budget\" names the channel's own AI token limit in the program, never the AI plan.",
     "2026-11-02: A storyboard never throws finished work away: Stop and Resume keep every finished step (also when the program closes, the internet drops or an AI plan reaches its limit), a check failure keeps the parts, and a part that breaks the style's rules is asked again alone, once, with what failed. Nothing retries by itself; Resume is the owner's click.",
-    "2026-11-03: Room 04 always shows the next step and its button up to the Editing Room. Pictures appear in their look's own way (traced only where a hand draws); the drawing hand is a visible setting of the channel's style. A plan blocked by shots longer than the video's pace is fixed by adding shots the AI draws, never by redrawing what is done."
+    "2026-11-03: Room 04 always shows the next step and its button up to the Editing Room. Pictures appear in their look's own way (traced only where a hand draws); the drawing hand is a visible setting of the channel's style. A plan blocked by shots longer than the video's pace is fixed by adding shots the AI draws, never by redrawing what is done.",
+    "2026-11-03: One button per job in Room 04: every step's button lives in the road; the cards keep their facts. A shot that holds too long is split where it is, each new shot on its own words."
   ],
-  "milestone": "0.82.0: the road from storyboard to editing in Room 04 (See the storyboard, Build again, one button per step), dropdowns kept open program-wide, drawing Stop and Draw the remaining, Fix the long shots, pictures in their look's own way and the drawing hand shown"
+  "milestone": "0.82.1: the long-shot fix splits the shot itself on its own words, one button per step in the road, compact steps, the story's chapters folded"
 }
