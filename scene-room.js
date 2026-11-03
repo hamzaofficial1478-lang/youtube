@@ -1544,19 +1544,48 @@ class SceneRoom {
     object(input);
     const createdBy = person(input.requestedBy), row = this.manifestRow(manifestId);
     requireValue(this.latestManifestRow(row.content_id).id === row.id && input.expectedRevision === row.revision, 'The plan changed in another tab. Reload first.', 409);
-    const payload = JSON.parse(row.payload), checks = JSON.parse(row.checks), limits = new Map();
-    for (const item of checks.issues) { const found = String(item).match(/^(S\d+)[A-Z] would hold [\d.]+ s, above the style's ([\d.]+) s shot limit/); if (found) limits.set(found[1], Math.min(limits.get(found[1]) ?? Infinity, Number(found[2]))); }
-    requireValue(limits.size, 'No shot of this plan holds longer than the video\'s pace.', 409);
-    const additions = payload.scenes.filter(scene => limits.has(scene.label)).map(scene => ({sceneId: scene.id, label: scene.label, count: Math.min(MAX_SHOTS_PER_SCENE, Math.ceil(scene.durationSeconds / limits.get(scene.label))) - scene.shots.length})).filter(item => item.count > 0);
-    requireValue(additions.length, `Those scenes already have the most shots a scene can have (${MAX_SHOTS_PER_SCENE}); split them instead.`, 409);
+    const payload = JSON.parse(row.payload), checks = JSON.parse(row.checks), long = [];
+    for (const item of checks.issues) { const found = String(item).match(/^(S\d+)([A-Z]) would hold [\d.]+ s, above the style's ([\d.]+) s shot limit/); if (found) long.push({scene: found[1], shot: found[2].charCodeAt(0) - 65, limit: Number(found[3])}); }
+    requireValue(long.length, 'No shot of this plan holds longer than the video\'s pace.', 409);
+    // The words as the plan check times them; a cue is a few words that are spoken first at that moment of the scene.
+    const words = Cap.wordTimings({sentences: payload.sentences, pauses: [], narrationSeconds: payload.timing.narrationSeconds});
+    const additions = [], full = [];
+    for (const item of long) {
+      const scene = payload.scenes.find(other => other.label === item.scene), shot = scene?.shots[item.shot];
+      if (!shot) continue;
+      const end = scene.startSeconds + scene.durationSeconds, sceneWords = words.filter(word => word.start >= scene.startSeconds - 0.01 && word.start < end - 0.01);
+      // Shots that start on their own words (cues) keep them: the long shot itself is split. Evenly shared shots need more shots.
+      const cueAt = value => (value ? Sk.matchPhrase(sceneWords, value)?.seconds ?? null : null), cueStarts = scene.shots.map((other, k) => (k === 0 ? scene.startSeconds : cueAt(other.cue)));
+      const cued = scene.shots.length > 1 && cueStarts.every((value, k) => value !== null && (k === 0 || value - cueStarts[k - 1] >= 0.5)) && end - cueStarts.at(-1) >= 0.5;
+      const room = MAX_SHOTS_PER_SCENE - scene.shots.length - additions.filter(add => add.sceneId === scene.id).reduce((sum, add) => sum + (add.cues?.length || add.count), 0);
+      const want = cued ? Math.ceil(shot.durationSeconds / item.limit) - 1 : Math.ceil(scene.durationSeconds / item.limit) - scene.shots.length, count = Math.min(room, want);
+      if (count < 1) { if (want >= 1) full.push(item.scene); continue; }
+      if (!cued) { additions.push({sceneId: scene.id, afterShotId: shot.id, count}); continue; }
+      const own = sceneWords.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds - 0.01), cues = [];
+      let last = shot.startSeconds;
+      for (let k = 1; k <= count; k++) {
+        const target = shot.startSeconds + shot.durationSeconds * k / (count + 1), from = own.findIndex(word => word.start >= target);
+        let cue = null;
+        for (let i = Math.max(0, from); i < own.length && !cue; i++) {
+          if (own[i].start - last < 0.5 || shot.startSeconds + shot.durationSeconds - own[i].start < 0.5) continue;
+          for (const size of [3, 2, 4]) {
+            const phrase = own.slice(i, i + size).map(word => word.text).join(' ');
+            if (phrase.split(/\s+/).length === size && phrase.length <= 80 && cueAt(phrase) === own[i].start) { cue = phrase; last = own[i].start; break; }
+          }
+        }
+        cues.push(cue);
+      }
+      additions.push({sceneId: scene.id, afterShotId: shot.id, cues});
+    }
+    requireValue(additions.length, `${full.join(', ')} already ${full.length === 1 ? 'has' : 'have'} the most shots a scene can have (${MAX_SHOTS_PER_SCENE}); split ${full.length === 1 ? 'it' : 'them'} into two scenes ("Split" on the scene) and fix again.`, 409);
     // Checked before the plan changes, so a refused job never leaves the copied shots behind.
     connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(row.content_id), 'A storyboard job is running for this script. Fix the long shots when it has finished.', 409);
     const edited = this.editManifest(row.id, {op: 'add-shots', additions, createdBy, expectedRevision: row.revision});
     const fresh = this.manifestRow(edited.id), fp = JSON.parse(fresh.payload), content = this.store.content(fresh.content_id), inputs = this.inputs(content);
-    const labels = additions.flatMap(item => { const scene = fp.scenes.find(other => other.id === item.sceneId); return scene.shots.slice(scene.shots.length - item.count).map(shot => shot.label); });
-    const ask = `These shots are new: the shot before them held longer than the video's pace (at most ${Math.min(...limits.values())} s a shot). Draw each new shot for the words it now covers so the scene moves on with them: the same place and characters, a new framing, action or key word in each shot, and a cue on its first words.`;
-    return {manifest: edited, added: labels.length, ...this.queueRedraw({row: fresh, content, inputs, payload: fp, labels, input, createdBy, ask})};
+    const before = new Set(payload.scenes.flatMap(scene => scene.shots.map(shot => shot.id))), labels = fp.scenes.flatMap(scene => scene.shots).filter(shot => !before.has(shot.id)).map(shot => shot.label);
+    const ask = `These shots are new: the shot before each of them held longer than the video's pace (at most ${Math.min(...long.map(item => item.limit))} s a shot), so it was split. Draw each new shot for the words it now covers so the scene moves on with them: the same place and characters, a new framing, action or key word in each shot. Keep each new shot's cue.`;
+    return {manifest: edited, added: labels.length, ...(full.length ? {full} : {}), ...this.queueRedraw({row: fresh, content, inputs, payload: fp, labels, input, createdBy, ask})};
   }
   // Room 04 "Change with words" (0.77, owner review 2026-10-31: change any scene by command). The owner says what should
   // change in one drawn shot; Claude draws that shot again with the request, checked like every drawing, as a redraw job
@@ -1687,15 +1716,18 @@ class SceneRoom {
       scene.shots.push({...base, id: shortId('sh'), notes: ''});
       note = `Added a shot to ${payload.scenes.find(item => item.id === scene.id).label}`;
     } else if (op === 'add-shots') {
-      // 0.82: "Fix the long shots" adds shots to several scenes in one revision (copies of each scene's last shot,
-      // without its cue, drawn again by the AI afterwards).
-      requireValue(Array.isArray(input.additions) && input.additions.length >= 1 && input.additions.length <= MAX_SCENES, 'Name the scenes to add shots to.');
+      // 0.82: "Fix the long shots" adds shots in one revision: right after the shot that holds too long (copies of it,
+      // each starting on its own words when the scene's shots start on cues), drawn again by the AI afterwards.
+      requireValue(Array.isArray(input.additions) && input.additions.length >= 1 && input.additions.length <= MAX_SHOTS, 'Name the shots to add shots after.');
       let added = 0;
       for (const item of input.additions) {
-        const scene = scenes[sceneIndex(item?.sceneId)], count = Number(item?.count);
+        const scene = scenes[sceneIndex(item?.sceneId)], cues = Array.isArray(item?.cues) ? item.cues : null, count = cues ? cues.length : Number(item?.count);
         requireValue(Number.isSafeInteger(count) && count >= 1 && scene.shots.length + count <= MAX_SHOTS_PER_SCENE, `A scene can have at most ${MAX_SHOTS_PER_SCENE} shots.`);
-        const {cue, ...base} = scene.shots.at(-1);
-        for (let k = 0; k < count; k++) scene.shots.push({...base, id: shortId('sh'), notes: ''});
+        const at = item.afterShotId ? scene.shots.findIndex(shot => shot.id === item.afterShotId) : scene.shots.length - 1;
+        requireValue(at >= 0, 'Shot not found in this revision.', 404);
+        const {cue, ...base} = scene.shots[at];
+        const fresh = Array.from({length: count}, (_, k) => { const value = cues?.[k] == null ? '' : text(cues[k], 'Cue', 1, 80); return {...base, id: shortId('sh'), notes: '', ...(value ? {cue: value} : {})}; });
+        scene.shots.splice(at + 1, 0, ...fresh);
         added += count;
       }
       note = `Added ${added} shot${added === 1 ? '' : 's'} where shots held longer than the video's pace`;

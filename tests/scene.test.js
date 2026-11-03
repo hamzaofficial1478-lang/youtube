@@ -1329,3 +1329,30 @@ test('a part whose shots would hold longer than the video\'s pace is asked again
   assert.match(asks[1].body.system, /FAILED THESE CHECKS[\s\S]*over the video's pace of 4\.5 s a shot/);
   assert.ok(!latestManifest(room, content.id).issues.some(item => /would hold/.test(item)));
 });
+
+// 0.82.1 (owner test 2026-11-03: "Those scenes already have the most shots a scene can have (8)" for S33A, a first shot
+// that held 6.5 s because the next shot started late on its cue): the long shot itself is split, on its own words.
+test('a long shot in a scene whose shots start on cues is split right after it, each new shot starting on its own words', async t => {
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', storyMap: false, withVoice: false});
+  base.narrate(330);
+  const {store, ids} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, browser: process.execPath});
+  const content = store.content(base.content.id), inputs = room.inputs(content);
+  const drawnShot = (id, cue) => ({id, source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', ...(cue ? {cue} : {})});
+  // 330 s over 60 sentences: 5.5 s each. Scene 2 is sentences 2-3 (11 s); its second shot starts on "market 2 kept" in
+  // sentence 3, so its first shot holds about 7 s against the style's 4.5 s.
+  const scenes = [{id: 'sc-hook', sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', shots: [drawnShot('sh-hook')]},
+    {id: 'sc-long', sentenceStart: 2, sentenceEnd: 3, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot('sh-a'), drawnShot('sh-b', 'market 2 kept')]},
+    ...Array.from({length: 57}, (_, k) => ({id: `sc-${k}`, sentenceStart: k + 4, sentenceEnd: k + 4, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot(`sh-${k}`)]}))];
+  store.transaction(() => room.insertManifest({inputs, content, scenes, summary: 'One long first shot', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  const manifest = latestManifest(room, content.id), before = manifest.plan.scenes[1];
+  assert.ok(manifest.issues.some(item => /^S02A would hold/.test(item)), manifest.issues.join(' | '));
+  assert.ok(before.shots[0].durationSeconds > before.shots[1].durationSeconds, 'the second shot starts on its cue');
+  const result = room.fixLongShots(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  const fixed = latestManifest(room, content.id), scene = fixed.plan.scenes[1];
+  assert.ok(!fixed.issues.some(item => /would hold/.test(item)), fixed.issues.join(' | '));
+  assert.deepEqual([scene.shots[0].id, scene.shots.at(-1).id, scene.shots.at(-1).cue], ['sh-a', 'sh-b', 'market 2 kept'], 'the long shot and the shot after it keep their IDs and cue');
+  const added = scene.shots.slice(1, -1);
+  assert.ok(added.length >= 1 && added.every(shot => shot.cue && shot.startSeconds > scene.startSeconds && shot.startSeconds < scene.shots.at(-1).startSeconds), 'the new shots sit right after the long one, each on its own words');
+  assert.deepEqual(JSON.parse(room.planJobRow(result.job.id).scope).redraw.labels, added.map(shot => shot.label));
+  assert.ok(fixed.plan.scenes.slice(2).every((other, k) => other.shots.length === 1 && other.shots[0].id === `sh-${k}`), 'no other scene changed');
+});
