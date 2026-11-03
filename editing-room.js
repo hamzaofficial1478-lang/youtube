@@ -420,6 +420,53 @@ class EditingRoom {
       {encoding: 'buffer', maxBuffer: 32 * 1024 * 1024, windowsHide: true, timeout: 60000}, (error, stdout) => (error || !stdout.length ? reject(new InputError(`${clip.label}: FFmpeg could not read that moment.`, 502)) : resolve(stdout)))));
     return {clipId: clip.id, at, png: png.toString('base64'), note: clip.mediaType === 'image' ? 'The still before its camera move.' : 'The source frame; the camera move, grade and graphics are added when the edit renders.'};
   }
+  // ------------------------------------------------------------ the live player (0.83, owner request 2026-11-03)
+  // What the Editing Room's player needs to play this revision in the owner's browser with no render: every drawn clip
+  // set up exactly as the render sets it up (Sk.carry across clips, the checked drawing, its words over its hold and
+  // transition), stills and footage with their in-point, speed and camera move, the joins, the captions and the
+  // narration. The page draws drawn clips with the render's own engine (/engine.js), so a paused frame is the render's.
+  player(revisionId) {
+    const {row, state, payload} = this.editState(revisionId), spec = state.inputs.spec, engine = E.primaryEngine(spec), primary = E.ENGINES[engine]?.draws ? engine : 'motion';
+    const ordered = payload.clips.map(clip => { const asset = state.inputs.assets[clip.shotId]; return {label: clip.label, sceneId: clip.sceneId, clipId: clip.id, sketch: asset.origin === 'drawn' && !asset.composition ? structuredClone(payload.drawings?.[clip.id] || asset.sketch) : null}; });
+    Sk.carry(ordered);
+    const clips = payload.clips.map((clip, index) => {
+      const asset = state.inputs.assets[clip.shotId], base = {id: clip.id, label: clip.label, start: clip.start, frames: clip.frames}, src = `/api/visual-assets/${asset.assetId}/file`;
+      if (asset.origin === 'drawn' && !asset.composition) {
+        try { return {...base, kind: 'drawn', ...this.playerDrawing(payload, index, ordered[index].sketch, primary)}; } catch { /* the board's preview below */ }
+      }
+      // A designed frame (or a drawing that does not check) plays Room 04's preview of the shot.
+      if (asset.origin === 'drawn') return {...base, kind: 'video', src, inSeconds: 0, speed: 1, preview: true};
+      return {...base, kind: asset.mediaType === 'video' ? 'video' : 'still', src, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, move: clip.move || null};
+    });
+    return {revisionId: row.id, revision: row.revision, fps: payload.fps, totalFrames: payload.totalFrames, vertical: payload.format === 'shorts', narration: `/api/edit-revisions/${row.id}/narration`,
+      palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: F.resolve(spec.typography.headingFont), body: F.resolve(spec.typography.bodyFont), hand: F.resolve('Segoe Print')}, drawing: spec.drawing || null,
+      clips, joins: payload.joins.map(join => ({type: join.type, frames: join.frames})), captions: payload.captions?.enabled ? payload.captions.groups.map(group => ({start: group.start, end: group.end, lines: group.lines})) : null};
+  }
+  // One drawn clip as the render draws it: the checked drawing with its element times and the words it speaks.
+  playerDrawing(payload, index, sketch, primary) {
+    const clip = payload.clips[index], extra = index < payload.clips.length - 1 ? payload.joins[index].frames : 0, words = this.clipWords(payload, index);
+    const checked = Sk.validate(sketch, {primary, lenient: true});
+    return {duration: (clip.frames + extra) / payload.fps + 0.1, data: {...checked, times: Sk.timing(checked, words), speech: words.map(word => [word.start, word.end])},
+      images: [...new Set((checked.elements || []).filter(el => el.kind === 'picture' && el.image).map(el => el.image))]};
+  }
+  // An unsaved drawing from the inspector, checked strictly like a save, so the player shows it before it is saved.
+  playerClip(revisionId, input) {
+    object(input);
+    const {state, payload} = this.editState(revisionId), index = payload.clips.findIndex(clip => clip.id === input.clipId);
+    requireValue(index >= 0, 'That clip is not in this edit.', 404);
+    const clip = payload.clips[index], engine = E.primaryEngine(state.inputs.spec);
+    let sketch;
+    try { sketch = this.checkDrawingFor(state)(input.sketch, clip); } catch (error) { throw new InputError(`${clip.label} drawing: ${error.message}`); }
+    requireValue(sketch, 'Send the changed drawing.');
+    return {clipId: clip.id, ...this.playerDrawing(payload, index, sketch, E.ENGINES[engine]?.draws ? engine : 'motion')};
+  }
+  // The narration this edit is timed on, played by the live player (the render checks its checksum; playing does not).
+  narrationFile(revisionId) {
+    const {state} = this.editState(revisionId), relative = state.inputs.scope.narration.relativePath, file = this.renders.localFile(relative);
+    requireValue(fs.existsSync(file), 'The approved narration file is missing.', 404);
+    const ext = relative.split('.').pop().toLowerCase();
+    return {file, mime: {wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', flac: 'audio/flac'}[ext] || 'application/octet-stream'};
+  }
   // One preview at a time: each opens its own browser or FFmpeg process.
   previewLane(run) { const next = (this.previewing || Promise.resolve()).catch(() => {}).then(run); this.previewing = next.catch(() => {}); return next; }
 

@@ -222,8 +222,8 @@ newest render of the edit plays in step with the playhead.
 has one: the shot's set, mood, camera, opening transition, film look, texture and look/board/design; and every
 element (kind, words, style, text animation, entrance, effect, pose, expression, prop, colour, position, size, "at",
 "until", "then", nested fields as JSON), with move up/down, remove, add (text, figure, prop, effect, arrow, bubble) and
-the whole drawing as JSON. Changes are an unsaved draft until "Save drawing", which makes one new revision; "Preview
-at the playhead" draws the draft exactly as the render will. Graphics and captions open their own editors.
+the whole drawing as JSON. Changes are an unsaved draft until "Save drawing", which makes one new revision; since 0.83 the
+live player shows the draft as it is typed (below). Graphics and captions open their own editors.
 
 **The edit's own drawings.** `set-drawing` (editing-brain `applyOp` with the room's `checkDrawing`) keeps a changed
 drawing in the revision (`timeline.drawings[clipId]`), checked strictly against the board's cast, kit, engines and
@@ -232,7 +232,9 @@ sound effects placed on drawn moments and the language editions all use the edit
 
 **Frame preview.** `POST /api/edit-revisions/:id/frame` draws one frame of a drawn shot in the local browser
 (an unsaved drawing too, checked first), or reads the source frame of footage or a still with the pinned FFmpeg (the
-camera move, grade, captions and graphics are added at render). One preview at a time.
+camera move, grade, captions and graphics are added at render). One preview at a time. Since 0.83 the page uses the
+live player instead; this route checks the drawing against the style's rules and does not carry characters between
+clips, so the player (which follows the render's own setup) is the closer view.
 
 **Typed commands.** `POST /api/edit-revisions/:id/command`: the owner writes what to change, for the selected clip
 or the whole edit. The team's Claude connection (Opus 5.5, task `editing`) answers, or ChatGPT when it is the only AI.
@@ -249,3 +251,40 @@ Tests: `tests/editing.test.js` "full control (0.54)" (strict owner checks, the r
 unsaved and stock shots, reset, a command answered by a stand-in AI with good and impossible steps, usage, apply, a
 non-answer, a stale revision and no AI). Browser check on a scratch workspace: tracks, beats, the synced render, the
 inspector, an unsaved change previewed and saved, a proposal shown with Apply.
+
+## The live player and the road (0.83)
+
+Owner review 2026-11-03: "no clear option where to start the render or the edit"; "which does the editing?"; "make it
+like a real editor where we can play the timeline and see the video, with play and stop, and make changes, then render".
+
+**The road.** Room 05 opens with the four-box road of Room 04 (`editRoad`): 1 Draft the edit (the editing brain, free,
+no AI), 2 Watch it and change it ("▶ Play the edit"), 3 Render the video ("Render this edit", the only render button
+once an edit exists; "Render plain assembly" shows only before), 4 Add music, then review (Audio Room and Review & QC).
+The FFmpeg and inputs cards lead only while something there needs doing, otherwise they sit below the editor.
+"Who made this edit, and how" (`editHow`) says who does what: the editing brain decides every cut, hold, move,
+transition and graphic with a reason; the critic checks it; drawn shots come from the drawing engine; the owner changes
+anything by hand or by typed command (the only AI step, it uses tokens); FFmpeg renders; Room 07 adds music.
+
+**The live player.** The timeline editor has a viewer on top (16:9, or 9:16 for Shorts) with ■ Stop, ▶ Play / ❚❚ Pause,
+frame steps and the clock; the inspector sits beside it and the timeline below. Space plays and pauses. Nothing is
+rendered: `GET /api/edit-revisions/:id/player` (`EditingRoom.player`) gives every clip set up exactly as the render
+sets it up (`Sk.carry` across clips, the drawing checked leniently on the primary engine, its words over its hold and
+transition with `Sk.timing` and speech, duration hold + transition + 0.1 s; a test rebuilds a clip the render's way and
+requires the same data), stills and footage with their source, in-point, speed and camera move, the joins, the
+captions and the narration (`/narration`, byte ranges). The page loads the render's own drawing engine
+(`GET /engine.js`: `motion.js` `pageScript`, the same files the render's browser runs) and draws each drawn clip on a
+hidden `#stage` canvas, copied to the screen each frame; painted pictures come from `GET /api/art/<sha256>` (checked by
+checksum). Stills get the render's eased move (`R.easedZoompan`), footage plays from its in-point at its speed, a soft
+join dissolves from the last frame of the clip before, captions show plainly. The narration is the clock (when the
+browser refuses sound the picture plays on the page clock). The playhead, clock and timeline scroll follow without a
+page redraw; a redraw repaints the paused frame. An unsaved drawing in the inspector is sent to
+`POST /api/edit-revisions/:id/player-clip` (checked strictly, like a save) and drawn as soon as it passes; a refusal is
+shown on the screen. Designed (atelier) shots play Room 04's preview of the shot. The rendered video folds under the
+viewer. What the player shows differently from the render: transitions as dissolves, captions in a plain look, no
+music, sound effects or graphics overlays.
+
+**Preview sizes.** A preview renders at 360p, 720p, 1080p or 1440p (`R.PRESETS.proxy1080`/`proxy1440`, `veryfast`,
+CRF 21/20); the size shows on the render card. The final master's preview check now scales both sides to 360p, so a
+720p, 1080p or 1440p preview can be compared (a 720p preview could not be compared before: FFmpeg's ssim needs the same
+size).
+

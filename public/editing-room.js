@@ -20,16 +20,47 @@ function editCard(content, engineReady) {
   const inputs = content.inputs, room = editFor(content.contentId), edit = room?.edit;
   const intro = '<p class="hint">The editing brain cuts on the measured pauses in the narration, varies shot lengths in a breathing pattern, gives every still a purposeful camera move, keeps transitions for structural moments, and proposes motion graphics where the narration says a number, a date or a quote. Every decision carries its reason, and the critic flags anything boring, lazy or amateur.</p>';
   if (!inputs.ready) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('Waiting for inputs', 'gray')}</div>${intro}<p class="muted">The edit starts when the approved board, narration and style above are ready.</p></section>`;
-  if (!edit) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('No edit yet', 'gray')}</div>${intro}<div class="card-actions">${action('Draft the edit', 'tl-generate', content.contentId, 'primary')}</div><p class="hint">Local and free: it measures the narration with FFmpeg and plans the edit on this computer.</p></section>`;
+  if (!edit) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('No edit yet', 'gray')}</div>${intro}<p class="hint">Press "Draft the edit" in step 1 above. Local and free: it measures the narration with FFmpeg and plans the edit on this computer.</p></section>`;
   const tl = edit.timeline, critique = edit.critique, stats = critique.stats, fps = tl.fps;
   const stale = room.current === false;
   const active = content.renders.some(job => ['queued', 'running'].includes(job.status));
   const head = `<div class="production-card-head"><div><span class="micro-label">EDITING BRAIN · EDIT r${edit.revision} · ${edit.actor === 'brain' ? 'drafted by the brain' : `changed by ${esc(edit.createdBy)}`} · ${esc(date(edit.createdAt))}</span><h2>Edit decisions</h2></div><div class="row-end">${badge(`Slideshow risk ${critique.slideshow.score} · ${critique.slideshow.verdict}`, EDIT_VERDICT[critique.slideshow.verdict] || 'gray')}${critique.counts.critical ? badge(`${critique.counts.critical} critical`, 'orange') : ''}${stale ? badge('Out of date', 'gray') : ''}</div></div>`;
   const timing = edit.timing ? `${edit.timing.method === 'pause-aligned' ? `Cuts follow the narration's measured pauses (${edit.timing.matched} of ${edit.timing.boundaries} sentence breaks found)` : 'Cuts use the word-count estimate'}. ${esc(edit.timing.note || '')}` : '';
   const facts = `<dl class="style-facts edit-facts"><div><dt>Clips</dt><dd>${stats.clips} · average ${stats.averageShotSeconds} s · ${stats.cutsPerMinute} cuts/min</dd></div><div><dt>Footage</dt><dd>${Math.round(stats.videoShare * 100)}% moving clips · ${Math.round(stats.stillShare * 100)}% stills with camera moves</dd></div><div><dt>Transitions</dt><dd>${esc(stats.transitionTypes.join(', '))} · ${stats.softTransitions} soft</dd></div><div><dt>Longest hold</dt><dd>${Number(stats.longestUnchangedSeconds).toFixed(1)} s without a change</dd></div><div><dt>Graphics</dt><dd>${stats.graphicsAccepted} on screen · ${stats.graphicsProposed} proposed</dd></div><div><dt>Timing</dt><dd>${timing}</dd></div></dl>`;
-  const actions = `<div class="card-actions edit-actions">${!stale && engineReady && !active ? action('Render this edit', 'tl-render', edit.id, 'primary') : ''}${!stale && edit.revision > 1 ? action('Undo last change', 'tl-undo', edit.id, 'secondary') : ''}${action(stale ? 'Draft a new edit' : 'Draft a fresh edit', 'tl-generate', content.contentId, stale ? 'primary' : 'secondary')}${!engineReady ? '<span class="muted">Check and pin FFmpeg to render.</span>' : ''}</div>`;
-  return `<section class="production-card edit-card">${head}${stale ? `<p class="inline-warning">${esc(room.staleReason || 'The inputs changed.')}</p>` : ''}${tlEditor(content, edit, stale)}${facts}${actions}
+  const actions = `<div class="card-actions edit-actions">${!stale && edit.revision > 1 ? action('Undo last change', 'tl-undo', edit.id, 'secondary') : ''}${action(stale ? 'Draft a new edit' : 'Draft a fresh edit', 'tl-generate', content.contentId, stale ? 'primary' : 'secondary')}</div>`;
+  return `<section class="production-card edit-card">${head}${stale ? `<p class="inline-warning">${esc(room.staleReason || 'The inputs changed.')}</p>` : ''}${tlEditor(content, edit, stale)}${editHow(edit)}${facts}${actions}
     ${editFindings(edit, stale)}${editGraphics(tl, stale)}${editCaptions(edit, stale)}${editClips(tl, stale)}${editCraft(room)}${editHistory(room)}</section>`;
+}
+// The road from the approved inputs to a reviewed render (0.83, owner review 2026-11-03: "no clear option where to start
+// the render or the edit"): four boxes as in Room 04, each with the one button for its job.
+function editRoad(content, engineReady) {
+  if (!content.inputs.ready) return '';
+  const room = editFor(content.contentId), edit = room?.edit, stale = room?.current === false, live = !!edit && !stale;
+  const running = content.renders.find(job => ['queued', 'running'].includes(job.status));
+  const rendered = live ? content.renders.find(job => job.status === 'completed' && job.scope?.edit?.revisionId === edit.id) : null;
+  const link = (label, id) => `<button type="button" class="road-link" data-action="tl-goto" data-id="${id}">${label}</button>`;
+  const room07 = '<button type="button" class="button secondary" data-production-room="audio">Audio Room →</button><button type="button" class="button primary" data-production-room="qc">Review & QC →</button>';
+  const steps = [
+    {title: 'Draft the edit', done: live, text: !edit ? 'The editing brain cuts the video from your approved storyboard and narration: a program on this PC, free, no AI.' : stale ? 'The storyboard, narration or style changed after this edit: draft a new one.' : `Edit r${edit.revision}, ${edit.actor === 'brain' ? 'made by the editing brain' : `changed by ${esc(edit.createdBy)}`}: ${edit.timeline.clips.length} clips. ${link('Who made it, and how ↓', 'edit-how')}`,
+      buttons: live ? '' : action(stale ? 'Draft a new edit' : 'Draft the edit', 'tl-generate', content.contentId, 'primary')},
+    {title: 'Watch it and change it', done: !!rendered, text: live ? 'Press Play to watch the edit as it is now, before any render. Click a clip on the timeline to change it, or tell Claude what to change.' : 'After the edit is drafted.', buttons: live ? action('▶ Play the edit', 'tl-goto-player', '', 'primary') : ''},
+    {title: 'Render the video', done: !!rendered, text: running ? `Rendering now: ${esc(running.progress?.stage || 'waiting for the render worker')}. ${link('See it ↓', 'render-latest')}` : rendered ? `Rendered at ${renderSizeName(rendered)}. ${link('Watch it ↓', 'render-latest')}` : !engineReady ? 'Check and pin FFmpeg first (Render engine, below).' : 'FFmpeg makes the video file on this PC, free: 360p is quickest, 1440p sharpest.',
+      buttons: live && engineReady && !running ? action(rendered ? 'Render again' : 'Render this edit', 'tl-render', edit.id, rendered ? 'secondary' : 'primary') : ''},
+    {title: 'Add music, then review', done: false, text: 'Room 07 adds music and sound effects and levels the narration (a new edit to render). Room 08 then checks the render and you approve it.', buttons: rendered ? room07 : ''},
+  ];
+  const next = steps.findIndex(step => !step.done), stateOf = k => (steps[k].done ? 'done' : k === next ? 'now' : 'later');
+  return `<section class="production-card scene-road edit-road"><div class="production-card-head"><div><span class="micro-label">WHAT HAPPENS NEXT</span><h2>From the approved storyboard to a finished video</h2></div><span class="road-count">${steps.filter(step => step.done).length} of ${steps.length} done</span></div>
+    <ol class="road-steps">${steps.map((step, k) => `<li class="road-step ${stateOf(k)}"><div class="road-top"><span class="road-mark">${step.done ? '✓' : k + 1}</span><strong>${step.title}</strong><span class="road-state">${{done: 'Done', now: 'Next', later: 'Later'}[stateOf(k)]}</span></div><p class="road-text">${step.text}</p>${step.buttons ? `<div class="road-actions">${step.buttons}</div>` : ''}</li>`).join('')}</ol></section>`;
+}
+// Who makes the edit (owner question 2026-11-03: "which do that?").
+function editHow(edit) {
+  const fixed = edit.autoFixes?.length || 0;
+  return `<details class="scene-history edit-how" id="edit-how" data-keep-open="edit-how"><summary>Who made this edit, and how</summary><ul class="intel-list">
+    <li><b>The editing brain</b>, a program on this PC (free, no AI), made every decision: where each cut lands (on the narrator's pauses and cue words), how long each shot holds, each still's camera move, every transition and the graphics where the script says a number, a date or a quote. Its reason for each clip is in the inspector and the clip list below.</li>
+    <li><b>The critic</b> then checks it for slideshow risk, long holds and lazy repeats${fixed ? `; the brain fixed ${fixed} of those itself` : ''}. What is left needs your taste or new visuals.</li>
+    <li><b>Drawn shots</b> are drawn by the drawing engine of Room 04, timed to the narrator's words, in your style and looks.</li>
+    <li><b>You</b> change anything: click a clip on the timeline and change it in the inspector, or type what you want and ${state.ai?.team?.claude || !state.ai?.team?.chatgpt ? 'Claude' : 'ChatGPT'} proposes the changes (this uses tokens; nothing changes until you apply them).</li>
+    <li><b>FFmpeg</b> makes the video file when you press Render. <b>Room 07</b> adds the music, sound effects and levels.</li></ul></details>`;
 }
 // Captions (P07): the rail the render burns in, and the SRT file for YouTube's own player.
 function captionLine(group) {
@@ -126,7 +157,7 @@ async function editSend(edit, ops, note) {
   const person = renderPerson() || 'Owner';
   await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
 }
-const TL_COMMANDS = new Set(['tl-step', 'tl-frame', 'tl-ask', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
+const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
 function editAction(command, id, button) {
   if (TL_COMMANDS.has(command)) return tlAction(command, id, button);
   const {content, edit} = editContext();
@@ -147,7 +178,7 @@ function editAction(command, id, button) {
   if (command === 'tl-undo') { if (button) button.disabled = true; return api(`/api/edit-revisions/${id}/undo`, {editedBy: renderPerson() || 'Owner'}).then(refresh).then(() => toast('Last change undone.')).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); }
   if (command === 'tl-render') {
     const criticals = edit.critique.counts.critical;
-    return editDialog('render', 'Render this edit', 'LOCAL RENDER · NO COST', `<p class="hint">Renders edit r${edit.revision} at proxy resolution with your pinned FFmpeg: ${tl.clips.length} clips with their own holds and camera moves, ${edit.critique.stats.softTransitions} soft transitions, ${edit.critique.stats.graphicsAccepted} graphics and a fade-out ending. Then it runs the technical QC.</p>${criticals ? `<p class="inline-warning">The critic still has ${criticals} critical finding${criticals === 1 ? '' : 's'}. You can render to look at it, but the style-proof verdict will ask you to accept ${criticals === 1 ? 'it' : 'them'}.</p>` : ''}<div class="form-grid">${renderNameField()}<label>Preview size<select name="resolution"><option value="360">360p (fast)</option><option value="720">720p (sharper, slower)</option></select></label></div>`, 'Render edit', {contentId: content.contentId, visualApprovalId: content.inputs.visualApprovalId, editRevisionId: edit.id});
+    return editDialog('render', 'Render this edit', 'LOCAL RENDER · NO COST', `<p class="hint">Renders edit r${edit.revision} with your pinned FFmpeg, on this PC and free: ${tl.clips.length} clips with their own holds and camera moves, ${edit.critique.stats.softTransitions} soft transitions, ${edit.critique.stats.graphicsAccepted} graphics and a fade-out ending. Then it runs the technical QC.</p>${criticals ? `<p class="inline-warning">The critic still has ${criticals} critical finding${criticals === 1 ? '' : 's'}. You can render to look at it, but the style-proof verdict will ask you to accept ${criticals === 1 ? 'it' : 'them'}.</p>` : ''}<div class="form-grid">${renderNameField()}${renderSizeField()}</div>`, 'Render edit', {contentId: content.contentId, visualApprovalId: content.inputs.visualApprovalId, editRevisionId: edit.id});
   }
   if (command === 'tl-clip') {
     const index = tl.clips.findIndex(item => item.id === id), clip = tl.clips[index];
@@ -248,7 +279,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
 // position; the shot's set, mood, camera, film and texture); any moment previews as a frame; the rendered preview plays
 // in step with the playhead; and the owner can type what to change for Claude to propose. Every change is a new
 // revision, checked like any other.
-const TL = {rev: null, zoom: 1, at: 0, sel: null, drawings: null, loading: false, drafts: {}, frame: null, command: '', scope: 'clip', proposal: null, busy: false};
+const TL = {rev: null, zoom: 1, at: 0, sel: null, drawings: null, loading: false, drafts: {}, command: '', scope: 'clip', proposal: null, busy: false};
 const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['audio', 'Audio', 18]];
 const TL_SHOT_KEYS = ['type', 'set', 'mood', 'camera', 'transition', 'film', 'texture', 'look', 'board', 'design'];
 const TL_ADD = {text: {kind: 'text', text: 'New words', style: 'title'}, figure: {kind: 'figure', pose: 'stand', expression: 'happy'}, prop: {kind: 'prop', prop: 'coin'}, fx: {kind: 'fx', effect: 'sparkle'}, arrow: {kind: 'arrow', from: [0.3, 0.6], to: [0.6, 0.4]}, bubble: {kind: 'bubble', text: 'Words', of: 0}};
@@ -257,7 +288,7 @@ const tlClock = seconds => `${Math.floor(seconds / 60)}:${(seconds % 60).toFixed
 function tlClipAt(tl, seconds) { const frame = Math.round(seconds * tl.fps); return tl.clips.find(clip => frame >= clip.start && frame < clip.start + clip.frames) || tl.clips.at(-1); }
 function tlSketch(clipId) { return TL.drafts[clipId] || TL.drawings?.clips?.[clipId]?.sketch || null; }
 function tlLoad(edit) {
-  if (TL.rev !== edit.id) { TL.rev = edit.id; TL.drawings = null; TL.drafts = {}; TL.proposal = null; TL.frame = null; if (TL.sel && !edit.timeline.clips.some(clip => clip.id === TL.sel.clipId)) TL.sel = null; }
+  if (TL.rev !== edit.id) { TL.rev = edit.id; TL.drawings = null; TL.drafts = {}; TL.proposal = null; if (TL.sel && !edit.timeline.clips.some(clip => clip.id === TL.sel.clipId)) TL.sel = null; }
   if (TL.drawings || TL.loading) return;
   TL.loading = true;
   api(`/api/edit-revisions/${edit.id}/drawings`, null, 'GET').then(result => { if (TL.rev === result.revisionId) TL.drawings = result; }).catch(error => { TL.drawings = {revisionId: edit.id, clips: {}, vocab: {}, error: error.message}; }).finally(() => { TL.loading = false; render(); });
@@ -311,15 +342,16 @@ function tlTracks(tl, stale) {
 }
 function tlEditor(content, edit, stale) {
   tlLoad(edit);
-  const tl = edit.timeline, video = tlRender(content), clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, who = team.claude ? 'Claude' : team.chatgpt ? 'ChatGPT' : null;
-  const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE EDITOR</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><span class="tl-clock">${tlClock(TL.at)} · ${esc(clip.label)}</span>${action('◀ 1 frame', 'tl-step', '-1', 'text-button')}${action('1 frame ▶', 'tl-step', '1', 'text-button')}${action('Preview this frame', 'tl-frame', '', 'secondary')}</div>`;
-  const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span><small>Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>';
-  const player = video ? `<video class="tl-video" data-tl-video src="/api/renders/${esc(video.id)}/video" controls preload="metadata"></video><p class="hint">${video.scope.edit.revisionId === edit.id ? `The render of this revision (r${edit.revision}).` : `The newest render is of r${video.scope.edit.revision}; render again to see later changes.`} Playing moves the playhead; clicking the timeline moves the video.</p>` : '<p class="hint">Render this edit to watch it here in step with the timeline. Until then, preview single frames.</p>';
-  const frame = TL.frame ? `<figure class="tl-frame"><img alt="Frame of ${esc(TL.frame.label)} at ${TL.frame.at.toFixed(2)} s" src="data:image/png;base64,${TL.frame.png}"><figcaption>${esc(TL.frame.label)} at ${TL.frame.at.toFixed(2)} s${TL.frame.draft ? ' · unsaved drawing' : ''}${TL.frame.note ? ` · ${esc(TL.frame.note)}` : ''}</figcaption></figure>` : '<p class="hint">No frame yet: move the playhead and press "Preview this frame". Drawn shots are drawn exactly as the render draws them; captions and graphics are added at render.</p>';
+  if (!stale) playLoad(edit);
+  const tl = edit.timeline, clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, who = team.claude ? 'Claude' : team.chatgpt ? 'ChatGPT' : null;
+  // 0.83: a viewer on top with Play, Pause and Stop, the inspector beside it, the timeline below, as in an editing program.
+  const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><small class="muted">Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>`;
+  const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span></div>';
+  const viewer = stale ? '<div class="tl-viewer"><p class="inline-warning">This edit is out of date, so it cannot play. Draft a new edit.</p></div>' : playViewer(edit, content);
   const commandBox = stale ? '' : `<div class="tl-command"><h4>Tell the editor what to change</h4><textarea data-tl="command" rows="3" maxlength="2000" placeholder="For example: make the title in ${esc(clip.label)} slam in gold, add a sparkle when he says &quot;gold&quot;, and use a whip pan after it.">${esc(TL.command)}</textarea>
     <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? action(TL.busy ? `${who} is reading the edit…` : `Ask ${who}`, 'tl-ask', '', 'primary') : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
     <p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
-  return `<div class="tl-editor" data-tl-root>${toolbar}${tlTracks(tl, stale)}${legend}<div class="tl-panels"><div class="tl-preview">${player}${frame}</div><div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${commandBox}</div>`;
+  return `<div class="tl-editor" data-tl-root id="tl-player"><div class="tl-panels">${viewer}<div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${toolbar}${tlTracks(tl, stale)}${legend}${commandBox}</div>`;
 }
 function tlProposal() {
   const p = TL.proposal;
@@ -351,7 +383,7 @@ function tlDrawing(clip, entry, stale) {
     <div class="form-grid tl-fields">${shot.map(key => tlField('shot', key, sketch[key], vocab)).join('')}</div>${rows}
     ${stale ? '' : `<div class="card-actions tl-add"><select data-tl="add-kind" aria-label="Element to add">${Object.keys(TL_ADD).map(kind => `<option>${kind}</option>`).join('')}</select>${action('+ Add element', 'tl-el-add', '', 'secondary')}</div>
     <details class="tl-json"><summary>The whole drawing as JSON (every field)</summary><textarea rows="12" data-tl-whole>${esc(JSON.stringify(sketch, null, 1))}</textarea><div class="card-actions">${action('Use this JSON', 'tl-json', '', 'secondary')}</div></details>
-    <div class="card-actions">${action('Preview at the playhead', 'tl-frame', '', 'secondary')}${dirty ? action('Save drawing (new revision)', 'tl-save-drawing', clip.id, 'primary') + action('Discard changes', 'tl-discard-drawing', clip.id, 'secondary') : ''}${edited && !dirty ? action('Back to the board’s drawing', 'tl-reset-drawing', clip.id, 'text-button danger') : ''}</div>`}`;
+    <p class="hint">Changes show in the player above as you make them; saving makes a new revision.</p><div class="card-actions">${dirty ? action('Save drawing (new revision)', 'tl-save-drawing', clip.id, 'primary') + action('Discard changes', 'tl-discard-drawing', clip.id, 'secondary') : ''}${edited && !dirty ? action('Back to the board’s drawing', 'tl-reset-drawing', clip.id, 'text-button danger') : ''}</div>`}`;
 }
 function tlInspector(edit, stale) {
   const tl = edit.timeline, sel = TL.sel;
@@ -385,7 +417,13 @@ function tlAction(command, id, button) {
   if (!edit) return;
   const tl = edit.timeline, clipId = TL.sel?.clipId;
   const restructure = change => { const draft = TL.drafts[clipId] || structuredClone(tlSketch(clipId)); change(draft); TL.drafts[clipId] = draft; render(); };
-  if (command === 'tl-step') { TL.at = Math.min(Math.max(0, TL.at + Number(id) / tl.fps), (tl.totalFrames - 1) / tl.fps); return render(); }
+  if (command === 'tl-step') { playHalt(); TL.at = Math.min(Math.max(0, TL.at + Number(id) / tl.fps), (tl.totalFrames - 1) / tl.fps); return render(); }
+  if (command === 'tl-play') return playStart();
+  if (command === 'tl-pause') return playPause();
+  if (command === 'tl-stop') { playHalt(); TL.at = 0; return render(); }
+  if (command === 'tl-play-retry') { PLAY.error = null; PLAY.rev = null; return render(); }
+  if (command === 'tl-goto') { const el = document.getElementById(id); if (el?.tagName === 'DETAILS') el.open = true; el?.scrollIntoView({behavior: 'smooth', block: 'start'}); return; }
+  if (command === 'tl-goto-player') { document.getElementById('tl-player')?.scrollIntoView({behavior: 'smooth', block: 'start'}); return playStart(); }
   if (command === 'tl-el-up' || command === 'tl-el-down') return restructure(draft => { const i = Number(id), j = command === 'tl-el-up' ? i - 1 : i + 1; [draft.elements[i], draft.elements[j]] = [draft.elements[j], draft.elements[i]]; });
   if (command === 'tl-el-remove') return restructure(draft => { draft.elements.splice(Number(id), 1); });
   if (command === 'tl-el-add') { const kind = document.querySelector('[data-tl="add-kind"]')?.value || 'text'; return restructure(draft => { draft.elements.push(structuredClone(TL_ADD[kind])); TL.sel = {kind: 'element', id: clipId, clipId, index: draft.elements.length - 1}; }); }
@@ -394,10 +432,6 @@ function tlAction(command, id, button) {
   if (command === 'tl-discard') { TL.proposal = null; return render(); }
   const busy = run => { if (button) button.disabled = true; return run().catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); };
   if (command === 'tl-save-drawing' || command === 'tl-reset-drawing') return busy(async () => { await editSend(edit, [{type: 'set-drawing', clipId: id, sketch: command === 'tl-save-drawing' ? TL.drafts[id] : null}]); delete TL.drafts[id]; await refresh(); toast(command === 'tl-save-drawing' ? 'Drawing saved as a new revision.' : 'Back to the board’s drawing.'); });
-  if (command === 'tl-frame') {
-    const clip = tlClipAt(tl, TL.at), at = Math.max(0, TL.at - clip.start / tl.fps), draft = TL.drafts[clip.id];
-    return busy(async () => { const result = await api(`/api/edit-revisions/${edit.id}/frame`, {clipId: clip.id, at: Math.min(at, clip.frames / tl.fps), ...(draft ? {sketch: draft} : {})}); TL.frame = {...result, label: clip.label, draft: !!draft}; render(); });
-  }
   if (command === 'tl-ask') {
     const text = TL.command.trim();
     if (text.length < 3) return toast('Write what to change first.', true);
@@ -408,6 +442,184 @@ function tlAction(command, id, button) {
   if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh(); toast(`${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
   return toast('Unknown action.', true);
 }
+// ------------------------------------------------------------ the live player (0.83, owner request 2026-11-03)
+// "Like other editing software: check the timeline edit, make changes, then render." The edit plays in this page with
+// no render: drawn shots are drawn by the render's own engine (/engine.js, the same files the render's browser runs)
+// from the same drawing, words and timings, stills and footage get their camera moves, soft joins dissolve, captions
+// show plainly, and the narration is the clock. A paused frame of a drawn shot is the frame the render draws.
+const PLAY = {rev: null, data: null, loading: false, error: null, engine: null, audio: null, playing: false, silent: false, t0: 0, raf: 0, setupFor: null, media: {}, drafts: {}, snap: null, snapFor: null, video: null};
+const playTotal = () => (PLAY.data ? PLAY.data.totalFrames / PLAY.data.fps : 0);
+const playSize = data => (data?.vertical ? [540, 960] : [960, 540]);
+function playEngine() {
+  return PLAY.engine ??= new Promise((resolve, reject) => {
+    // The engine draws on #stage (outside the page's redrawn area); each frame is copied onto the visible screen.
+    if (!document.getElementById('stage')) document.body.appendChild(Object.assign(document.createElement('canvas'), {id: 'stage', hidden: true}));
+    const script = Object.assign(document.createElement('script'), {src: '/engine.js'});
+    script.onload = () => resolve();
+    script.onerror = () => { PLAY.engine = null; reject(new Error('The drawing engine did not load. Restart the program and try again.')); };
+    document.head.appendChild(script);
+  });
+}
+function playLoad(edit) {
+  if (PLAY.rev === edit.id && (PLAY.data || PLAY.loading || PLAY.error)) return;
+  playHalt();
+  Object.assign(PLAY, {rev: edit.id, data: null, error: null, loading: true, setupFor: null, drafts: {}, snap: null, snapFor: null});
+  Promise.all([playEngine(), api(`/api/edit-revisions/${edit.id}/player`, null, 'GET')]).then(async ([, data]) => {
+    if (PLAY.rev !== data.revisionId) return;
+    // Painted pictures are decoded before a layout needs their size, as in the render.
+    window.DIMG = window.DIMG || {};
+    await Promise.all([...new Set(data.clips.flatMap(clip => clip.images || []))].filter(key => !window.DIMG[key]).map(key => new Promise(done => { const image = new Image(); image.onload = done; image.onerror = done; image.src = `/api/art/${key}`; window.DIMG[key] = image; })));
+    await Promise.all([data.fonts.heading, data.fonts.body, data.fonts.hand].map(name => document.fonts.load(`40px "${name}"`).catch(() => null)));
+    if (PLAY.rev !== data.revisionId) return;
+    PLAY.data = data;
+    PLAY.audio = new Audio(data.narration);
+    PLAY.audio.preload = 'auto';
+    PLAY.audio.addEventListener('ended', () => { if (PLAY.playing) playPause(); });
+  }).catch(error => { PLAY.error = error.message; }).finally(() => { PLAY.loading = false; render(); });
+}
+function playClipAt(t) {
+  const clips = PLAY.data.clips, frame = Math.floor(t * PLAY.data.fps + 1e-6);
+  const k = clips.findIndex(clip => frame >= clip.start && frame < clip.start + clip.frames);
+  return k < 0 ? (frame < 0 ? 0 : clips.length - 1) : k;
+}
+// One unsaved drawing from the inspector, checked by the program (strictly, like a save) before it is drawn.
+function playDraft(clip) {
+  const draft = TL.drafts[clip.id];
+  if (!draft) return null;
+  const json = JSON.stringify(draft), entry = PLAY.drafts[clip.id] ||= {};
+  if (entry.want !== json) { entry.want = json; if (!entry.busy) playDraftFetch(clip.id); }
+  return entry;
+}
+function playDraftFetch(clipId) {
+  const entry = PLAY.drafts[clipId], asked = entry.want, rev = PLAY.rev;
+  entry.busy = true;
+  api(`/api/edit-revisions/${rev}/player-clip`, {clipId, sketch: JSON.parse(asked)}).then(result => { entry.json = asked; entry.data = result; entry.error = null; })
+    .catch(error => { entry.json = asked; entry.error = error.message; })
+    .finally(() => { entry.busy = false; if (PLAY.rev !== rev) return; if (entry.want !== entry.json) playDraftFetch(clipId); else if (!PLAY.playing) playDraw(TL.at); });
+}
+function playMedia(clip) {
+  let el = PLAY.media[clip.id];
+  if (el) return el;
+  el = clip.kind === 'still' ? new Image() : Object.assign(document.createElement('video'), {muted: true, playsInline: true, preload: 'auto'});
+  // A still or a seek that arrives later redraws the paused frame.
+  for (const name of clip.kind === 'still' ? ['load'] : ['loadeddata', 'seeked']) el.addEventListener(name, () => { if (!PLAY.playing) playDraw(TL.at); });
+  el.src = clip.src;
+  return (PLAY.media[clip.id] = el);
+}
+// The render's eased camera move (R.easedZoompan) on a picture that covers the frame.
+function playCover(c, el, W, H, move, p) {
+  const iw = el.videoWidth || el.naturalWidth, ih = el.videoHeight || el.naturalHeight;
+  c.fillStyle = '#111'; c.fillRect(0, 0, W, H);
+  if (!iw || !ih) return;
+  const e = p * p * (3 - 2 * p), a = move?.amount || 0;
+  let z = 1, fx = 0.5, fy = 0.5;
+  if (move?.kind === 'push-in') z = 1 + a * e; else if (move?.kind === 'pull-out') z = 1 + a - a * e;
+  else if (move?.kind === 'pan-right') { z = 1 + a; fx = e; } else if (move?.kind === 'pan-left') { z = 1 + a; fx = 1 - e; } else if (move?.kind === 'push-detail') { z = 1 + a * e; fy = 0.38; }
+  const s = Math.max(W / iw, H / ih) * z, dw = iw * s, dh = ih * s;
+  c.drawImage(el, (W - dw) * fx, (H - dh) * fy, dw, dh);
+}
+function playClip(c, clip, local, W, H) {
+  const data = PLAY.data, hold = clip.frames / data.fps;
+  if (clip.kind === 'drawn') {
+    const entry = playDraft(clip), source = entry?.data || clip;
+    if (PLAY.setupFor !== source) { window.MOTION.setup({template: 'sketch-scene', data: source.data, palette: data.palette, fonts: data.fonts, finish: 'clean', drawing: data.drawing, vertical: data.vertical, width: W, height: H, fps: data.fps, duration: source.duration}); PLAY.setupFor = source; }
+    try { window.MOTION.renderFrame(Math.max(0, Math.min(local, source.duration - 0.1))); c.drawImage(document.getElementById('stage'), 0, 0, W, H); }
+    catch (error) { c.fillStyle = '#2b2b2b'; c.fillRect(0, 0, W, H); c.fillStyle = '#fff'; c.font = '16px sans-serif'; c.fillText(`${clip.label}: ${error.message}`.slice(0, 90), 16, H / 2); }
+    if (entry?.error && entry.json === entry.want) { c.fillStyle = 'rgba(142,59,40,.92)'; c.fillRect(0, H - 34, W, 34); c.fillStyle = '#fff'; c.font = '600 14px sans-serif'; c.fillText(`Not drawn yet: ${entry.error}`.slice(0, 110), 12, H - 12); }
+    return;
+  }
+  const el = playMedia(clip), p = Math.max(0, Math.min(1, local / hold));
+  if (clip.kind !== 'still') {
+    const want = (clip.inSeconds || 0) + Math.max(0, local) * (clip.speed || 1);
+    if (PLAY.playing) {
+      if (PLAY.video !== el) { PLAY.video?.pause(); PLAY.video = el; el.playbackRate = clip.speed || 1; el.currentTime = want; }
+      if (el.paused) el.play().catch(() => {});
+      if (Math.abs(el.currentTime - want) > 0.3) el.currentTime = want;
+    } else if (el.readyState >= 1 && Math.abs(el.currentTime - want) > 0.5 / data.fps) el.currentTime = want;
+  }
+  playCover(c, el, W, H, clip.kind === 'still' ? clip.move : null, p);
+}
+function playCaption(c, t, W, H) {
+  const group = PLAY.data.captions?.find(item => t >= item.start && t < item.end);
+  if (!group) return;
+  const size = Math.round((PLAY.data.vertical ? W : H) * 0.058);
+  c.font = `700 ${size}px "${PLAY.data.fonts.body}", "Segoe UI", Arial, sans-serif`; c.textAlign = 'center'; c.lineJoin = 'round';
+  c.lineWidth = size * 0.2; c.strokeStyle = 'rgba(0,0,0,.85)'; c.fillStyle = '#fff';
+  const base = H * (PLAY.data.vertical ? 0.74 : 0.9);
+  group.lines.forEach((line, i) => { const y = base - (group.lines.length - 1 - i) * size * 1.2; c.strokeText(line, W / 2, y); c.fillText(line, W / 2, y); });
+  c.textAlign = 'start';
+}
+function playDraw(t) {
+  const data = PLAY.data, screen = document.querySelector('[data-tl-canvas]');
+  if (!data || !screen) return;
+  const c = screen.getContext('2d'), [W, H] = [screen.width, screen.height], k = playClipAt(t), clip = data.clips[k], local = t - clip.start / data.fps;
+  playClip(c, clip, local, W, H);
+  // A soft join dissolves from the last frame of the clip before (the render blends the two exactly).
+  const join = k > 0 ? data.joins[k - 1] : null, span = join && join.type !== 'cut' ? join.frames / data.fps : 0;
+  if (span && local < span && PLAY.snapFor === data.clips[k - 1].id) { c.globalAlpha = 1 - local / span; c.drawImage(PLAY.snap, 0, 0, W, H); c.globalAlpha = 1; }
+  const next = data.joins[k];
+  if (next && next.type !== 'cut' && clip.frames / data.fps - local < 0.6) {
+    PLAY.snap ||= document.createElement('canvas');
+    if (PLAY.snap.width !== W || PLAY.snap.height !== H) Object.assign(PLAY.snap, {width: W, height: H});
+    PLAY.snap.getContext('2d').drawImage(screen, 0, 0); PLAY.snapFor = clip.id;
+  }
+  playCaption(c, t, W, H);
+  playTicker(t, clip);
+}
+// The playhead, the clock and the timeline's scroll follow the picture without redrawing the page.
+function playTicker(t, clip) {
+  const line = document.querySelector('[data-tl-playhead]'), svg = document.querySelector('[data-tl-svg]');
+  if (line && svg) {
+    const x = t * Number(svg.dataset.pps); line.setAttribute('x1', x.toFixed(1)); line.setAttribute('x2', x.toFixed(1));
+    const scroller = svg.closest('.tl-scroll');
+    if (PLAY.playing && scroller && (x < scroller.scrollLeft || x > scroller.scrollLeft + scroller.clientWidth - 40)) scroller.scrollLeft = tlScroll = Math.max(0, x - 80);
+  }
+  const clock = document.querySelector('[data-tl-clock]');
+  if (clock) clock.textContent = `${tlClock(t)} / ${tlClock(playTotal())} · ${clip.label}`;
+}
+function playTick() {
+  if (!PLAY.playing) return;
+  // Leaving the room (or an edit going out of date) stops the sound with the picture.
+  if (!document.querySelector('[data-tl-canvas]')) { playHalt(); return; }
+  const t = PLAY.silent ? (performance.now() - PLAY.t0) / 1000 : PLAY.audio.currentTime;
+  if (t >= playTotal() - 0.5 / PLAY.data.fps) { TL.at = Math.max(0, playTotal() - 1 / PLAY.data.fps); playPause(); return; }
+  TL.at = t;
+  playDraw(t);
+  PLAY.raf = requestAnimationFrame(playTick);
+}
+function playStart() {
+  if (!PLAY.data || PLAY.playing) return;
+  if (TL.at >= playTotal() - 0.1) TL.at = 0;
+  document.querySelector('[data-tl-video]')?.pause();
+  Object.assign(PLAY, {playing: true, silent: false, t0: performance.now() - TL.at * 1000});
+  PLAY.audio.currentTime = TL.at;
+  // Without sound (no narration file, or the browser refuses) the picture still plays on the clock.
+  PLAY.audio.play().catch(() => { PLAY.silent = true; PLAY.t0 = performance.now() - TL.at * 1000; });
+  PLAY.raf = requestAnimationFrame(playTick);
+  render();
+}
+// Stops the sound and the footage; render() is left to the caller.
+function playHalt() {
+  if (PLAY.playing && !PLAY.silent && PLAY.audio) TL.at = PLAY.audio.currentTime;
+  PLAY.playing = false; cancelAnimationFrame(PLAY.raf);
+  PLAY.audio?.pause(); PLAY.video?.pause(); PLAY.video = null;
+}
+function playPause() { playHalt(); render(); }
+function playSeek(t) {
+  TL.at = Math.min(Math.max(0, t), Math.max(0, playTotal() - 1 / (PLAY.data?.fps || 30)));
+  if (!PLAY.playing) return;
+  PLAY.t0 = performance.now() - TL.at * 1000;
+  if (!PLAY.silent) PLAY.audio.currentTime = TL.at;
+}
+function playViewer(edit, content) {
+  const data = PLAY.data, [W, H] = playSize(data || {vertical: edit.timeline.format === 'shorts'}), total = edit.timeline.totalFrames / edit.timeline.fps, clip = tlClipAt(edit.timeline, TL.at);
+  const status = PLAY.error ? `<div class="tl-screen-note bad"><p>${esc(PLAY.error)}</p>${action('Try again', 'tl-play-retry', '', 'secondary')}</div>` : !data ? '<div class="tl-screen-note"><p>Loading the drawing engine and the pictures…</p></div>' : '';
+  const transport = `<div class="tl-transport">${action('■ Stop', 'tl-stop', '', 'secondary')}${PLAY.playing ? action('❚❚ Pause', 'tl-pause', '', 'primary') : action('▶ Play', 'tl-play', '', 'primary')}${action('◀ 1 frame', 'tl-step', '-1', 'text-button')}${action('1 frame ▶', 'tl-step', '1', 'text-button')}<span class="tl-clock" data-tl-clock>${tlClock(TL.at)} / ${tlClock(total)} · ${esc(clip.label)}</span></div>`;
+  const video = tlRender(content);
+  const rendered = video ? `<details class="tl-rendered" data-keep-open="tl-rendered"><summary>The rendered video (r${video.scope.edit.revision}${video.scope.edit.revisionId === edit.id ? '' : ', an earlier revision'} · ${renderSizeName(video)})</summary><video class="tl-video" data-tl-video src="/api/renders/${esc(video.id)}/video" controls preload="metadata"></video><p class="hint">The finished file, with music and the caption look. Playing it moves the playhead too.</p></details>` : '';
+  return `<div class="tl-viewer"><div class="tl-screen ${data?.vertical || edit.timeline.format === 'shorts' ? 'vertical' : ''}"><canvas data-tl-canvas width="${W}" height="${H}" aria-label="The edit at the playhead"></canvas>${status}</div>${transport}
+    <p class="hint">Live: drawn shots are drawn exactly as the render draws them, on the narrator's words. Here transitions show as dissolves and captions plainly; music, graphics and the caption look come with the render. Space plays and pauses.</p>${rendered}</div>`;
+}
 // Clicks on the timeline: select an item and move the playhead there; the ruler only moves the playhead.
 document.addEventListener('click', event => {
   const svg = event.target.closest?.('[data-tl-svg]');
@@ -416,7 +628,7 @@ document.addEventListener('click', event => {
   if (!edit) return;
   const tl = edit.timeline, pps = Number(svg.dataset.pps), item = event.target.closest('[data-sel]'), box = svg.getBoundingClientRect();
   // A drawing beat puts the playhead on its own moment (just after the element arrives); anything else where clicked.
-  TL.at = Math.min(Math.max(0, item?.dataset.at ? Number(item.dataset.at) : (event.clientX - box.left) / pps), (tl.totalFrames - 1) / tl.fps);
+  playSeek(Math.min(Math.max(0, item?.dataset.at ? Number(item.dataset.at) : (event.clientX - box.left) / pps), (tl.totalFrames - 1) / tl.fps));
   if (item) {
     const kind = item.dataset.sel, id = item.dataset.id;
     TL.sel = kind === 'element' ? {kind, id, clipId: id, index: Number(item.dataset.index)} : kind === 'clip' || kind === 'join' ? {kind, id, clipId: id} : {kind, id};
@@ -430,7 +642,7 @@ document.addEventListener('input', event => {
   if (!target.closest?.('[data-tl-root]')) return;
   if (target.dataset.tl === 'zoom') { TL.zoom = Number(target.value); return render(); }
   if (target.dataset.tl === 'command') { TL.command = target.value; return; }
-  if (target.dataset.tlPath) { const {edit} = editContext(); if (edit) tlSet(edit, target.dataset.tlPath, target); }
+  if (target.dataset.tlPath) { const {edit} = editContext(); if (edit) { tlSet(edit, target.dataset.tlPath, target); if (!PLAY.playing) playDraw(TL.at); } }
 });
 document.addEventListener('change', event => {
   const target = event.target;
@@ -451,6 +663,14 @@ document.addEventListener('scroll', event => { if (event.target.classList?.conta
 function tlAfterRender() {
   const scroller = document.querySelector('.tl-scroll');
   if (scroller) scroller.scrollLeft = tlScroll;
+  // A redrawn page has a blank screen until the next frame: a paused player draws its frame again at once.
+  if (PLAY.data && !PLAY.playing && document.querySelector('[data-tl-canvas]')) playDraw(TL.at);
   const video = document.querySelector('[data-tl-video]');
   if (video && TL.at > 0) video.addEventListener('loadedmetadata', () => { video.currentTime = Math.min(TL.at, video.duration); }, {once: true});
 }
+// Space plays and pauses while the player is on screen (not while typing in a field).
+document.addEventListener('keydown', event => {
+  if (event.code !== 'Space' || event.repeat || !PLAY.data || !document.querySelector('[data-tl-canvas]') || event.target.closest?.('input, textarea, select, button, [contenteditable]')) return;
+  event.preventDefault();
+  if (PLAY.playing) playPause(); else playStart();
+});

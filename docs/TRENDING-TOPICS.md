@@ -67,6 +67,25 @@ word. Now:
 - Claude's topic ideas get the topic, angle and look words and the channel's style: every idea must join the subject and
   the angle and suit the look.
 
+## Searching inside a small niche (0.83)
+
+Owner test 2026-11-03: a "stone age finance" scan of 14 days kept 2 of 24 videos (55 and 9 views), "money before coins"
+found gold-coin and crypto videos, titles showed "I&#39;m", and the topic ideas strayed from the niche. Causes: each
+keyword was searched with `order=viewCount`, which returns the most-viewed videos sharing any one word of the phrase;
+a small niche has few new videos in a fortnight; and Claude was asked for ideas from two tiny videos.
+
+- Searches use YouTube's relevance order (`YouTubePublicClient.search`); the scan still sorts by views. A scan with a
+  niche (or a channel size) looks through 50 videos a keyword for the same 100 units.
+- Look back up to a year (7, 14, 30, 90, 180 or 365 days in the form; 90 by default for a new scan).
+- Titles, channel names and description excerpts from search come back readable (`htmlText`: the entities YouTube uses).
+- Each keyword records how many of its videos fit the niche (`kept`), shown in the keyword filter. A scan with fewer
+  than 5 videos inside the niche, or whose best has under 1,000 views, says "Not enough to call a trend", suggests 90 or
+  180 days and names the phrases that found nothing inside the niche (they usually lack the angle).
+- Topic ideas need at least 3 videos inside the niche (`MIN_TOPIC_VIDEOS`); fewer is refused before Claude is asked.
+- An idea whose title, promise, angle and hook name neither the niche's subject and angle is marked "May be outside the
+  niche" (`offNiche`), never hidden.
+- The channel-size filter on the list is a dropdown (any size, under 1,000 ... under 1 million).
+
 ## Clearing and exporting (0.74)
 
 Scans and topic ideas have tick boxes and a toolbar: delete the ticked rows or every row shown, and export them as PDF,

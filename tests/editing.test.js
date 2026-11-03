@@ -22,6 +22,8 @@ const B = require('../editing-brain');
 const T = require('../transitions');
 const Cap = require('../captions');
 const R = require('../render');
+const Sk = require('../sketch');
+const E = require('../engines');
 const {createApp} = require('../server');
 
 const hasFFmpeg = (() => { try { execFileSync('ffprobe', ['-version'], {stdio: 'ignore'}); execFileSync('ffmpeg', ['-version'], {stdio: 'ignore'}); return true; } catch { return false; } })();
@@ -878,6 +880,15 @@ test('HTTP edit routes need the local token and expose the room in state', async
   assert.equal((await send(`/api/edit-revisions/${id}/ops`, {editedBy: 'Owner', ops: [{type: 'set-hero'}]})).status, 404);
   assert.equal((await send(`/api/edit-revisions/${id}/undo`, {editedBy: 'Owner'})).status, 404);
   for (const kind of ['srt', 'vtt']) assert.equal((await fetch(`${base}/api/edit-revisions/${id}/captions.${kind}`)).status, 404);
+  // 0.83: the live player's engine, data, narration and pictures.
+  const engine = await fetch(`${base}/engine.js`);
+  assert.equal(engine.status, 200);
+  assert.match(engine.headers.get('content-type'), /javascript/);
+  assert.match(await engine.text(), /window\.MOTION = \{setup, renderFrame/);
+  for (const part of ['player', 'narration']) assert.equal((await fetch(`${base}/api/edit-revisions/${id}/${part}`)).status, 404);
+  assert.equal((await fetch(`${base}/api/art/${'a'.repeat(64)}`)).status, 404);
+  assert.equal((await send(`/api/edit-revisions/${id}/player-clip`, {clipId: 'x', sketch: {}}, 'bad')).status, 403);
+  assert.equal((await send(`/api/edit-revisions/${id}/player-clip`, {clipId: 'x', sketch: {}})).status, 404);
 });
 
 // ---------------------------------------------------------------- P06b animated (canvas) graphics
@@ -1118,6 +1129,53 @@ async function drawnBoard({dataRoot, store, scenes, content}) {
   const approval = await scenes.approveVisuals(manifest.id, {approvedBy: 'Owner', confirmations: {rightsReviewed: true, sequenceReviewed: true, warningsAccepted: true}});
   return {approval, targets};
 }
+
+// 0.83 (owner request 2026-11-03: play the timeline and see the video before rendering): the live player gets every clip
+// set up as the render sets it up, and its data draws the same frame as the render's own preview.
+test('the live player gets the edit as the render draws it: drawn shots, moves, joins, captions and the narration', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, content} = env;
+  const {approval, targets} = await drawnBoard(env);
+  const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const player = editing.player(edit.id), tl = edit.timeline;
+  assert.deepEqual([player.revisionId, player.fps, player.totalFrames, player.clips.length, player.joins.length], [edit.id, tl.fps, tl.totalFrames, tl.clips.length, tl.joins.length]);
+  assert.equal(player.narration, `/api/edit-revisions/${edit.id}/narration`);
+  const drawnIndex = tl.clips.findIndex(clip => clip.shotId === targets[0].id), drawn = player.clips[drawnIndex], clip = tl.clips[drawnIndex];
+  assert.equal(drawn.kind, 'drawn');
+  assert.equal(drawn.data.elements[1].text, 'Trade routes');
+  assert.equal(drawn.data.times.elements.length, 2, 'element times on the words, as the render times them');
+  assert.ok(Array.isArray(drawn.data.speech));
+  assert.ok(Math.abs(drawn.duration - ((clip.frames + (tl.joins[drawnIndex]?.frames || 0)) / tl.fps + 0.1)) < 1e-9, 'the hold and its transition, as the render draws it');
+  const still = player.clips.find(item => item.kind === 'still');
+  assert.match(still.src, /^\/api\/visual-assets\/[a-f0-9-]+\/file$/);
+  assert.ok(player.clips.filter(item => item.kind === 'still').some(item => item.move?.kind), 'stills carry their camera move');
+  if (tl.captions?.enabled) assert.ok(player.captions.length && player.captions.every(group => Array.isArray(group.lines)));
+  // An unsaved drawing is checked strictly, like a save, before the player draws it.
+  const changed = structuredClone(editing.drawings(edit.id).clips[clip.id].sketch);
+  changed.elements[1] = {...changed.elements[1], text: 'New routes', animate: 'slam'};
+  assert.equal(editing.playerClip(edit.id, {clipId: clip.id, sketch: changed}).data.elements[1].text, 'New routes');
+  assert.throws(() => editing.playerClip(edit.id, {clipId: clip.id, sketch: {...changed, elements: [{...changed.elements[1], animate: 'wobble-zoom'}]}}), /drawing: .*animate/i);
+  assert.throws(() => editing.playerClip(edit.id, {clipId: tl.clips.find(item => item.mediaType === 'image').id, sketch: changed}), /only drawn shots have a drawing/);
+  const voice = editing.narrationFile(edit.id);
+  assert.ok(fs.existsSync(voice.file) && voice.mime === 'audio/wav');
+  // The drawing is set up exactly as the render sets it up (render-room.js: Sk.carry, a lenient check on the primary
+  // engine, the words over the hold and the transition), so the player draws the render's frames.
+  const report = await env.renders.checkReadiness({requestedBy: 'Owner'});
+  env.renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the live player test.'});
+  const scope = editing.renderScope(edit.id, env.store.content(content.id)), extra = tl.joins[drawnIndex]?.frames || 0, start = clip.start / tl.fps, seconds = (clip.frames + extra) / tl.fps;
+  const round = value => Math.round(value * 1000) / 1000, spoken = (tl.captions?.groups || []).flatMap(group => group.words);
+  const words = spoken.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: round(word.start - start), end: round(Math.max(word.start, word.end ?? word.start) - start)}));
+  const ordered = tl.clips.map(item => ({label: item.label, sceneId: item.sceneId, clipId: item.id, sketch: scope.drawings?.[item.id]?.sketch ? structuredClone(scope.drawings[item.id].sketch) : null}));
+  Sk.carry(ordered);
+  const sketch = Sk.validate(ordered[drawnIndex].sketch, {primary: E.ENGINES[scope.engine]?.draws ? scope.engine : 'motion', lenient: true});
+  assert.deepEqual(drawn.data, {...sketch, times: Sk.timing(sketch, words), speech: words.map(word => [word.start, word.end])});
+  // And the engine the page loads draws it.
+  const renderer = new MotionRenderer({browser: findBrowser()});
+  await renderer.start();
+  t.after(() => renderer.close());
+  const live = await renderer.frame({template: 'sketch-scene', data: drawn.data, palette: player.palette, fonts: player.fonts, drawing: player.drawing, vertical: player.vertical, width: 960, height: 540, fps: player.fps, duration: drawn.duration, t: 1.2});
+  assert.ok(live.length > 20000, 'a drawn frame, not a blank one');
+});
 
 test('full control (0.54): every drawn shot is shown and changed inside the edit, any moment previews as a frame, typed commands become checked operations', {skip: skip || noBrowser}, async t => {
   const env = setup(t, {seconds: 20});

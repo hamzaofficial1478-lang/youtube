@@ -145,7 +145,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .tl-legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:6px;font-size:10px;color:#6f7d72;align-items:center}.tl-legend span::before{content:'';display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:#8fb39c}
 .tl-legend .drawn::before{background:#5b6fa8}.tl-legend .edited::before{background:#c9862f}.tl-legend .video::before{background:#4f7e63}.tl-legend .soft::before{background:#e0a463}.tl-legend .beat::before{background:#5b6fa8;border-radius:50%}.tl-legend .graphic::before{background:#2f6b4f}.tl-legend .caption::before{background:#a9b8ad}
 .tl-panels{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:14px;margin-top:12px}@media (max-width:900px){.tl-panels{grid-template-columns:1fr}}
-.tl-video{width:100%;border-radius:8px;background:#111}.tl-frame{margin:8px 0 0}.tl-frame img{width:100%;border-radius:8px;border:1px solid #e3e8df;display:block}.tl-frame figcaption{font-size:11px;color:#6f7d72;margin-top:4px}
+.tl-video{width:100%;border-radius:8px;background:#111}
 .tl-inspector h4,.tl-command h4{margin:0 0 6px}.tl-element{border:1px solid #e3e8df;border-radius:8px;padding:6px 8px;margin:6px 0;background:#fff}.tl-element summary{cursor:pointer;font-size:12px}.tl-fields{gap:6px 10px;margin-top:6px}.tl-fields label{font-size:11px}
 .tl-fields .invalid,.tl-json .invalid{border-color:#d1453b}.tl-json textarea{width:100%;font-family:Consolas,monospace;font-size:11px}.tl-add{gap:8px;align-items:center}
 .tl-command{margin-top:14px;border-top:1px solid #e3e8df;padding-top:10px}.tl-command textarea{width:100%}.tl-command-row{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin-top:6px;font-size:12px}
@@ -254,3 +254,19 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .road-ask{flex:0 0 100%;text-align:center;font-size:12px;font-weight:600;color:#5d6a62;margin-bottom:-2px}
 @media (max-width:900px){.road-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.road-steps{grid-template-columns:1fr}}
+
+/* 0.83 (owner request 2026-11-03): the Editing Room as an editing program: a viewer with Play, Pause and Stop on top,
+   the inspector beside it, the timeline below. The inspector scrolls on its own so the viewer stays in sight. */
+.tl-panels{grid-template-columns:minmax(0,1.7fr) minmax(260px,1fr);margin:0 0 14px;align-items:start}
+.tl-command-row input[type=radio]{width:auto;flex:0 0 auto;margin:0}
+.tl-inspector{max-height:640px;overflow:auto;padding-right:4px}
+.tl-viewer{position:sticky;top:8px;min-width:0}
+.tl-screen{position:relative;background:#101412;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(16,20,18,.18)}
+.tl-screen canvas{display:block;width:100%;height:auto;aspect-ratio:16/9}
+.tl-screen.vertical{max-width:360px;margin:0 auto}.tl-screen.vertical canvas{aspect-ratio:9/16}
+.tl-screen-note{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:10px;padding:20px;text-align:center;color:#e9efe9;font-size:13px;background:rgba(16,20,18,.86)}
+.tl-screen-note.bad{color:#ffd9cf}
+.tl-transport{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 4px}
+.tl-transport .button{min-width:96px}.tl-transport .tl-clock{margin-left:auto;font-size:14px}
+.tl-rendered{margin-top:8px;border:1px solid #e3e8df;border-radius:8px;background:#fff}.tl-rendered>summary{cursor:pointer;padding:8px 10px;font-size:13px;font-weight:600}.tl-rendered>video,.tl-rendered>p{margin:0 10px 10px;width:calc(100% - 20px)}
+@media (max-width:900px){.tl-viewer{position:static}.tl-inspector{max-height:none}}

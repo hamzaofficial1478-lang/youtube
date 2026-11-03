@@ -86,6 +86,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   let timer, ffmpegAvailable=null, ticks=0;
   const voiceReady=voiceRuntime.preflight().then(()=>{ffmpegAvailable=true;return true;}).catch(()=>{ffmpegAvailable=false;return false;});
   function json(res,code,body) {res.writeHead(code,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(body));}
+  // A media file with byte ranges (0.83: the Editing Room's live player seeks in the narration and the footage).
+  function sendMedia(req,res,file,mime){let size;try{size=fs.statSync(file).size;}catch{throw new InputError('Media file is unavailable.',404);}const match=/^bytes=(\d*)-(\d*)$/.exec(req.headers.range||'');if(match&&(match[1]||match[2])){const start=match[1]?Number(match[1]):Math.max(0,size-Number(match[2])),end=match[1]&&match[2]?Math.min(Number(match[2]),size-1):size-1;if(!(start>=0&&start<=end&&end<size))throw new InputError('That byte range is outside the file.',416);res.writeHead(206,{'Content-Type':mime,'Content-Range':`bytes ${start}-${end}/${size}`,'Accept-Ranges':'bytes','Content-Length':end-start+1,'Cache-Control':'no-store'});return fs.createReadStream(file,{start,end}).pipe(res);}res.writeHead(200,{'Content-Type':mime,'Content-Length':size,'Accept-Ranges':'bytes','Cache-Control':'no-store'});return fs.createReadStream(file).pipe(res);}
+  // The drawing engine the renders use, served to the live player (it changes only with a program update).
+  let engineSource=null;const engineScript=()=>(engineSource??=require('./motion').pageScript());
   async function readBody(req,limit=262144) {
     if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))throw new InputError('Use application/json.',415);
     const chunks=[];let bytes=0;
@@ -156,7 +160,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/skills/brief')return json(res,200,skills.brief(String(url.searchParams.get('taskKey')||''),{familyId:url.searchParams.get('familyId')||null}));
         if(pathname==='/api/skills/effect')return json(res,200,skills.effect(String(url.searchParams.get('skillId')||'')));
         const visualFile=pathname.match(/^\/api\/(visual-candidates|visual-assets)\/([a-f0-9-]+)\/(preview|thumb|file)$/);
-        if(visualFile){const [,kind,id,part]=visualFile;if((kind==='visual-candidates')!==(part==='preview'))throw new InputError('Page not found.',404);const {file,mime}=kind==='visual-candidates'?sceneRoom.candidatePreview(id):sceneRoom.assetFile(id,part);let body;try{body=fs.readFileSync(file);}catch{throw new InputError('Media file is unavailable.',404);}res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store','Content-Length':body.length});return res.end(body);}
+        if(visualFile){const [,kind,id,part]=visualFile;if((kind==='visual-candidates')!==(part==='preview'))throw new InputError('Page not found.',404);const {file,mime}=kind==='visual-candidates'?sceneRoom.candidatePreview(id):sceneRoom.assetFile(id,part);if(part==='file')return sendMedia(req,res,file,mime);let body;try{body=fs.readFileSync(file);}catch{throw new InputError('Media file is unavailable.',404);}res.writeHead(200,{'Content-Type':mime,'Cache-Control':'no-store','Content-Length':body.length});return res.end(body);}
         const nicheShot=pathname.match(/^\/api\/niche-reads\/([a-f0-9-]+)\/image$/);
         if(nicheShot){const {file,mime}=nicheFactory.imageFile(nicheShot[1]),body=fs.readFileSync(file);res.writeHead(200,{'Content-Type':mime,'Content-Length':body.length,'Cache-Control':'no-store'});return res.end(body);}
         const trendScan=pathname.match(/^\/api\/trend-scans\/([a-f0-9-]+)$/);
@@ -164,6 +168,12 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const exported=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/export$/);
         // 0.73: the planning file is a Word document; ?format=json keeps the raw record.
         if(exported){const data=store.exportContent(exported[1]),name=`${String(data.content.title||'draft').replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'').slice(0,60)||'draft'}-v${data.content.revision}`;if(url.searchParams.get('format')==='json'){res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}const file=Documents.docxFile(Documents.planningBlocks(data));res.writeHead(200,{'Content-Type':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Content-Length':file.length,'Content-Disposition':`attachment; filename="${encodeURIComponent(name)}.docx"; filename*=UTF-8''${encodeURIComponent(name)}.docx`,'Cache-Control':'no-store'});return res.end(file);}
+        // The live player (0.83): the drawing engine, the edit as playable data, its narration and its painted pictures.
+        if(pathname==='/engine.js'){res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'});return res.end(engineScript());}
+        const playerData=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(player|narration)$/);
+        if(playerData){if(playerData[2]==='player')return json(res,200,editingRoom.player(playerData[1]));const {file,mime}=editingRoom.narrationFile(playerData[1]);return sendMedia(req,res,file,mime);}
+        const artFile=pathname.match(/^\/api\/art\/([a-f0-9]{64})$/);
+        if(artFile){const {bytes,mime}=sceneRoom.artForPlayer(artFile[1]);res.writeHead(200,{'Content-Type':mime,'Content-Length':bytes.length,'Cache-Control':'no-store'});return res.end(bytes);}
         const editDrawings=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/drawings$/);
         if(editDrawings)return json(res,200,editingRoom.drawings(editDrawings[1]));
         throw new InputError('Page not found.',404);
@@ -269,7 +279,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/backups/restore/cancel'&&req.method==='POST'){requireBackups();return json(res,200,backups.cancelRestore());}
         const backupAction=pathname.match(/^\/api\/backups\/([0-9TZ]+-[0-9a-f]{4})\/(verify|restore)$/);
         if(backupAction&&req.method==='POST'){requireBackups();return json(res,200,backupAction[2]==='verify'?await backups.verify(backupAction[1]):await backups.requestRestore(backupAction[1],{by:body.requestedBy,confirmed:body.confirmed}));}
-        const editTool=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(frame|command)$/);
+        const editTool=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(frame|command|player-clip)$/);
+        if(editTool&&editTool[2]==='player-clip'&&req.method==='POST')return json(res,200,editingRoom.playerClip(editTool[1],body));
         if(editTool&&editTool[2]==='frame'&&req.method==='POST')return json(res,200,await editingRoom.frame(editTool[1],body));
         if(editTool&&editTool[2]==='command'&&req.method==='POST')return json(res,200,await editingRoom.command(editTool[1],body));
         const editAction=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(ops|undo)$/);

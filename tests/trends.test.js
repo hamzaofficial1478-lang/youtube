@@ -15,7 +15,7 @@ const CH = ['UCaaaaaaaaaaaaaaaaaaaaaa', 'UCbbbbbbbbbbbbbbbbbbbbbb'];
 
 // YouTube answers: each keyword finds three videos; vid(2) is found by both keywords. The channel answer
 // lists channels in the opposite order to the request, so pairing by position would mix them up.
-function network({claude = null, searchStatus = 200} = {}) {
+function network({claude = null, searchStatus = 200, perSearch = 3} = {}) {
   const calls = [];
   const fetch = async (url, options = {}) => {
     const target = new URL(String(url));
@@ -25,7 +25,7 @@ function network({claude = null, searchStatus = 200} = {}) {
       if (target.pathname === '/youtube/v3/search') {
         if (searchStatus !== 200) return json({error: 'quota'}, searchStatus);
         const base = target.searchParams.get('q') === 'stoicism' ? 1 : 2;
-        return json({items: [0, 1, 2].map(n => ({id: {videoId: vid(base + n)}, snippet: {title: `Trending stoic lesson ${base + n} for a hard week`, description: base + n === 3 ? 'A calm evening with Seneca.' : '', channelId: CH[(base + n) % 2], channelTitle: `Channel ${(base + n) % 2}`, publishedAt: '2026-10-18T10:00:00Z'}}))});
+        return json({items: Array.from({length: perSearch}, (_, n) => n).map(n => ({id: {videoId: vid(base + n)}, snippet: {title: `Trending stoic lesson ${base + n} for a hard week`, description: base + n === 3 ? 'A calm evening with Seneca.' : '', channelId: CH[(base + n) % 2], channelTitle: `Channel ${(base + n) % 2}`, publishedAt: '2026-10-18T10:00:00Z'}}))});
       }
       if (target.pathname === '/youtube/v3/videos') return json({items: target.searchParams.get('id').split(',').map(id => ({id, statistics: {viewCount: String(Number(id.slice(3)) * 10000), likeCount: '50', commentCount: '7'}, contentDetails: {duration: id === vid(4) ? 'PT50S' : 'PT14M2S'}}))});
       if (target.pathname === '/youtube/v3/channels') return json({items: target.searchParams.get('id').split(',').reverse().map(id => ({id, snippet: {title: `Real ${id.slice(0, 4)}`, customUrl: '@x'}, statistics: id === CH[0] ? {subscriberCount: '2400', videoCount: '31'} : {hiddenSubscriberCount: true, videoCount: '400'}}))});
@@ -62,7 +62,7 @@ const topicAnswer = (count, extra = {}) => JSON.stringify({
 test('a trend scan searches each keyword once, matches videos and channels by ID and keeps YouTube numbers as given', async t => {
   const net = network(), {trends, quota, ids} = setup(t, net);
   assert.equal(plannedUnits(2, 5), 202);
-  assert.throws(() => trends.queueScan({keywords: ['stoicism'], days: 31, perKeyword: 5, connector: ids.youtube, requestedBy: 'Owner'}), /Days to look back/);
+  assert.throws(() => trends.queueScan({keywords: ['stoicism'], days: 366, perKeyword: 5, connector: ids.youtube, requestedBy: 'Owner'}), /Days to look back/);
   assert.throws(() => trends.queueScan({keywords: ['stoicism', 'Stoicism'], days: 7, perKeyword: 5, connector: ids.youtube, requestedBy: 'Owner'}), /once/);
   assert.throws(() => trends.queueScan({keywords: Array.from({length: 21}, (_, n) => `keyword ${n}`), days: 7, perKeyword: 5, connector: ids.youtube, requestedBy: 'Owner'}), /daily cap of 2,000/);
   const queued = trends.queueScan({keywords: ['stoicism', 'marcus aurelius'], days: 7, perKeyword: 5, duration: 'long', connector: ids.youtube, requestedBy: 'Owner'});
@@ -71,7 +71,7 @@ test('a trend scan searches each keyword once, matches videos and channels by ID
   assert.equal(scan.status, 'completed');
   const searches = net.calls.filter(call => call.path === '/youtube/v3/search');
   assert.equal(searches.length, 2);
-  assert.equal(searches[0].query.order, 'viewCount');
+  assert.equal(searches[0].query.order, 'relevance');
   assert.equal(searches[0].query.videoDuration, 'long');
   assert.ok(Date.parse(searches[0].query.publishedAfter) < Date.now() - 6.9 * 86400000);
   assert.equal(scan.result.usage.youtube, 202);
@@ -155,7 +155,7 @@ test('copied trending wording, unknown refs and long titles never reach the page
 
 test('a scan stays inside the chosen niche and the owner\'s channel size, and Claude reads only what was kept', async t => {
   let asked = null;
-  const net = network({claude: body => { asked = body; return topicAnswer(8, {themes: [{name: 'Stoic routines', why: 'Most viewed videos promise a routine for a hard week.', refs: ['T1', 'T3']}]}); }}), {trends, ids, family, store} = setup(t, net);
+  const net = network({perSearch: 5, claude: body => { asked = body; return topicAnswer(8, {themes: [{name: 'Stoic routines', why: 'Most viewed videos promise a routine for a hard week.', refs: ['T1', 'T3']}]}); }}), {trends, ids, family, store} = setup(t, net);
   assert.throws(() => trends.queueScan({keywords: ['stoicism'], days: 7, perKeyword: 5, niche: {source: 'custom', text: 'the of and'}, connector: ids.youtube, requestedBy: 'Owner'}), /at least one word/);
   assert.throws(() => trends.queueScan({keywords: ['stoicism'], days: 7, perKeyword: 5, maxSubscribers: 0, connector: ids.youtube, requestedBy: 'Owner'}), /subscribers/);
   // The niche of a channel, sized to a channel of 3,000: 50 results per keyword are searched for the same 100 units.
@@ -164,14 +164,15 @@ test('a scan stays inside the chosen niche and the owner\'s channel size, and Cl
   assert.equal(queued.scope.plannedUnits.youtube, plannedUnits(2, 50));
   const scan = await trends.processNextScan();
   assert.equal(net.calls.find(call => call.path === '/youtube/v3/search').query.maxResults, '50');
-  assert.deepEqual(scan.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(4), vid(2)], 'channels of 2,400 subscribers fit; hidden sizes are left out');
-  assert.deepEqual(scan.result.leftOut, {niche: 0, bigger: 0, hidden: 2});
+  assert.deepEqual(scan.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(6), vid(4), vid(2)], 'channels of 2,400 subscribers fit; hidden sizes are left out');
+  assert.deepEqual(scan.result.leftOut, {niche: 0, bigger: 0, hidden: 3});
+  assert.deepEqual(scan.result.keywords.map(item => [item.count, item.kept]), [[5, 2], [5, 3]], 'each keyword says how many of its videos fit');
   assert.ok(scan.result.videos.every(video => video.description === undefined), 'the description excerpt is used for the match, not stored');
   trends.saveSettings({revision: 0, topicTokenLimit: 16000, youtubeDerivedUse: {approved: true, approvedOn: '2026-10-20', reference: 'Google case 12345', confirmedBy: 'Owner'}});
   trends.queueTopics(scan.id, {familyId: family.id, count: 8, connector: ids.claude, requestedBy: 'Owner'});
   const done = await trends.processNextTopics();
   assert.equal(done.status, 'completed');
-  assert.deepEqual(Object.keys(done.refIndex), ['T1', 'T3']);
+  assert.deepEqual(Object.keys(done.refIndex), ['T1', 'T3', 'T5'], 'only the kept videos reach Claude');
   const sent = JSON.stringify(asked.messages), system = asked.system.map ? asked.system.map(block => block.text).join('') : asked.system;
   assert.match(sent, /Trending stoic lesson 4/);
   assert.doesNotMatch(sent, /Trending stoic lesson 3/, 'a left-out video never reaches Claude');
@@ -180,10 +181,13 @@ test('a scan stays inside the chosen niche and the owner\'s channel size, and Cl
   assert.match(system, /at most maxSubscribers subscribers/);
   // Niche words the owner types: only the video whose description names Seneca stays.
   const words = setup(t, network()), done2 = words.trends.queueScan({keywords: ['stoicism'], days: 7, perKeyword: 5, niche: {source: 'custom', text: 'Roman thinkers', words: ['Seneca']}, connector: words.ids.youtube, requestedBy: 'Owner'});
-  assert.equal(done2.scope.plannedUnits.youtube, plannedUnits(1, 5));
+  assert.equal(done2.scope.plannedUnits.youtube, plannedUnits(1, 50), 'a niche scan looks through 50 videos a keyword for the same 100 units');
   const kept = await words.trends.processNextScan();
   assert.deepEqual(kept.result.videos.filter(video => !video.leftOut).map(video => video.videoId), [vid(3)]);
   assert.equal(kept.result.leftOut.niche, 2);
+  // 0.83: one video inside the niche is not a trend; Claude is not asked.
+  words.trends.saveSettings({revision: 0, topicTokenLimit: 16000, youtubeDerivedUse: {approved: true, approvedOn: '2026-10-20', reference: 'Google case 12345', confirmedBy: 'Owner'}});
+  assert.throws(() => words.trends.queueTopics(kept.id, {familyId: words.family.id, count: 8, connector: words.ids.claude, requestedBy: 'Owner'}), /Only 1 video of this scan fits the niche: too few/);
   // Nothing kept: Claude is not asked.
   const none = setup(t, network());
   none.trends.queueScan({keywords: ['stoicism'], days: 7, perKeyword: 5, niche: {source: 'custom', text: 'Crypto trading'}, connector: none.ids.youtube, requestedBy: 'Owner'});
@@ -226,4 +230,26 @@ test('0.76: a niche of subject and angle keeps only videos that join them; the A
   assert.throws(() => trends.nicheInput({source: 'family', familyId: family.id, angleWords: ['stone age']}), /topic words/);
   assert.deepEqual(trends.nicheInput({source: 'family', familyId: family.id, topicWords: ['Finance', 'money'], angleWords: ['stone age'], lookWords: ['stickman']}).topicWords, ['finance', 'money']);
   assert.ok(ids);
+});
+
+// 0.83 (owner test 2026-11-03: off-niche videos, "I&#39;m" in titles, topic ideas outside the niche).
+test('0.83: searches go by relevance with readable titles, and an idea outside the niche is marked', async t => {
+  const {YouTubePublicClient} = require('../intel-sources');
+  let seen = null;
+  const client = new YouTubePublicClient(KEYS.youtube, async url => { seen = new URL(String(url)); return json({items: [{id: {videoId: vid(1)}, snippet: {title: 'I&#39;m Bearish &amp; GEMS &quot;now&quot;', description: 'Caf&eacute; &#x1F600;', channelId: CH[0], channelTitle: 'A &amp; B', publishedAt: '2026-10-01T00:00:00Z'}}]}); });
+  const [item] = await client.search('stone age money', {publishedAfter: '2026-01-01T00:00:00Z', maxResults: 50});
+  assert.equal(seen.searchParams.get('order'), 'relevance');
+  assert.deepEqual([item.title, item.channelTitle, item.description], ['I\'m Bearish & GEMS "now"', 'A & B', 'Caf&eacute; 😀'], 'only the entities YouTube uses are decoded');
+  const topics = ['Stoic tools for a hard week at work', 'How a stoic gets through a hard week', 'One stoic question for every hard week', 'The hard week a stoic emperor survived', 'Five breakfast recipes for busy people'];
+  const net = network({perSearch: 5, claude: () => topicAnswer(5, {topics: topics.map(title => ({title, promise: 'You will leave with one practice you can try tonight.', whyClick: 'It names one concrete practice instead of a vague mindset.', hook: 'He ruled an empire, and every night he wrote three lines to himself.', angle: 'Shows the practice with a real day, not quotes alone.', format: 'long-form', refs: ['T1'], confidence: 'medium'}))})});
+  const {trends, ids, family} = setup(t, net);
+  trends.queueScan({keywords: ['stoicism'], days: 180, perKeyword: 5, niche: {source: 'custom', text: 'Stoicism for hard weeks', topicWords: ['stoic'], angleWords: ['hard week']}, connector: ids.youtube, requestedBy: 'Owner'});
+  const scan = await trends.processNextScan();
+  assert.equal(scan.scope.days, 180, 'a year back is allowed now; 180 days here');
+  assert.ok(scan.result.videos.filter(video => !video.leftOut).length >= 3);
+  trends.saveSettings({revision: 0, topicTokenLimit: 16000, youtubeDerivedUse: {approved: true, approvedOn: '2026-10-20', reference: 'Google case 12345', confirmedBy: 'Owner'}});
+  trends.queueTopics(scan.id, {familyId: family.id, count: 5, connector: ids.claude, requestedBy: 'Owner'});
+  const done = await trends.processNextTopics();
+  assert.equal(done.status, 'completed', done.error);
+  assert.deepEqual(done.result.topics.map(topic => !!topic.offNiche), [false, false, false, false, true], 'the breakfast idea names neither the subject nor the angle');
 });
