@@ -1356,3 +1356,83 @@ test('a long shot in a scene whose shots start on cues is split right after it, 
   assert.deepEqual(JSON.parse(room.planJobRow(result.job.id).scope).redraw.labels, added.map(shot => shot.label));
   assert.ok(fixed.plan.scenes.slice(2).every((other, k) => other.shots.length === 1 && other.shots[0].id === `sh-${k}`), 'no other scene changed');
 });
+
+// 0.82.2 (owner test 2026-11-03: a long-shot fix stopped at picture 2 of 5 started again at picture 1 on Resume): the
+// redraw keeps the AI's drawings with the job, so a resume never asks for them again and finds its finished pictures.
+test('a stopped long-shot fix resumes with its drawings and finished pictures kept', async t => {
+  const {AiError} = require('../ai');
+  const art = {viewBox: [600, 400], paths: [{d: 'M100 300 L500 300 L500 360 L100 360 Z', fill: '#C9A77C', stroke: '#1E1E1E', width: 4}, {d: 'M200 120 L400 120 L380 300 L220 300 Z', fill: '#FFFFFF', stroke: '#1E1E1E', width: 4}, {d: 'M210 160 L390 160 L384 220 L216 220 Z', fill: '#E5484D', stroke: '#1E1E1E', width: 3}, {d: 'M250 100 C230 70 270 50 250 20', fill: 'none', stroke: '#8A96A3', width: 5}, {d: 'M225 230 L245 230 L240 290 L226 288 Z', fill: '#E6E6E6'}, {d: 'M400 160 C470 160 470 260 390 260', fill: 'none', stroke: '#1E1E1E', width: 10}]};
+  const usage = {promptTokens: 2000, completionTokens: 1000, totalTokens: 3000}, asked = {review: 0, picture: 0};
+  let hold = true, started = () => {};
+  const ai = {team: () => ({}), complete: ({task, messages, signal, onStart}) => {
+    if (task === 'scenes') {
+      const input = JSON.parse(messages.at(-1).content);
+      asked.review++;
+      onStart();
+      return Promise.resolve({content: JSON.stringify({report: 'Drawn.', changes: input.drawNow.map((label, k) => ({label, reason: 'New shot on its words.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `The river market at dawn, traders and baskets, view ${k + 1}`, size: 'l'}, {kind: 'text', style: 'keyword', text: `Shot ${k + 1}`}]}}))}), usage, model: 'm', provider: 'claude'});
+    }
+    asked.picture++;
+    // The second picture is stopped the first time.
+    if (asked.picture === 2 && hold) return new Promise((resolve, reject) => { signal.addEventListener('abort', () => { onStart(); reject(new AiError('Stopped by you.', 499, {kind: 'stopped'})); }, {once: true}); started(); });
+    onStart();
+    return Promise.resolve({content: JSON.stringify(art), usage, model: 'm', provider: 'claude'});
+  }};
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', storyMap: false, withVoice: false});
+  base.narrate(330);
+  const {store, ids} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, browser: process.execPath, ai});
+  const content = store.content(base.content.id), inputs = room.inputs(content);
+  const drawnShot = (id, cue) => ({id, source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', ...(cue ? {cue} : {})});
+  // Two scenes of two sentences (11 s) with one shot each: each gets new shots, so the redraw has several pictures.
+  const scenes = [{id: 'sc-hook', sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', shots: [drawnShot('sh-hook')]},
+    {id: 'sc-a', sentenceStart: 2, sentenceEnd: 3, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot('sh-a')]},
+    {id: 'sc-b', sentenceStart: 4, sentenceEnd: 5, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot('sh-b')]},
+    ...Array.from({length: 55}, (_, k) => ({id: `sc-${k}`, sentenceStart: k + 6, sentenceEnd: k + 6, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot(`sh-${k}`)]}))];
+  store.transaction(() => room.insertManifest({inputs, content, scenes, summary: 'Long shots', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  const manifest = latestManifest(room, content.id);
+  const fixed = room.fixLongShots(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  assert.equal(room.publicPlanJob(room.planJobRow(fixed.job.id)).redraw.purpose, 'long');
+  const busy = new Promise(resolve => { started = resolve; }), run = room.processNextPlan();
+  await busy;
+  room.stopPlan(fixed.job.id);
+  await run;
+  let job = room.publicPlanJob(room.planJobRow(fixed.job.id));
+  assert.equal(job.status, 'paused');
+  assert.equal(job.progress.review, 'done', 'the new drawings are kept with the job');
+  assert.equal(job.progress.pictures, 1, 'the first picture is kept');
+  hold = false;
+  room.resumePlan(fixed.job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(fixed.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.equal(asked.review, 1, 'the AI was not asked for the drawings again');
+  assert.equal(asked.picture, fixed.added + 1, 'each picture was asked once, plus the one that was stopped');
+});
+
+// 0.82.2: kept drawings are kept only when the AI drew something, so a deliberate retry after "no drawings" asks again.
+test('a redraw that came back without drawings asks the AI again on a retry', async t => {
+  let asked = 0;
+  const usage = {promptTokens: 2000, completionTokens: 1000, totalTokens: 3000};
+  const ai = {team: () => ({}), complete: ({task, messages, onStart}) => {
+    asked++;
+    onStart();
+    const input = JSON.parse(messages.at(-1).content);
+    return Promise.resolve({content: JSON.stringify({report: 'Drawn.', changes: asked === 1 ? [] : input.drawNow.map(label => ({label, reason: 'New shot on its words.', sketch: {engine: 'stickman', elements: [{kind: 'text', style: 'keyword', text: 'Stones'}]}}))}), usage, model: 'm', provider: 'claude'});
+  }};
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', storyMap: false, withVoice: false});
+  base.narrate(330);
+  const {store, ids} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, browser: process.execPath, ai});
+  const content = store.content(base.content.id), inputs = room.inputs(content);
+  const drawnShot = id => ({id, source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: ''});
+  const scenes = [{id: 'sc-hook', sentenceStart: 1, sentenceEnd: 1, purpose: 'hook', direction: '', onScreenText: '', shots: [drawnShot('sh-hook')]},
+    {id: 'sc-a', sentenceStart: 2, sentenceEnd: 3, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot('sh-a')]},
+    ...Array.from({length: 57}, (_, k) => ({id: `sc-${k}`, sentenceStart: k + 4, sentenceEnd: k + 4, purpose: 'explain', direction: '', onScreenText: '', shots: [drawnShot(`sh-${k}`)]}))];
+  store.transaction(() => room.insertManifest({inputs, content, scenes, summary: 'Long shots', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  const manifest = latestManifest(room, content.id);
+  const fixed = room.fixLongShots(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  await room.processNextPlan();
+  assert.equal(room.planJobRow(fixed.job.id).status, 'quality_failed');
+  room.retryPlan(fixed.job.id, {});
+  await room.processNextPlan();
+  assert.equal(room.planJobRow(fixed.job.id).status, 'completed', room.planJobRow(fixed.job.id).error);
+  assert.equal(asked, 2, 'the retry asked the AI again');
+});

@@ -246,3 +246,20 @@ The owner's test of 2026-11-03: "Fix with ChatGPT" answered "Those scenes alread
   the Editing Room. The inputs card, the plan card, the drawing row and the approval card keep their facts and point to
   the road. The road's five steps sit in one row where there is room, each as tall as its content, with small buttons.
 - "Story & engines" starts folded, and its chapter list is a dropdown of its own.
+
+### The process tab as sketched; a stopped fix resumes where it was (0.82.2)
+
+The owner's review of 2026-11-03 found the road "too generic and too ugly" and drew what it should be; the same day a
+long-shot fix stopped at picture 2 of 5 started again at picture 1 on Resume.
+
+- The road is four boxes: the storyboard (no button; "See the storyboard" is a link in its text); approve the
+  storyboard ("Fix the long shots with" over Claude and ChatGPT side by side, or "Review and approve"; "Show the
+  problems" is a link); draw the scenes (one centred button: Draw the remaining, Stop drawing or Draw them all again);
+  approve the visuals, then edit (Approve visuals, then Go to the Editing Room). Three a row, each as tall as its row,
+  with a Done / Next / Later chip and "n of 4 done" at the top; two a row in a narrow window, one on a phone.
+- A redraw job (the long-shot fix, a change asked in words, undesigned shots) keeps the AI's drawings with the job before
+  it asks for pictures, so a resume never asks for them again and finds the finished pictures by their words; a resumed
+  job reserves nothing more for the drawings. A redraw that covers many scenes keeps its review chunk by chunk. Drawings
+  are kept only when the AI drew something: a deliberate retry after "Claude returned no drawings" asks again. Designed frames are kept per job too, so a resumed compose never designs
+  a finished shot twice. The job's row says what it is: "Drawing 4 new shots (long-shot fix)", "Changing S12B as you
+  asked" or "Drawings for 3 undesigned shots".

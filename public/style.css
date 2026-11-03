@@ -225,19 +225,32 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .sound-fold{margin:6px 0 10px;border:1px solid #e3e8df;border-radius:8px;background:#fbfcf9}.sound-fold>summary{cursor:pointer;padding:10px 12px;font-weight:600;font-size:13px}.sound-fold[open]>summary{border-bottom:1px solid #e3e8df}.sound-fold>.st-library,.sound-fold>.st-cues{padding:10px}
 /* 0.82 (owner review 2026-11-02): the road from storyboard to editing, the storyboard's own heading, problems that jump
    to their scene, and a short highlight where a jump lands. */
-.scene-road{margin-bottom:16px}.road-steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-.road-steps>li{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #e3e8df;border-radius:10px;background:#fbfcf9}
-.road-steps>li.done{background:#f1f7f2;border-color:#cfe2d6}.road-steps>li.now{border-color:#c46b2c;background:#fff8ef;box-shadow:0 0 0 1px #e3b98f}
-.road-mark{flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:#e3e8df;color:#2c3b33}.road-steps>li.done .road-mark{background:#2f6b4f;color:#fff}.road-steps>li.now .road-mark{background:#c46b2c;color:#fff}
-.road-steps strong{display:block;font-size:13px}.road-steps small{display:block;color:#5d6a62;font-size:12px;line-height:1.45;margin-top:2px}.road-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}.road-actions:empty{display:none}
 .built-note{margin:12px 0 4px;padding:9px 12px;border-radius:8px;background:#f1f7f2;border:1px solid #cfe2d6;font-size:12px;color:#28463a;line-height:1.5}
 .board-title{margin:22px 0 10px;padding-top:14px;border-top:1px solid #e3e8df;font-size:17px}
 .scene-jump{border:0;background:none;padding:0;font:inherit;font-weight:700;color:#8e3b28;text-decoration:underline;cursor:pointer}
 .flash{animation:flash 1.6s ease-out}@keyframes flash{0%{box-shadow:0 0 0 4px #e3b98f}100%{box-shadow:0 0 0 0 transparent}}
-.road-steps>li{min-width:0}.road-steps>li>div{min-width:0}.road-actions .button,.handoff-record .text-button{white-space:normal;text-align:left;max-width:100%}
-/* 0.82.1 (owner review 2026-11-03: the top steps were taller than their content): five compact steps in one row where
-   there is room, each as tall as its own content, with small buttons side by side. */
-.road-steps{grid-template-columns:repeat(auto-fit,minmax(140px,1fr));align-items:start}
-.road-steps>li{padding:9px 10px}
-.road-actions .button{padding:6px 10px;font-size:12px;min-height:0;line-height:1.3}
+.road-actions .button,.handoff-record .text-button{white-space:normal;max-width:100%}
 .story-chapters{margin-top:8px}.story-chapters>summary{cursor:pointer;font-size:12px;color:#56645b;padding:4px 2px}
+
+/* 0.82.2 (owner sketch 2026-11-03): the road as four boxes, three a row, each as tall as its row, a state label on top;
+   two buttons share the bottom of their box side by side, a lone button sits centred. */
+.scene-road{margin-bottom:16px}.scene-road .production-card-head{align-items:center}
+.road-count{font-size:12px;font-weight:600;color:#2f6b4f;background:#eef6f0;border:1px solid #cfe2d6;border-radius:999px;padding:4px 10px}
+.road-steps{list-style:none;margin:4px 0 0;padding:0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.road-step{display:flex;flex-direction:column;min-width:0;padding:14px 16px 16px;border:1px solid #e1e7df;border-radius:12px;background:#fff;box-shadow:0 1px 3px rgba(28,52,40,.06)}
+.road-step.done{border-top:3px solid #2f6b4f;background:#fbfdfb}
+.road-step.now{border:1.5px solid #c46b2c;background:#fffaf4;box-shadow:0 4px 14px rgba(196,107,44,.12)}
+.road-step.later{background:#fafbf9}.road-step.later .road-text{color:#7a857e}
+.road-top{display:flex;align-items:center;gap:10px}
+.road-top strong{flex:1;font-size:14px;line-height:1.3;color:#1f2f27}
+.road-mark{flex:0 0 28px;height:28px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:#e6ebe4;color:#2c3b33}
+.road-step.done .road-mark{background:#2f6b4f;color:#fff}.road-step.now .road-mark{background:#c46b2c;color:#fff}
+.road-state{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px;background:#eef1ec;color:#66736b}
+.road-step.done .road-state{background:#e3f1e7;color:#2f6b4f}.road-step.now .road-state{background:#fbe6d4;color:#a8551d}
+.road-text{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:#4f5c55}
+.road-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:#2f6b4f;text-decoration:underline;cursor:pointer}
+.road-actions{margin-top:auto;padding-top:14px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.road-actions .button{flex:1 1 0;min-width:0;padding:8px 14px;font-size:13px}.road-actions .button:only-child{flex:0 1 auto;min-width:60%}
+.road-ask{flex:0 0 100%;text-align:center;font-size:12px;font-weight:600;color:#5d6a62;margin-bottom:-2px}
+@media (max-width:900px){.road-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.road-steps{grid-template-columns:1fr}}
