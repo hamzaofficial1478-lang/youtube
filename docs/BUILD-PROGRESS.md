@@ -175,7 +175,7 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
   with too few shots, "Fix the long shots" (`fixLongShots`, edit `add-shots`, a redraw of only the new shots); picture
   entrances by finish, the guide's wording, `fs.hand` in the channel style window, the drawing settings and a hand
   warning in Room 04, `drawn-scene/29`.
-- **Tested:** `npm run check`; the full `npm test` (result below); new unit tests (thirty one-shot scenes over the pace:
+- **Tested:** `npm run check`; the full `npm test` (419 tests: 416 pass, 3 skipped because they need Windows, none failed); new unit tests (thirty one-shot scenes over the pace:
   the drawing count, 30 queued, Stop cancels the 30 waiting, "Draw the remaining" queues them again, the long-shot fix
   makes a new revision without hold problems where every scene keeps its first shot's ID and queues a redraw of only the
   new shots with its ask; a part whose shots hold over the 4.5 s pace is asked again with that finding and the plan has
