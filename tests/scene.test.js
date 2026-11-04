@@ -1444,3 +1444,90 @@ test('a redraw that came back without drawings asks the AI again on a retry', as
   assert.equal(room.planJobRow(fixed.job.id).status, 'completed', room.planJobRow(fixed.job.id).error);
   assert.equal(asked, 2, 'the retry asked the AI again');
 });
+
+// 0.86 (owner review 2026-11-04, two screenshots).
+test('0.86: Approve visuals waits for every drawing, Clear keeps the job being drawn, revoked drawings are deleted or redone, and a rebuilt storyboard is kept, chosen or merged', async t => {
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', storyMap: false});
+  const {store, ids, dataRoot} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot, browser: process.execPath});
+  const content = store.content(base.content.id), inputs = room.inputs(content), count = splitSentences(content.script, 'en-US').length;
+  const sketch = set => ({set, camera: 'still', elements: [{kind: 'figure', pose: 'walk', x: 0.4}, {kind: 'prop', prop: 'campfire', x: 0.7, y: 0.74}]});
+  // Scenes of two sentences with three drawn shots each (about 3 s a shot).
+  const plan = (tag, set) => Array.from({length: Math.ceil(count / 2)}, (_, k) => ({id: `sc-${tag}-${k}`, sentenceStart: 2 * k + 1, sentenceEnd: Math.min(count, 2 * k + 2), purpose: k === 0 ? 'hook' : 'explain', direction: '', onScreenText: '',
+    shots: Array.from({length: 3}, (_, j) => ({id: `sh-${tag}-${k}-${j}`, source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', sketch: sketch(set)}))}));
+  store.transaction(() => room.insertManifest({inputs, content, scenes: plan('a', 'nature'), summary: 'First', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  let manifest = latestManifest(room, content.id);
+  assert.deepEqual(manifest.issues, []);
+  approvePlan(room, manifest);
+  manifest = latestManifest(room, content.id);
+  const shotsOf = m => m.plan.scenes.flatMap(scene => scene.shots), state = () => room.state().contents.find(item => item.contentId === content.id);
+  // A drawn shot's drawing as the program records it (today's sketch, or out of date).
+  const drawFake = (shot, current = true) => {
+    const id = `as-${shot.id}-${Math.random().toString(16).slice(2, 8)}`, rel = `visual-assets/${id}.mp4`;
+    fs.mkdirSync(path.join(dataRoot, 'visual-assets'), {recursive: true});
+    fs.writeFileSync(path.join(dataRoot, rel), `drawing ${id}`);
+    const bytes = fs.readFileSync(path.join(dataRoot, rel)), sketchHash = current ? createHash('sha256').update(JSON.stringify({sketch: shot.sketch, engine: Sk.VERSION})).digest('hex') : 'old';
+    store.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, base.family.id, content.id, shot.id, 'drawn', '{}', 'fixture', 'video', rel, null, createHash('sha256').update(bytes).digest('hex'), bytes.length, 'video/mp4', JSON.stringify({kind: 'video', durationSeconds: 9, width: 1280, height: 720}), JSON.stringify({basis: 'own-drawing', sketchHash}), 'Owner', new Date().toISOString());
+    store.transaction(() => room.selectTx(content.id, shot.id, id, 'Owner', null, 'draw'));
+    return {id, rel};
+  };
+  const first = shotsOf(manifest).map(shot => drawFake(shot, shot !== shotsOf(manifest)[0]));
+  const approve = () => room.approveVisuals(manifest.id, {approvedBy: 'Owner', confirmations: {rightsReviewed: true, sequenceReviewed: true, warningsAccepted: true}});
+  // One drawing is out of date: approving waits; so it does while the scenes are being drawn.
+  await assert.rejects(approve(), /1 drawn shot is not drawn with today's drawing yet/);
+  const fresh = drawFake(shotsOf(manifest)[0]);
+  store.db.prepare("INSERT INTO visual_jobs(id,family_id,content_id,manifest_id,shot_id,kind,capability_id,status,scope,attempts,created_by,created_at,updated_at) VALUES('dj-1',?,?,?,?,'draw','drawn-scene','running','{}',0,'Owner',?,?)").run(base.family.id, content.id, manifest.id, shotsOf(manifest)[0].id, new Date().toISOString(), new Date().toISOString());
+  await assert.rejects(approve(), /being drawn now/);
+  // Clear leaves the storyboard job whose plan is being drawn.
+  store.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at,manifest_id) VALUES('pj-1',?,?,'completed','{}',1,'Owner',?,?,?)").run(base.family.id, content.id, new Date().toISOString(), new Date().toISOString(), manifest.id);
+  assert.deepEqual(room.clearPlanJobs(content.id), {cleared: 0});
+  store.db.prepare("UPDATE visual_jobs SET status='completed' WHERE id='dj-1'").run();
+  const approval = await approve();
+  // Revoked: the old drawings and the revoked approval's drawings go, for good; the revoke reason reaches the next storyboard.
+  room.revokeApproval(approval.id, {by: 'Owner', reason: 'The scenes were not matching the stone age.'});
+  assert.throws(() => room.redoRevoked(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision - 1}), /another tab/);
+  const redo = room.redoRevoked(manifest.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: manifest.revision});
+  const redoScope = JSON.parse(room.planJobRow(redo.job.id).scope);
+  assert.equal(redoScope.redraw.labels.length, shotsOf(manifest).length);
+  assert.equal(redoScope.redraw.purpose, 'redo');
+  assert.match(redoScope.redraw.ask, /revoked these visuals: "The scenes were not matching the stone age\."/);
+  store.db.prepare("UPDATE scene_plan_jobs SET status='cancelled' WHERE id=?").run(redo.job.id);
+  const deleted = room.deleteRevokedDrawings(content.id, {requestedBy: 'Owner'});
+  assert.equal(deleted.deleted, first.length + 1, 'the revoked drawings and the unused out-of-date one');
+  assert.ok(first.every(item => !fs.existsSync(path.join(dataRoot, item.rel))) && !fs.existsSync(path.join(dataRoot, fresh.rel)), 'their files left this PC');
+  assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM visual_selections WHERE content_id=?').get(content.id).n, 0);
+  assert.equal(state().approvals[0].clearedAt !== undefined, true);
+  assert.throws(() => room.deleteRevokedDrawings(content.id, {requestedBy: 'Owner'}), /no revoked visuals/);
+  assert.deepEqual(state().drawing, {total: shotsOf(manifest).length, current: 0, outdated: 0, missing: shotsOf(manifest).length, active: 0});
+  // Building again: keep the storyboard there is (or revoke its visuals), then choose.
+  const build = extra => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude, ...extra});
+  const kept = build({previous: 'keep'});
+  assert.deepEqual(JSON.parse(room.planJobRow(kept.job.id).scope).keep, {manifestId: manifest.id, revision: manifest.revision});
+  assert.match(planMessages(JSON.parse(room.planJobRow(kept.job.id).scope).parts[0].promptInput)[0].content + planMessages(JSON.parse(room.planJobRow(kept.job.id).scope).parts[0].promptInput)[1].content, /REJECTED EARLIER VISUALS[\s\S]*not matching the stone age/);
+  // The new storyboard arrives (as the job would make it).
+  const newRow = store.transaction(() => room.insertManifest({inputs, content, scenes: plan('b', 'prehistoric'), summary: 'Second', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  store.db.prepare("UPDATE scene_plan_jobs SET status='completed', manifest_id=? WHERE id=?").run(newRow.id, kept.job.id);
+  const compare = state().compare;
+  assert.deepEqual([compare.jobId, compare.fresh.revision, compare.earlier.revision, compare.mergeable], [kept.job.id, newRow.revision, manifest.revision, true]);
+  // Merge: the AI picks per stretch; the merged plan keeps every shot's ID (so drawings carry over).
+  const asked = [];
+  room.ai.complete = async ({messages}) => { asked.push(messages); return {content: JSON.stringify({explain: 'The stone-age land fits the opening; the rest is better in the new one.', picks: [{block: 1, use: 'previous', why: 'Its hook reads better.'}]}), usage: {promptTokens: 900, completionTokens: 100, totalTokens: 1000}}; };
+  const merged = await room.chooseStoryboard(kept.job.id, {choice: 'merge', requestedBy: 'Owner', connector: ids.claude, expectedRevision: newRow.revision});
+  assert.match(asked[0][1].content, /"previous":\[\{"label":"S01A"/);
+  const ids0 = merged.manifest.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.id));
+  assert.ok(ids0[0].startsWith('sh-a-0-') && ids0.slice(3).every(id => id.startsWith('sh-b-')), ids0.slice(0, 5).join(' '));
+  assert.equal(merged.manifest.source, 'merge');
+  assert.equal(state().compare, null, 'chosen once');
+  await assert.rejects(room.chooseStoryboard(kept.job.id, {choice: 'new', requestedBy: 'Owner', expectedRevision: merged.manifest.revision}), /already made/);
+  assert.equal(store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='storyboard_merge'").get().status, 'settled');
+  // Building again with "replace" revokes approved visuals and offers no choice afterwards; "go back" copies the earlier plan exactly.
+  const again = build({previous: 'revoke'});
+  assert.equal(JSON.parse(room.planJobRow(again.job.id).scope).keep, undefined);
+  store.db.prepare("UPDATE scene_plan_jobs SET status='cancelled' WHERE id=?").run(again.job.id);
+  const third = build({previous: 'keep'}), now3 = latestManifest(room, content.id);
+  const thirdRow = store.transaction(() => room.insertManifest({inputs, content, scenes: plan('c', 'cave'), summary: 'Third', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
+  store.db.prepare("UPDATE scene_plan_jobs SET status='completed', manifest_id=? WHERE id=?").run(thirdRow.id, third.job.id);
+  const back = await room.chooseStoryboard(third.job.id, {choice: 'previous', requestedBy: 'Owner', expectedRevision: thirdRow.revision});
+  assert.deepEqual(back.manifest.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.id)), now3.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.id)), 'the earlier storyboard comes back with its own shots');
+  assert.equal(back.manifest.source, 'choice');
+});

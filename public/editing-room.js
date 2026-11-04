@@ -46,7 +46,8 @@ function editRoad(content, engineReady) {
     {title: 'Watch it and change it', done: !!rendered, text: live ? 'Press Play to watch the edit as it is now, before any render. Click a clip on the timeline to change it, or tell Claude what to change.' : 'After the edit is drafted.', buttons: live ? action('▶ Play the edit', 'tl-goto-player', '', 'primary') : ''},
     {title: 'Render the video', done: !!rendered, text: running ? `Rendering now: ${esc(running.progress?.stage || 'waiting for the render worker')}. ${link('See it ↓', 'render-latest')}` : rendered ? `Rendered at ${renderSizeName(rendered)}. ${link('Watch it ↓', 'render-latest')}` : !engineReady ? 'Check and pin FFmpeg first (Render engine, below).' : 'FFmpeg makes the video file on this PC, free: 360p is quickest, 1440p sharpest.',
       buttons: live && engineReady && !running ? action(rendered ? 'Render again' : 'Render this edit', 'tl-render', edit.id, rendered ? 'secondary' : 'primary') : ''},
-    {title: 'Add music, then review', done: false, text: 'Room 07 adds music and sound effects and levels the narration (a new edit to render). Room 08 then checks the render and you approve it.', buttons: rendered ? room07 : ''},
+    // 0.86: a draft already carries the library's music and effects when the program could add them.
+    {title: edit?.timeline?.audio?.music?.enabled || edit?.timeline?.audio?.sfx?.enabled ? 'Check the music, then review' : 'Add music, then review', done: false, text: edit?.timeline?.audio?.music?.enabled || edit?.timeline?.audio?.sfx?.enabled ? `The program added ${[edit.timeline.audio.music?.enabled ? 'music' : '', edit.timeline.audio.sfx?.enabled ? 'sound effects' : ''].filter(Boolean).join(' and ')} from your sound library when it drafted this edit; listen in the render and change them in Room 07 if needed. Room 08 then checks the render and you approve it.` : 'Room 07 adds music and sound effects and levels the narration (a new edit to render). Room 08 then checks the render and you approve it.', buttons: rendered ? room07 : ''},
   ];
   const next = steps.findIndex(step => !step.done), stateOf = k => (steps[k].done ? 'done' : k === next ? 'now' : 'later');
   return `<section class="production-card scene-road edit-road"><div class="production-card-head"><div><span class="micro-label">WHAT HAPPENS NEXT</span><h2>From the approved storyboard to a finished video</h2></div><span class="road-count">${steps.filter(step => step.done).length} of ${steps.length} done</span></div>
@@ -60,7 +61,8 @@ function editHow(edit) {
     <li><b>The critic</b> then checks it for slideshow risk, long holds and lazy repeats${fixed ? `; the brain fixed ${fixed} of those itself` : ''}. What is left needs your taste or new visuals.</li>
     <li><b>Drawn shots</b> are drawn by the drawing engine of Room 04, timed to the narrator's words, in your style and looks.</li>
     <li><b>You</b> change anything: click a clip on the timeline and change it in the inspector, or type what you want and ${state.ai?.team?.claude || !state.ai?.team?.chatgpt ? 'Claude' : 'ChatGPT'} proposes the changes (this uses tokens; nothing changes until you apply them).</li>
-    <li><b>FFmpeg</b> makes the video file when you press Render. <b>Room 07</b> adds the music, sound effects and levels.</li></ul></details>`;
+    <li><b>Music and sound effects</b> ${edit.autoAudio ? `were added by the program when it drafted this edit: ${esc(edit.autoAudio.join('; '))}.` : 'come from Room 07 (Levels and mix).'} Change them in the timeline's Audio row or by asking the editor.</li>
+    <li><b>FFmpeg</b> makes the video file when you press Render.</li></ul></details>`;
 }
 // Captions (P07): the rail the render burns in, and the SRT file for YouTube's own player.
 function captionLine(group) {

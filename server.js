@@ -303,15 +303,21 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(visualSettings&&req.method==='POST')return json(res,200,sceneRoom.saveSettings(visualSettings[1],body));
         const planClear=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plan-jobs\/clear$/);
         if(planClear&&req.method==='POST')return json(res,200,sceneRoom.clearPlanJobs(planClear[1]));
+        // Delete the drawings of revoked visuals (0.86).
+        const revokedDelete=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/revoked-drawings\/delete$/);
+        if(revokedDelete&&req.method==='POST')return json(res,200,sceneRoom.deleteRevokedDrawings(revokedDelete[1],body));
         const scenePlan=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plans$/);
         if(scenePlan&&req.method==='POST')return json(res,200,sceneRoom.createPlan(scenePlan[1],body));
         // Stop and Resume of a storyboard (0.81).
         const planPause=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/(stop|resume)$/);
         if(planPause&&req.method==='POST')return json(res,200,planPause[2]==='stop'?sceneRoom.stopPlan(planPause[1]):sceneRoom.resumePlan(planPause[1],body));
+        // The new storyboard, the earlier one, or a merge of both (0.86).
+        const planChoose=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/choose$/);
+        if(planChoose&&req.method==='POST')return json(res,200,await sceneRoom.chooseStoryboard(planChoose[1],body));
         const planRetry=pathname.match(/^\/api\/scene-plan-jobs\/([a-f0-9-]+)\/retry$/);
         if(planRetry&&req.method==='POST')return json(res,200,sceneRoom.retryPlan(planRetry[1],body));
-        const manifestAction=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/(revisions|review|search-all|pick-top|generate-all|draw-all|visual-approval|redesign-frame|redraw-undesigned|shot-picture|change-shot|draw-stop|fix-long-shots)$/);
-        if(manifestAction&&req.method==='POST'){const [,id,kind]=manifestAction;const handler={revisions:()=>sceneRoom.editManifest(id,body),review:()=>sceneRoom.reviewManifest(id,body),'search-all':()=>sceneRoom.queueSearchAll(id,body),'pick-top':()=>sceneRoom.queuePickTop(id,body),'generate-all':()=>sceneRoom.queueGenerateAll(id,body),'draw-all':()=>sceneRoom.queueDrawAll(id,body),'visual-approval':()=>sceneRoom.approveVisuals(id,body),'redesign-frame':()=>sceneRoom.redesignFrame(id,body),'draw-stop':()=>sceneRoom.stopDrawing(id),'fix-long-shots':()=>sceneRoom.fixLongShots(id,body),'redraw-undesigned':()=>sceneRoom.redrawUndesigned(id,body),'shot-picture':()=>sceneRoom.pictureForShot(id,body),'change-shot':()=>sceneRoom.changeShot(id,body)}[kind];return json(res,200,await handler());}
+        const manifestAction=pathname.match(/^\/api\/scene-manifests\/([a-f0-9-]+)\/(revisions|review|search-all|pick-top|generate-all|draw-all|visual-approval|redesign-frame|redraw-undesigned|shot-picture|change-shot|draw-stop|fix-long-shots|redo-revoked)$/);
+        if(manifestAction&&req.method==='POST'){const [,id,kind]=manifestAction;const handler={revisions:()=>sceneRoom.editManifest(id,body),review:()=>sceneRoom.reviewManifest(id,body),'search-all':()=>sceneRoom.queueSearchAll(id,body),'pick-top':()=>sceneRoom.queuePickTop(id,body),'generate-all':()=>sceneRoom.queueGenerateAll(id,body),'draw-all':()=>sceneRoom.queueDrawAll(id,body),'visual-approval':()=>sceneRoom.approveVisuals(id,body),'redesign-frame':()=>sceneRoom.redesignFrame(id,body),'draw-stop':()=>sceneRoom.stopDrawing(id),'fix-long-shots':()=>sceneRoom.fixLongShots(id,body),'redraw-undesigned':()=>sceneRoom.redrawUndesigned(id,body),'shot-picture':()=>sceneRoom.pictureForShot(id,body),'change-shot':()=>sceneRoom.changeShot(id,body),'redo-revoked':()=>sceneRoom.redoRevoked(id,body)}[kind];return json(res,200,await handler());}
         const shotAction=pathname.match(/^\/api\/scene-shots\/(search|generate|select)$/);
         if(shotAction&&req.method==='POST'){const kind=shotAction[1];return json(res,200,kind==='search'?sceneRoom.queueSearch(body):kind==='generate'?sceneRoom.queueGenerate(body):sceneRoom.select(body));}
         const candidateImport=pathname.match(/^\/api\/visual-candidates\/([a-f0-9-]+)\/import$/);

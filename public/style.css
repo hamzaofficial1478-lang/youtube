@@ -276,3 +276,10 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .trend-measures>div{border:1px solid #e1e7df;border-radius:10px;padding:10px 12px;background:#fbfcfa}.trend-measures b{font-size:13px}
 .trend-measures p{margin:4px 0 0;font-size:12px;line-height:1.5;color:#5d6a62}
 @media (max-width:900px){.trend-measures{grid-template-columns:1fr}}
+/* 0.86: two storyboards to choose between, the revoked visuals box, and the build-again questions */
+.road-choice{margin:12px 0 4px;padding:12px 14px;border:1px solid #e3b98f;border-left:4px solid #c46b2c;border-radius:8px;background:#fff8f0;font-size:13px;line-height:1.5;color:#3d2a1a}
+.road-choice p{margin:6px 0}
+.revoked-box{margin:10px 0}
+.revoked-box .card-actions{flex-wrap:wrap}
+.strong-warning label.check{display:flex;flex-direction:row;gap:8px;align-items:flex-start;font-weight:500;margin:6px 0}.strong-warning label.check input{width:auto;min-height:0;height:auto;flex:none;margin:3px 0 0}
+.strong-warning p{margin:0 0 6px}
