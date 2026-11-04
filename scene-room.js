@@ -842,8 +842,8 @@ class SceneRoom {
     this.store.content(contentId);
     // A paused job is not finished (0.81): it keeps its Resume, so it is never cleared. Neither is the job whose plan is
     // still being drawn (0.86, owner review 2026-11-04: "Clear them" took away the row of the drawing in progress).
-    const latest = this.latestManifestRow(contentId), drawing = latest && this.db.prepare("SELECT 1 FROM visual_jobs WHERE content_id=? AND kind='draw' AND status IN ('queued','running')").get(contentId) ? latest.id : '';
-    const result = this.db.prepare("UPDATE scene_plan_jobs SET cleared_at=? WHERE content_id=? AND cleared_at IS NULL AND status NOT IN ('queued','running','paused') AND COALESCE(manifest_id,'')<>?").run(now(), contentId, drawing);
+    const latest = this.latestManifestRow(contentId), drawing = latest && this.db.prepare("SELECT 1 FROM visual_jobs WHERE content_id=? AND kind='draw' AND status IN ('queued','running')").get(contentId) ? latest.id : null;
+    const result = this.db.prepare("UPDATE scene_plan_jobs SET cleared_at=? WHERE content_id=? AND cleared_at IS NULL AND status NOT IN ('queued','running','paused') AND (? IS NULL OR COALESCE(manifest_id,'')<>?)").run(now(), contentId, drawing, drawing);
     return {cleared: Number(result.changes)};
   }
   planJobRow(id) { const row = this.db.prepare('SELECT * FROM scene_plan_jobs WHERE id=?').get(id); requireValue(row, 'Scene plan job not found.', 404); return row; }
