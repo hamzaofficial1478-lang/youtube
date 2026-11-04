@@ -1,0 +1,1314 @@
+[
+ {
+  "id": "craft.the-craft-bar",
+  "title": "Would a proud illustrator ship this?",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "checklist",
+  "when": "Judging any drawn or designed shot before it is used.",
+  "summary": "The test of every frame is whether a proud human illustrator would ship it, or whether it is mechanical shape-assembly. The common tells have known fixes.",
+  "checks": [
+   "Subjects built from hand-placed points over real anatomy, not ellipses and capsules.",
+   "A style changes the mark, the edge and the order of marks, not only the palette.",
+   "An idea shown as a real machine or action, not boxes and arrows.",
+   "Lines end on another line or an edge, never in the air; textures thin out where a surface turns away.",
+   "Parts touch the way real ones do (resting, bolted, butted); nothing floats or sinks in.",
+   "Strokes vary: long ones fast, fiddly ones slow, thick-thin and tapered.",
+   "Drifts are hand-placed with bare rests, never even scatter or one flower stamped 200 times.",
+   "Every element in frame has a one-line reason, or it is not drawn.",
+   "Marks are made in the order a hand makes them; nothing fades or scales in.",
+   "People have a canon, joints within limits, five fingers where seen and weight over the feet.",
+   "The same character is drawn the same in every shot.",
+   "Words sit on their own ground (a plate, a calm patch), never over busy art or a face."
+  ],
+  "avoid": [
+   "Flat colour fields with no light, wash or cast shadow.",
+   "Gradient sky, disc sun and oval bokeh standing in for a sky.",
+   "A hold where the subject stops (the camera may creep; the subject keeps living)."
+  ],
+  "tags": [
+   "craft",
+   "quality",
+   "drawing"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/craft-bar.md, restated in our own words.",
+  "priority": 88
+ },
+ {
+  "id": "craft.detail-pass",
+  "title": "The detail pass: look inside the silhouette",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "checklist",
+  "when": "Before any picture, character or recreation is shown.",
+  "summary": "A silhouette filled with texture is not a drawing. Crop into faces, hands, feet and joins and check the interior lines a viewer looks at; every medium says them in its own way, but none may leave them out.",
+  "checks": [
+   "Faces: a mouth line, the chin, nose and nostrils, both eyelids and the inner corner of the eye, brows, the ear's inner rim.",
+   "Hands, paws and feet: fingers or toes separated, knuckles or pads where they show, nails or claws, a contact shadow where they meet the ground.",
+   "Joins between forms: where a leg meets the body, an arm crosses the chest, cloth folds at a joint, as thinner inner contours.",
+   "Markings and patterns follow the surface of the form, not the picture plane."
+  ],
+  "tags": [
+   "craft",
+   "detail",
+   "faces"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/craft-bar.md, restated in our own words.",
+  "priority": 80
+ },
+ {
+  "id": "craft.no-dead-air",
+  "title": "No dead air: something changes every second",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Any shot, edit or designed animation that moves.",
+  "summary": "In anything that moves, something visibly changes in every second from the first frame. A hold means the camera creeps while the subject keeps living; a declared hold is only for words being read or an end card.",
+  "do": [
+   "Have motion in the first frame (open mid-move).",
+   "On a hold, let the subject breathe, blink or react while the camera creeps 3-6%.",
+   "Give words time to read: at least max(0.7 s, 0.3 s per word), counted from the frame the last word is whole."
+  ],
+  "avoid": [
+   "Opening on an empty or still frame.",
+   "A creeping camera over a frozen picture (a tool sees change, the eye sees a still)."
+  ],
+  "numbers": {
+   "minReadSeconds": "max(0.7, 0.3 per word)",
+   "holdCreep": "3-6% push"
+  },
+  "tags": [
+   "pacing",
+   "motion",
+   "readability"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/craft-bar.md, restated in our own words.",
+  "priority": 84
+ },
+ {
+  "id": "story.transformation-and-token",
+  "title": "Every film needs a transformation, a turn and a token",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "principle",
+  "when": "Planning a video's story shape, its chapters and its visual through-line.",
+  "summary": "An audience forgives a rough drawing in a story and resents a gorgeous one without. A video needs a transformation you can say as two words with an arrow, a hook in the first three seconds, a turn caused inside its world, an escalation that is physical, and a visual token that returns changed.",
+  "do": [
+   "Write the story in three sentences: setup, transformation, payoff. If you cannot, it is not a story yet.",
+   "Plant a question in the first three seconds; no logos, blank holds or establishing for its own sake.",
+   "Put the turn on a moment you can point to, caused by something in the world of the video.",
+   "Plant a visual token early, never explain it, and bring it back small and changed at the end.",
+   "Change the look only when the story changes state, never as a row of style vignettes.",
+   "For every shot ask what changed for the subject; a shot where only the rendering changed is cut.",
+   "End on the resolve, then give it a few beats of room."
+  ],
+  "avoid": [
+   "A style reel with a subject in it.",
+   "Ending exactly on the last event with no room."
+  ],
+  "tags": [
+   "story",
+   "structure",
+   "payoff"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/storytelling.md, restated in our own words.",
+  "priority": 86
+ },
+ {
+  "id": "story.rows-are-actions",
+  "title": "Storyboard rows are actions that carry something",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "Writing a storyboard or scene plan for a narrated video.",
+  "summary": "A storyboard that is one fact per frame plays as a slide deck. Each row says what moves, what it becomes and what it carries in from the row before (an object, a shape, the camera).",
+  "do": [
+   "Write each row as an action: what moves and what it becomes.",
+   "Carry something across every pair of rows; two rows that carry nothing are two slide cuts.",
+   "Write the line the viewer should leave repeating beside the story sentence.",
+   "Let one actor (an object, a character, a mark) carry the video and cross every seam it can.",
+   "Say each fact once; a repeated number is cut unless it is a deliberate callback.",
+   "Keep counts on screen true: a count is a claim."
+  ],
+  "avoid": [
+   "A row that is only a fact on a frame.",
+   "Counts that change for no reason."
+  ],
+  "tags": [
+   "storyboard",
+   "story",
+   "continuity"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/storytelling.md, restated in our own words.",
+  "priority": 80
+ },
+ {
+  "id": "story.comedy-devices",
+  "title": "Comedy: pain first, then gags across devices",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "procedure",
+  "when": "Writing or staging humour in a script or a scene.",
+  "summary": "Comedy that lands starts from the audience's real pain points, then pitches gags across different devices, each with a twist and a note of who laughs and why.",
+  "steps": [
+   "List the audience's lived pain points with specific nouns.",
+   "Write one gag per pain, aimed at the situation or the habit, never at a real person.",
+   "Spread gags across at least four devices: verbal, visual pun, interaction, physical, structural.",
+   "Give each gag one line on who gets it and why; cut one that needs explaining."
+  ],
+  "avoid": [
+   "An observation with no twist.",
+   "Every joke in one shape."
+  ],
+  "tags": [
+   "comedy",
+   "script"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/storytelling.md, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "realism.state-the-realism",
+  "title": "State the realism: depart from the icon on purpose",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "procedure",
+  "when": "Drawing any real thing: an animal, an object, a person, a place.",
+  "summary": "Asked for a subject, a model draws its road-sign icon: symmetrical, flat, outlined and built from primitives. Realism is a written list of departures from that icon, from real reference.",
+  "steps": [
+   "Name the anatomy part by part so a specialist could name every part on the still.",
+   "Say which reference was used; borrow structure, never a real specimen's pattern.",
+   "When the subject transforms, write the mapping from each old part to each new one.",
+   "Prefer three-quarter views and half-open poses; author a side view rather than squashing a top view.",
+   "Do form before colour: one named light for the whole video, core shadow, reflected light, cast and contact shadows.",
+   "Let translucent things show 15-20% of what is behind them."
+  ],
+  "avoid": [
+   "A subject with no cast shadow (it looks pasted on).",
+   "Watercolour read as low opacity (it is thin washes with full pigment where form turns)."
+  ],
+  "tags": [
+   "realism",
+   "reference",
+   "anatomy"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/realism-and-craft.md, restated in our own words.",
+  "priority": 78
+ },
+ {
+  "id": "realism.texture-by-hand",
+  "title": "Texture made by hand, anchored to the world",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "ruleset",
+  "when": "Adding paper, grain, ink or brush texture to drawn shots and designed frames.",
+  "summary": "Texture belongs to its material and to the world, not the screen. Screen-fixed grain crawls when the camera moves; texture laid on everything blurs the joins; marks must be sized to the thing they draw.",
+  "do": [
+   "Anchor texture to the drawn world so it moves with the camera; add a finer layer when zooming in.",
+   "Put texture only on the material it belongs to (paper grain on paper, not on a blueprint region).",
+   "Size every mark to the thing it draws and check it at the closest and widest scale used.",
+   "Make medium-true motion: misregistered ink lagging a fast move, a wash spreading from where the brush touched."
+  ],
+  "avoid": [
+   "One blur filter over everything (the plastic look).",
+   "Grain fixed to the screen during camera moves."
+  ],
+  "tags": [
+   "texture",
+   "medium"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/realism-and-craft.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "anatomy.people-checks",
+  "title": "People: canon, joints, hands and balance",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "checklist",
+  "when": "Drawing people in any engine.",
+  "summary": "People are built from a skeleton, volumes and a camera, then drawn; the checks catch the failures the eye misses and the eye catches the ones the checks miss.",
+  "checks": [
+   "Heads tall by age: 1 year 4, 3 years 5, 6 years 5.75, 9 years 6.2, 12 years 7, adult 7.5, heroic 8.",
+   "Adult landmarks: crotch at half height, elbow at the waist, wrist at the crotch, the hand about the face's size.",
+   "Joints within real limits (elbow 0-150, knee 0-140); an ankle at its limit lifts the heel.",
+   "Knuckles on an arc with the middle finger longest; the thumb leaves the palm at its base joint, not the wrist.",
+   "A pinch meets; a grip closes on what it holds.",
+   "Weight over the support; contrapposto: the pelvis drops on the free side and the shoulders tilt against it.",
+   "Look for: arms hanging in a gap, rake hands, a face turning without the far eye narrowing, a hand covering the face, floating or sinking feet."
+  ],
+  "tags": [
+   "anatomy",
+   "people",
+   "hands"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/anatomy.md, restated in our own words.",
+  "priority": 76
+ },
+ {
+  "id": "anatomy.one-character-module",
+  "title": "A character is built once and posed, never redrawn",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "ruleset",
+  "when": "Any video with a recurring character.",
+  "summary": "A character drawn fresh per shot drifts: glasses change size, the coat changes colour, a hand grows a sixth finger. Build the character once as a spec (features, proportions, colour roles), approve it once, and pose it in every shot.",
+  "do": [
+   "Write the identity in one paragraph: age, proportions and the 5-8 features a child would draw from memory.",
+   "Give colours as roles (coat, skin, hair) that every look maps in its own medium.",
+   "Pose the same character in every shot; never draw it again from scratch.",
+   "Check the distinguishing features appear in every view they should."
+  ],
+  "avoid": [
+   "Re-describing the character differently in each shot."
+  ],
+  "tags": [
+   "character",
+   "consistency",
+   "cast"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/character-consistency.md, restated in our own words.",
+  "priority": 74
+ },
+ {
+  "id": "styles.a-style-is-marks",
+  "title": "A style is a way of making marks",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "principle",
+  "when": "Choosing, describing or switching the look of a video or a shot.",
+  "summary": "A style changes the medium, the edge and the order of the marks, not only the palette. The same fox by a crayon kid, a collage artist and a printmaker changes shape, edge and light, in the order the marks go down.",
+  "steps": [
+   "Name the medium physically: what touches the paper, how wet it is, how it lifts, what the paper does back.",
+   "Decide the order of marks: wash then line, line then wash, plate by plate, piece by piece.",
+   "Pick the paper and its texture, applied last.",
+   "Prove the look on one still of the hardest subject before using it everywhere."
+  ],
+  "avoid": [
+   "One drawing recoloured into nine outfits."
+  ],
+  "tags": [
+   "style",
+   "medium",
+   "look"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles.md, restated in our own words.",
+  "priority": 80
+ },
+ {
+  "id": "styles.pick-for-the-job",
+  "title": "Pick the style for the job before the looks",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing a look or film look for a channel or a video.",
+  "summary": "The same idea reads differently in each hand; choose for the job first, and keep one hand across a channel so its videos feel like a system.",
+  "do": [
+   "Warm, human, a brand with a smile: pencil and watercolour, crayon, cut paper.",
+   "A serious topic, a report, a founder essay: ballpoint, ink and line-wash, engraving.",
+   "An explainer, a how-it-works, an infographic: chalkboard, blueprint, ballpoint with drafted labels, scrapbook, flat vector, isometric.",
+   "Loud, social, a launch: marker comic, risograph.",
+   "A poster or one image people keep: engraving, risograph, cut paper.",
+   "Say in one line why the style was chosen."
+  ],
+  "tags": [
+   "style",
+   "choice"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "collage.cut-paper-no-lines",
+  "title": "Cut-paper collage: zero drawn lines",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "ruleset",
+  "when": "Cut-paper collage looks (the Paper collage finish, documentary collage).",
+  "summary": "Cut-paper collage has no drawn lines at all: torn pieces carry a white fibrous edge, scissor pieces are crisp, and each piece lifts a soft shadow off the one below.",
+  "do": [
+   "Make every shape a piece of paper: torn for soft natural shapes, scissor-cut for crisp ones.",
+   "Lift each piece off the one below with a soft shadow.",
+   "Keep the white fibrous edge on torn pieces only."
+  ],
+  "avoid": [
+   "Outlines or ink lines on paper pieces."
+  ],
+  "tags": [
+   "collage",
+   "paper"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles/INDEX.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "collage.toy-theatre",
+  "title": "Toy theatre collage: printed papers, card edges and stage depth",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "template",
+  "when": "Playful paper worlds, children's stories, stop-motion paper stages.",
+  "summary": "A toy-theatre collage stands cut-outs as flats in a stage with real gaps between them: printed and sugar papers, gouache cut-outs with a white sticker margin, a darker card edge on every piece, and a shadow whose size is the gap to the flat behind. It moves like stop-motion.",
+  "steps": [
+   "Set the stage first (the proscenium and floor), then build the scene back to front: sky drop, sun on its stick, clouds, far pieces, the headland, sea rows, houses one by one, front pieces, curtains last.",
+   "Give printed papers a motif (waves, dots, stones, diamonds, newsprint) and gouache cut-outs broad strokes and a shade side away from the sun.",
+   "Show each piece's card edge as a darker offset copy down and right, then the white sticker margin.",
+   "Hold every pose for two frames; a piece travels held above the stack (wide, far shadow), lands, jiggles a few degrees and settles."
+  ],
+  "avoid": [
+   "Paint or ink that moves once laid down.",
+   "A sticker margin following a concave detail too closely."
+  ],
+  "tags": [
+   "collage",
+   "stop-motion",
+   "paper"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles/paperCraft.md, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "collage.scrapbook",
+  "title": "The archival scrapbook: engravings, typed captions, tape and a stamp",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "template",
+  "when": "Research-style explainers, history, nature notes and archive looks.",
+  "summary": "An archival scrapbook page is foxed rag paper with torn cards, yellowed tape, a peg on twine, hand-tinted copperplate engravings, typewritten captions, ransom-note cut letters, a red pen and one rubber stamp last. Words are part of the picture.",
+  "steps": [
+   "Lay the page, then the cards one by one (held, then pressed), each taped or pegged.",
+   "Cut the engravings line by line with tone in the line width; hand-tint them with thin washes spreading from where the brush touched.",
+   "Type captions one strike at a time, each a hair off the line; paste ransom letters one by one with a small tilt.",
+   "Annotate charts in red pen; rock the stamp on from one end last."
+  ],
+  "avoid": [
+   "Fonts set flat with fillText; letters are struck or cut.",
+   "Ink that moves once made (paper moves, ink never does)."
+  ],
+  "tags": [
+   "collage",
+   "scrapbook",
+   "archive"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles/scrapbook.md, restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "pixel.cel-order",
+  "title": "Pixel art in pixel order, held on threes",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "procedure",
+  "when": "Building or revealing pixel art.",
+  "summary": "Pixel art is laid one cell at a time in a declared palette. The edge is a clean staircase, faces are laid by hand as sprites, and it is built in pixel order: flat masses, cleanup, shading clusters, highlights, then the lights and their glow last.",
+  "steps": [
+   "Block in flat mid colours (the subject coarse first), then sweep the silhouette once to clean the line.",
+   "Add shading clusters and the sky's dither bands, then highlights and rim light, then the light sources and their glow last, with a beat of rest between passes.",
+   "Lay faces, ears and eyes as an ASCII sprite by hand.",
+   "Hold cels for three frames (a 10 fps feel); move characters pose to pose, never tweened between poses."
+  ],
+  "checks": [
+   "Every pixel is a palette colour.",
+   "No one-cell nubs or notches; run lengths even along curves."
+  ],
+  "tags": [
+   "pixel",
+   "sprites"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/styles/pixelArt.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "seams.six-mechanisms",
+  "title": "Six ways to get from one picture to the next",
+  "rooms": [
+   "editing",
+   "timeline",
+   "motion"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing how one scene hands over to the next.",
+  "summary": "A video that shows one good thing, then an unrelated good thing, plays as a slideshow. The next picture should come out of the current one: foreground as transition, a persistent actor, selection to expansion, registered decomposition, a continuous canvas, or exploded layers. If none is what the seam says, use a gentle move.",
+  "do": [
+   "\"And now this\", with nothing shared: something already in the scene grows until it covers the frame and clears onto the next.",
+   "\"The same thing, further along\": one object keeps its position, size and colour across the seam while the world changes.",
+   "\"This one, out of all of those\": one item of a set grows until it is the next scene, framed exactly like the item.",
+   "\"The same things, put in order\": parts move from their old places to their new ones, traceably (no more than about seven at once).",
+   "\"Next to that, over here\": the scenes sit in one big layout and the camera travels between them.",
+   "\"And this is what is inside\": an object separates into its real layers, holds, and closes again.",
+   "Have the destination drawn before the move starts, and carry a shape, position or direction across.",
+   "Use one or two mechanisms per video, for the seams that matter."
+  ],
+  "avoid": [
+   "All six in thirty seconds (a demo reel of moves).",
+   "A mechanism whose condition does not hold; use the gentle move (a bloom, a flip, a push)."
+  ],
+  "tags": [
+   "transitions",
+   "seams",
+   "continuity"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-grammar.md, restated in our own words.",
+  "priority": 82
+ },
+ {
+  "id": "seams.cuts-that-carry-motion",
+  "title": "Cuts that carry motion: match speed and direction",
+  "rooms": [
+   "editing",
+   "timeline",
+   "motion"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "formula",
+  "when": "Cutting between two shots that move, or any camera-move transition.",
+  "summary": "A cut between moving shots is smooth when both sides move at the same speed in the same screen direction: the outgoing shot accelerates out and cuts on its fastest frame, the incoming one opens at that speed and settles. A cut from moving to still, or a turn or speed jump at the cut, reads as a jerk.",
+  "do": [
+   "Accelerate the outgoing shot over 0.2-0.4 s and cut after its fastest frame.",
+   "Open the incoming shot at the same speed and direction and bring it to rest over 0.8-1.4 s.",
+   "For a push through a cut, grow both sides at the same rate in log scale.",
+   "Keep whatever crosses the cut at the same position, size, colour and edge.",
+   "Let type and photos of people leave in 0.5-0.7 s, easing in, never motion-blurred."
+  ],
+  "avoid": [
+   "Dissolving two copies of one thing (a ghost at the midpoint).",
+   "Turns over 30 degrees or speed halving or doubling at a cut.",
+   "Moves faster than about two and a half frame widths a second (blur becomes streaks); cut on the beat instead."
+  ],
+  "numbers": {
+   "exitSeconds": "0.2-0.4",
+   "settleSeconds": "0.8-1.4",
+   "textExitSeconds": "0.5-0.7",
+   "speedCeiling": "2.5 frame widths per second"
+  },
+  "tags": [
+   "cuts",
+   "motion",
+   "transitions"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-grammar.md, restated in our own words.",
+  "priority": 80
+ },
+ {
+  "id": "seams.refused-effects",
+  "title": "Effects to refuse, and what to make instead",
+  "rooms": [
+   "editing",
+   "timeline",
+   "motion"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing effects and transitions, or when an effect is asked for by name.",
+  "summary": "Some popular effects break the craft: they are stock overlays with no cause in the picture. Name the reason in one line and make the alternative instead.",
+  "do": [
+   "Instead of a glitch or RGB split: a cut on the beat, or one shake on a real impact.",
+   "Instead of a light sweep or shine: light that belongs to the world and finds the subject.",
+   "Instead of a fade-in: draw it on, reveal it from behind something, or write it.",
+   "Instead of a particle burst: dust or splash born on a real contact.",
+   "Instead of a cross dissolve between unrelated pictures: one object moving and changing mid-trip, or the gentle move.",
+   "Instead of lens flare, leaks or bokeh discs on a drawing: one named light in the scene."
+  ],
+  "avoid": [
+   "Using any of these as a default; each needs a cause in the picture."
+  ],
+  "tags": [
+   "effects",
+   "transitions",
+   "taste"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-grammar.md, restated in our own words.",
+  "priority": 74
+ },
+ {
+  "id": "seams.ready-made",
+  "title": "Three made seams: brush wipe, iris and flash cut",
+  "rooms": [
+   "editing",
+   "timeline",
+   "motion"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "A plain change of scene that still wants a made mark.",
+  "summary": "Three seams carry a made mark when nothing else fits: a brush wipe for drawn registers, an iris that opens from the thing the next scene is about, and a flash cut on a strong beat.",
+  "do": [
+   "Brush wipe: a loaded brush pulled across in the direction the story moves, wet ink ahead of the new picture, 0.6-0.9 s; once or twice a video.",
+   "Iris: open it from the subject of the next scene, close it on the subject of this one, evenly in log scale over 0.5-0.8 s.",
+   "Flash cut: a hard cut under a short burst of light on a strong beat; never one frame, never full white, never two within half a second."
+  ],
+  "avoid": [
+   "An iris centred on nothing.",
+   "A brush wipe in a clean, designed register."
+  ],
+  "tags": [
+   "transitions",
+   "wipe",
+   "iris"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-grammar.md, restated in our own words.",
+  "priority": 64
+ },
+ {
+  "id": "camera.one-camera",
+  "title": "One camera, keyed: dolly, lens, parallax and shake",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Camera moves in drawn shots, designed frames and the edit.",
+  "summary": "There is one camera for every plane. Zoom is a ratio, so it eases in log scale; a camera with no operator accelerates gently and arrives gently; near planes swing wide and far ones barely stir; a shake is an impact that rings down.",
+  "do": [
+   "Ease zooms in log scale so a long push spends time evenly; ease each segment in and out.",
+   "Give every depth plane its parallax from the one camera, never its own drift.",
+   "Choose a dolly for travelling into a world and a lens zoom (a punch-in) for a documentary or operator voice.",
+   "Use a dolly zoom only for a moment of realisation, with at least two planes behind the subject, once a video.",
+   "Shake on an impact: full strength on the hit, a squared decay within a beat, low-frequency smooth noise with a little rotation.",
+   "Thicken lines only slightly in close-ups (about scale to the power 0.35)."
+  ],
+  "avoid": [
+   "Linear camera moves (mechanical) or ease-out only (interrupted).",
+   "Random per-frame shake (a faulty projector)."
+  ],
+  "numbers": {
+   "lineWeight": "scale^0.35",
+   "shakeAttackFrames": "2"
+  },
+  "tags": [
+   "camera",
+   "parallax",
+   "zoom"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/camera.md, restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "camera.time-ramps",
+  "title": "Slow motion and freeze frames, once each",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Speed ramps, slow motion and freeze frames in a video.",
+  "summary": "One slow motion at the peak and one freeze on a telling pose per video; a second halves the first. A freeze must keep something moving, and the music and sound stay on real time.",
+  "do": [
+   "Ease into and out of slow motion; never a kick.",
+   "Keep something moving during a freeze (a name writing itself, the camera creeping).",
+   "Keep the score on real time and put the sound of a slowed event on the frame it appears."
+  ],
+  "avoid": [
+   "A frozen frame with nothing moving.",
+   "Two slow motions in one video."
+  ],
+  "tags": [
+   "camera",
+   "slow-motion",
+   "freeze"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/camera.md, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "motion.opens-and-closes",
+  "title": "Openings and endings that are made, not defaults",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "The first and last seconds of a video or a chapter.",
+  "summary": "Open already moving; close by taking things away or by returning to the opening, earned.",
+  "do": [
+   "Open mid-move: frame 0 is composed and already moving, partway into a camera move or an action.",
+   "Or open so close on one detail that the subject is not yet readable, then pull back over 1.5-3 s.",
+   "Or open cold in the middle of the action, the wide shot second as the answer to where we are.",
+   "Close by subtraction: motion slows, parts leave, the music stops on a bar line, near silence, one soft sound on the last picture.",
+   "Or close by returning to the first frame, now understood.",
+   "Or land the travelling actor as part of the end mark."
+  ],
+  "avoid": [
+   "Opening on a still that then starts.",
+   "A close that is the end card, then a stinger, then the card again."
+  ],
+  "tags": [
+   "hook",
+   "opening",
+   "ending"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-deck.json, restated in our own words.",
+  "priority": 70
+ },
+ {
+  "id": "motion.reveals",
+  "title": "Reveals: drawn on, from behind, by light, assembled, counted",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "How a thing arrives in a shot.",
+  "summary": "Things arrive honestly: drawn in the order a hand makes them, revealed from behind something in the picture, found by light that belongs to the world, assembled from the back, or counted while the thing they count changes.",
+  "do": [
+   "Draw it on in a hand's order, the tool visible, each stroke taking the time its length asks.",
+   "Bring it out from behind a hill, a card edge or another figure, so the picture supplies the mask.",
+   "Let light arrive (a door, a lamp, the sun) and find the subject that was there in the dark.",
+   "Assemble parts back to front, each held above the stack with a wide shadow that closes as it lands, 0.08-0.12 s apart.",
+   "Count a number while the thing it counts changes, and stop on the frame the action stops."
+  ],
+  "avoid": [
+   "A mask edge in mid-air with nothing drawn there.",
+   "A number that keeps rolling after the action ended."
+  ],
+  "tags": [
+   "reveal",
+   "entrance",
+   "motion"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-deck.json, restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "motion.type-moves",
+  "title": "Type that is written, handed over and pointed",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Words, labels and titles on screen.",
+  "summary": "Words are written by their tool and held long enough to read twice; one line hands over to the next; a label names one thing with a dot and a line, and can travel across a seam to become the next heading.",
+  "do": [
+   "Write a line at a hand's speed and hold it to be read twice, never over a face or busy texture.",
+   "Hand one line to the next word by word, the old words leaving at twice the pace they came.",
+   "Name one thing with a dot, a leader line and a short label; the dot follows the thing, the label holds still.",
+   "Carry a label across a seam to land as the next scene's heading.",
+   "Underline the one word that matters after the line lands, on a beat, about 0.25 s; at most twice a video."
+  ],
+  "avoid": [
+   "Two full lines competing on screen.",
+   "Strikethrough where underline was meant."
+  ],
+  "tags": [
+   "typography",
+   "labels",
+   "kinetic-type"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-deck.json, restated in our own words.",
+  "priority": 70
+ },
+ {
+  "id": "acting.principles",
+  "title": "Acting: anticipate, follow through, settle, breathe",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Characters and objects that move in a shot.",
+  "summary": "Life comes from the animator's principles: a move the other way first, loose parts arriving late, nothing stopping dead, a level head in a run, and a body at rest that still breathes.",
+  "do": [
+   "Anticipate a large action: go the other way first for 0.15-0.3 s, about a quarter of the action's size.",
+   "Let loose parts (a tail, hair, a sleeve) follow 0.05-0.1 s per segment, each wider than the one before.",
+   "Let a landing go a little past, come back and rest within 0.3-0.5 s; weight decides how far past.",
+   "Keep the head level while the body works in a run.",
+   "At rest: the chest rises over 3-4 s, a 0.1-0.15 s blink every few seconds at uneven gaps.",
+   "Show contact where it happens: dust, a splash or a squashed shadow on the frame of the hit.",
+   "Hold the result of the biggest change for 1-2 s, alive."
+  ],
+  "avoid": [
+   "Both sides of a character doing the same thing at once (one side leads by a few frames).",
+   "Stiff materials whipping like cloth."
+  ],
+  "numbers": {
+   "anticipation": "0.15-0.3 s",
+   "settle": "0.3-0.5 s",
+   "breath": "3-4 s",
+   "blink": "0.1-0.15 s"
+  },
+  "tags": [
+   "acting",
+   "animation",
+   "characters"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/motion-deck.json, restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "explainer.machines",
+  "title": "Explain an idea by building a machine that does it",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "procedure",
+  "when": "Explaining how something works, a process, a system or an abstract idea.",
+  "summary": "A diagram of labelled boxes gives the viewer nothing to name. Find a real made object that does the idea's actions (a turnstile for one at a time, a sieve for a filter, a ratchet for only forward), build it from parts that each have a job, and let one model drive its motion and its readout.",
+  "steps": [
+   "Get the idea's real quantities first.",
+   "Name the actions (fills, waits, matches, rejects) and what they act on.",
+   "Find a made object a general viewer recognises that does those actions, and test the match aloud step by step.",
+   "List the parts from the ground up; nothing floats and nothing is idle.",
+   "Give the accent to the one part that carries the story.",
+   "Show the number live on a dial, counter or ruler, worked out from the machine's own state.",
+   "Turn it to face the viewer at a third to two thirds of a right angle."
+  ],
+  "avoid": [
+   "A big bare panel with a scratch of detail.",
+   "Words typed beside the machine that disagree with its state."
+  ],
+  "tags": [
+   "explainer",
+   "metaphor",
+   "diagram"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/machines.md, restated in our own words.",
+  "priority": 74
+ },
+ {
+  "id": "explainer.one-concept",
+  "title": "Explainers: one concept on screen at a time",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "ruleset",
+  "when": "Explainers, infographics and teaching chapters.",
+  "summary": "An explainer is judged on whether a viewer understands something true afterwards. Facts and words come before drawing; one concept is on screen at a time, built in the order the viewer needs it, and charts are drawn to scale from the real numbers.",
+  "do": [
+   "Keep a ledger of every claim with its source; a claim without a source is cut or shown as a metaphor.",
+   "Build each concept in the order the viewer needs it; the diagram assembling is the explanation.",
+   "Give captions their own readable size and time: max(0.7 s, 0.3 s per word), longer for children or a second language.",
+   "Draw charts to scale with values labelled, annotated in the style's own hand.",
+   "For an infographic page: one reading path, one hero figure, three to seven supporting facts."
+  ],
+  "avoid": [
+   "Several concepts competing on one screen.",
+   "Numbers on screen that are not in the ledger."
+  ],
+  "tags": [
+   "explainer",
+   "infographic",
+   "facts"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/explainer.md, restated in our own words.",
+  "priority": 76
+ },
+ {
+  "id": "story.long-videos",
+  "title": "Long videos: a spine, chapters and one style contract",
+  "rooms": [
+   "script",
+   "scene"
+  ],
+  "tasks": [
+   "scene.plan",
+   "script.candidate",
+   "script.review"
+  ],
+  "kind": "procedure",
+  "when": "Videos longer than about 90 seconds.",
+  "summary": "A long video is chapters, each with its own small arc, joined by one through-line, one style contract and transitions that carry the story.",
+  "steps": [
+   "Write the spine first: the through-line in one sentence, then one line per chapter on what changes in it; cut a chapter that changes nothing.",
+   "Fix one style contract before the chapters: palette, line weight, type size, the characters, the music and its moods.",
+   "Hand over chapters with a match cut, a covered switch or a shared token, never a hard cut to black every time.",
+   "Score the chapters as one theme varied per mood, with the transitions scored.",
+   "Review each chapter, then the whole, with and without sound."
+  ],
+  "tags": [
+   "long-form",
+   "chapters",
+   "structure"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/long-film.md, restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "drawing.draw-itself",
+  "title": "A picture that draws itself ends exactly on the still",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "visuals.prompt"
+  ],
+  "kind": "ruleset",
+  "when": "Shots where a picture is drawn on screen (whiteboard, the drawing hand, painted pictures drawn in).",
+  "summary": "A drawing film starts on bare ground, makes its marks in the medium's own order at a hand's pace with short rests between passes, and ends on the finished still.",
+  "do": [
+   "Frame 0 is the bare ground: paper, board, linen, a blank screen.",
+   "Follow the medium's order: watercolour lays pencil, light washes, darker washes, detail, line; woodcut the key block then colour light to dark; pixel art masses, line cleanup, shading, highlights.",
+   "Grow strokes along their path; spread washes from where the brush touched; drop and seat bricks; land stamps.",
+   "Draw long strokes fast and fiddly ones slowly, with rests up to half a second between passes."
+  ],
+  "avoid": [
+   "The finished picture fading in.",
+   "A freeze longer than half a second inside the drawing."
+  ],
+  "tags": [
+   "drawing",
+   "reveal",
+   "process"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/drawing-process.md, restated in our own words.",
+  "priority": 70
+ },
+ {
+  "id": "motion.one-world",
+  "title": "Motion graphics as one world and one camera",
+  "rooms": [
+   "motion",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Designed motion-graphics sequences, launches and clean explainers.",
+  "summary": "A motion film built scene by scene plays as a slide deck. Place every beat as a region of one larger world and travel one camera between them, so the thing on screen at the end of one beat is still in the world at the start of the next.",
+  "do": [
+   "Lay beats out as regions in one world and move the camera between them; a stop with no travel is a slide cut.",
+   "Enter list items from alternating sides so a list never plays as a carousel.",
+   "Let words rise in and sink out last word first, on an ease-in, clearing the edge at speed.",
+   "Set the temperament (calm, lively, snappy) before building; it sets top speed, settle and overshoot.",
+   "Give type and photos sharp edges when everything else has motion blur."
+  ],
+  "avoid": [
+   "Three beats in a row settling into one layout (a carousel).",
+   "Cross-dissolves or fades over large parts of the frame.",
+   "Translucent brand colour fills."
+  ],
+  "tags": [
+   "motion-graphics",
+   "world",
+   "camera"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/motion-film.md, restated in our own words.",
+  "priority": 68
+ },
+ {
+  "id": "review.fresh-critic",
+  "title": "A fresh critic reviews, never the builder",
+  "rooms": [
+   "qc",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "qc.review",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "procedure",
+  "when": "Reviewing a storyboard, a scene or a finished render.",
+  "summary": "The builder sees what it meant. Every review is done fresh: freeze the file, retell the story from a silent contact sheet, run four readings (director, illustrator, motion and finish, sound and sync), rank problems with timestamps and severity, fix the biggest first, and stop at ship or after three rounds.",
+  "steps": [
+   "Freeze a copy of the file being judged.",
+   "Read a silent contact sheet and retell the story before reading the brief; where the retelling differs, the picture is at fault.",
+   "Director reading: the point, the first second, pacing and every seam as a before and after pair.",
+   "Illustrator reading: full-size stills and crops of faces, hands, feet and joins.",
+   "Motion and finish: pops, stalls, jumps, smears, dense strips across every seam.",
+   "Sound and sync: cues on their frames, one loudest moment on the payoff.",
+   "Rank: P0 seen on a key moment or breaking the story; P1 noticed on normal viewing; P2 only on pause.",
+   "Fix the biggest first, recheck with a new critic, and stop at ship or after three rounds, reporting what remains."
+  ],
+  "checks": [
+   "Say what works first, so it survives the fixes.",
+   "A picture that does not read is fixed in the picture, never by adding a caption.",
+   "Give the critic the owner's own earlier rejections, word for word."
+  ],
+  "tags": [
+   "review",
+   "quality",
+   "critic"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/review.md, restated in our own words.",
+  "priority": 76
+ },
+ {
+  "id": "review.scorecard",
+  "title": "The scorecard and the ship gate",
+  "rooms": [
+   "qc",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "qc.review",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "checklist",
+  "when": "Deciding whether a video or a scene is ready.",
+  "summary": "Score each line 1 to 5; a line with an open P0 cannot score above 3; ship when every line is 3 or more, finish is 5 and the average is 4 or more.",
+  "checks": [
+   "Point: one idea that reads with the sound off, something set up early that pays off.",
+   "First second: frame 0 composed and already moving, the subject known within a second.",
+   "Drawing: anatomy from named reference that survives a crop at twice the size.",
+   "Style: the marks, the edge and the order of making all belong to the medium.",
+   "Motion: weight, anticipation, things that settle; nothing stops dead.",
+   "Seams: something carried across every seam; no designed seam used a third time.",
+   "Pacing: one high point with calm either side, results held long enough to land.",
+   "Sound: every cue on its frame, one clear loudest moment on the payoff, an ending that takes away."
+  ],
+  "tags": [
+   "review",
+   "scorecard"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/review.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "review.design-pass-first",
+  "title": "Judge the design, not only the collisions",
+  "rooms": [
+   "qc",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "qc.review",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Checking stills, storyboards and frames before showing them.",
+  "summary": "A frame can have nothing overlapping and still fail: no hierarchy, cramped spacing, not a poster. Look at each review frame as a designer first and a checker second, and re-read the owner's last notes against it.",
+  "do": [
+   "Check hierarchy, flow and whether each frame would pass as a poster before looking for bugs.",
+   "Re-read the owner's last three notes against the new version, one by one.",
+   "Preview options as a still sheet side by side before a full render."
+  ],
+  "avoid": [
+   "Grading the effort instead of the frame."
+  ],
+  "tags": [
+   "review",
+   "design"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/craft-bar.md, restated in our own words.",
+  "priority": 64
+ },
+ {
+  "id": "narration.script-for-the-voice",
+  "title": "Write narration for the voice, and the screen for the eye",
+  "rooms": [
+   "voice",
+   "script",
+   "captions"
+  ],
+  "tasks": [
+   "voice.direction",
+   "script.candidate",
+   "captions.segment"
+  ],
+  "kind": "ruleset",
+  "when": "Writing and directing narration and its on-screen words.",
+  "summary": "A narrated video is timed by its voice. What the voice says and what the screen shows can differ: numbers, money and symbols are spoken as words and shown as figures, and emphasis is written in plain case in quotes, never capitals.",
+  "do": [
+   "Budget time before setting length: a voice says 1.2-4.5 words a second and every phrase needs max(0.7 s, 0.3 s per word) on screen.",
+   "Write figures as spoken words in the narration and as figures on screen.",
+   "Mark emphasis with quotes in plain case; capitals can make a voice skip the word.",
+   "Cut the picture to the words: build shots on the words, captions from the timing.",
+   "Have a person listen before it ships."
+  ],
+  "avoid": [
+   "Capitalised emphasis in narration text."
+  ],
+  "tags": [
+   "narration",
+   "voice",
+   "captions"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/workflows/narration.md, restated in our own words.",
+  "priority": 68
+ },
+ {
+  "id": "audio.sound-design",
+  "title": "Sound effects only where direction really changes",
+  "rooms": [
+   "audio",
+   "editing"
+  ],
+  "tasks": [
+   "audio.mix",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Placing sound effects and mixing them under narration and music.",
+  "summary": "Effects go on real changes of direction and real contacts, not on every move. One riser and one impact per video; the score ducks under effects and every cue sits within a few dB of it; under someone else's music use only unpitched taps.",
+  "do": [
+   "Place effects on real direction changes and real contacts.",
+   "Use one riser and one impact per video, on the moments that matter.",
+   "Keep every cue within about 6 dB of the score; duck the score under effects.",
+   "Under licensed music, keep effects unpitched (taps) so they do not clash with its key."
+  ],
+  "avoid": [
+   "A whoosh on every transition.",
+   "Effects that fight the music's pitch."
+  ],
+  "tags": [
+   "sound",
+   "sfx",
+   "mix"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/music/sound-design.md, restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "audio.music-has-a-plan",
+  "title": "Music gets a plan, never an adjective",
+  "rooms": [
+   "audio"
+  ],
+  "tasks": [
+   "audio.mix",
+   "editing.plan"
+  ],
+  "kind": "procedure",
+  "when": "Choosing or scoring music for a video.",
+  "summary": "Music is planned like the picture: a style, a mood per section, a tension arc and a motif, then measurements; a person listens before it ships.",
+  "steps": [
+   "Pick a style vocabulary and a mood for each section.",
+   "Sketch the tension arc across the video and where it peaks.",
+   "Choose a motif that can return changed at the end.",
+   "Score the transitions between chapters.",
+   "Let a person listen; the program cannot hear."
+  ],
+  "tags": [
+   "music",
+   "score"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/music/README.md, restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "craft.one-look-still",
+  "title": "Prove the look on one still, then build end to end",
+  "rooms": [
+   "qc",
+   "editing",
+   "scene"
+  ],
+  "tasks": [
+   "qc.review",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "Starting a new channel look or a new video style.",
+  "summary": "A still answers exactly one question: is this the look. Ask it once, properly, on the hardest frame; everything else (story, pacing, camera, music) only exists in motion and is learned fastest from a rough whole.",
+  "do": [
+   "Make one look still of the hardest frame in its final medium and light, critique it in writing, and get one approval.",
+   "Then build the whole video end to end before polishing parts.",
+   "Spend approvals where being wrong is expensive: the look, the music, the final video."
+  ],
+  "avoid": [
+   "Rounds of approving fragments of a video nobody can watch yet."
+  ],
+  "tags": [
+   "workflow",
+   "approval"
+  ],
+  "source": "anidoodle (alexgreensh, Apache-2.0), pinned 9c20e77: skills/anidoodle/references/working-method.md, restated in our own words.",
+  "priority": 58
+ }
+]

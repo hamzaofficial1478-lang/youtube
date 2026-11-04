@@ -202,15 +202,20 @@ class MotionRenderer {
     }
     return found;
   }
-  async renderComposition({html, frameId, width, height, scale = 1, canvas, duration, fps, outDir, warp = null, onFrame = () => {}}) {
+  // hold (0.89): stop-motion finishes show each drawing for that many frames (paper collage on twos, pixel art on
+  // threes); a held frame is the same picture, so it is copied instead of drawn again.
+  async renderComposition({html, frameId, width, height, scale = 1, canvas, duration, fps, outDir, warp = null, hold = 1, onFrame = () => {}}) {
     const status = await this.loadComposition({html, frameId, width, height, scale, canvas, duration});
     if (!status.ready) throw new InputError(`The composition did not start: ${status.errors[0] || 'no timeline was registered'}.`, 422);
     fs.mkdirSync(outDir, {recursive: true});
-    const frames = Math.max(1, Math.round(duration * fps)), hash = createHash('sha256');
+    const frames = Math.max(1, Math.round(duration * fps)), hash = createHash('sha256'), step = Math.max(1, Math.min(4, Math.round(hold) || 1));
+    let bytes = null;
     for (let index = 0; index < frames; index++) {
-      const t = index / fps, at = warp ? warpTime(warp, t) : t;
-      await this.evaluate(`__atelier.seek(${at})`);
-      const bytes = Buffer.from((await this.send('Page.captureScreenshot', {format: 'png', fromSurface: true})).data, 'base64');
+      if (index % step === 0 || !bytes) {
+        const t = (index - (index % step)) / fps, at = warp ? warpTime(warp, t) : t;
+        await this.evaluate(`__atelier.seek(${at})`);
+        bytes = Buffer.from((await this.send('Page.captureScreenshot', {format: 'png', fromSurface: true})).data, 'base64');
+      }
       hash.update(bytes);
       fs.writeFileSync(path.join(outDir, `f${String(index).padStart(5, '0')}.png`), bytes);
       onFrame(index + 1, frames);

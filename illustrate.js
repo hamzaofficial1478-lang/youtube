@@ -82,7 +82,7 @@ function validateArt(raw, {outlines = true} = {}) {
 }
 
 // The illustrator's messages: one picture, its words, the look it will be drawn in and the story's world.
-function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon', look = 'classic', design = null, palette = null, world = null, cast = [], aspect = 1.5, findings = []}) {
+function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon', look = 'classic', design = null, palette = null, world = null, cast = [], aspect = 1.5, findings = [], skills = null}) {
   const docLook = engine === 'motion' && DESIGN_NOTES[design], notes = docLook ? {...ENGINE_NOTES.handdrawn, role: 'the illustrator of a documentary video', reveal: 'its shapes build in one after another', people: 'People are drawn as people in period costume (proportioned bodies, faces with expression), matching the cast\'s look when a character of the cast appears.', outlines: true} : ENGINE_NOTES[engine] || ENGINE_NOTES.handdrawn;
   const [lookName, lookNote] = engine === 'stickman' ? [look, STICK_NOTES[look] || STICK_NOTES.classic] : docLook ? [design, DESIGN_NOTES[design]] : engine === 'motion' ? ['motion graphics', MOTION_NOTE] : [board, LOOK_NOTES[board] || LOOK_NOTES.cartoon];
   const input = {picture: describe, spokenWords: words, look: lookName, lookNote, ...(palette ? {palette} : {}), ...(world ? {world} : {}), ...(cast.length ? {cast} : {}), aspect: Math.round(aspect * 100) / 100};
@@ -102,6 +102,8 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
       'NO text, letters, numbers or symbols that read as words; no logos, brands, real people, celebrities or copyrighted characters. Leave the background empty (the board shows through) unless the picture is a whole place, then keep the sky or wall simple.',
       notes.people,
       `VISUAL RULES OF THIS LOOK: ${Dna.paintRules(Dna.of({engine, look, board, design}))}`,
+      // The owner's approved picture skills (0.89): craft advice inside the rules above, never over them.
+      ...(skills ? [`CRAFT SKILLS THE OWNER APPROVED FOR PICTURES (apply the ones that fit this picture; the rules above come first): ${JSON.stringify(skills)}`] : []),
       ...(findings.length ? [`YOUR LAST PICTURE FAILED THESE CHECKS; fix them: ${findings.join(' ')}`] : []),
     ].join('\n')},
   ];
@@ -113,7 +115,7 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
 // Painted pictures follow the visual rules of the shot's engine and look (visual-dna.js; owner review 2026-10-22: a
 // realistic camp behind a stick figure never resonates). reference: the video's first approved painting is attached
 // so every picture of one video shares one style. findings: what the art director found in the last attempt.
-function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic', board = 'cartoon', design = null, type = null, palette = null, world = null, backdrop = false, aspect = 1.5, vertical = false, film = null, filmName = null, reference = false, people = [], portraits = false, findings = []}) {
+function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic', board = 'cartoon', design = null, type = null, palette = null, world = null, backdrop = false, aspect = 1.5, vertical = false, film = null, filmName = null, reference = false, people = [], portraits = false, findings = [], skills = null}) {
   const rules = Dna.of({engine, look, board, design, type}), photo = ['photo', 'cutout'].includes(rules.pictures), natural = rules.pictures === 'natural';
   const place = world ? ` The story happens in ${world.place || 'its place'}${world.era ? ` (${world.era} era)` : ''}: everything belongs to that time and place.` : '';
   const colours = palette && !photo && !natural ? ` Colours that sit well with this palette: background ${palette.background}, ink ${palette.ink}, accent ${palette.accent}.` : '';
@@ -123,12 +125,14 @@ function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic
   const cast = people.length ? ` People in it: ${people.map(item => `${item.name}${item.role ? ` (${item.role})` : ''}${item.look ? `: ${Object.entries(item.look).filter(([, value]) => value && value !== 'none').map(([key, value]) => `${key} ${value}`).join(', ')}` : ''}`).join('; ')}.${portraits ? ' The attached pictures of people (after the style reference, when there is one) show them as painted before: keep their faces, hair, build and clothes.' : ''}` : '';
   const match = reference ? ' The attached image is this video\'s style reference: match its medium, line weight, colours and level of detail exactly, but not its content.' : '';
   const fix = findings.length ? ` The last attempt was rejected by the art director: ${findings.join(' ')} Fix that.` : '';
+  // The owner's approved picture skills (0.89), as short craft lines inside the look's rules.
+  const craftDo = Dna.craftText(skills, 'do', 700), craftAvoid = Dna.craftText(skills, 'avoid', 400), craft = craftDo || craftAvoid ? ` Craft: ${craftDo}${craftAvoid ? ` Avoid: ${craftAvoid}` : ''}` : '';
   const head = natural && backdrop
     ? `A ${vertical ? 'tall 9:16 portrait' : 'wide 16:9 landscape'} ${kind} for an animated YouTube video, the whole scene of this moment: ${describe}.${said}${place}${cast} Paint the place and the people and things of the moment; the program adds words, numbers and motion graphics on top, so keep calm space for them in the upper third or at one side. No text, letters, numbers, signs or logos; no watermark; no frame or border.`
     : backdrop
     ? `A ${vertical ? 'tall 9:16 portrait' : 'wide 16:9 landscape'} background ${kind} for an animated YouTube video: ${describe}.${said}${place} The place only: no people, no characters and no animals in front; no text, letters, numbers, signs or logos; no watermark. Keep the lower middle third simple and open, where the drawn characters will stand.`
     : `${rules.pictures === 'cutout' ? 'A photographic cut-out' : `${/^[aeiou]/.test(kind) ? 'An' : 'A'} ${kind}`} for an animated YouTube video: ${describe}.${said}${place} One clear subject, centred, on a simple plain background; no text, letters, numbers or logos, no watermark, no real person's likeness. Aspect about ${Math.round(aspect * 10) / 10}:1.`;
-  return `${head}${natural && !backdrop ? cast : ''} ${Dna.paintRules(rules, {backdrop, film, filmName})}${colours}${match}${fix} ${photo ? 'An original image, not a copy of any existing photo.' : natural ? 'Original artwork, painted, not a photograph.' : 'Original artwork.'}`;
+  return `${head}${natural && !backdrop ? cast : ''} ${Dna.paintRules(rules, {backdrop, film, filmName})}${colours}${craft}${match}${fix} ${photo ? 'An original image, not a copy of any existing photo.' : natural ? 'Original artwork, painted, not a photograph.' : 'Original artwork.'}`;
 }
 
 module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, DESIGN_NOTES, outlined, validateArt, messages, paintPrompt};

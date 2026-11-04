@@ -504,7 +504,7 @@ class RenderRoom {
                 // Atelier shot: the composition, seeked so each reveal lands on the narrator's actual word.
                 const comp = drawing.composition, canvas = scope.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
                 const warp = At.warp({planned: comp.words || [], actual: words, composed: comp.composedSeconds, hold: seconds});
-                return renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, outDir: path.join(work, folder)});
+                return renderer.renderComposition({html: comp.html, frameId: comp.frameId, ...canvas, scale: size.width / canvas.width, canvas: comp.canvas, duration: seconds + 0.1, fps, warp, hold: comp.hold || 1, outDir: path.join(work, folder)});
               } else {
               const sketch = Sk.validate(carried[clipId] || drawing.sketch, {primary: E.ENGINES[scope.edit.engine]?.draws ? scope.edit.engine : 'motion', lenient: true});
               return renderer.render({template: 'sketch-scene', data: {...sketch, times: Sk.timing(sketch, words), speech: words.map(word => [word.start, word.end])}, images: this.scenes.artImages(sketch), palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, drawing: spec.drawing || null,
@@ -523,7 +523,8 @@ class RenderRoom {
                 logs.push({step: `redraw ${clip.label} after the drawing browser stopped answering (${tries} of 3)`, ok: true, stderr: ''});
               }
             }
-            const args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
+            // Pixel art (0.89) keeps every cell one sharp square at any output size.
+            const grid = drawing.composition?.grid, args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(folder, drawn.pattern), ...(Array.isArray(grid) ? ['-vf', At.pixelFilter(grid, size)] : []), '-c:v', 'libx264', '-preset', 'slow', '-crf', '12', '-pix_fmt', 'yuv420p', '-an', '-y', file];
             const out = await R.run(job.paths.ffmpeg, args, {timeout: Math.max(60000, drawn.frames * 200), cwd: work});
             logs.push({step: `encode ${clip.label}`, ok: true, stderr: R.tail(out.stderr)});
             fs.rmSync(path.join(work, folder), {recursive: true, force: true});

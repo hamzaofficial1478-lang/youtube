@@ -60,7 +60,7 @@ const RENDERERS = {
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
   },
   atelier: {
-    features: ['Every shot designed by Claude for this video as an HTML animation (it was called Atelier)', 'Finish: Motion graphics (kinetic type, numbers, diagrams, metaphors), HTML render (cel-painted anime: characters and places in a closed colour script, drawings held on twos, one expensive action shot per scene, a locked camera and the colour-dip cut), or Mix of both chosen per scene', 'Not the old motion graphics engine: that one became the Documentary engine\'s designed looks and the motion layer of every engine (0.37)'],
+    features: ['Every shot designed by Claude for this video as an HTML animation (it was called Atelier)', 'Finish: Motion graphics (kinetic type, numbers, diagrams, metaphors), HTML render (cel-painted anime: characters and places in a closed colour script, drawings held on twos, one expensive action shot per scene, a locked camera and the colour-dip cut), Paper collage (cut and torn paper with white torn rims and paper shadows, newspaper and notebook paper, moved like stop-motion on twos), Pixel art (cells on a fixed grid in a closed palette of up to 16 colours, dithered skies and glows, a bitmap font, held on threes), or Mix of the finishes you tick, chosen per scene', 'Not the old motion graphics engine: that one became the Documentary engine\'s designed looks and the motion layer of every engine (0.37)'],
     name: 'Motion Graphics (HTML compositions)', milestone: 'P06h', status: 'built',
     note: 'Atelier engine (0.25): Claude designs every shot from scratch as an animated page (HyperFrames method: art direction, blueprints, motion rules, voice-paced reveals); the program checks each one and renders it frame by frame in the local browser, timed onto the narrator\'s words. Drawn and stock shots can join it.',
     supports: {formats: FORMATS, frameRates: [24, 25, 30, 50, 60], transitions: TRANSITIONS, cameraMoves: ['static', 'pan', 'zoom', 'parallax', 'tracking']},
@@ -105,8 +105,11 @@ const CINEMA_GRADES = Object.freeze(['choose', ...Object.keys(require('./engines
 const PICTURE_TYPES = Object.freeze(['cartoon', 'natural', 'mix']);
 const PICTURE_TYPE_ADAPTERS = Object.freeze(['ffmpeg-sketch', 'canvas-frames', 'ffmpeg-montage', 'motion-graphics', 'story-mix']);
 // The atelier's finish (0.68, html-anime): designed motion graphics, or cel-painted anime in a closed colour script.
-const ATELIER_FINISHES = Object.freeze(['motion', 'anime', 'mix']);
+// 0.89 (owner request 2026-11-04): paper collage and pixel art; a mix uses the finishes the owner ticks (two or more).
+const ATELIER_FINISHES = Object.freeze(['motion', 'anime', 'collage', 'pixel', 'mix']);
+const ATELIER_MIXABLE = Object.freeze(['motion', 'anime', 'collage', 'pixel']);
 const ATELIER_SCRIPTS = Object.freeze(['choose', 'indigo', 'eclipse', 'noon', 'festival']);
+const ATELIER_PALETTES = Object.freeze(['choose', 'dusk', 'meadow', 'desert', 'arcade', 'handheld']);
 // The Stickman engine's looks are features of its one style (owner review 2026-10-16: the Style Library shows the
 // main editing engines only). Choosing a look in the style editor fills in its recommended settings, which the
 // owner can still change; the drawing itself follows drawing.look.
@@ -413,7 +416,16 @@ function validateStyleSpec(input) {
   const atelier = input.atelier === undefined || input.atelier === null ? null : (() => {
     const atelierIn = object(input.atelier, 'Atelier finish');
     requireValue(['atelier', 'story-mix'].includes(adapter), `The ${name} engine has no atelier finish; it is for the Atelier and Story Mix engines.`);
-    return {finish: choice(atelierIn.finish, ATELIER_FINISHES, 'atelier finish'), script: choice(atelierIn.script ?? 'choose', ATELIER_SCRIPTS, 'colour script')};
+    const finish = choice(atelierIn.finish, ATELIER_FINISHES, 'atelier finish');
+    // Ticked finishes of a mix (0.89): kept only while the finish is mix; none ticked = motion graphics and HTML render.
+    const finishes = finish === 'mix' && atelierIn.finishes !== undefined && atelierIn.finishes !== null ? (() => {
+      requireValue(Array.isArray(atelierIn.finishes), 'The finishes of a mix must be a list.');
+      const picked = ATELIER_MIXABLE.filter(item => atelierIn.finishes.includes(item));
+      requireValue(picked.length === atelierIn.finishes.length && picked.length >= 2, `Tick two or more of ${ATELIER_MIXABLE.join(', ')} for a mix.`);
+      return picked;
+    })() : null;
+    const palette = choice(atelierIn.palette ?? 'choose', ATELIER_PALETTES, 'pixel palette');
+    return {finish, script: choice(atelierIn.script ?? 'choose', ATELIER_SCRIPTS, 'colour script'), ...(finishes ? {finishes} : {}), ...(palette !== 'choose' ? {palette} : {})};
   })();
 
   const qcIn = object(input.qc, 'Quality checks');
@@ -711,7 +723,7 @@ class StyleLibrary {
 
   vocabulary() {
     return {formats: FORMATS, frameRates: FRAME_RATES, resolutions: RESOLUTIONS, aspect: ASPECT, transitions: ALL_TRANSITIONS(), cameraMoves: CAMERA_MOVES, easing: EASING,
-      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, atelierFinishes: ATELIER_FINISHES, atelierScripts: ATELIER_SCRIPTS, pictureTypes: PICTURE_TYPES, pictureTypeAdapters: PICTURE_TYPE_ADAPTERS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, captionThemes: require('./captions').THEME_NAMES, captionAnimations: require('./captions').ANIMATIONS, fonts: require('./fonts').choices(), visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
+      textCase: TEXT_CASE, drawingLooks: DRAWING_LOOKS, drawingBoards: DRAWING_BOARDS, drawingDesigns: DRAWING_DESIGNS, drawingFilms: DRAWING_FILMS, atelierFinishes: ATELIER_FINISHES, atelierMixable: ATELIER_MIXABLE, atelierScripts: ATELIER_SCRIPTS, atelierPalettes: ATELIER_PALETTES, pictureTypes: PICTURE_TYPES, pictureTypeAdapters: PICTURE_TYPE_ADAPTERS, cinemaGrades: CINEMA_GRADES, lookPresets: LOOK_PRESETS, captionModes: CAPTION_MODES, captionPositions: CAPTION_POSITIONS, captionThemes: require('./captions').THEME_NAMES, captionAnimations: require('./captions').ANIMATIONS, fonts: require('./fonts').choices(), visualSources: VISUAL_SOURCES, aiDisclosure: AI_DISCLOSURE,
       sfxUsage: SFX_USAGE, referenceLimit: OWNER_REFERENCE_LIMIT};
   }
 

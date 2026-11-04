@@ -1,0 +1,11 @@
+anidoodle
+Copyright 2026 Alex Greenshpun
+
+skills/anidoodle-craft.json (0.89) and the paper collage and pixel art finishes of the Motion Graphics engine
+(atelier.js, atelier-runtime.js) restate, in our own words, the craft doctrine of anidoodle
+(https://github.com/alexgreensh/anidoodle, pinned 9c20e77467be393e54c7193611eeec2f7bfb8cc7): skills/anidoodle/SKILL.md
+and its references (craft bar, storytelling, realism and craft, anatomy, styles and the style recipes for cut-paper
+collage, toy-theatre paper collage, archival scrapbook and pixel art, motion grammar, the motion deck, camera, working
+method, and the explainer, long film, drawing process, character consistency, machines, motion film, review and
+narration workflows, and the sound design notes). No source code, engine, sound pack or image of anidoodle is included.
+anidoodle is licensed under the Apache License, Version 2.0, kept in LICENSE beside this notice.

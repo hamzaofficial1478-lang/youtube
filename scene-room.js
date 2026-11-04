@@ -215,15 +215,30 @@ function currentWarnings(warnings, payload) {
   const drawn = payload.scenes.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: said(shot), notes: shot.notes})));
   return [...warnings.filter(item => !CONTINUITY_NOTE.test(item)), ...Sk.continuity(drawn, payload.cast)];
 }
+// The words of a video's engine, looks, finishes and film looks that decide which engine-specific skills fit it (0.74;
+// 0.89 adds the Motion Graphics finishes, film looks and the picture type).
+function skillStyle(inputs, spec) {
+  const drawing = spec.drawing || {}, atelier = spec.atelier ? (spec.atelier.finish === 'mix' ? (spec.atelier.finishes || ['motion', 'anime']) : [spec.atelier.finish]) : [];
+  return ['engine', inputs.engine, ...(inputs.scope?.drawn || []), drawing.look, ...(drawing.looks || []), drawing.board, ...(drawing.boards || []), drawing.design, ...(drawing.designs || []), drawing.hand ? 'hand' : '', inputs.engine === 'handdrawn' ? 'whiteboard' : '',
+    ...atelier.map(item => (item === 'collage' ? 'collage paper' : item)), drawing.film, ...(drawing.films || []), drawing.pictureType, spec.cinema ? 'cinema' : ''].filter(Boolean).join(' ');
+}
+// What a designed drawing is checked against (0.89: a paper or pixel finish counts, so changing it draws the shot again;
+// motion graphics and HTML render keep their earlier hash).
+function compositionHashOf(frame, direction) {
+  const finish = At.renderFinish(direction, frame, {width: 1920, height: 1080});
+  return hash({html: frame.html, engine: At.VERSION, ...(finish.hold ? {finish: finish.finish, hold: finish.hold} : {})});
+}
 // One atelier frame as it goes into a plan: the planned spec, plus its designed composition (checked again).
-function atelierFrame(raw, label, warnings, format, finish = 'motion', script = null) {
+function atelierFrame(raw, label, warnings, format, finish = 'motion', script = null, {finishes = null, direction = null} = {}) {
   let frame;
-  try { frame = At.validateFrame(raw, {lenient: true, warn: message => warnings.push(`${label} frame: ${message}`), label, finish}); } catch (error) { warnings.push(`${label}: ${error.message} It is drawn from its words instead.`); return null; }
-  // In a mixed video only the HTML render frames keep to the colour script's checks.
-  if (finish === 'mix' && frame.finish !== 'anime') script = null;
+  try { frame = At.validateFrame(raw, {lenient: true, warn: message => warnings.push(`${label} frame: ${message}`), label, finish, finishes}); } catch (error) { warnings.push(`${label}: ${error.message} It is drawn from its words instead.`); return null; }
+  // In a mixed video only the HTML render frames keep to the colour script's checks, and only pixel frames to the
+  // pixel palette (0.89).
+  const own = At.frameFinish(direction || {finish, finishes}, frame);
+  if (own !== 'anime') script = null;
   if (typeof raw.html === 'string' && raw.html) {
     const canvas = format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080};
-    const checked = At.validateComposition(`<template>${raw.html}</template>`, {frameId: raw.frameId, ...canvas, duration: raw.composedSeconds, script});
+    const checked = At.validateComposition(`<template>${raw.html}</template>`, {frameId: raw.frameId, ...canvas, duration: raw.composedSeconds, script, finish: own, pixel: own === 'pixel' ? direction?.pixel || null : null});
     if (checked.issues.length) warnings.push(`${label}: its composition no longer passes the checks (${checked.issues[0]}); it is drawn from its words instead.`);
     else Object.assign(frame, {html: checked.html, frameId: raw.frameId, composedSeconds: raw.composedSeconds, words: Array.isArray(raw.words) ? raw.words.slice(0, 400) : [], version: raw.version || At.VERSION});
   } else warnings.push(`${label}: its composition is not designed yet; it is drawn from its words until it is.`);
@@ -245,7 +260,9 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
   const castFixes = mend ? Sk.worldCast(castOut, storyWorld) : [];
   const spokenWords = drawnPlan || scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences: timed, pauses: [], narrationSeconds}) : [];
   // The atelier's anime finish (0.68): frames carry their shot and drawings, compositions keep to the colour script.
-  const finish = ['anime', 'mix'].includes(spec.atelier?.finish) ? spec.atelier.finish : 'motion', animeScript = finish !== 'motion' && direction ? At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script}).script : null;
+  // Paper collage and pixel art (0.89); a mix uses the style's ticked finishes.
+  const finish = At.FINISHES.includes(spec.atelier?.finish) ? spec.atelier.finish : 'motion', finishes = spec.atelier?.finishes || null;
+  const checkedDirection = finish !== 'motion' && direction ? At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, finishes, palette: spec.atelier?.palette}) : null, animeScript = checkedDirection?.script || null;
   const {pacing, qc, typography} = spec, spokenBy = new Map(), allowed = E.engineScope(spec).drawn, films = E.engineScope(spec).films;
   const out = scenes.map((scene, index) => {
     const span = timed.slice(scene.sentenceStart - 1, scene.sentenceEnd);
@@ -279,7 +296,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
       const setting = scene.setting ? Sk.validateSetting(scene.setting, {kit}) : null;
       const raw = shot.sketch && setting ? {...shot.sketch, set: shot.sketch.set ?? setting.set, mood: shot.sketch.mood ?? setting.mood} : shot.sketch;
       // An atelier frame (P06h) replaces the sketch; its composition, once designed, is checked again here.
-      const frame = shot.source === 'generated-graphics' && shot.frame ? atelierFrame(shot.frame, shotLabel, warnings, format, finish, animeScript) : null;
+      const frame = shot.source === 'generated-graphics' && shot.frame ? atelierFrame(shot.frame, shotLabel, warnings, format, finish, animeScript, {finishes, direction: checkedDirection}) : null;
       const drawPrimary = E.ENGINES[primary]?.draws ? primary : 'motion';
       const sketch = shot.source === 'generated-graphics' ? (frame?.html ? {} : {sketch: raw && !frame ? Sk.validate(raw, {primary: drawPrimary, cast: castOut, lenient: true, warn: message => warnings.push(`${shotLabel} drawing: ${message}`), kit, engines: allowed, films, looks: E.engineScope(spec).looks, boards: E.engineScope(spec).boards, designs: E.engineScope(spec).designs, types: E.engineScope(spec).types || ['cartoon']}) : Sk.fromText(own, {onScreenText: scene.onScreenText, shotIndex, purpose: scene.purpose, primary: drawPrimary, cast: castOut, setting})}) : {};
       // Leaving the main look is a judgement call: the planner says why in the shot's notes.
@@ -303,7 +320,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
   warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
   return {
     payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut} : {}), ...(design ? {design} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
-      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(pictures ? {pictures} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(storyWorld ? {world: storyWorld} : {}), ...(E.GRADES[grade] ? {grade} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
+      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, finishes, palette: spec.atelier?.palette, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(pictures ? {pictures} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(storyWorld ? {world: storyWorld} : {}), ...(E.GRADES[grade] ? {grade} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
     issues, warnings,
   };
 }
@@ -413,6 +430,7 @@ function reviewMessages(input) {
     // The owner's line-by-line review of a weak video (2026-10-21), as checks on every shot.
     '(7) OWNER STANDARD - fix every shot that fails one of these: something that breaks physics or nature without a reason in the words (floating things, wrong sizes, water or light that cannot be, an animal or person moving in a way they cannot); a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
+    ...(input.skills ? [SKILLS_LINE.replace('Apply them in every scene and shot', 'Judge every shot by them too, and fix the shots that break them')] : []),
     ...(input.drawNow ? ['The shots listed in "drawNow" were planned as designed (atelier) shots that will not be designed. Return a drawing ("sketch") for each of them in the same vocabulary, in the engine that suits its words (motion graphics for numbers, lists and comparisons; stickman for people; hand-drawn for processes, places and history), so it fits its neighbours. Leave the other shots alone unless they clearly fail.'] : []),
     E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film, looks: input.looks, boards: input.boards, designs: input.designs, films: input.films, pictureType: input.pictureType}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix' && (input.looks || true), boards: input.board === 'mix' && (input.boards || true), designs: input.design === 'mix' && (input.designs || true), types: E.PICTURE_TYPES[input.pictureType] || null}),
   ].join('\n');
@@ -765,12 +783,12 @@ class SceneRoom {
     // Chosen for this video (0.74): its subject, and its engine and looks (skills made for another engine stay out).
     const drawing = spec.drawing || {};
     const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id, {text: [content.title, content.angle, inputs.family.niche, spec.name].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(inputs.family.format) ? inputs.family.format : null,
-      style: ['engine', inputs.engine, ...(inputs.scope?.drawn || []), drawing.look, ...(drawing.looks || []), drawing.board, ...(drawing.boards || []), drawing.design, ...(drawing.designs || []), drawing.hand ? 'hand' : '', inputs.engine === 'handdrawn' ? 'whiteboard' : '', ['anime', 'mix'].includes(spec.atelier?.finish) ? 'anime' : '', spec.cinema ? 'cinema' : ''].filter(Boolean).join(' ')}) || null;
+      style: skillStyle(inputs, spec)}) || null;
     // Why the owner revoked earlier visuals of this script (0.86): the next storyboard learns from them.
     const rejected = this.db.prepare("SELECT end_reason FROM visual_approvals WHERE content_id=? AND status='revoked' ORDER BY ended_at DESC LIMIT 5").all(content.id).map(row => String(row.end_reason || '').replace(/\s*Revoked by [^.]*\.\s*$/, '').trim().slice(0, 300)).filter(Boolean);
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(['anime', 'mix'].includes(spec.atelier?.finish) ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: spec.adaptive ? {min: 0.8, max: 10} : {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen,
         // An adaptive style (0.64): Claude designs this video's look; the style's own values are only its starting point.
         ...(spec.adaptive ? {adaptive: true, startingPoint: {palette: spec.palette, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont}, pace: {shotMinSeconds: spec.pacing.shotMinSeconds, shotMaxSeconds: spec.pacing.shotMaxSeconds, hookShotMaxSeconds: spec.pacing.hookShotMaxSeconds}, energy: spec.motion.intensity, captions: {theme: spec.captions.theme || 'clean', animation: spec.captions.animation || 'fade', highlight: spec.captions.activeWordHighlight}}, fonts: Fonts.choices().map(item => `${item.name} (${item.group}${item.installed ? '' : ', drawn as ' + item.instead})`)} : {})},
@@ -803,7 +821,7 @@ class SceneRoom {
     });
     // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
     const map = parts.length > 1 && settings.storyMap !== false ? (() => {
-      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(pictureType ? {pictureType} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(['anime', 'mix'].includes(spec.atelier?.finish) ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(pictureType ? {pictureType} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
       const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
       requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
       return {input, maxTokens};
@@ -1141,6 +1159,12 @@ class SceneRoom {
     const words = Cap.wordTimings({sentences: built.payload.sentences, pauses: [], narrationSeconds: built.payload.timing.narrationSeconds});
     const canvas = family.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080}, direction = built.payload.direction;
     const report = {shots: targets.length, designed: 0, tokens: 0, notes};
+    // The owner's approved craft skills for designed shots (0.89): chosen for this video's subject and its finishes,
+    // recorded once with the plan job.
+    const used = [...new Set(targets.map(item => At.frameFinish(direction, item.shot.frame)))];
+    const skillBrief = this.store.skillRuntime?.brief('motion.template', family.id, {text: [content.title, content.angle, family.niche, ...used, ...targets.slice(0, 12).map(item => item.shot.frame.focal || '')].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null,
+      style: ['engine', 'atelier', 'motion', ...used, used.includes('anime') ? 'anime' : '', used.includes('pixel') ? 'pixel' : '', used.includes('collage') ? 'collage paper' : ''].filter(Boolean).join(' ')}) || null;
+    if (skillBrief) this.store.skillRuntime.recordUsage({jobId: job.id, familyId: family.id, room: 'scene', taskKey: 'motion.template', brief: skillBrief});
     const renderer = this.browser ? new MotionRenderer({browser: this.browser, timeoutMs: 20000}) : null;
     let rendererReady = false;
     const reserve = (key, limit) => this.store.transaction(() => {
@@ -1164,14 +1188,14 @@ class SceneRoom {
         for (let attempt = 1; attempt <= 2 && !html; attempt++) {
           const key = `${job.id}:frame:${shot.label}:${job.tag ?? job.attempts}:${attempt}`, limit = job.scope.compose.tokenLimit;
           if (!reserve(key, limit)) { notes.push(`${shot.label}: the family's monthly token limit could not reserve this shot; it is drawn from its words.`); break; }
-          const messages = At.composeMessages({frameId, ...canvas, duration, frame: shot.frame, direction, words: spoken, neighbours, notes: shot.notes, findings, ask, fps: inputs.spec.canvas.frameRate});
+          const messages = At.composeMessages({frameId, ...canvas, duration, frame: shot.frame, direction, words: spoken, neighbours, notes: shot.notes, findings, ask, fps: inputs.spec.canvas.frameRate, skills: skillBrief?.prompt || null});
           const maxTokens = Math.min(32000, limit - messageTokenUpperBound(messages));
           let reply;
           try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'frames', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
           catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; notes.push(`${shot.label}: ${error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer.'} It is drawn from its words.`); break; }
           settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
           report.tokens += reply.usage?.totalTokens || 0;
-          const checked = At.validateComposition(reply.content, {frameId, ...canvas, duration, script: At.frameFinish(direction, shot.frame) === 'anime' ? direction.script : null});
+          const own = At.frameFinish(direction, shot.frame), checked = At.validateComposition(reply.content, {frameId, ...canvas, duration, script: own === 'anime' ? direction.script : null, finish: own, pixel: own === 'pixel' ? direction.pixel : null});
           findings = [...checked.issues];
           if (!findings.length && renderer) {
             try {
@@ -1282,11 +1306,12 @@ class SceneRoom {
     // The video's style key: its first painting that passed, attached to every later painting so the video keeps one style.
     // Natural paintings keep a style key of their own, and the first painting of each character is that character's portrait.
     const keptImage = key => { const row = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, key); return row ? JSON.parse(row.art).image : null; };
+    const skills = this.jobSkills(job, 'visuals.prompt', inputs, content);
     const styleKeys = {cartoon: keptImage('paint:style-key'), natural: keptImage('paint:style-key:natural')};
     const artDirector = async (sha, rules, item, label, attempt) => {
       const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
       if (!reserve(key, CHECK_TOKENS)) return {fits: true, problems: [], unchecked: 'the family\'s monthly token limit could not reserve the check'};
-      const messages = Dna.checkMessages({rules, describe: item.describe, backdrop: item.backdrop === true, image: {mediaType: file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp', data: fs.readFileSync(file).toString('base64')}});
+      const messages = Dna.checkMessages({rules, skills, describe: item.describe, backdrop: item.backdrop === true, image: {mediaType: file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp', data: fs.readFileSync(file).toString('base64')}});
       try { const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens: 4000, signal: job.signal, onStart}); settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown'); report.tokens += reply.usage?.totalTokens || 0; return Dna.readCheck(reply.content); }
       catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; return {fits: true, problems: [], unchecked: error instanceof AiError || error instanceof InputError ? error.message : 'no answer'}; }
     };
@@ -1333,7 +1358,7 @@ class SceneRoom {
           fs.mkdirSync(path.dirname(incoming), {recursive: true});
           let settled = false;
           try {
-            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems}), outFile: incoming, references, onStart});
+            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills}), outFile: incoming, references, onStart});
             settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
             report.tokens += made.usage?.totalTokens || 0;
             const candidate = this.keepArt(incoming);
@@ -1364,7 +1389,7 @@ class SceneRoom {
       for (let attempt = 1; attempt <= 2 && !art; attempt++) {
         const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
-        const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', engine, board, look, design, palette, world: plan.world || null, grade: plan.grade || null, cast, aspect, findings});
+        const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', engine, board, look, design, palette, world: plan.world || null, grade: plan.grade || null, cast, aspect, findings, skills});
         const maxTokens = Math.min(32000, scope.tokenLimit - messageTokenUpperBound(messages));
         let reply;
         try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
@@ -1390,6 +1415,15 @@ class SceneRoom {
     notes.reverse();
     return {plan, pictures: report};
   }
+  // The owner's approved skills for one step of a plan job (0.89, owner request 2026-11-04: skills at every step). The
+  // continuity review reads the planner's own skills; the pictures, paintings and their art director get the visual
+  // skills chosen for this video's subject and look. Recorded once per job and step.
+  jobSkills(job, taskKey, inputs, content) {
+    if (taskKey === 'scene.plan') { const kept = (job.scope.parts?.[0]?.promptInput || job.scope.promptInput)?.skills; if (kept) return kept; }
+    const brief = this.store.skillRuntime?.brief(taskKey, inputs.family.id, {text: [content.title, content.angle, inputs.family.niche, inputs.spec.name].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(inputs.family.format) ? inputs.family.format : null, style: skillStyle(inputs, inputs.spec)}) || null;
+    if (brief) this.store.skillRuntime.recordUsage({jobId: job.id, familyId: inputs.family.id, room: 'scene', taskKey, brief});
+    return brief?.prompt || null;
+  }
   async reviewPlan(job, merged, spent, onStart, {only = null, ask = null, resume = null} = {}) {
     const content = this.store.content(job.content_id), inputs = this.inputs(content), plan = resume ? structuredClone(resume.plan) : structuredClone(merged), notes = resume ? [...resume.review.notes] : [], changes = resume ? [...resume.review.changes] : [];
     let built;
@@ -1397,7 +1431,7 @@ class SceneRoom {
       const raw = aiScenes(merged, false);
       built = buildPayload({scenes: raw.scenes, sentences: splitSentences(content.script, inputs.family.primaryLocale).map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec: inputs.spec, terms: [], summary: raw.summary, cast: raw.cast, primary: inputs.engine, kit: kitOf(merged.kit), world: merged.world || null});
     } catch { return {plan: merged, review: null}; }
-    const words = Cap.wordTimings({sentences: built.payload.sentences, pauses: [], narrationSeconds: built.payload.timing.narrationSeconds});
+    const words = Cap.wordTimings({sentences: built.payload.sentences, pauses: [], narrationSeconds: built.payload.timing.narrationSeconds}), skills = this.jobSkills(job, 'scene.plan', inputs, content);
     // With `only`, the review reads just the scenes holding those shots and draws them now (redraw job).
     const all = built.payload.scenes, scenes = only ? all.filter(scene => scene.shots.some(shot => only.includes(shot.label))) : all;
     if (!scenes.length) return {plan, review: null};
@@ -1413,7 +1447,7 @@ class SceneRoom {
       const flagged = [...Sk.continuity(listed, built.payload.cast || []), ...Sk.worldNotes(listed, merged.world)];
       const kitNow = kitOf(merged.kit);
       const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {}), ...ticks(inputs.spec.drawing), ...(E.PICTURE_TYPES[inputs.spec.drawing.pictureType] ? {pictureType: inputs.spec.drawing.pictureType} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}),
-        ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}), ...(ask ? {ownerAsks: ask} : {}),
+        ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}), ...(ask ? {ownerAsks: ask} : {}), ...(skills ? {skills} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
           shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
       const messages = reviewMessages(input), maxTokens = Math.min(32000, job.scope.review.tokenLimit - messageTokenUpperBound(messages));
@@ -2047,7 +2081,7 @@ class SceneRoom {
       if (!raw) continue;
       let r = {};
       try { r = JSON.parse(raw); } catch { /* counted as out of date */ }
-      const same = shot.frame?.html ? r.compositionHash === hash({html: shot.frame.html, engine: At.VERSION}) : r.sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION});
+      const same = shot.frame?.html ? r.compositionHash === compositionHashOf(shot.frame, payload.direction) : r.sketchHash === hash({sketch: shot.sketch, engine: Sk.VERSION});
       if (same) current++; else outdated++;
     }
     return {total, current, outdated, missing: total - current - outdated, active};
@@ -2074,7 +2108,9 @@ class SceneRoom {
         if (shot.source !== 'generated-graphics' || this.activeJob(row.content_id, shot.id, 'draw')) continue;
         const selected = this.db.prepare('SELECT a.rights FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=? AND s.shot_id=?').get(row.content_id, shot.id);
         if (shot.frame?.html) {
-          const composition = {html: shot.frame.html, frameId: shot.frame.frameId, composedSeconds: shot.frame.composedSeconds, words: shot.frame.words || [], canvas: mctx.payload.direction?.palette.canvas || '#FFFFFF'}, compositionHash = hash({html: composition.html, engine: At.VERSION});
+          // Paper collage and pixel art (0.89) carry how the render shows them: frames held per drawing, the pixel grid.
+          const finish = At.renderFinish(mctx.payload.direction, shot.frame, mctx.family.format === 'shorts' ? {width: 1080, height: 1920} : {width: 1920, height: 1080});
+          const composition = {html: shot.frame.html, frameId: shot.frame.frameId, composedSeconds: shot.frame.composedSeconds, words: shot.frame.words || [], canvas: mctx.payload.direction?.palette.canvas || '#FFFFFF', ...finish}, compositionHash = compositionHashOf(shot.frame, mctx.payload.direction);
           if (!again && selected && JSON.parse(selected.rights).compositionHash === compositionHash) continue;
           ids.push(this.insertJob({ctx: this.shotIn(mctx, shot.id), kind: 'draw', capabilityId: 'drawn-scene', scope: {composition, compositionHash, durationSeconds: shot.durationSeconds, capability: VS.capability('drawn-scene')}, createdBy}));
           continue;
@@ -2293,7 +2329,7 @@ class SceneRoom {
         try {
           await renderer.start();
           // An atelier shot (P06h) is its designed composition, seeked frame by frame at preview size.
-          return scope.composition ? await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, outDir: work}) : await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, images: this.artImages(scope.sketch), palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
+          return scope.composition ? await renderer.renderComposition({html: scope.composition.html, frameId: scope.composition.frameId, ...canvas, scale: preview.width / canvas.width, canvas: scope.composition.canvas, duration: scope.composition.composedSeconds, fps, hold: scope.composition.hold || 1, outDir: work}) : await renderer.render({template: 'sketch-scene', data: {...Sk.validate(scope.sketch, {primary: E.primaryEngine(spec), lenient: true}), times: scope.times || null}, images: this.artImages(scope.sketch), palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent},
           fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont, hand: 'Segoe Print'}, drawing: spec.drawing || null,
           vertical: ctx.family.format === 'shorts', width: preview.width, height: preview.height, fps, duration, outDir: work});
         } finally { await renderer.close(); }
@@ -2301,7 +2337,7 @@ class SceneRoom {
       let drawn;
       try { drawn = await draw(); } catch (error) { if (!/did not answer|did not start/i.test(String(error.message))) throw error; fs.rmSync(work, {recursive: true, force: true}); drawn = await draw(); }
       file = path.join(dir, `${assetId}.mp4`);
-      await R.run(this.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(work, drawn.pattern), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', '-y', file], {timeout: Math.max(120000, drawn.frames * 200)});
+      await R.run(this.ffmpeg, ['-hide_banner', '-nostdin', '-loglevel', 'error', '-framerate', String(fps), '-i', path.join(work, drawn.pattern), ...(Array.isArray(scope.composition?.grid) ? ['-vf', At.pixelFilter(scope.composition.grid, preview)] : []), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-an', '-y', file], {timeout: Math.max(120000, drawn.frames * 200)});
       const probe = await this.evidence(file, 'video/mp4'), thumb = await this.thumbnail(file, assetId, probe), sha256 = VS.sha256File(file), sizeBytes = fs.statSync(file).size;
       const rights = scope.composition
         ? {basis: 'own-composition', license: scope.capability.rights, provider: 'local', composition: scope.composition, compositionHash: scope.compositionHash, framesSha256: drawn.sha256, drawnAt: now(), synthetic: false, disclosure: 'none', note: 'Designed for this video by Claude (atelier) and rendered by the program; no third-party media.'}
@@ -2735,4 +2771,4 @@ function mergePlans(fresh, earlier, picks) {
   return {scenes, cast, kit: {...(earlier.kit || {}), ...(fresh.kit || {})}, renamed: Object.keys(remap).length, fromEarlier: blocks.filter(item => use.get(item.block) === 'previous').length, blocks: blocks.length};
 }
 
-module.exports = {planScenes, mergeBlocks, mergeMessages, readPicks, mergePlans, SKILLS_LINE, SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};
+module.exports = {reviewMessages, skillStyle, planScenes, mergeBlocks, mergeMessages, readPicks, mergePlans, SKILLS_LINE, SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};

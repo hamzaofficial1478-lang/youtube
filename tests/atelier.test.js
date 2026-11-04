@@ -165,3 +165,113 @@ test('the style keeps the atelier finish only for the Atelier and Story Mix engi
   assert.equal(St.validateStyleSpec({...launch('atelier'), atelier: {finish: 'mix'}}).atelier.finish, 'mix');
   assert.match(launch('atelier').name, /^Motion Graphics/, 'the engine is called Motion Graphics (it was Atelier)');
 });
+
+// 0.89 (owner request 2026-11-04): paper collage and pixel art in the Motion Graphics engine.
+test('paper collage and pixel art: their contracts, palettes, checks and what the render needs', () => {
+  const read = 'A warm handmade story of a small town told in cut paper and little pixel signs';
+  const paper = A.validateDirection({read, palette: {canvas: '#C9A36B', ink: '#2B2430', accent: '#E85D4A', support: '#8CC6E7'}}, {finish: 'collage'});
+  assert.deepEqual([paper.finish, paper.palette.accent, paper.pixel, paper.script], ['collage', '#E85D4A', undefined, undefined]);
+  // Pixel art: the style's palette, Claude's own, or a named repair; the palette roles come from it.
+  const preset = A.validateDirection({read}, {finish: 'pixel', palette: 'arcade'});
+  assert.deepEqual([preset.finish, preset.pixel.name, preset.pixel.colors.length, preset.palette.canvas], ['pixel', 'Arcade night', 16, A.PALETTES.arcade.colors[0]]);
+  const own = A.validateDirection({read, pixel: {name: 'Night lake', colors: ['#101828', '#2A4365', '#F6E05E', '#FFFFFF']}}, {finish: 'pixel'});
+  assert.deepEqual([own.pixel.key, own.palette.canvas, own.palette.ink], ['own', '#101828', '#FFFFFF']);
+  const warnings = [];
+  assert.equal(A.validateDirection({read, pixel: {colors: ['#101010', '#111111', '#121212', '#131313']}}, {finish: 'pixel', warn: m => warnings.push(m)}).pixel.name, 'Rainy dusk');
+  assert.match(warnings[0], /stands out from its ground/);
+  assert.throws(() => A.pixelPalette({colors: ['#000000']}, {lenient: false}), /4 to 16/);
+  // Contracts: paper and pixels have their own rules and keep the shared ones.
+  const frame = A.validateFrame({blueprint: 'compose', beats: [{show: 'the house drops in'}]});
+  const ask = (direction, extra = {}) => A.composeMessages({frameId, width: 1920, height: 1080, duration: 3, frame, direction, words: [], fps: 30, ...extra});
+  const [paperSystem, paperUser] = ask(paper, {skills: {skills: [{id: 'collage.torn-rims', do: ['tear part of the edge']}]}});
+  assert.match(paperSystem.content, /PAPER COLLAGE FINISH[\s\S]*url\(#at-torn\)[\s\S]*STOP-MOTION|PAPER COLLAGE FINISH[\s\S]*url\(#at-torn\)[\s\S]*stop-motion/i);
+  assert.doesNotMatch(paperSystem.content, /MOTION DOCTRINE/);
+  assert.match(paperUser.content, /"finish":"collage"[\s\S]*"heldFrames":2[\s\S]*Craft skills the owner approved[\s\S]*collage\.torn-rims/);
+  const [pixelSystem, pixelUser] = ask(preset);
+  assert.match(pixelSystem.content, /PIXEL ART FINISH[\s\S]*crispEdges[\s\S]*__atelier\.pixel\.text/);
+  assert.match(pixelUser.content, /"heldFrames":3,"grid":"320x180","pixelPalette":\["#0B0B14"/);
+  assert.equal(JSON.parse(A.composeMessages({frameId, width: 1080, height: 1920, duration: 3, frame, direction: preset, words: [], fps: 30})[1].content.split('\n\n')[0]).grid, '180x320', 'Shorts get a tall grid');
+  // The checks: paper must be paper; pixels must be cells in the palette without blends.
+  const svg = body => `<template><div id="root" data-composition-id="${frameId}" data-width="1920" data-height="1080" data-duration="3">${body}<script>${timeline}</script></div></template>`;
+  const check = (body, finish, pixel = null) => A.validateComposition(svg(body), {frameId, width: 1920, height: 1080, duration: 3, finish, pixel});
+  assert.match(check('<svg viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="#C9A36B"/></svg>', 'collage').issues.join(' '), /Nothing in the shot is paper/);
+  assert.deepEqual(check('<svg viewBox="0 0 1920 1080"><rect width="1920" height="1080" fill="#C9A36B" filter="url(#at-torn-kraft)"/></svg>', 'collage').issues, []);
+  assert.match(check('<svg viewBox="0 0 320 180"><rect width="320" height="180" fill="#0B0B14"/></svg>', 'pixel', preset.pixel).issues.join(' '), /not on the cell grid/);
+  const flagged = check('<svg viewBox="0 0 320 180" shape-rendering="crispEdges"><rect width="320" height="180" fill="#0B0B14"/><rect width="9" height="9" fill="#123456"/><rect width="9" height="9" fill="#654321"/><rect width="9" height="9" fill="#ABCDEF"/><div style="filter:blur(2px)"></div></svg>', 'pixel', preset.pixel).issues.join(' ');
+  assert.match(flagged, /no blur[\s\S]*Colours outside the pixel palette: #123456, #654321, #ABCDEF/);
+  assert.deepEqual(check(`<svg viewBox="0 0 320 180" shape-rendering="crispEdges"><rect width="320" height="180" fill="${A.PALETTES.arcade.colors[0]}"/></svg>`, 'pixel', preset.pixel).issues, []);
+  // The render: frames held per drawing, and a pixel grid scaled sharply.
+  assert.deepEqual(A.renderFinish(paper, frame, {width: 1920, height: 1080}), {finish: 'collage', hold: 2});
+  assert.deepEqual(A.renderFinish(preset, frame, {width: 1080, height: 1920}), {finish: 'pixel', hold: 3, grid: [180, 320]});
+  assert.deepEqual(A.renderFinish(A.validateDirection({read}), frame, {width: 1920, height: 1080}), {}, 'motion graphics are not held');
+  assert.equal(A.pixelFilter([320, 180], {width: 1280, height: 720}), 'scale=320:180:flags=neighbor,scale=1280:720:flags=neighbor');
+  // The planner's guide.
+  assert.match(A.promptGuide({finish: 'collage'}), /PAPER COLLAGE[\s\S]*cut-paper figures[\s\S]*Blueprints/);
+  assert.match(A.promptGuide({finish: 'pixel', palette: 'meadow'}), /PIXEL ART[\s\S]*style's Meadow day/);
+});
+
+test('a mix of the ticked finishes: each frame takes one of them, with its own palette and checks', () => {
+  const read = 'An explainer that tells the history in paper and the numbers in pixels and plain charts';
+  const direction = A.validateDirection({read, pixel: 'desert'}, {finish: 'mix', finishes: ['collage', 'pixel', 'motion']});
+  assert.deepEqual([direction.finish, direction.finishes, direction.pixel.name, direction.script], ['mix', ['motion', 'collage', 'pixel'], 'Desert noon', undefined]);
+  const beats = [{show: 'a map of the old town'}], warnings = [];
+  const paper = A.validateFrame({blueprint: 'compose', finish: 'collage', beats}, {finish: 'mix', finishes: direction.finishes});
+  const none = A.validateFrame({blueprint: 'compose', beats}, {finish: 'mix', finishes: direction.finishes});
+  const odd = A.validateFrame({blueprint: 'compose', finish: 'anime', beats}, {finish: 'mix', finishes: direction.finishes, warn: m => warnings.push(m)});
+  assert.deepEqual([paper.finish, none.finish, odd.finish], ['collage', 'motion', 'motion']);
+  assert.match(warnings[0], /is motion, collage or pixel; it is motion graphics/);
+  assert.deepEqual([A.frameFinish(direction, paper), A.frameFinish(direction, {finish: 'pixel'}), A.frameFinish(direction, {finish: 'anime'})], ['collage', 'pixel', 'motion']);
+  // The old mix (no ticks) is motion graphics and the HTML render, exactly as before 0.89.
+  const old = A.validateDirection({read, script: 'noon'}, {finish: 'mix'});
+  assert.deepEqual([old.finishes, old.script.name, A.frameFinish(old, {finish: 'collage'})], [undefined, 'Paper noon', 'motion']);
+  const guide = A.promptGuide({finish: 'mix', finishes: ['collage', 'pixel', 'motion']});
+  assert.match(guide, /A MIX OF 3 FINISHES[\s\S]*"collage"[\s\S]*"pixel"[\s\S]*PAPER COLLAGE FRAMES[\s\S]*PIXEL ART FRAMES/);
+  assert.doesNotMatch(guide, /HTML RENDER FRAMES/);
+  assert.match(A.promptGuide({finish: 'mix', script: 'noon'}), /MIX OF MOTION GRAPHICS AND HTML RENDER/, 'the old mix keeps its guide');
+});
+
+test('the style keeps paper and pixel settings: ticked finishes only for a mix, a named pixel palette', () => {
+  const St = require('../style'), launch = structuredClone(St.LAUNCH_PROFILES.find(item => item.key === 'atelier').spec);
+  assert.deepEqual(St.validateStyleSpec({...launch, atelier: {finish: 'pixel', palette: 'handheld'}}).atelier, {finish: 'pixel', script: 'choose', palette: 'handheld'});
+  assert.deepEqual(St.validateStyleSpec({...launch, atelier: {finish: 'mix', finishes: ['pixel', 'collage']}}).atelier, {finish: 'mix', script: 'choose', finishes: ['collage', 'pixel']});
+  assert.deepEqual(St.validateStyleSpec({...launch, atelier: {finish: 'collage', finishes: ['pixel', 'collage']}}).atelier, {finish: 'collage', script: 'choose'}, 'ticks are kept only while the finish is mix');
+  assert.throws(() => St.validateStyleSpec({...launch, atelier: {finish: 'mix', finishes: ['pixel']}}), /Tick two or more/);
+  assert.throws(() => St.validateStyleSpec({...launch, atelier: {finish: 'pixel', palette: 'neon'}}), /pixel palette/);
+});
+
+test('the browser holds paper on twos and pixels on threes, and the pixel helpers lay exact cells', {skip: findBrowser() ? false : 'No Edge or Chrome on this machine'}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'atelier-hold-'));
+  const renderer = new MotionRenderer();
+  t.after(async () => { await renderer.close(); fs.rmSync(dir, {recursive: true, force: true}); });
+  await renderer.start();
+  const move = `const tl = gsap.timeline({paused: true}); tl.fromTo('#${frameId}-hero', {x: 0}, {x: 600, duration: 3, ease: 'none'}, 0); window.__timelines["${frameId}"] = tl;`;
+  const html = A.validateComposition(composition(move), {frameId, width: 1920, height: 1080, duration: 3}).html;
+  const base = {html, frameId, width: 1920, height: 1080, scale: 0.125, canvas: '#10131A', duration: 1, fps: 12};
+  await renderer.renderComposition({...base, hold: 3, outDir: path.join(dir, 'h')});
+  const frame = k => fs.readFileSync(path.join(dir, 'h', `f${String(k).padStart(5, '0')}.png`));
+  assert.ok(frame(0).equals(frame(1)) && frame(1).equals(frame(2)), 'one drawing is shown for three frames');
+  assert.ok(!frame(2).equals(frame(3)), 'the next drawing comes on the fourth frame');
+  // The pixel helpers, run in the page: a bitmap word, a sprite and a dither, in cells.
+  const pix = `<svg id="${frameId}-px" viewBox="0 0 320 180" width="100%" height="100%" shape-rendering="crispEdges"></svg>`;
+  const build = `const s = document.getElementById('${frameId}-px'), X = __atelier.pixel; window.__word = X.text(s, 'HI 1', 2, 2, '#FFFFFF').childNodes.length; window.__sprite = X.sprite(s, ['.##.', '#aa#'], {'#': '#FF0000', a: '#00FF00'}, 10, 10).childNodes.length; window.__fill = X.dither('#000000', '#FFFFFF', 0.5); window.__defs = !!document.querySelector('#at-defs #at-torn') && !!document.getElementById(window.__fill.slice(5, -1)); ${timeline}`;
+  await renderer.loadComposition({html: A.validateComposition(composition(build, pix), {frameId, width: 1920, height: 1080, duration: 3}).html, frameId, width: 640, height: 360, duration: 3});
+  assert.deepEqual(await renderer.evaluate('[window.__word, window.__sprite, window.__fill, window.__defs]'), [19, 4, 'url(#at-px-000000-FFFFFF-8)', true]);
+});
+
+// 0.89: the approved skills reach the continuity review, Claude's pictures, ChatGPT's paintings and the art director.
+test('skills reach the review, the pictures, the paintings and the art director', () => {
+  const {reviewMessages, skillStyle} = require('../scene-room');
+  const Il = require('../illustrate'), Dna = require('../visual-dna');
+  const skills = {sourceHierarchy: ['owner instruction in this request'], skills: [{id: 'era.cave-painting', title: 'Cave painting', do: ['Keep pigment strong and dense.'], avoid: ['A bison like a box on table legs.'], checks: ['The bison has a tall hump.']}]};
+  const review = reviewMessages({engine: 'stickman', look: 'classic', skills, scenes: []});
+  assert.match(review[0].content, /OWNER SKILLS \(input "skills"\)[^\n]*Judge every shot by them too/);
+  assert.doesNotMatch(reviewMessages({engine: 'stickman', look: 'classic', scenes: []})[0].content, /OWNER SKILLS/);
+  assert.match(Il.messages({describe: 'a bison on a cave wall', skills})[1].content, /CRAFT SKILLS THE OWNER APPROVED FOR PICTURES[\s\S]*era\.cave-painting/);
+  assert.match(Il.paintPrompt({describe: 'a bison on a cave wall', skills}), /Craft: Keep pigment strong and dense\. Avoid: A bison like a box on table legs\./);
+  assert.doesNotMatch(Il.paintPrompt({describe: 'a bison on a cave wall'}), /Craft:/);
+  const check = Dna.checkMessages({rules: Dna.of({engine: 'stickman', look: 'classic'}), describe: 'a bison', image: {mediaType: 'image/png', data: 'AA=='}, skills});
+  assert.match(check[1].content[1].text, /CRAFT CHECKS THE OWNER APPROVED[^\n]*tall hump/);
+  assert.equal(Dna.craftText(skills, 'do', 10), '', 'a rule that does not fit is left out whole');
+  // The words that decide which engine-specific skills fit a video include its Motion Graphics finishes and film looks.
+  assert.match(skillStyle({engine: 'atelier'}, {atelier: {finish: 'mix', finishes: ['collage', 'pixel']}, drawing: {film: 'riso'}}), /collage paper pixel riso/);
+});

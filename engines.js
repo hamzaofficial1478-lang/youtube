@@ -200,7 +200,10 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
     ...(film === 'choose' ? [`FILM LOOK: choose one film look for this whole video, or none, and set it on every drawn shot as sketch.film${films?.length ? ' (only from the film looks the owner ticked)' : ''}: ${only(FILMS, films).map(([key, item]) => `${key} (${item.name}): ${item.plan}`).join(' ')} A second look only for a change of register (a flashback, an archive memory), with the reason in notes.`] : []),
     // 0.68: an anime atelier draws its people itself, so they never step out into stick figures.
     ...(atelier?.finish === 'anime' ? ['ANIME ATELIER: the atelier shots draw the people themselves as cel characters; do not use stick figures or ink sketches for human moments in this video.'] : []),
-    ...(atelier?.finish === 'mix' ? ['MIXED ATELIER: people are drawn in the HTML render (anime) shots as cel characters; do not use stick figures or ink sketches for human moments in this video.'] : []),
+    ...(atelier?.finish === 'mix' && (!atelier.finishes || atelier.finishes.includes('anime')) ? ['MIXED ATELIER: people are drawn in the HTML render (anime) shots as cel characters; do not use stick figures or ink sketches for human moments in this video.'] : []),
+    // 0.89: paper and pixel videos keep their people in their own medium, so the video stays one film.
+    ...(atelier?.finish === 'collage' ? ['PAPER COLLAGE ATELIER: people in this video are cut-paper figures inside the atelier shots; do not use stick figures or ink sketches for human moments.'] : []),
+    ...(atelier?.finish === 'pixel' ? ['PIXEL ART ATELIER: people in this video are pixel sprites inside the atelier shots; do not use stick figures or ink sketches for human moments.'] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
     ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : []),

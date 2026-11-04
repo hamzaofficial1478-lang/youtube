@@ -1,0 +1,8 @@
+The paper collage and pixel art finishes of the Motion Graphics engine (0.89: atelier.js, atelier-runtime.js) and
+skills/drawing-craft.json restate the method of claude-drawing-skill (https://github.com/cloveric/claude-drawing-skill,
+pinned 4886ed820dd11ba5e3f32fce0ad3560edba849db): SKILL.md (the process, the per-medium lists of failures and fixes, the
+animation notes), lib/papercut.py (torn edges, the white fibrous rim, depth shadows, kraft, newsprint, notebook and crayon
+papers) and lib/pixelart.py (a small grid, a limited palette, ordered Bayer dithering, a 3x5 bitmap font, nearest
+upscaling). Its Python painting library is not included or run; the paper filters and pixel helpers are written for
+the browser in our own code. The 4x4 Bayer matrix is the standard one. The MIT licence is kept in LICENSE beside this
+notice.
