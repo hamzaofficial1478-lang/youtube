@@ -33,6 +33,7 @@ const MUSIC_MODELS = Object.freeze(['music_v1', 'music_v2', 'music_v2_5']);
 // sections, or the AI reading the script (uses tokens; the owner's named setting).
 const SETTINGS_DEFAULTS = Object.freeze({source: 'library', autoScore: 'free', sfxPicks: {}, musicModel: 'music_v2_5', monthlyMusicSeconds: 3600, monthlySfx: 300, centsPerMusicMinute: 30, centsPerSfx: 3, rights: null});
 const SOURCES = Object.freeze(['library', 'elevenlabs']);
+const PAID_SFX = Object.freeze(Object.keys(M.SFX).filter(kind => !M.STORY_SFX.includes(kind)));
 
 // ElevenLabs music and sound effects: fixed origin, header-only key, bounded download.
 class ElevenLabsAudioClient {
@@ -352,7 +353,8 @@ class SoundtrackRoom {
   libraryKinds(familyId) {
     const style = this.scenes.styles?.handoffs().find(item => item.familyId === familyId && item.ready);
     const engine = style ? E.primaryEngine(JSON.parse(this.scenes.styles.revisionRow(style.revisionId).spec)) : 'montage';
-    return Object.keys(M.SFX).map(kind => ({kind, engine, request: M.sfxRequest(kind, engine)}));
+    // Paid generation makes the twenty classic effects; the story sounds (0.87) come free from the library or Freesound.
+    return PAID_SFX.map(kind => ({kind, engine, request: M.sfxRequest(kind, engine)}));
   }
   library(familyId) {
     const settings = this.settings(familyId);
@@ -382,7 +384,7 @@ class SoundtrackRoom {
   queueLibrary(familyId, input) {
     object(input);
     const by = person(input.requestedBy), {settings, connector} = this.generationGate(familyId, input);
-    const kinds = Array.isArray(input.kinds) && input.kinds.length ? input.kinds : Object.keys(M.SFX);
+    const kinds = Array.isArray(input.kinds) && input.kinds.length ? input.kinds : PAID_SFX;
     requireValue(kinds.every(kind => Object.hasOwn(M.SFX, kind)), `Sound effects must be from: ${Object.keys(M.SFX).join(', ')}.`);
     const todo = this.libraryKinds(familyId).filter(item => kinds.includes(item.kind) && !this.assetFor(familyId, 'sfx', item.request) && !this.activeAudioJob(familyId, hash(item.request)));
     requireValue(todo.length, 'Those sound effects are already in the library or being generated.', 409);

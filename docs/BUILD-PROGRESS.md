@@ -163,7 +163,7 @@ Owner question: Freesound is connected - will the program search and add the mus
 - Only what the video needs (soundtrack.js, sound-online.js): `needs` gives Freesound the effect kinds the drawings earn and the world's music flavour; music searched in the world first, then by mood; tracks tagged with both.
 - The edit follows (editing-room.js, server.js): `refreshAutoAudio` after a new score or a fill, as a program revision while the audio is still the program's; never over the owner's mix; no repeat asking.
 - Who scores (soundtrack.js, public/audio-room.js, public/render-room.js): the channel setting free (default) or AI.
-- Tests: @@TESTS@@
+- Tests: `npm run check` clean; full `npm test` 433 tests: 429 passed, 3 skipped (Windows-only), 1 failed: the paid ElevenLabs effect library would have generated the 10 story sounds too (30 paid effects instead of 20). Fixed: paid generation makes only the twenty classic effects (`PAID_SFX`); story sounds come free from the library or Freesound. That test then passed, and tests/soundtrack.test.js and tests/sound-online.test.js ran 14 of 14 and the sound-library editing tests 2 of 2. New tests: story sounds from drawings and places, world music in the free score, a missing story sound left out at render; Freesound asked only for the needed effects and for tribal music first; the edit follows a newer score by itself and never over the owner's mix; the AI-score setting queues the AI score. Not tested: live Freesound searches with the new queries, a render with story sounds on the owner's library, Windows.
 
 ### 2026-11-04 - 0.86.0 drawings before approval, revoked drawings, building again with a choice, music with the draft
 
