@@ -7,7 +7,7 @@
   const SETS = K.SETS = {};
   K.GROUND = 0.805;
   // How strongly each set shows through; night-like sets stay dark enough to read as night.
-  K.SET_STRENGTH = {night: 0.78, space: 0.8, storm: 0.72, ocean: 0.72, stage: 0.75, abstract: 0.6};
+  K.SET_STRENGTH = {cave: 0.8, night: 0.78, space: 0.8, storm: 0.72, ocean: 0.72, stage: 0.75, abstract: 0.6};
   const F = (x, y, s, dir = 1) => K.frame(x * K.W, y * K.H, s * K.u, dir);
   const box = (x, y, w, h, fill, extra = {}) => ({pts: K.frame(0, 0, 1).pts([[x * K.W, y * K.H], [(x + w) * K.W, y * K.H], [(x + w) * K.W, (y + h) * K.H], [x * K.W, (y + h) * K.H], [x * K.W, y * K.H]]), fill, ...extra});
   const prop = (name, x, y, s, t, dir = 1) => K.PROPS[name](F(x, y, s, dir), {tl: t, seed: 3});
@@ -110,6 +110,19 @@
     ...[[0.2, 0.86], [0.55, 0.9], [0.85, 0.84]].map(([x, y]) => ({pts: F(x, y, 70).ring(0, 0, 1, 0.3, 20), fill: '#4A5230', stroke: false})),
     ...[[0.08, '#A8232B'], [0.92, '#2E5FA8']].flatMap(([x, col], k) => [{pts: [[x * K.W, 0.82 * K.H], [x * K.W, 0.42 * K.H]], width: 1}, ...flag(x, 0.42, col, t, k * 2)])];
 
+  // 0.85 the stone age (owner test 2026-11-04): a cave with painted walls and a fire, and the open land of hunters.
+  const painted = (name, x, y, s, t, dir = 1) => prop(name, x, y, s, t, dir).filter(item => item.pts).map(item => ({pts: item.pts, color: '#B5652B', width: 1.1, alpha: 0.75}));
+  SETS.cave = t => [wall('#5E4B3C'), ...[[0.1, 0.2], [0.4, 0.1], [0.62, 0.3], [0.3, 0.45], [0.9, 0.12]].map(([x, y], k) => ({pts: F(x, y, 160 + k * 30).blob(0, 0, 0.5, 0.32, 5, 0.18), fill: '#544335', stroke: false})),
+    {pts: F(0.84, 0.52, 520).blob(0, 0, 0.26, 0.5, 6, 0.08), fill: '#F3D7A2'}, {pts: F(0.84, 0.66, 300).blob(0, 0, 0.36, 0.12, 3, 0.1), fill: '#B9A15E', stroke: false}, ...prop('sun', 0.86, 0.3, 70, t),
+    ...[0.04, 0.16, 0.3, 0.47, 0.6, 0.72].map((x, k) => tri([[x, -0.02], [x + 0.025, 0.06 + (k % 3) * 0.04], [x + 0.05, -0.02]], '#4B3B2E')),
+    ...painted('mammoth', 0.3, 0.3, 150, 0), ...painted('spear', 0.47, 0.28, 90, 0), ...[[0.55, 0.36], [0.6, 0.33]].map(([x, y]) => ({pts: F(x, y, 26).blob(0, 0, 0.5, 0.6, 5, 0.3), fill: K.alpha('#B5652B', 0.7), stroke: false})),
+    ...ground('#4A3A2E'), ...prop('campfire', 0.16, 0.74, 150, t)];
+  SETS.prehistoric = t => [sky('#F6C68B', '#FBE8C8'), ...prop('sun', 0.84, 0.16, 160, t), ...birds(t), ...prop('volcano', 0.16, 0.5, 360, t), hills(0.6, '#C9B27A', 0.035, 1.3), hills(0.7, '#A9B36A', 0.03, 2, 0.6),
+    ...prop('mammoth', drift(0.3, 0.006, t, 1.5), 0.6, 110, t), ...prop('mammoth', drift(0.9, 0.006, t, 1.5), 0.62, 80, t + 1),
+    tri([[0.64, 0.77], [0.71, 0.55], [0.78, 0.77]], '#C8A27A'), {pts: [[0.69 * K.W, 0.53 * K.H], [0.71 * K.W, 0.57 * K.H], [0.73 * K.W, 0.53 * K.H]], width: 1}, tri([[0.7, 0.77], [0.71, 0.66], [0.72, 0.77]], '#5E4630'),
+    ...[[0.06, 0.78], [0.5, 0.79], [0.95, 0.77]].map(([x, y], k) => ({pts: F(x, y, 90 + k * 20).blob(0, 0, 0.5, 0.3, 5, 0.12), fill: '#9C9285'})),
+    ...ground('#B9A15E', false), ...Array.from({length: 9}, (_, k) => ({pts: F(0.05 + k * 0.11, 0.84, 40).pts([[-0.3, 0.3], [0, -0.4], [0.1, 0.3], [0.4, -0.3], [0.3, 0.3]]), color: '#7D8A3E', width: 0.8})),
+    ...prop('tree', 0.92, 0.6, 260, t)];
 
   // ------------------------------------------------------------ moods: light and colour over the whole shot
   K.mood = (name, t) => {

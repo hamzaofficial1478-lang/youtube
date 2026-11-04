@@ -772,3 +772,19 @@ whatever looks were ticked later.
   whether a hand draws, film looks, the picture type) and warns, with a link to the channel's style, when a hand draws
   in looks that are not Whiteboard.
 - `drawn-scene/29`: drawings made before are out of date and are drawn again by "Draw the remaining".
+
+## 36. The stone age, and drawings that finish inside their shot (0.85.0)
+
+Owner test, 2026-11-04: a stone-age script was drawn in the nature clearing, its people wore today's clothes, and drawings changed before they were finished.
+
+**The stone age in the vocabulary.** Two places: `cave` (rock walls with ochre paintings of a mammoth and a spear, hand prints, a campfire, daylight at the cave's mouth; it shows at night-like strength) and `prehistoric` (open land under a warm sky, a smoking volcano, a hide tent, mammoths walking far off, rocks and tufts of grass; outdoor, so nightfall sets its sun). Four props: `campfire` (crossed logs in a ring of stones, flames and rising sparks), `spear` (a flint point lashed to a shaft), `stone-axe` (a stone head on a handle) and `mammoth` (walking legs, swinging trunk, tusks); bonfire, javelin, axe, flint and woolly-mammoth map onto them. One outfit, `fur`: a hide tunic with a ragged hem and spots for stick figures, and for people a hide over bare arms and legs.
+
+**A stone-age script is a stone-age world.** When the plan names no world (one-part plans often do not), `Sk.worldOf` reads the script: stone age, cavemen, cave people, prehistoric, palaeolithic, neolithic, mesolithic, Neanderthals, mammoths or hunter-gatherers make the world `prehistoric`, and the plan stores it. Then, on Claude's and the free plans (never on the owner's own edits):
+
+- `Sk.worldCast` dresses the story's characters in hides before the shots are checked (headwear other than a headband or hood and eyewear other than an eyepatch come off). The narrator, the viewer ("you"), a host or guide, robots, creatures and the story's own kit costumes keep their looks.
+- `worldMend` moves places of today and of later ages: rooms, offices, banks, chambers and throne rooms to the cave; streets, cities, roads, markets, villages, castles, harbours, parks, nature and battlefields to the stone-age land. A figure without a cast id is dressed in hides there too.
+- A line that speaks to the viewer (you, your, today, this video) stays in today's world.
+
+The planner's guide lists the stone age beside the other places of the past, and the free draft finds caves, the stone age, mammoths, spears, flint and campfires in the words. `drawn-scene/30` (old drawings are drawn again).
+
+**Drawings finish inside their shot.** Under the pen (a drawing hand, or the whiteboard look) one thing is drawn at a time, so a short shot with a character, two props and a title used to cut away before the pen was done. The layout now queues every drawing first; when the queue runs past 0.15 s before the cut, the pen draws faster (`PACE`, down to 40% of its usual time, used for drawing on, handwriting and traced pictures) until it fits, and a drawing that still would not finish starts early enough to land. In the other looks an element that arrives late starts early enough for its entrance to finish. A long shot keeps the pen's own pace. The live player and the render use the same engine, so both show it.

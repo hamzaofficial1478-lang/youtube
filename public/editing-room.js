@@ -343,14 +343,16 @@ function tlTracks(tl, stale) {
 function tlEditor(content, edit, stale) {
   tlLoad(edit);
   if (!stale) playLoad(edit);
-  const tl = edit.timeline, clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, who = team.claude ? 'Claude' : team.chatgpt ? 'ChatGPT' : null;
+  // 0.85: one button per connected AI (owner question 2026-11-04: "why there is no button of ask gpt?").
+  const tl = edit.timeline, clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, ais = [['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => team[key]), who = ais.map(([, name]) => name).join(' or ') || null;
+  const askButtons = ais.map(([key, name], k) => action(TL.busy === key ? `${name} is reading the edit…` : `Ask ${name}`, 'tl-ask', key, k ? 'secondary' : 'primary')).join('');
   // 0.83: a viewer on top with Play, Pause and Stop, the inspector beside it, the timeline below, as in an editing program.
   const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><small class="muted">Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>`;
   const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span></div>';
   const viewer = stale ? '<div class="tl-viewer"><p class="inline-warning">This edit is out of date, so it cannot play. Draft a new edit.</p></div>' : playViewer(edit, content);
   const commandBox = stale ? '' : `<div class="tl-command"><h4>Tell the editor what to change</h4><textarea data-tl="command" rows="3" maxlength="2000" placeholder="For example: make the title in ${esc(clip.label)} slam in gold, add a sparkle when he says &quot;gold&quot;, and use a whip pan after it.">${esc(TL.command)}</textarea>
-    <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? action(TL.busy ? `${who} is reading the edit…` : `Ask ${who}`, 'tl-ask', '', 'primary') : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
-    <p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
+    <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? askButtons : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
+    <p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. You can ask for pictures, words, timing, transitions, captions, music and sound effects (music plays once the video has a score in Room 07 Audio). One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
   return `<div class="tl-editor" data-tl-root id="tl-player"><div class="tl-panels">${viewer}<div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${toolbar}${tlTracks(tl, stale)}${legend}${commandBox}</div>`;
 }
 function tlProposal() {
@@ -436,8 +438,9 @@ function tlAction(command, id, button) {
     const text = TL.command.trim();
     if (text.length < 3) return toast('Write what to change first.', true);
     const focus = TL.scope === 'clip' ? (TL.sel?.clipId || tlClipAt(tl, TL.at).id) : null;
-    TL.busy = true; render();
-    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
+    if (TL.busy) return toast('The editor is still reading the edit.', true);
+    TL.busy = ['claude', 'chatgpt'].includes(id) ? id : 'claude'; render();
+    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ai: TL.busy, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
   }
   if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh(); toast(`${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
   return toast('Unknown action.', true);

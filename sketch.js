@@ -21,14 +21,14 @@ const LOOK = Object.freeze({
   headwear: ['none', 'cap', 'beanie', 'fedora', 'top-hat', 'hard-hat', 'crown', 'chef-hat', 'graduation', 'cowboy', 'helmet', 'headband', 'party-hat', 'hood', 'beret', 'police-cap', 'wizard', 'tricorn', 'bicorne', 'bowler', 'peaked-cap', 'spiked-helmet', 'turban', 'laurel'],
   eyewear: ['none', 'glasses', 'sunglasses', 'monocle', 'eyepatch', 'goggles'],
   facial: ['none', 'mustache', 'beard', 'stubble', 'goatee', 'handlebar'],
-  outfit: ['none', 'tie', 'bowtie', 'scarf', 'cape', 'lab-coat', 'suit', 'apron', 'vest', 'backpack', 'badge', 'dress', 'hoodie', 'uniform', 'officer', 'armor', 'robe'],
+  outfit: ['none', 'tie', 'bowtie', 'scarf', 'cape', 'lab-coat', 'suit', 'apron', 'vest', 'backpack', 'badge', 'dress', 'hoodie', 'uniform', 'officer', 'armor', 'robe', 'fur'],
   mark: ['none', 'bandage', 'scar', 'freckles', 'blush'],
   color: ['red', 'blue', 'green', 'yellow', 'orange', 'purple', 'pink', 'black', 'white', 'grey', 'brown', 'gold', 'teal'],
 });
 const DEFAULT_LOOK = Object.freeze({body: 'stick', hair: 'messy', hairColor: 'brown', headwear: 'none', eyewear: 'none', facial: 'none', outfit: 'none', mark: 'none', color: 'blue'});
 const PROPS = Object.freeze([
   'sun', 'moon', 'star', 'cloud', 'storm', 'rain', 'snow', 'bolt', 'rainbow', 'tree', 'palm', 'flower', 'mountain', 'volcano', 'waves', 'fire', 'drop', 'planet', 'globe', 'sand', 'thermometer',
-  'house', 'city', 'building', 'castle', 'car', 'bus', 'truck', 'plane', 'rocket', 'ship', 'galleon', 'bike',
+  'house', 'city', 'building', 'castle', 'car', 'bus', 'truck', 'plane', 'rocket', 'ship', 'galleon', 'bike', 'campfire', 'spear', 'stone-axe', 'mammoth',
   'coin', 'money', 'moneybag', 'card', 'piggy-bank', 'briefcase', 'chart', 'chart-up', 'chart-down', 'pie-chart', 'gold', 'diamond', 'calculator',
   'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'gear', 'lightbulb', 'magnet', 'atom', 'dna', 'microscope', 'flask', 'satellite',
   'brain', 'head', 'heart', 'eye', 'tooth', 'bone', 'pill', 'syringe', 'virus', 'skull',
@@ -37,7 +37,7 @@ const PROPS = Object.freeze([
 ]);
 // 0.37: places of the past (owner review 2026-10-18: a king belongs in a throne room or a castle, not a room with a TV).
 const SETS = Object.freeze(['none', 'room', 'office', 'home', 'bedroom', 'kitchen', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'ocean', 'night', 'space', 'storm', 'stage', 'abstract',
-  'throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield']);
+  'throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield', 'cave', 'prehistoric']);
 const MOODS = Object.freeze(['normal', 'tense', 'happy', 'dark', 'dream', 'danger', 'cold', 'money', 'warm', 'sunset', 'night', 'mystery', 'calm', 'hope', 'retro']);
 const CAMERAS = Object.freeze(['still', 'push', 'pull', 'drift', 'punch', 'shake', 'pan-left', 'pan-right', 'tilt-up', 'tilt-down', 'crash-zoom', 'dolly-in', 'handheld', 'ken-burns']);
 const TRANSITIONS = Object.freeze(['cut', 'whip-left', 'whip-right', 'whip-up', 'whip-down', 'zoom', 'zoom-out', 'pop', 'ink', 'glitch', 'slide-up', 'slide-down', 'slide-left', 'slide-right', 'drop', 'iris', 'flash', 'shake']);
@@ -64,7 +64,7 @@ const SIZES = Object.freeze(['s', 'm', 'l', 'xl']);
 // The cast has no creative limit: as many characters as the script needs (40 is only a sanity bound).
 const MAX_ELEMENTS = 12, MAX_CAST = 40, MAX_THEN = 3, MAX_FOCUS = 3;
 // The drawing engine's version: drawings made by an older engine are drawn again by "Draw all scenes".
-const VERSION = 'drawn-scene/29';
+const VERSION = 'drawn-scene/30';
 // 0.33: a shot may carry one picture Claude draws for it (illustrate.js), and its own whiteboard look.
 const MAX_PICTURES = 1;
 // Picture types of a drawn shot (0.63, engines.js PICTURE_TYPES) and what a natural shot paints instead of drawing.
@@ -86,7 +86,7 @@ const CROWD_POSES = Object.freeze(['stand', 'cheer', 'fist', 'shock', 'wave', 'w
 const PROP_SYNONYMS = Object.freeze({
   cash: 'money', bill: 'money', banknote: 'money', 'dollar-bill': 'money', computer: 'laptop', pc: 'monitor', screen: 'monitor', mobile: 'phone', smartphone: 'phone', cellphone: 'phone',
   document: 'paper', file: 'paper', contract: 'paper', note: 'paper', envelope: 'letter', mail: 'letter', email: 'letter', airplane: 'plane', aeroplane: 'plane', jet: 'plane', boat: 'ship',
-  earth: 'globe', world: 'globe', 'sailing-ship': 'galleon', 'tall-ship': 'galleon', caravel: 'galleon', carrack: 'galleon', sailship: 'galleon', lightning: 'bolt', thunder: 'storm', idea: 'lightbulb', bulb: 'lightbulb', 'money-bag': 'moneybag', sack: 'moneybag', 'credit-card': 'card', graph: 'chart-up',
+  earth: 'globe', world: 'globe', 'sailing-ship': 'galleon', 'tall-ship': 'galleon', caravel: 'galleon', carrack: 'galleon', sailship: 'galleon', bonfire: 'campfire', 'camp-fire': 'campfire', javelin: 'spear', lance: 'spear', axe: 'stone-axe', 'hand-axe': 'stone-axe', 'stone-tool': 'stone-axe', flint: 'stone-axe', 'woolly-mammoth': 'mammoth', lightning: 'bolt', thunder: 'storm', idea: 'lightbulb', bulb: 'lightbulb', 'money-bag': 'moneybag', sack: 'moneybag', 'credit-card': 'card', graph: 'chart-up',
   stats: 'chart', statistics: 'chart', coffee: 'cup', mug: 'cup', tea: 'cup', hamburger: 'burger', chest: 'box', package: 'box', parcel: 'box', crate: 'box', potion: 'flask', poison: 'flask',
   bacteria: 'virus', germ: 'virus', medicine: 'pill', needle: 'syringe', vaccine: 'syringe', 'question-mark': 'question', 'exclamation-mark': 'exclamation', tick: 'check', x: 'cross',
   danger: 'warning', caution: 'warning', forbidden: 'no-sign', banned: 'no-sign', skyscraper: 'building', office: 'building', tower: 'building', home: 'house', automobile: 'car', taxi: 'car',
@@ -409,6 +409,21 @@ const OLD_ERAS = ['prehistoric', 'ancient', 'medieval', 'early-modern'];
 const PAST_PLACE = Object.freeze({room: 'chamber', home: 'chamber', bedroom: 'chamber', kitchen: 'chamber', office: 'chamber', classroom: 'chamber', lab: 'chamber', hospital: 'chamber', bank: 'chamber', shop: 'market', street: 'village', city: 'village', road: 'village'});
 const MODERN = Object.freeze({props: ['ship', 'car', 'bus', 'truck', 'plane', 'rocket', 'bike', 'card', 'calculator', 'laptop', 'phone', 'monitor', 'tv', 'camera', 'robot', 'battery', 'wifi', 'lightbulb', 'microscope', 'satellite', 'syringe', 'pill', 'newspaper', 'alarm', 'burger', 'pizza', 'megaphone', 'toilet', 'chart', 'chart-up', 'chart-down', 'pie-chart'],
   outfits: ['tie', 'bowtie', 'lab-coat', 'suit', 'backpack', 'badge', 'hoodie', 'uniform'], sets: Object.keys(PAST_PLACE)});
+// 0.85 the stone age (owner test 2026-11-04: "the script was of stone age but there was no scene of stone age and the
+// people were not dressed up as stone age"): its places are caves and open land, and its people wear hides.
+const STONE_PLACE = Object.freeze({room: 'cave', home: 'cave', bedroom: 'cave', kitchen: 'cave', office: 'cave', classroom: 'cave', lab: 'cave', hospital: 'cave', bank: 'cave', chamber: 'cave', throne: 'cave',
+  shop: 'prehistoric', street: 'prehistoric', city: 'prehistoric', road: 'prehistoric', market: 'prehistoric', village: 'prehistoric', castle: 'prehistoric', harbor: 'prehistoric', park: 'prehistoric', nature: 'prehistoric', battlefield: 'prehistoric'});
+const STONE_WORDS = /\b(stone[- ]age|cave ?m[ae]n|cave ?(people|dwellers?)|pre-?historic|pal(a)?eolithic|neolithic|mesolithic|neanderthals?|mammoths?|hunter-gatherers?)\b/i;
+// The story's world when the plan named none: a script about the stone age tells a prehistoric story.
+const worldOf = text => (STONE_WORDS.test(String(text || '')) ? {era: 'prehistoric', place: 'the Stone Age', rules: []} : null);
+// The narrator or "you" stays in today's clothes; robots, creatures and the story's own kit costumes stay as designed.
+const VIEWER_ROLE = /\b(narrator|viewer|host|presenter|guide|you|today|modern)\b/i;
+const dressable = look => look?.body === 'stick' && look.outfit !== 'fur' && !String(look.outfit).startsWith('kit:');
+const inHides = look => ({...look, outfit: 'fur', headwear: ['none', 'headband', 'hood'].includes(look.headwear) ? look.headwear : 'none', eyewear: look.eyewear === 'eyepatch' ? 'eyepatch' : 'none'});
+function worldCast(cast, world = null) {
+  if (world?.era !== 'prehistoric') return [];
+  return cast.filter(member => dressable(member.look) && !VIEWER_ROLE.test(`${member.name} ${member.role || ''}`)).map(member => { member.look = inHides(member.look); return {label: 'Cast', fix: `${member.name} wears hides in this stone-age story.`}; });
+}
 const underWater = item => item.sketch?.set === 'ocean' && item.sketch.elements.some(el => el.kind === 'figure') && !DIVING.test(`${item.words || ''} ${item.notes || ''}`);
 function worldNotes(drawn, world = null) {
   const notes = [];
@@ -425,10 +440,16 @@ function worldNotes(drawn, world = null) {
 function worldMend(drawn, world = null) {
   const fixes = drawn.filter(underWater).map(item => { item.sketch.set = 'beach'; return {label: item.label, fix: 'People stood on the sea floor (the ocean set is under water), so the shot moved to the beach, at the sea surface.'}; });
   if (OLD_ERAS.includes(world?.era)) for (const item of drawn) {
-    const was = item.sketch?.set, now = PAST_PLACE[was];
-    if (!now || NOWADAYS.test(item.words || '')) continue;
-    item.sketch.set = now;
-    fixes.push({label: item.label, fix: `The ${was} set is a place of today, so this ${world.era} story moved it to the ${now}.`});
+    if (!item.sketch || NOWADAYS.test(item.words || '')) continue;
+    const stone = world.era === 'prehistoric', was = item.sketch.set, now = (stone ? STONE_PLACE : PAST_PLACE)[was];
+    if (now) {
+      item.sketch.set = now;
+      fixes.push({label: item.label, fix: `The ${was} set ${stone ? 'is not a place of the stone age' : 'is a place of today'}, so this ${world.era} story moved it to the ${now === 'prehistoric' ? 'stone-age land' : now}.`});
+    }
+    // A figure without a cast id carries its own look; cast members are dressed by worldCast.
+    const bare = stone ? item.sketch.elements.filter(el => el.kind === 'figure' && !el.who && dressable(el.look)) : [];
+    for (const el of bare) el.look = inHides(el.look);
+    if (bare.length) fixes.push({label: item.label, fix: 'Its people wear hides, as people of the stone age did.'});
   }
   return fixes;
 }
@@ -445,7 +466,8 @@ const PLACE_WORDS = Object.freeze({room: ['room'], office: ['office', 'desk', 'b
   night: ['night', 'midnight', 'moon'], space: ['space', 'planet', 'earth', 'orbit', 'satellite'], storm: ['storm', 'lightning', 'thunder', 'rain', 'cloud', 'bolt'], stage: ['stage', 'show', 'audience', 'crowd'],
   throne: ['king', 'queen', 'throne', 'court', 'emperor', 'empress', 'sultan', 'palace'], castle: ['castle', 'fortress', 'fort', 'kingdom', 'empire', 'walls'], chamber: ['chamber', 'study', 'hall', 'room'],
   harbor: ['harbor', 'harbour', 'port', 'dock', 'ship', 'ships', 'fleet', 'sail'], market: ['market', 'bazaar', 'merchant', 'trade', 'trader', 'sell', 'buy', 'spice'], village: ['village', 'town', 'peasant', 'farm', 'farmer'],
-  battlefield: ['battle', 'war', 'army', 'armies', 'soldier', 'soldiers', 'fight', 'invade', 'invasion']});
+  battlefield: ['battle', 'war', 'army', 'armies', 'soldier', 'soldiers', 'fight', 'invade', 'invasion'],
+  cave: ['cave', 'caves', 'caveman', 'cavemen', 'shelter', 'den', 'fire'], prehistoric: ['prehistoric', 'stone', 'hunt', 'hunter', 'hunters', 'hunting', 'tribe', 'mammoth', 'gather', 'wild', 'plains']});
 // Continuity between neighbouring drawn shots of one scene: [{kind, shot, previous, figure?, message}].
 // shots: [{label, sceneId, sketch, words?, notes?}] in order. A graphic beat in another engine or on an abstract
 // backdrop is a deliberate insert, not a change of place; a change of place the shot's words or notes go to is
@@ -568,9 +590,10 @@ const PROP_WORDS = [
   ['globe', /\b(globe|planet)\b/], ['clock', /\b(clocks?|o'clock)\b/], ['calendar', /\b(calendars?)\b/], ['book', /\b(books?|notebooks?|diary|journal|letters?|wrote|write|writing|readers?)\b/],
   ['city', /\b(city|cities|town)\b/], ['house', /\b(house|home)\b/], ['tree', /\b(trees?|forest|wood)\b/], ['sand', /\b(sand|desert|beach|dune)\b/], ['glass', /\b(glass|crystal)\b/],
   ['waves', /\b(sound|hear|noise|loud|shock wave|echo|ocean|sea|seas)\b/], ['thermometer', /\b(degrees?|temperature)\b/], ['magnifier', /\b(investigat\w*|magnif\w*|clues?)\b/], ['lightbulb', /\b(ideas?|invent\w*)\b/],
+  ['mammoth', /\b(mammoths?)\b/], ['spear', /\b(spears?|hunt\w*)\b/], ['stone-axe', /\b(stone tools?|axes?|flint)\b/], ['campfire', /\b(campfires?|camp ?fires?)\b/],
   ['trophy', /\b(win\w*|best|champion\w*|advantage\w*)\b/], ['warning', /\b(danger\w*|warning|risk\w*|careful)\b/], ['pill', /\b(medicine|pills?|drug\w*|doctor\w*|health)\b/], ['car', /\b(car|cars|drive|driving|traffic)\b/],
 ].filter(([prop]) => PROPS.includes(prop));
-const SET_WORDS = [['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['storm', /\b(lost at sea|sank|sink\w*|shipwreck\w*|wreck\w*)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyages?|ships?|sailors?|sea)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
+const SET_WORDS = [['cave', /\b(caves?|cave ?m[ae]n|campfire)\b/], ['prehistoric', STONE_WORDS], ['throne', /\b(king|queen|emperor|empress|throne|sultan|royal)\b/], ['battlefield', /\b(battle\w*|armies|army|soldiers?|invad\w*|war)\b/], ['storm', /\b(lost at sea|sank|sink\w*|shipwreck\w*|wreck\w*)\b/], ['harbor', /\b(harbou?r|port|fleet|sail\w*|voyages?|ships?|sailors?|sea)\b/], ['market', /\b(market|bazaar|merchants?|spices?)\b/], ['castle', /\b(castle|fortress|kingdom|empire)\b/],
   ['lab', /\b(science|scientist\w*|experiment\w*|lab|chemical\w*|atoms?)\b/], ['bank', /\b(bank\w*|money|loan\w*|debt|invest\w*)\b/], ['office', /\b(job|work\w*|boss|office|company|business)\b/],
   ['space', /\b(space|planet\w*|stars?|galaxy|universe|orbit)\b/], ['storm', /\b(storm|thunder\w*|lightning)\b/], ['ocean', /\b(underwater|under water|diving|divers?|seabed|sea floor|coral|fish)\b/], ['city', /\b(city|cities|street\w*|town)\b/],
   ['hospital', /\b(doctor\w*|hospital|disease|virus|sick)\b/], ['classroom', /\b(school|teacher|student\w*|learn\w*|class)\b/], ['nature', /\b(nature|forest|trees?|animal\w*)\b/], ['desert', /\b(desert|sand|dune)\b/], ['home', /\b(home|house|family)\b/]];
@@ -651,7 +674,7 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
     ...(looks ? [`A stickman shot of a video that mixes the stickman looks names its look: "look": ${list(Array.isArray(looks) ? looks : STICK_LOOKS)}.`] : []),
     ...(boards ? [`A hand-drawn shot of a video that mixes the whiteboard looks names its look: "board": ${list(Array.isArray(boards) ? boards : BOARDS)}.`] : []),
     ...(designs ? [`A documentary drawn shot (engine "motion") of a video that mixes the documentary looks names its look: "design": ${list((painted ? [...DESIGNS, 'footage'] : DESIGNS).filter(design => !Array.isArray(designs) || designs.includes(design)))}.${painted ? ' A "footage" shot is a photo-real place painted by ChatGPT (a picture with "backdrop": true) with motion graphics over it.' : ''}`] : []),
-    'Places of the past: throne (a throne room), castle (a castle above its land, for a kingdom or an empire), chamber (a stone room with a candle and a tapestry), harbor (a port with ships), market (stalls under awnings), village (cottages and a path), battlefield (a field with smoke and banners). Never put a TV, a lamp, a laptop or a car in a story set before electricity.',
+    'Places of the past: throne (a throne room), castle (a castle above its land, for a kingdom or an empire), chamber (a stone room with a candle and a tapestry), harbor (a port with ships), market (stalls under awnings), village (cottages and a path), battlefield (a field with smoke and banners). The stone age: cave (a cave with painted walls, a fire and daylight at its mouth) and prehistoric (open land with a smoking volcano, a hide tent and mammoths), props campfire, spear, stone-axe, mammoth, bone and skull, and people in the outfit fur (hides). Never put a TV, a lamp, a laptop or a car in a story set before electricity.',
     'Every element may have "at" (the exact words from this shot\'s narration it appears on), "until" (words it leaves on) and "enter": ' + list(ENTERS) + ' (mask: revealed through a growing circle; swing: swings in; blur: focuses in from a blur; rise: rises into place; land: arrives a little oversized and soft and settles to its size).',
     `MOTION LAYER: a text may "animate": ${list(TEXT_ANIMS)} (rise: words rise from a mask line; letters: letter by letter; typewriter: typed with a cursor; wipe: a highlighter bar sweeps and reveals; slam: lands hard with motion trails and a shake; track: a cinematic title whose letters close in; glitch: breaks up, then settles; blur: a focus pull; focus: a statement whose key words stay while the rest dims; redact: black bars lift off the words one by one, key words last). Any element may sit on a "layer": back (moves slower with the camera and goes soft) or front (moves faster) for 2.5D depth. A shot may carry a "texture": ${list(TEXTURES)} (film grain, an old film, paper, grid paper, VHS lines, a two-colour archive tint, warm light leaks).`,
     `- {"kind": "figure", "who": cast id, "pose": ${list(POSES)}, "expression": ${list(EXPRESSIONS)}, "emote": ${list(EMOTES)}, "holds"?: a prop, "x": 0-1, "y": feet 0.4-0.84 (ground 0.8), "size": s|m|l|xl, "facing": left|right, "then"?: [{"at": words, "pose"?, "expression"?, "emote"?, "x"? (walks there), "facing"?}] (max ${MAX_THEN}), "label"?}`,
@@ -692,4 +715,4 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
   ].join('\n');
 }
 
-module.exports = {TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, PICTURE_TYPES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+module.exports = {worldOf, worldCast, TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, PICTURE_TYPES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
