@@ -27,7 +27,8 @@ const PROVIDERS = Object.freeze({
   jamendo: {label: 'Jamendo', api: 'https://api.jamendo.com/v3.0/', hosts: /^([a-z0-9-]+\.)*jamendo\.com$/i, kind: 'music'},
 });
 // What each empty effect slot is searched for.
-const SLOT_QUERY = Object.freeze({whoosh: 'whoosh', 'swoosh-up': 'swoosh rise', pop: 'pop', impact: 'impact hit', stamp: 'stamp paper', boom: 'boom explosion', zap: 'electric zap', thunder: 'thunder', ding: 'ding bell', right: 'correct answer', wrong: 'wrong buzzer', tick: 'clock tick', riser: 'riser', sparkle: 'magic sparkle', cash: 'cash register', glitch: 'glitch', scribble: 'pencil scribble', boing: 'boing', heartbeat: 'heartbeat', typing: 'typing keyboard'});
+const SLOT_QUERY = Object.freeze({whoosh: 'whoosh', 'swoosh-up': 'swoosh rise', pop: 'pop', impact: 'impact hit', stamp: 'stamp paper', boom: 'boom explosion', zap: 'electric zap', thunder: 'thunder', ding: 'ding bell', right: 'correct answer', wrong: 'wrong buzzer', tick: 'clock tick', riser: 'riser', sparkle: 'magic sparkle', cash: 'cash register', glitch: 'glitch', scribble: 'pencil scribble', boing: 'boing', heartbeat: 'heartbeat', typing: 'typing keyboard',
+  fire: 'campfire crackling', animal: 'elephant trumpet', waves: 'ocean waves', rain: 'rain', wind: 'wind', crowd: 'crowd murmur', birds: 'birds chirping', drum: 'tribal drum hit', clash: 'sword clash', stone: 'stone knock'});
 
 // A licence a monetized video may use: CC0, or CC BY of any version (credit required).
 function licenceOf(value) {
@@ -127,10 +128,11 @@ class SoundOnline {
   // When a video's score needs moods or effects the library lacks (0.78, owner request 2026-10-31: "the program will find
   // the music and sfx as per the need of usage"), Freesound is asked by itself, if it is connected and confirmed. Quiet
   // when there is nothing to find, no connection, or another import already running.
-  autoFill(contentId, cues, by = 'Program (automatic)') {
+  // 0.87: only the effects this video's drawings earn (kinds), and music in the story's world first (flavour).
+  autoFill(contentId, cues, {kinds = null, flavour = null} = {}, by = 'Program (automatic)') {
     const connector = this.connectors.list?.().find(item => item.provider === 'freesound' && item.test?.status === 'passed' && !item.busy);
     if (!connector) return null;
-    try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, music: cues.map(cue => `${cue.mood || ''} ${cue.prompt || ''}`.trim()).filter(Boolean).slice(0, 40), perMood: 3, contentId}); }
+    try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, music: cues.map(cue => `${cue.mood || ''} ${cue.prompt || ''}`.trim()).filter(Boolean).slice(0, 40), perMood: 3, contentId, ...(kinds ? {kinds, effects: kinds.length > 0} : {}), ...(flavour ? {flavour} : {})}); }
     catch (error) { if (error instanceof InputError) return null; throw error; }
   }
   remember(items) {
@@ -180,7 +182,7 @@ class SoundOnline {
     fs.writeFileSync(file, bytes);
     try {
       const kind = input.kind === 'music' || input.kind === 'sfx' ? input.kind : item.kind;
-      const result = await this.library.storeFile(file, {kind, title: item.title, tags: [...new Set([...(input.slot ? [input.slot] : []), ...item.tags])].slice(0, 20), source: item.provider, licence: `${item.licence.code} (${item.licence.url}) via ${PROVIDERS[item.provider].label}`, attribution: item.licence.credit ? creditLine(item) : null, pageUrl: item.page, originalName: `${item.provider}-${item.id}.mp3`, by});
+      const result = await this.library.storeFile(file, {kind, title: item.title, tags: [...new Set([...(input.slot ? String(input.slot).split(" ").filter(Boolean) : []), ...item.tags])].slice(0, 20), source: item.provider, licence: `${item.licence.code} (${item.licence.url}) via ${PROVIDERS[item.provider].label}`, attribution: item.licence.credit ? creditLine(item) : null, pageUrl: item.page, originalName: `${item.provider}-${item.id}.mp3`, by});
       this.store.event(`Added "${item.title}" by ${item.author} from ${PROVIDERS[item.provider].label} (${item.licence.code}) to the sound library, by ${by}`);
       return {...result, sound: this.library.publicSound(this.library.row(result.id))};
     } finally { fs.rmSync(file, {force: true}); }
@@ -204,13 +206,13 @@ class SoundOnline {
     requireValue(Number.isSafeInteger(perMood) && perMood >= 1 && perMood <= 5, 'Tracks per mood must be 1 to 5.');
     const wanted = input.music === 'all' ? Object.keys(M.MOOD_TAGS) : input.music ? M.moodFamilies(input.music.join(' ')) : [];
     const counts = this.moodCounts(), moods = wanted.filter(mood => counts[mood] < perMood).map(mood => ({mood, need: perMood - counts[mood]}));
-    const contentId = typeof input.contentId === 'string' && input.contentId.length <= 80 ? input.contentId : null;
+    const contentId = typeof input.contentId === 'string' && input.contentId.length <= 80 ? input.contentId : null, flavour = typeof input.flavour === 'string' && /^[a-z -]{2,30}$/.test(input.flavour) ? input.flavour : null;
     requireValue(kinds.length || moods.length, input.music ? 'Your library already has every effect and enough music for these moods.' : 'Every effect slot already has a sound.', 409);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM sound_imports WHERE status IN ('queued','running')").get(), 'An import is already running. Wait for it to finish.', 409);
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO sound_imports(id,folder,status,scope,progress,error,created_by,created_at,updated_at) VALUES(?,?,'queued',?,?,NULL,?,?,?)")
-        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, moods, contentId, licence: 'CC0 or CC BY via Freesound', kind: moods.length ? 'mixed' : 'sfx'}), JSON.stringify({total: kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
+        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, moods, contentId, ...(flavour ? {flavour} : {}), licence: 'CC0 or CC BY via Freesound', kind: moods.length ? 'mixed' : 'sfx'}), JSON.stringify({total: kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
       this.store.event(`Queued Freesound: ${kinds.length} empty effect slot(s)${moods.length ? `, music for ${moods.map(item => item.mood).join(', ')}` : ''}, by ${by}`);
       return this.library.publicImport(this.library.importRow(id));
     });
@@ -241,11 +243,13 @@ class SoundOnline {
       for (const {mood, need} of moods) {
         try {
           const ref = this.connection('freesound', scope.connector);
-          const results = (await this.fillSearch(ref, `${mood} music`, {kind: 'music', limit: 25, sort: 'downloads_desc'}))
-            .filter(item => item.licence.ok && item.download && item.seconds >= 45 && !this.db.prepare('SELECT 1 FROM sounds WHERE source=? AND page_url=?').get(item.provider, item.page)).slice(0, need);
+          const usable = items => items.filter(item => item.licence.ok && item.download && item.seconds >= 45 && !this.db.prepare('SELECT 1 FROM sounds WHERE source=? AND page_url=?').get(item.provider, item.page)).slice(0, need);
+          // The story's world first (0.87: "tribal" music for a stone-age story), then any music of the mood.
+          let results = scope.flavour ? usable(await this.fillSearch(ref, `${mood} ${scope.flavour} music`, {kind: 'music', limit: 25, sort: 'downloads_desc'})) : [], tag = results.length ? scope.flavour : null;
+          if (!results.length) results = usable(await this.fillSearch(ref, `${mood} music`, {kind: 'music', limit: 25, sort: 'downloads_desc'}));
           requireValue(results.length, 'no CC0 or CC BY music found');
           this.remember(results);
-          for (const item of results) { const added = await this.add({requestedBy: row.created_by, ref: `freesound:${item.id}`, connector: scope.connector, kind: 'music', slot: mood}); if (added.added) progress.added++; else progress.already++; }
+          for (const item of results) { const added = await this.add({requestedBy: row.created_by, ref: `freesound:${item.id}`, connector: scope.connector, kind: 'music', slot: tag ? `${mood} ${tag}` : mood}); if (added.added) progress.added++; else progress.already++; }
         } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${mood} music: ${clean(error.message, 140)}`); }
         finally { progress.done++; save(); }
       }

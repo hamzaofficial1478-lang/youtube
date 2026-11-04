@@ -289,7 +289,7 @@ class EditingRoom {
       // 0.86: the music and sound effects come with the draft, from the family's own sound library.
       const auto = this.autoAudio(inputs, contentId);
       if (auto?.settings) payload.audio = auto.settings;
-      const meta = {...(auto ? {autoAudio: auto.notes} : {}), timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
+      const meta = {...(auto ? {autoAudio: auto.notes, autoAudioSettings: auto.settings || null} : {}), timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
       return this.store.transaction(() => {
         const fresh = this.inputs(this.store.content(contentId));
         requireValue(fresh.ready && fresh.scopeHash === inputs.scopeHash, 'The inputs changed while the edit was being prepared. Try again.', 409);
@@ -315,20 +315,52 @@ class EditingRoom {
   // current score, the free score is made from the story's sections (no AI, nothing paid; Freesound fills missing
   // tracks by itself when it is connected); the music is on when every cue has a track, the effects when the library
   // has effects, at the style's density. A family on paid generation (ElevenLabs) is left to Room 07.
-  autoAudio(inputs, contentId) {
+  // ask: false when called after a fill, so a search that found nothing never asks Freesound again in a loop.
+  autoAudio(inputs, contentId, {ask = true} = {}) {
     const st = this.soundtrack;
     if (!st || st.settings(inputs.family.id).source !== 'library') return null;
     const notes = [];
     let score = st.latestScore(contentId);
-    if (!score?.current) {
+    // 0.87: the channel may let the AI score the music from the script by itself (its named setting; uses tokens). The
+    // music then switches on by itself when the score and its tracks are ready (refreshAutoAudio).
+    const ai = st.settings(inputs.family.id).autoScore === 'ai' ? (() => { try { const team = this.scenes?.ai?.team?.(); return team?.claude || team?.chatgpt || null; } catch { return null; } })() : null;
+    if (!score?.current && ai) {
+      try { st.queueScore(contentId, {requestedBy: 'Program (automatic)', connector: {id: ai.id, revision: ai.revision}}); notes.push(`${ai.provider === 'chatgpt' ? 'ChatGPT' : 'Claude'} is scoring the music from the script; it switches on by itself when it is ready`); score = null; }
+      catch (error) { notes.push(`the AI could not start the score (${error.message}); the free score is used`); }
+    }
+    if (!score?.current && !notes.some(note => /scoring the music/.test(note))) {
       try { score = st.rulesScore(contentId, {requestedBy: 'Program (automatic)'}); notes.push(`a free music score was made from the story's ${score.cues.length} section${score.cues.length === 1 ? '' : 's'}`); }
       catch (error) { score = null; notes.push(`no music score: ${error.message}`); }
-    }
+    } else if (ask && score?.current && !score.ready) st.askFreesound?.(contentId);
     const music = !!(score?.current && score.ready), effects = st.sounds ? st.sounds.tracks('sfx').length : 0, usage = inputs.spec?.audio?.sfxUsage, density = Audio.DENSITIES.includes(usage) && usage !== 'none' ? usage : 'accent', sfx = effects > 0 && usage !== 'none';
     if (score && !music) notes.push('the music stays off until the sound library has a track for every cue (Freesound fills it by itself when it is connected); switch it on in Levels and mix');
     if (!effects) notes.push('no sound effects: the sound library has none yet');
     const on = [...(music ? [`music on (score r${score.revision}, ${score.cues.length} cue${score.cues.length === 1 ? '' : 's'}, ducked under the voice)`] : []), ...(sfx ? [`sound effects on (${density}, from ${effects} library effect${effects === 1 ? '' : 's'}, placed on the drawings' moments)`] : [])];
     return {settings: music || sfx ? Audio.settings({...Audio.DEFAULTS, music: {...Audio.MUSIC_DEFAULTS, enabled: music, scoreId: music ? score.id : null}, sfx: {...Audio.SFX_DEFAULTS, enabled: sfx, density}}) : null, notes: [...on, ...notes]};
+  }
+
+  // 0.87 (owner request 2026-11-04: "the program must fetch the music and sfx by itself as per the video"): when a new
+  // score arrives, or Freesound has added what this video needed, the edit's music and effects follow by themselves - a
+  // new revision by the program - as long as the audio is still what the program set (an owner's own mix is never
+  // overridden) and the edit is current.
+  refreshAutoAudio(contentId) {
+    if (this.busy.has(contentId) || !this.soundtrack) return null;
+    const content = this.store.content(contentId), inputs = this.inputs(content);
+    if (!inputs.ready) return null;
+    const timeline = this.db.prepare('SELECT * FROM edit_timelines WHERE content_id=? AND scope_hash=?').get(contentId, inputs.scopeHash), latest = timeline && this.latestRow(timeline.id);
+    if (!latest) return null;
+    const {timeline: payload, meta} = this.timelinePayload(latest);
+    if (!meta || !Object.hasOwn(meta, 'autoAudioSettings') || JSON.stringify(payload.audio || null) !== JSON.stringify(meta.autoAudioSettings)) return null;
+    const score = this.soundtrack.latestScore(contentId);
+    if (!score?.current) return null;
+    const auto = this.autoAudio(inputs, contentId, {ask: false});
+    if (!auto?.settings || JSON.stringify(auto.settings) === JSON.stringify(payload.audio || null)) return null;
+    return this.store.transaction(() => {
+      if (this.latestRow(timeline.id).id !== latest.id) return null;
+      const row = this.insertRevision({timeline, payload: {...payload, audio: auto.settings}, parent: latest, actor: 'brain', receipt: {autoAudio: auto.notes}, note: `The program updated the music and effects: ${auto.notes.join('; ')}`.slice(0, 500), createdBy: 'Program (automatic)', meta: {...meta, autoAudio: auto.notes, autoAudioSettings: auto.settings}});
+      this.store.event(`Edit r${row.revision} of "${content.title}": the program updated its music and effects`);
+      return this.publicRevision(row, {detail: true});
+    });
   }
 
   // ------------------------------------------------------------ owner edits

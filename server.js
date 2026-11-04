@@ -80,7 +80,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   // 0.61: Freesound effects and Jamendo music, searched and added on the owner's click.
-  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);try{store.repairUnreachedJobs();}catch(error){console.error('Repairing unreached jobs:',error.message);}soundOnline.onFilled=(scope,by)=>soundtrack.repickTracks(scope.contentId,by);soundtrack.onScored=(contentId,cues)=>soundOnline.autoFill(contentId,cues);
+  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);try{store.repairUnreachedJobs();}catch(error){console.error('Repairing unreached jobs:',error.message);}soundOnline.onFilled=(scope,by)=>{const repicked=soundtrack.repickTracks(scope.contentId,by);try{editingRoom.refreshAutoAudio(scope.contentId);}catch(error){console.error('Updating the edit\'s music:',error.message);}return repicked;};soundtrack.onScored=(contentId,cues,needs)=>soundOnline.autoFill(contentId,cues,needs);soundtrack.onScoreChanged=contentId=>editingRoom.refreshAutoAudio(contentId);
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;

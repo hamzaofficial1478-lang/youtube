@@ -1495,7 +1495,13 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   // 0.86: the draft already carries the video's current score and the library's effects.
   assert.deepEqual([edit.timeline.audio.music.enabled, edit.timeline.audio.music.scoreId, edit.timeline.audio.sfx.enabled], [true, repicked.id, true]);
   assert.match(edit.autoAudio.join(' '), /music on \(score r\d+[\s\S]*sound effects on/);
-  const mixed = editing.applyOps(edit.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'normalize', targetLufs: -16, truePeakDb: -2, music: {enabled: true, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: scored.id}, sfx: {enabled: false, density: 'none', levelDb: -12}}}]});
+  // 0.87: a newer score reaches the drafted edit by itself while its audio is still the program's.
+  assert.equal(editing.refreshAutoAudio(content.id), null, 'nothing new yet');
+  const rescored = room.rulesScore(content.id, {requestedBy: 'Owner'});
+  const followed = editing.refreshAutoAudio(content.id);
+  assert.deepEqual([followed.revision, followed.timeline.audio.music.scoreId], [edit.revision + 1, rescored.id]);
+  assert.match(followed.note, /The program updated the music and effects/);
+  const mixed = editing.applyOps(followed.id, {editedBy: 'Owner', ops: [{type: 'set-audio', settings: {mode: 'normalize', targetLufs: -16, truePeakDb: -2, music: {enabled: true, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: scored.id}, sfx: {enabled: false, density: 'none', levelDb: -12}}}]});
   const report = await renders.checkReadiness({requestedBy: 'Owner'});
   renders.pin({readinessId: report.id, pinnedBy: 'Owner', reason: 'Reviewed build for the library mix.'});
   const queued = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: mixed.id});
@@ -1513,6 +1519,9 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   sounds.update(cues[0].sha256, {updatedBy: 'Owner', enabled: false});
   assert.equal(room.score(scored.id).ready, false);
   assert.throws(() => renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: mixed.id}), /left the sound library or was switched off/);
+  // The owner's own mix is never overridden by the program.
+  room.rulesScore(content.id, {requestedBy: 'Owner'});
+  assert.equal(editing.refreshAutoAudio(content.id), null);
 });
 
 test('0.86: a draft without a score gets the free score from its story sections, music only when every cue has a track, effects at the style\'s density', () => {
@@ -1528,5 +1537,11 @@ test('0.86: a draft without a score gets the free score from its story sections,
   assert.equal(waiting.settings, null, 'nothing to switch on yet');
   assert.match(waiting.notes.join(' '), /stays off until the sound library has a track[\s\S]*no sound effects/);
   assert.equal(auto(fake({source: 'elevenlabs'})), null, 'paid generation is left to Room 07');
+  // 0.87: with the channel's "the AI scores the music" setting, the AI is asked instead of the free score.
+  const queued = [], ai = {...fake(), settings: () => ({source: 'library', autoScore: 'ai'}), queueScore: (contentId, input) => queued.push([contentId, input.connector.id])};
+  const asked = EditingRoom.prototype.autoAudio.call({soundtrack: ai, scenes: {ai: {team: () => ({claude: {id: 'claude-1', revision: 2, provider: 'claude-code'}})}}}, {family: {id: 'f1'}, spec: {audio: {sfxUsage: 'accent'}}}, 'c1');
+  assert.deepEqual(queued, [['c1', 'claude-1']]);
+  assert.match(asked.notes.join(' '), /Claude is scoring the music from the script/);
+  assert.equal(asked.settings.music.enabled, false, 'music waits for the AI\'s score');
   assert.equal(auto(fake(), 'none').settings.sfx.enabled, false, 'a style without effects keeps them off');
 });

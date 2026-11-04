@@ -142,3 +142,27 @@ test('the music supervisor hears what the approved competitor study learned abou
   assert.match(M.messages(input)[0].content, /competitorGuidance/);
   assert.equal(SoundtrackRoom.prototype.promptInput.call({store: {}, scenes: {}}, inputs).competitorGuidance, undefined, 'no study, no guidance');
 });
+
+// 0.87 (owner request 2026-11-04: "fetch the sfx and music as per the video and script, matching its tone"):
+// what is drawn is heard, a new place is heard once, and the story's world colours the music.
+test('0.87: story sounds follow the drawings and places, the world colours the music, a missing story sound never blocks', () => {
+  const sketch = (set, elements = []) => ({set, engine: 'stickman', camera: 'still', elements});
+  const shots = [sketch('cave', [{kind: 'prop', prop: 'campfire'}, {kind: 'figure', pose: 'walk'}]), sketch('cave', [{kind: 'prop', prop: 'mammoth'}]), sketch('prehistoric', [{kind: 'crowd', count: 6}])];
+  assert.deepEqual(M.neededEffects(shots, {density: 'accent'}), ['animal', 'crowd', 'fire', 'wind']);
+  assert.deepEqual(M.neededEffects(shots, {density: 'none'}), []);
+  const clips = shots.map((item, k) => ({label: `S0${k + 1}A`, start: k * 4, seconds: 4, sketch: item, times: null}));
+  const events = M.sfxEvents({clips, density: 'accent'});
+  assert.deepEqual(events.filter(item => /arriving/.test(item.reason)).map(item => item.kind), ['fire', 'wind'], 'the cave is heard once, then the open land');
+  assert.ok(events.some(item => item.kind === 'animal' && /mammoth/.test(item.reason)));
+  for (const kind of M.STORY_SFX) assert.ok(M.SFX[kind] && M.EFFECT_WORDS[kind]?.length, kind);
+  const free = M.rulesScore({scenes: [{purpose: 'hook', startSeconds: 0, durationSeconds: 30}, {purpose: 'turn', startSeconds: 30, durationSeconds: 30}], durationSeconds: 60, moods: ['warm'], niche: 'stone age money', era: 'prehistoric'});
+  assert.ok(free.cues.every(cue => /tribal/.test(cue.prompt)), free.cues[0].prompt);
+  // The render leaves out a story sound the library lacks; the others are still required.
+  const {SoundtrackRoom} = require('../soundtrack');
+  const asset = {probe: {peakDb: -3}};
+  const fakeRoom = {settings: () => ({source: 'library'}), library: () => [{kind: 'pop', asset}, {kind: 'fire', asset: null}, {kind: 'animal', asset: null}, {kind: 'wind', asset}, {kind: 'crowd', asset: null}], fileOf: () => ({relativePath: 'sound-library/x.mp3', sha256: 'x'})};
+  const timeline = {fps: 30, captions: {groups: []}, clips: clips.map((clip, k) => ({id: `c${k}`, label: clip.label, start: clip.start * 30, frames: 120}))};
+  const out = SoundtrackRoom.prototype.soundtrackFor.call(fakeRoom, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
+  assert.deepEqual(out.skipped.sort(), ['animal', 'crowd', 'fire']);
+  assert.ok(out.sfx.length && out.sfx.every(item => ['wind', 'pop'].includes(item.kind)), JSON.stringify(out.sfx.map(item => item.kind)));
+});
