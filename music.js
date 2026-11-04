@@ -52,7 +52,7 @@ function validate(raw, durationSeconds, {lenient = false, warn = () => {}} = {})
 
 // The free score: the scenes grouped into story sections, one cue per section, moods from the style.
 const PURPOSE_MOOD = Object.freeze({hook: ['punchy', 4], context: ['curious', 3], explain: ['curious', 3], example: ['light', 3], evidence: ['focused', 3], turn: ['dramatic', 4], recap: ['warm', 2], close: ['warm', 2], 'call-to-action': ['uplifting', 3]});
-function rulesScore({scenes, durationSeconds, moods = [], niche = ''}) {
+function rulesScore({scenes, durationSeconds, moods = [], niche = '', era = null}) {
   const sections = [];
   for (const scene of scenes) {
     const [mood, energy] = PURPOSE_MOOD[scene.purpose] || ['curious', 3], last = sections.at(-1);
@@ -63,7 +63,8 @@ function rulesScore({scenes, durationSeconds, moods = [], niche = ''}) {
   for (const section of sections) { if (merged.length && section.end - section.start < 12) merged.at(-1).end = section.end; else merged.push({...section}); }
   if (merged.length && merged[0].start > 0) merged[0].start = 0;
   if (merged.length) merged.at(-1).end = durationSeconds;
-  const flavour = moods.length ? moods.join(', ') : 'modern, clean';
+  // The story's world colours every cue (0.87): a stone-age story asks for tribal music first.
+  const flavour = [...(ERA_MUSIC[era] ? [ERA_MUSIC[era]] : []), ...(moods.length ? moods : ['modern', 'clean'])].join(', ');
   return validate({summary: 'Free score: one cue per story section, moods from the style.', cues: merged.map((item, k) => ({start: item.start, end: item.end, mood: item.mood, energy: item.energy,
     prompt: `Instrumental background music for a YouTube video about ${clean(niche, 80) || 'an interesting topic'}: ${item.mood}, ${flavour}, steady groove that sits under a voice-over, no vocals, energy ${item.energy} of 5.`,
     entry: k === 0 ? 'hit' : 'fade', exit: k === merged.length - 1 ? 'fade' : 'fade'}))}, durationSeconds);
@@ -112,7 +113,27 @@ const SFX = Object.freeze({
   boing: {seconds: 0.6, prompt: 'cartoon spring boing'},
   heartbeat: {seconds: 1.2, prompt: 'two strong heartbeats, low thump'},
   typing: {seconds: 1.5, prompt: 'fast typing on a laptop keyboard'},
+  // 0.87 story sounds (owner request 2026-11-04: "fetch the sfx as per the video and script"): what is on screen is heard.
+  fire: {seconds: 2.5, prompt: 'campfire crackling, wood burning'},
+  animal: {seconds: 2.0, prompt: 'large animal call, elephant trumpeting'},
+  waves: {seconds: 3.0, prompt: 'ocean waves washing on a shore'},
+  rain: {seconds: 3.0, prompt: 'steady rain falling outdoors'},
+  wind: {seconds: 3.0, prompt: 'wind blowing across open land'},
+  crowd: {seconds: 3.0, prompt: 'crowd of people murmuring and talking'},
+  birds: {seconds: 3.0, prompt: 'birds chirping outdoors in daylight'},
+  drum: {seconds: 1.5, prompt: 'deep tribal drum hit'},
+  clash: {seconds: 1.0, prompt: 'swords clashing, metal on metal'},
+  stone: {seconds: 0.8, prompt: 'stone tool knocking on rock'},
 });
+// Story sounds are welcome but never required: a video plays without one the library lacks.
+const STORY_SFX = Object.freeze(['fire', 'animal', 'waves', 'rain', 'wind', 'crowd', 'birds', 'drum', 'clash', 'stone']);
+// The sound a place makes when the story arrives there (once, when the place changes).
+const SET_SFX = Object.freeze({ocean: 'waves', beach: 'waves', harbor: 'waves', storm: 'rain', nature: 'birds', park: 'birds', village: 'birds', mountains: 'wind', desert: 'wind', prehistoric: 'wind', cave: 'fire',
+  market: 'crowd', street: 'crowd', city: 'crowd', stage: 'crowd', battlefield: 'clash'});
+// The props that make a sound of their own.
+const PROP_SFX = Object.freeze({campfire: 'fire', fire: 'fire', candle: 'fire', mammoth: 'animal', waves: 'waves', ship: 'waves', galleon: 'waves', rain: 'rain', storm: 'rain', snow: 'wind', sword: 'clash', shield: 'clash', 'stone-axe': 'stone', spear: 'stone'});
+// The music of a story's world (the plan's era): searched first, then any music of the mood.
+const ERA_MUSIC = Object.freeze({prehistoric: 'tribal', ancient: 'ancient', medieval: 'medieval', 'early-modern': 'orchestral', future: 'futuristic'});
 const FLAVOUR = Object.freeze({stickman: 'playful cartoon sound effect, crisp and clean, no music', handdrawn: 'soft organic hand-made sound effect, warm, no music', motion: 'clean modern UI sound design, crisp, no music', montage: 'cinematic sound effect, polished, no music', cinema: 'cinematic film sound design, natural and rich, no music'});
 const sfxRequest = (kind, engine = 'stickman') => ({text: `${SFX[kind].prompt}, ${FLAVOUR[engine] || FLAVOUR.montage}.`, duration_seconds: SFX[kind].seconds, prompt_influence: 0.5, model_id: 'eleven_text_to_sound_v2'});
 
@@ -130,7 +151,8 @@ function elementStarts(sketch, times, duration) {
 function sfxFor(el, engine) {
   if (el.kind === 'fx') return {burst: ['impact', 2], flash: ['zap', 2], shake: ['impact', 2], punch: ['impact', 2], confetti: ['sparkle', 2], 'money-rain': ['cash', 2], cross: ['wrong', 1], check: ['right', 1], sparkles: ['sparkle', 3], shockwave: ['boom', 2], glitch: ['glitch', 2], scan: ['typing', 3], hearts: ['sparkle', 3], 'ink-splat': ['impact', 3], pulse: ['heartbeat', 3], progress: ['riser', 3]}[el.effect] || null;
   if (el.kind === 'text') return {stamp: ['stamp', 1], counter: ['tick', 2], headline: ['swoosh-up', 2], number: ['impact', 2], pop: ['pop', 3], title: ['whoosh', 3], highlight: ['scribble', 3], label: ['pop', 3]}[el.style] || null;
-  if (el.kind === 'prop') { if (el.enter === 'drop') return ['impact', 2]; if (el.prop === 'bolt') return ['zap', 2]; if (['coin', 'money', 'moneybag', 'gold'].includes(el.prop)) return ['cash', 3]; return [engine === 'handdrawn' ? 'scribble' : 'pop', 3]; }
+  if (el.kind === 'crowd') return ['crowd', 2];
+  if (el.kind === 'prop') { if (el.enter === 'drop') return ['impact', 2]; if (el.prop === 'bolt') return ['zap', 2]; if (PROP_SFX[el.prop]) return [PROP_SFX[el.prop], 2]; if (['coin', 'money', 'moneybag', 'gold'].includes(el.prop)) return ['cash', 3]; return [engine === 'handdrawn' ? 'scribble' : 'pop', 3]; }
   if (el.kind === 'figure') return [engine === 'handdrawn' ? 'scribble' : 'pop', 3];
   if (el.kind === 'arrow') return ['whoosh', 3];
   return null;
@@ -141,8 +163,12 @@ const TRANSITION_SFX = Object.freeze({'whip-left': 'whoosh', 'whip-right': 'whoo
 function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
   const rank = DENSITY_RANK[density] || 0, events = [];
   if (!rank) return [];
+  let place = null;
   for (const clip of clips) {
     if (!clip.sketch) continue;
+    // A new place is heard once as the story arrives there.
+    if (clip.sketch.set !== place && SET_SFX[clip.sketch.set]) events.push({seconds: round(clip.start + 0.1, 3), kind: SET_SFX[clip.sketch.set], need: 2, bed: true, reason: `arriving at the ${clip.sketch.set}`});
+    place = clip.sketch.set;
     const kind = TRANSITION_SFX[clip.sketch.transition];
     if (kind) events.push({seconds: Math.max(0, clip.start - 0.05), kind, need: 1, reason: `${clip.sketch.transition} opening`});
     const starts = elementStarts(clip.sketch, clip.times, clip.seconds);
@@ -153,13 +179,29 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
       events.push({seconds: round(clip.start + starts[i] + delay, 3), kind: hit[0], need: hit[1], reason: `${el.kind === 'fx' ? el.effect : el.kind === 'text' ? `${el.style} text` : el.prop || el.kind} in ${clip.label || 'a drawn shot'}`});
     });
   }
+  // A place's sound is a bed under the moment, so it never pushes out an effect (or the other way round).
   const chosen = [];
   for (const event of events.filter(item => item.need <= rank).sort((a, b) => a.seconds - b.seconds || a.need - b.need)) {
-    const near = chosen.find(item => Math.abs(item.seconds - event.seconds) < 0.18);
+    const near = chosen.find(item => !!item.bed === !!event.bed && Math.abs(item.seconds - event.seconds) < 0.18);
     if (!near) chosen.push(event);
     else if (event.need < near.need) chosen.splice(chosen.indexOf(near), 1, event);
   }
-  return chosen.map(({need, ...item}) => item);
+  return chosen.map(({need, bed, ...item}) => item);
+}
+
+// Every kind of effect a video's drawings earn at a density, read from the plan (no timing needed): what Freesound
+// fetches for this video (0.87).
+function neededEffects(sketches, {density = 'accent', engine = 'stickman'} = {}) {
+  const rank = DENSITY_RANK[density] || 0, kinds = new Set();
+  if (!rank) return [];
+  let place = null;
+  for (const sketch of sketches.filter(Boolean)) {
+    if (sketch.set !== place && SET_SFX[sketch.set]) kinds.add(SET_SFX[sketch.set]);
+    place = sketch.set;
+    if (TRANSITION_SFX[sketch.transition]) kinds.add(TRANSITION_SFX[sketch.transition]);
+    for (const el of sketch.elements || []) { const hit = sfxFor(el, sketch.engine || engine); if (hit && hit[1] <= rank) kinds.add(hit[0]); }
+  }
+  return [...kinds].filter(kind => SFX[kind]).sort();
 }
 
 // ---------------------------------------------------------------- the mix
@@ -228,6 +270,9 @@ const EFFECT_WORDS = Object.freeze({
   tick: ['tick', 'clock', 'ticking', 'timer', 'countdown'], riser: ['riser', 'rising', 'build', 'buildup', 'tension', 'swell'], sparkle: ['sparkle', 'magic', 'shimmer', 'twinkle', 'glitter', 'fairy'],
   cash: ['cash', 'register', 'coin', 'coins', 'money', 'ching'], glitch: ['glitch', 'digital', 'static', 'distortion', 'stutter'], scribble: ['scribble', 'pencil', 'marker', 'writing', 'pen', 'chalk', 'drawing'],
   boing: ['boing', 'spring', 'bounce', 'cartoon'], heartbeat: ['heartbeat', 'heart', 'pulse'], typing: ['typing', 'keyboard', 'typewriter', 'keys'],
+  fire: ['fire', 'campfire', 'crackle', 'crackling', 'flames', 'burning', 'bonfire'], animal: ['elephant', 'trumpet', 'trumpeting', 'mammoth', 'roar', 'animal'], waves: ['waves', 'wave', 'ocean', 'sea', 'surf', 'shore'],
+  rain: ['rain', 'raining', 'rainfall', 'drizzle'], wind: ['wind', 'windy', 'gust', 'breeze', 'howling'], crowd: ['crowd', 'people', 'murmur', 'chatter', 'market', 'audience'], birds: ['birds', 'bird', 'chirp', 'chirping', 'birdsong', 'tweet'],
+  drum: ['drum', 'drums', 'tribal', 'percussion', 'tom'], clash: ['sword', 'swords', 'clash', 'metal', 'blade', 'clang'], stone: ['stone', 'rock', 'flint', 'knock', 'pebble'],
 });
 const words = text => String(text || '').toLowerCase().split(/[^a-z]+/).filter(word => word.length > 2);
 const tagsOf = track => new Set([...(track.tags || []), ...words(track.title)]);
@@ -298,4 +343,4 @@ function pickEffects(sounds, picks = {}) {
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

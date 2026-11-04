@@ -92,11 +92,11 @@ test('Freesound and Jamendo: the owner\'s confirmation, searches inside the hour
   // Empty effect slots filled from Freesound: one search per slot, each sound tagged with its slot.
   const before = Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length;
   const fill = online.queueFill({requestedBy: 'Owner', connector: ref});
-  assert.equal(fill.progress.total, 20 - before);
+  assert.equal(fill.progress.total, Object.keys(M.SFX).length - before);
   assert.equal(await library.processNextImport(), null, 'the folder import worker leaves online jobs alone');
   const filled = await online.processNextFill();
   assert.equal(filled.status, 'completed', JSON.stringify(filled.progress));
-  assert.equal(Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length, 20, 'every slot has a sound');
+  assert.equal(Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length, Object.keys(M.SFX).length, 'every slot has a sound');
   assert.equal(quota.summary().freesound.used, 1 + fill.progress.total, 'the search and one search per slot (the connection test is outside the allowance)');
   // Jamendo music: CC BY only, and only tracks the artist allows to download.
   const jam = connectors.save({name: 'Jamendo', provider: 'jamendo', key: 'b6747d04', termsConfirmed: true});
@@ -132,14 +132,14 @@ test('0.74: one click fills the library: the most downloaded effects and music f
   const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch, pauseMs: 0});
   const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
   const tested = await connectors.test(saved.id, saved.revision), ref = {id: tested.connector.id, revision: tested.connector.revision};
-  // The whole library: 20 effect slots and the 11 moods, one search each.
-  const fill = online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 2});
-  assert.equal(fill.progress.total, 20 + Object.keys(M.MOOD_TAGS).length);
+  // The whole library: every effect slot (the story sounds of 0.87 too) and the 11 moods, one search each.
+  const slots = Object.keys(M.SFX).length, fill = online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 2});
+  assert.equal(fill.progress.total, slots + Object.keys(M.MOOD_TAGS).length);
   const done = await online.processNextFill();
   assert.equal(done.status, 'completed', JSON.stringify(done.progress));
   const searches = net.calls.filter(call => call.url.includes('/apiv2/search/')).map(call => new URL(call.url).searchParams);
-  assert.ok(searches.slice(-31).every(params => params.get('sort') === 'downloads_desc'), 'the most downloaded, the most used');
-  assert.equal(Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length, 20);
+  assert.ok(searches.slice(-(slots + Object.keys(M.MOOD_TAGS).length)).every(params => params.get('sort') === 'downloads_desc'), 'the most downloaded, the most used');
+  assert.equal(Object.values(M.pickEffects(library.tracks('sfx'))).filter(Boolean).length, slots);
   assert.ok(Object.values(online.moodCounts()).every(count => count >= 2), JSON.stringify(online.moodCounts()));
   assert.ok(library.tracks('music').every(track => track.attribution === null && track.source === 'freesound'));
   assert.throws(() => online.queueFill({requestedBy: 'Owner', connector: ref, music: 'all', perMood: 2}), /already has every effect and enough music/);
@@ -191,4 +191,30 @@ test('0.78: Freesound failures are named, a slow search is tried once more, and 
   const sources = library.state().bySource;
   assert.equal(sources[0].id, 'freesound');
   assert.ok(sources[0].music >= 6 && sources[0].sfx >= 1, JSON.stringify(sources));
+});
+
+// 0.87 (owner request 2026-11-04): Freesound is asked only for the sounds this video's drawings need, and for music in
+// the story's world first ("tribal" for the stone age), then any music of the mood.
+test('0.87: a video asks Freesound only for the sounds its drawings need, and for music in its world first', async t => {
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sound-need-'));
+  const store = new Store(':memory:', {artifactRoot: dataRoot});
+  t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
+  const net = network(), connectors = new ConnectorSlots(store, protector, net.fetch), quota = new QuotaLedger(store);
+  const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch, pauseMs: 0});
+  const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
+  await connectors.test(saved.id, saved.revision);
+  const before = net.calls.length;
+  const job = online.autoFill('video-2', [{mood: 'curious', prompt: 'light pulse under the hook'}], {kinds: ['fire', 'animal'], flavour: 'tribal'});
+  const scope = JSON.parse(store.db.prepare('SELECT scope FROM sound_imports WHERE id=?').get(job.id).scope);
+  assert.deepEqual([scope.kinds, scope.flavour, scope.contentId], [['fire', 'animal'], 'tribal', 'video-2']);
+  const done = await online.processNextFill();
+  assert.equal(done.status, 'completed', JSON.stringify(done.progress));
+  const queries = net.calls.slice(before).filter(call => call.url.includes('/apiv2/search/')).map(call => new URL(call.url).searchParams.get('query'));
+  assert.deepEqual(queries.filter(q => !/music$/.test(q)), ['campfire crackling', 'elephant trumpet'], 'only the effects the drawings need');
+  assert.equal(queries.find(q => /music$/.test(q)), 'curious tribal music', 'the story\'s world first');
+  const picked = M.pickEffects(library.tracks('sfx'));
+  assert.ok(picked.fire && picked.animal && !picked.whoosh);
+  const music = library.tracks('music');
+  assert.ok(music.length && music.every(track => track.tags.includes('tribal')) && music.some(track => track.tags.includes('curious')), JSON.stringify(music.map(track => track.tags)));
 });
