@@ -163,7 +163,7 @@ Owner review (three screenshots, nine questions): the edit was out of date after
 - Polish the whole edit with Claude or ChatGPT (`polish`): up to 40 changes with the `editing.plan` skills and competitor lessons; typed requests get them too. The editing brain itself stays the free rules program.
 - Remove for cancelled, failed, out-of-date and stopped renders (`RenderRoom.remove`).
 - The critique, graphics, captions and craft sections fold (`editFold`).
-- Tests: @@TESTS@@
+- Tests: `npm run check` clean; full `npm test` 434 tests: 431 passed, 0 failed, 3 skipped (Windows-only). New tests: a fresh draft after the visuals were approved again carries the owner's change and not the undone one; the timeline's music row holds the score's cues with their tracks; the polish asks with its instruction, the approved editing skill and 32,000 tokens and takes up to 40 changes, and the skills are recorded; an unfinished render leaves the list and keeps its record. Browser check (Playwright, throwaway server): Narration, Music and Sound effects rows, Polish with Claude and ChatGPT, the four sections folded. Not tested: a polish answered by a live AI, Remove on Windows.
 
 ### 2026-11-04 - 0.87.0 the program fetches each video's music and story sounds itself
 
