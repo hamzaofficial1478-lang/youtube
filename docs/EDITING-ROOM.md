@@ -288,3 +288,12 @@ CRF 21/20); the size shows on the render card. The final master's preview check 
 720p, 1080p or 1440p preview can be compared (a 720p preview could not be compared before: FFmpeg's ssim needs the same
 size).
 
+
+## Asking Claude or ChatGPT (0.85)
+
+Owner test, 2026-11-04: the editor answered "I can't add music or sound effects, because I have no audio operations, and there is no 'Stone Age' background", and there was no button to ask ChatGPT.
+
+- The command box shows one button per connected AI: **Ask Claude** and **Ask ChatGPT** (`ai: 'claude' | 'chatgpt'` in `POST /api/edit-revisions/:id/command`). Without a choice Claude is asked first, as before. A missing connection is named.
+- The editor can change the audio mix with `set-audio` (the same operation as Room 07's "Levels and mix"): narration loudness, music on or off with its level, ducking and fades, and sound effects with their density and level. It is sent the edit's current audio settings and the video's music score (id, revision, ready, current). Music plays only the video's current, ready score; when there is none, the dry run refuses the music with "score the music in Room 07 Audio first" and the sound effects can still be switched on (they come from the sound library and land on the drawings' moments).
+- The plan's world and its own kit (`kit:<id>` items) are sent, and the new stone-age places, props and clothes are in the drawing guide, so "change the background to the stone age" is a `set-shot` with `set: "prehistoric"` or `"cave"`.
+- A cast member's clothes come from the storyboard's cast and stay the same in every shot; the editor says so and points to building the storyboard again in Room 04 (the stone-age dressing happens there).

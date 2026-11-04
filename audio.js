@@ -98,4 +98,4 @@ function qc({stderr, stream, expectedSeconds, config}) {
 
 const mixes = config => !!(config?.music?.enabled || (config?.sfx?.enabled && config.sfx.density !== 'none'));
 
-module.exports = {SCHEMA, DEFAULTS, MUSIC_DEFAULTS, SFX_DEFAULTS, MIX_FILTERS, REQUIRED_FILTERS, mixes, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};
+module.exports = {DUCKS, DENSITIES, SCHEMA, DEFAULTS, MUSIC_DEFAULTS, SFX_DEFAULTS, MIX_FILTERS, REQUIRED_FILTERS, mixes, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};

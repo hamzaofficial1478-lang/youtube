@@ -12,7 +12,10 @@
   const handwritten = () => K.FIN === 'ink' || K.FIN === 'wb';
   const WRITTEN = new Set(['title', 'label', 'highlight', 'keyword']);
   // Words are written out at a writing pace.
-  const writeSeconds = text => Math.min(1.6, Math.max(0.4, 0.25 + String(text).length * 0.045));
+  // 0.85 (owner test 2026-11-04: "they gone up before getting fully drawn"): when a shot is too short for everything its
+  // pen draws, the pen draws faster (PACE, down to 40% of its time), so every drawing is finished before the cut.
+  let PACE = 1;
+  const writeSeconds = text => PACE * Math.min(1.6, Math.max(0.4, 0.25 + String(text).length * 0.045));
   const PROP_SIZE = {s: 150, m: 230, l: 330, xl: 460};
   const TEXT_BASE = {statement: 88, poster: 300, title: 84, note: 54, number: 150, counter: 140, stamp: 96, highlight: 70, pop: 84, label: 42, headline: 60, chapter: 80, sticky: 40, tag: 46, callout: 50, keyword: 120, versus: 72};
   const TEXT_SCALE = {s: 0.7, m: 1, l: 1.35, xl: 1.8};
@@ -22,11 +25,11 @@
   const FX_SIZE = {s: 120, m: 200, l: 300, xl: 420};
   const ENTER_SECONDS = {pop: 0.4, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, mask: 0.6, swing: 0.55, blur: 0.5, rise: 0.45, land: 0.42, none: 0};
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
-  const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : ENTER_SECONDS[enter] ?? 0.34);
+  const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : (enter === 'draw' ? PACE : 1) * (ENTER_SECONDS[enter] ?? 0.34));
   const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind']);
   const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse', 'nightfall']);
   // Places under the open sky (nightfall draws its sun, moon and stars only there).
-  const OUTDOOR_SETS = new Set(['none', 'abstract', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'night', 'storm', 'castle', 'harbor', 'market', 'village', 'battlefield']);
+  const OUTDOOR_SETS = new Set(['none', 'abstract', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'night', 'storm', 'castle', 'harbor', 'market', 'village', 'battlefield', 'prehistoric']);
   const MARKS = new Set(['underline', 'circle', 'cross', 'check', 'spotlight']);
   // The doodle look's ground: a bold strip under the action, coloured by the place.
   const DOODLE_GROUND = {park: '#7BC043', nature: '#7BC043', mountains: '#7BC043', storm: '#6FA53A', night: '#3F6E2E', beach: '#F2C14E', desert: '#F2C14E', street: '#B8BCC2', road: '#B8BCC2', city: '#B8BCC2', stage: '#C98B4E', classroom: '#D9B38C', home: '#D9B38C', room: '#D9B38C', office: '#C9CDD2', kitchen: '#D9B38C', bedroom: '#D9B38C', shop: '#D9B38C', bank: '#C9CDD2', hospital: '#C9CDD2', lab: '#C9CDD2'};
@@ -62,7 +65,7 @@
   // (drawn-reveal.js): its lines, then its colours brushed in, in up to 60% of its time on screen (at most 5 s). A
   // painted place the shot before already showed is not drawn again.
   const sketches = el => !!(window.DREVEAL && painted(el) && (K.FIN === 'wb' || HAND) && !(el.backdrop && D.holdBackdrop));
-  const pictureSeconds = (el, ts = 0) => (painted(el) ? (sketches(el) ? Math.min(5, Math.max(1.2, 0.6 * (P.duration - ts))) : el.backdrop ? 0.4 : 1.1) : el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
+  const pictureSeconds = (el, ts = 0) => PACE * (painted(el) ? (sketches(el) ? Math.min(5, Math.max(1.2, 0.6 * (P.duration - ts))) : el.backdrop ? 0.4 : 1.1) : el.art ? Math.min(4.2, Math.max(2.2, 1.2 + 0.018 * el.art.paths.length), Math.max(0.8, 0.45 * (P.duration - ts))) : 0.5);
   function estimate(el) {
     // A map (0.36) at size xl is the whole frame; smaller maps are panels like charts.
     if (el.kind === 'map' && (el.size || 'xl') === 'xl') return {box: [0, 0, K.W, K.H], center: [K.W / 2, K.H / 2], r: K.H / 2, w: K.W, h: K.H};
@@ -103,6 +106,7 @@
   }
   function layout(d) {
     const dur = P.duration, engine = d.engine, times = d.times || {elements: [], focus: []};
+    PACE = 1;
     const est = d.elements.map(estimate);
     // A face is never covered: a loose prop placed on a character's head moves above it, or beside it towards the open
     // side when there is no room above (live 0.26 run: a target pin sat on the hero's face).
@@ -223,7 +227,8 @@
       const drawsOn = engine === 'handdrawn' || PEN || K.FIN === 'ink';
       if (ts == null && item.kind === 'figure' && (!item.enter || item.enter === 'auto')) { ts = drawsOn ? 0.05 : 0; if (!drawsOn) enter = 'none'; }
       if (ts == null) { ts = drawsOn ? 0.05 + order * Math.min(0.5, Math.max(0.18, dur * 0.45 / Math.max(1, uncued))) : 0.03 + order * 0.08; order++; }
-      ts = Math.max(0, Math.min(ts, dur - 0.3));
+      // A drawing starts early enough to have landed before the shot ends.
+      ts = Math.max(0, Math.min(ts, dur - Math.max(0.3, 0.15 + enterSeconds(enter, engine) * (item.kind === 'figure' && enter === 'draw' ? 1.25 : 1))));
       const te = cue.t1 != null && cue.t1 > ts + 0.25 ? cue.t1 : null;
       // A change of pose or face anticipates its word by a beat, as an animator would key it.
       const steps = (item.then || []).map((step, k) => ({...step, t: cue.then?.[k] != null ? Math.max(ts, cue.then[k] - 0.1) : ts + (k + 1) * (dur - ts) / (item.then.length + 1)})).sort((a, b) => a.t - b.t);
@@ -245,12 +250,14 @@
     // One pen draws one thing at a time: under the pen a drawing waits for the one before it to finish (a drawing on
     // a word waits a moment only, so it never drifts far from its word).
     if (PEN) {
-      let end = 0;
-      d.elements.map((item, i) => i).filter(i => el[i].enter === 'draw').sort((a, b) => el[a].ts - el[b].ts).forEach(i => {
-        const item = d.elements[i], busy = item.kind === 'text' && WRITTEN.has(item.style) ? writeSeconds(item.text) : item.kind === 'picture' ? pictureSeconds(item, el[i].ts) : enterSeconds('draw', engine) * (item.kind === 'figure' ? 1.25 : 1);
-        if (el[i].ts < end && (!el[i].cued || end - el[i].ts <= 0.6)) el[i].ts = Math.min(end, dur - 0.3);
-        end = Math.max(end, el[i].ts + busy);
-      });
+      const drawn = d.elements.map((item, i) => i).filter(i => el[i].enter === 'draw').sort((a, b) => el[a].ts - el[b].ts), start = drawn.map(i => el[i].ts);
+      const busy = i => { const item = d.elements[i]; return item.kind === 'text' && WRITTEN.has(item.style) ? writeSeconds(item.text) : item.kind === 'picture' ? pictureSeconds(item, el[i].ts) : enterSeconds('draw', engine) * (item.kind === 'figure' ? 1.25 : 1); };
+      const queue = () => { let end = 0; drawn.forEach((i, k) => { el[i].ts = start[k]; if (el[i].ts < end && (!el[i].cued || end - el[i].ts <= 0.6)) el[i].ts = end; end = Math.max(end, el[i].ts + busy(i)); }); return end; };
+      const room = dur - 0.15, from = drawn.length ? Math.min(...start) : 0;
+      let end = queue();
+      for (let k = 0; k < 4 && end > room && PACE > 0.4; k++) { PACE = Math.max(0.4, PACE * (room - from) / Math.max(0.01, end - from)); end = queue(); }
+      // At the fastest pace a drawing that still would not finish starts early enough to (it shares the pen).
+      drawn.forEach(i => { el[i].ts = Math.max(0, Math.min(el[i].ts, room - busy(i))); });
     }
     // A lone object on a plain backdrop gets a stage: a lit disc with slow rays behind it, so it never reads as a
     // still icon pasted on a page.
@@ -1998,5 +2005,5 @@
   }
   const catalog = () => ({props: Object.keys(K.PROPS).sort(), sets: Object.keys(K.SETS).sort(), poses: [...K.POSES].sort(), expressions: [...K.EXPRESSIONS].sort()});
   // layout(): the last frame's measured boxes, the pen's tip and the hand, read by the tests.
-  window.DRAWN = {frame, catalog, layout: () => (LAYOUT ? {est: LAYOUT.est, tip: K.TIP, hand: LASTHAND} : null)};
+  window.DRAWN = {frame, catalog, layout: () => (LAYOUT ? {est: LAYOUT.est, tip: K.TIP, hand: LASTHAND, pace: PACE, times: LAYOUT.el.map(item => ({ts: item.ts, enter: item.enter}))} : null)};
 }());

@@ -316,6 +316,7 @@
   }
 
   // ------------------------------------------------------------ outfits (screen points of the body)
+  const FUR = '#A0703F';
   function outfit(J, look, h, dir, layer, st) {
     const col = K.col(look.color), L = [], o = look.outfit;
     const perp = (pt, w) => { const dx = J.neck[0] - J.hip[0], dy = J.neck[1] - J.hip[1], l = Math.hypot(dx, dy) || 1; return [[pt[0] - dy / l * w, pt[1] + dx / l * w], [pt[0] + dy / l * w, pt[1] - dx / l * w]]; };
@@ -344,6 +345,9 @@
     if (o === 'officer') { L.push(body(0.072, 0.066, 0.92, -0.06, col)); const n = along(0.9); [-1, 1].forEach(side => L.push({pts: K.frame(n[0] + side * 0.06 * h, n[1] + 0.005 * h, h, dir).rrect(-0.03, -0.012, 0.06, 0.024, 0.012), fill: C.gold, width: 0.4})); L.push({pts: [along(0.9), along(0.2)], color: C.red, width: 1.6}); }
     if (o === 'armor') { L.push(body(0.075, 0.068, 0.92, -0.04, C.metal)); [0.66, 0.42].forEach(f => { const [a, b] = perp(along(f), 0.07 * h); L.push({pts: [a, b], width: 0.5}); }); }
     if (o === 'robe') { const [a, b] = perp(along(0.92), 0.06 * h); L.push({pts: [a, b, [J.hip[0] + 0.12 * h, J.hip[1] + 0.3 * h], [J.hip[0] - 0.12 * h, J.hip[1] + 0.3 * h], a], fill: col}); }
+    // 0.85 the stone age: a hide tunic with a ragged hem and spots.
+    if (o === 'fur') { const [a, b] = perp(along(0.88), 0.06 * h), [c, d] = perp(along(-0.12), 0.09 * h), hem = Array.from({length: 7}, (_, k) => [d[0] + (c[0] - d[0]) * k / 6, d[1] + (c[1] - d[1]) * k / 6 + (k % 2 ? 0.035 * h : 0)]);
+      L.push({pts: [a, b, ...hem, a], fill: FUR}, ...[0.6, 0.3, 0.05].map((f, k) => { const p = along(f); return {pts: K.frame(p[0] + (k - 1) * 0.03 * h, p[1], h, dir).ring(0, 0, 0.014, 0.01, 10), fill: '#6B4A2B', stroke: false}; })); }
     if (o === 'badge') { const c = along(0.72); L.push({pts: K.frame(c[0] + 0.02 * h * dir, c[1], h, dir).star(0, 0, 0.03, 0.013), fill: C.gold, width: 0.4}); }
     return L;
   }
@@ -411,9 +415,9 @@
     const seed = K.hashText(`${look.color}${look.hair}${look.hairColor}${look.outfit}`);
     const skin = ['#F3D3B8', '#E2B48D', '#C68E63', '#8D5A3B'][seed % 4];
     const shirt = look.color ? K.col(look.color) : ['#5B7FA6', '#C8553D', '#6A994E', '#E9C46A', '#8E7DBE'][seed % 5];
-    const suit = look.outfit === 'suit', coat = look.outfit === 'lab-coat', officer = ['officer', 'uniform'].includes(look.outfit), armor = look.outfit === 'armor', robe = look.outfit === 'robe';
-    const top = suit ? '#2E3440' : coat ? '#FFFFFF' : armor ? C.metal : shirt, trousers = suit ? '#2E3440' : officer ? K.mix(shirt, '#000000', 0.45) : ['#3E4A5C', '#5C4B3E', '#2F3E46'][seed % 3];
-    const longSleeves = suit || coat || officer || armor || robe || look.outfit === 'hoodie' || seed % 3 === 0;
+    const suit = look.outfit === 'suit', coat = look.outfit === 'lab-coat', officer = ['officer', 'uniform'].includes(look.outfit), armor = look.outfit === 'armor', robe = look.outfit === 'robe', fur = look.outfit === 'fur';
+    const top = suit ? '#2E3440' : coat ? '#FFFFFF' : armor ? C.metal : fur ? FUR : shirt, trousers = suit ? '#2E3440' : fur ? skin : officer ? K.mix(shirt, '#000000', 0.45) : ['#3E4A5C', '#5C4B3E', '#2F3E46'][seed % 3];
+    const longSleeves = !fur && (suit || coat || officer || armor || robe || look.outfit === 'hoodie' || seed % 3 === 0);
     const axis = [J.neck[0] - J.hip[0], J.neck[1] - J.hip[1]], al = Math.hypot(axis[0], axis[1]) || 1, nrm = [-axis[1] / al, axis[0] / al];
     const along = (f, w) => [J.hip[0] + axis[0] * f + nrm[0] * w, J.hip[1] + axis[1] * f + nrm[1] * w];
     const shift = (pts, w) => pts.map(p => [p[0] + nrm[0] * w, p[1] + nrm[1] * w]);
@@ -438,7 +442,7 @@
     // A robe reaches the feet, so both legs go behind it.
     if (robe) leg(legF);
     if (!chibi) L.push({pts: tube([along(0.95, 0), J.head], 0.05 * h, 0.046 * h), fill: skin, ...line});
-    const hem = coat ? -0.35 : robe ? -1.12 : -0.05, flare = robe ? 0.15 : 0.092;
+    const hem = coat ? -0.35 : robe ? -1.12 : fur ? -0.3 : -0.05, flare = robe ? 0.15 : fur ? 0.11 : 0.092;
     const body = [along(1.0, -0.035 * h), along(0.96, -0.1 * h), along(0.84, -0.11 * h), along(0.45, -0.086 * h), along(hem, -flare * h), along(hem, flare * h), along(0.45, 0.086 * h), along(0.84, 0.11 * h), along(0.96, 0.1 * h), along(1.0, 0.035 * h)];
     L.push({pts: smooth(body), fill: top, ...line});
     if (officer) {
@@ -446,6 +450,7 @@
       if (look.outfit === 'officer') L.push(...[-1, 1].map(side => ({pts: K.frame(...along(0.96, side * 0.1 * h), h, 1).rrect(-0.035, -0.014, 0.07, 0.028, 0.014), fill: C.gold, px: lw * 0.7})), {pts: [along(0.95, -0.08 * h), along(0.95, -0.05 * h), along(0.12, 0.09 * h), along(0.2, 0.06 * h)], fill: shirt === C.red ? C.blue : C.red, px: lw * 0.6});
     }
     if (armor) L.push(...[0.66, 0.42].map(f => ({pts: [along(f, -0.09 * h), along(f + 0.03, 0), along(f, 0.09 * h)], px: lw * 0.8})));
+    if (fur) L.push(...[[0.62, -0.04], [0.3, 0.05], [-0.05, -0.05], [0.8, 0.05]].map(([f, w]) => ({pts: K.frame(...along(f, w * h), h, 1).ring(0, 0, 0.018, 0.013, 10), fill: '#6B4A2B', stroke: false})), {pts: [-0.3, -0.22, -0.3, -0.22, -0.3].map((f, k) => along(f, (-0.11 + k * 0.055) * h)), px: lw * 0.7});
     L.push({pts: [along(1.0, -0.035 * h), along(0.86, 0), along(1.0, 0.035 * h)], px: lw * 0.9});
     if (suit) L.push({pts: [along(0.99, -0.012 * h), along(0.99, 0.012 * h), along(0.55, 0.016 * h), along(0.5, 0), along(0.55, -0.016 * h), along(0.99, -0.012 * h)], fill: C.red, px: lw * 0.8});
     if (!coat && !robe) L.push({pts: [along(0.03, -0.09 * h), along(0.03, 0.09 * h)], px: lw * 0.9});

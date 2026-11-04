@@ -1291,8 +1291,21 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   await assert.rejects(editing.command(r4.id, {requestedBy: 'Owner', text: 'Make it better'}), /did not answer with edit operations/);
   assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM intelligence_usage WHERE kind='edit_command' AND status='settled'").get().n, 2);
   await assert.rejects(editing.command(r3.id, {requestedBy: 'Owner', text: 'Anything'}), /newer revision/);
+  // 0.85: the owner asks ChatGPT by its own button, and the editor can set the music and sound effects.
+  const mix = on => ({mode: 'normalize', targetLufs: -16, truePeakDb: -2, music: {enabled: on, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: on ? '00000000-0000-4000-8000-000000000000' : null}, sfx: {enabled: true, density: 'accent', levelDb: -12}});
+  scenes.ai = {team: () => ({claude: {id: 'claude-1'}, chatgpt: {id: 'gpt-1'}}), complete: async ({connectorId, messages}) => { asked.push({connectorId, messages}); return {content: JSON.stringify({explain: 'Effects on; music needs a score.', ops: [{type: 'set-audio', settings: mix(true)}, {type: 'set-audio', settings: mix(false)}]}), usage: {totalTokens: 50}, model: 'gpt', provider: 'chatgpt'}; }};
+  const sound = await editing.command(r4.id, {requestedBy: 'Owner', text: 'Add music and sound effects', ai: 'chatgpt'});
+  assert.equal(asked.at(-1).connectorId, 'gpt-1');
+  assert.match(asked.at(-1).messages[0].content, /"type":"set-audio"/);
+  assert.match(asked.at(-1).messages[1].content, /AUDIO: \{"settings":/);
+  assert.deepEqual(sound.steps.map(step => step.ok), [false, true]);
+  assert.match(sound.steps[0].error, /no music score yet/);
+  const r5 = editing.applyOps(r4.id, {editedBy: 'Owner', ops: sound.ops});
+  assert.equal(r5.timeline.audio.sfx.enabled, true);
+  scenes.ai = {team: () => ({claude: {id: 'claude-1'}, chatgpt: null})};
+  await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Anything', ai: 'chatgpt'}), /ChatGPT is not connected/);
   scenes.ai = {team: () => ({claude: null, chatgpt: null})};
-  await assert.rejects(editing.command(r4.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
+  await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
 });
 
 // ---------------------------------------------------------------- P08c music and sound effects

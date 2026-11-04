@@ -423,3 +423,37 @@ test('0.58 words fit as drawn (capitals, tags, stamps), a chart keeps its size b
     assert.ok(Math.abs(est[1].chip[0] - hx) > hr, 'beside the head, not on the face');
   } finally { await renderer.close(); }
 });
+
+test('0.85 a short shot draws faster so every drawing is finished before the cut', {skip: browser ? false : 'No Edge or Chrome on this machine'}, async () => {
+  const renderer = new MotionRenderer({browser});
+  const busy = {set: 'cave', camera: 'still', elements: [{kind: 'figure', pose: 'point', x: 0.3, holds: 'spear'}, {kind: 'prop', prop: 'campfire', x: 0.6, y: 0.74}, {kind: 'prop', prop: 'mammoth', x: 0.82, y: 0.6}, {kind: 'text', style: 'title', text: 'The first traders', x: 0.5, y: 0.15}, {kind: 'text', style: 'label', text: 'flint', x: 0.6, y: 0.5}]};
+  const at = async duration => { await frame(renderer, busy, duration - 0.05, {duration, drawing: {look: 'classic', hand: true}}); return renderer.evaluate('DRAWN.layout()'); };
+  try {
+    await renderer.start();
+    const short = await at(2), long = await at(8);
+    assert.ok(short.pace < 1 && short.pace >= 0.4, `the pen speeds up (${short.pace})`);
+    assert.equal(long.pace, 1, 'a long shot keeps the pen at its own pace');
+    assert.ok(short.times.every(item => item.ts <= 2 - 0.3), JSON.stringify(short.times));
+  } finally { await renderer.close(); }
+});
+
+test('0.85 a stone-age story lives in caves and open land, and its people wear hides', () => {
+  assert.equal(Sk.worldOf('Long ago, in the Stone Age, people swapped flint for food.').era, 'prehistoric');
+  assert.equal(Sk.worldOf('Today the bank pays you interest.'), null);
+  for (const name of ['cave', 'prehistoric']) assert.ok(Sk.SETS.includes(name));
+  for (const name of ['campfire', 'spear', 'stone-axe', 'mammoth']) assert.ok(Sk.PROPS.includes(name));
+  assert.ok(Sk.LOOK.outfit.includes('fur'));
+  const world = Sk.worldOf('cavemen'), cast = [{id: 'c1', name: 'Grok', role: 'a hunter', look: {...Sk.DEFAULT_LOOK, headwear: 'cap'}}, {id: 'c2', name: 'Narrator', role: 'talks to you', look: {...Sk.DEFAULT_LOOK}}];
+  assert.equal(Sk.worldCast(cast, world).length, 1);
+  assert.equal(cast[0].look.outfit, 'fur');
+  assert.equal(cast[0].look.headwear, 'none', 'no cap in the stone age');
+  assert.equal(cast[1].look.outfit, 'none', 'the narrator keeps today\'s clothes');
+  const fire = [{kind: 'prop', prop: 'campfire'}];
+  const shots = [{label: 'S01A', words: 'They hunted together.', sketch: Sk.validate({set: 'nature', elements: [{kind: 'figure', pose: 'walk'}]})}, {label: 'S01B', words: 'They slept close to the fire.', sketch: Sk.validate({set: 'home', elements: fire})}, {label: 'S02A', words: 'Today you use a card.', sketch: Sk.validate({set: 'shop', elements: fire})}];
+  const fixes = Sk.worldMend(shots, world);
+  assert.deepEqual(shots.map(shot => shot.sketch.set), ['prehistoric', 'cave', 'shop'], 'a line that speaks to the viewer stays today');
+  assert.equal(shots[0].sketch.elements[0].look.outfit, 'fur');
+  assert.ok(fixes.some(fix => fix.label === 'S01A' && /hides/.test(fix.fix)));
+  // The free draft finds the stone age in the words.
+  assert.equal(Sk.fromText('In the stone age, hunters chased a mammoth.').set, 'prehistoric');
+});

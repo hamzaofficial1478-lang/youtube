@@ -240,6 +240,9 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
   const drawnPlan = scenes.some(scene => scene.shots.some(shot => shot.source === 'generated-graphics'));
   let castOut = Sk.validateCast(cast, {lenient: true, warn: message => warnings.push(`Cast: ${message}`), kit});
   if (drawnPlan && !castOut.length && ['stickman', 'handdrawn'].includes(primary)) castOut = structuredClone(DEFAULT_CAST);
+  // A plan that named no world still tells the script's story: a stone-age script is a prehistoric world (0.85).
+  const storyWorld = world || (drawnPlan ? Sk.worldOf(sentences.map(item => item.text).join(' ')) : null);
+  const castFixes = mend ? Sk.worldCast(castOut, storyWorld) : [];
   const spokenWords = drawnPlan || scenes.some(scene => scene.shots.some(shot => shot.cue)) ? Cap.wordTimings({sentences: timed, pauses: [], narrationSeconds}) : [];
   // The atelier's anime finish (0.68): frames carry their shot and drawings, compositions keep to the colour script.
   const finish = ['anime', 'mix'].includes(spec.atelier?.finish) ? spec.atelier.finish : 'motion', animeScript = finish !== 'motion' && direction ? At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script}).script : null;
@@ -292,15 +295,15 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
   // Continuity with each shot's own words: Claude's and the free plans are mended (the fixes are listed in the
   // plan); the owner's own edits are only checked.
   const drawn = out.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: spokenBy.get(shot.label), notes: shot.notes})));
-  const mended = mend ? [...Sk.mend(drawn, castOut), ...Sk.worldMend(drawn, world)] : [];
-  warnings.push(...Sk.continuity(drawn, castOut), ...Sk.worldNotes(drawn, world));
+  const mended = mend ? [...castFixes, ...Sk.mend(drawn, castOut), ...Sk.worldMend(drawn, storyWorld)] : [];
+  warnings.push(...Sk.continuity(drawn, castOut), ...Sk.worldNotes(drawn, storyWorld));
   for (const shot of drawn) if (shot.sketch?.elements?.some(item => item.kind === 'picture' && !item.art && !item.image)) warnings.push(`${shot.label}: its picture is not drawn yet, so the shot shows only the rest of its drawing.`);
   // How the engines take turns across the video (P06i), measured for free; long videos get plain notes.
   const mix = D.measureMix(out, {primary, seconds: narrationSeconds});
   warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
   return {
     payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut} : {}), ...(design ? {design} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
-      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(pictures ? {pictures} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(world ? {world} : {}), ...(E.GRADES[grade] ? {grade} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
+      ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(pictures ? {pictures} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(storyWorld ? {world: storyWorld} : {}), ...(E.GRADES[grade] ? {grade} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
     issues, warnings,
   };
 }
