@@ -118,3 +118,7 @@ An approval is current only while all of these hold. Otherwise the room shows th
   - the resumed master is byte-identical to the one made in one go;
   - a newer approved master supersedes the older.
 - Not tested: a long real video, drawn engines at full size over many minutes, and the owner's own review of a master.
+
+## Removing a render that did not finish (0.88)
+
+A cancelled, failed, out-of-date or stopped render has a **Remove** button (`RenderRoom.remove`, `POST /api/renders/:id/remove`): it leaves the lists (`render_jobs.cleared_at`), and its kept parts (`render_stages`) and work and output folders leave this PC, so a later render starts from the beginning. Its record stays for the history and the Operations report. A finished render is never removed this way.

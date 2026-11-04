@@ -392,7 +392,7 @@ const BRIEF_BYTE_BUDGET = 1800;
 // 0.73 (owner question 2026-10-30, "will the skills be used?"): with every skill approved a script job received 3 of
 // 122 script skills. The creative jobs now carry far more; their limits grow with the brief (scripts add it on top,
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
-const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 14000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 3000, 'visuals.prompt': 2500});
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 14000, 'editing.plan': 8000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 3000, 'visuals.prompt': 2500});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 // ---------------------------------------------------------------- choosing skills for one request (0.74)

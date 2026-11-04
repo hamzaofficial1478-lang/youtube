@@ -14,6 +14,7 @@ const C = require('./craft');
 const Cap = require('./captions');
 const Audio = require('./audio');
 const Kit = require('./kit');
+const M = require('./music');
 const Sk = require('./sketch');
 const T = require('./transitions');
 const E = require('./engines');
@@ -29,7 +30,10 @@ const CUTS_VERSION = `scene>${R.SCENE_CUT_THRESHOLD} v1`;
 const OVERRIDE_SKILL = {'set-transition': 'editing.transition-grammar', 'set-move': 'editing.still-image-motion', 'set-hold': 'editing.change-cadence', 'set-graphic': 'motion.graphic-type-selector', reorder: 'editing.opening-hook-construction'};
 const OVERRIDE_REPEAT = 2;
 // One typed instruction (0.54): the editor's answer is a short list of operations.
-const COMMAND_TOKENS = 24000;
+const COMMAND_TOKENS = 24000, POLISH_TOKENS = 32000;
+// 0.88 (owner review 2026-11-04: "the editing looks too generic and basic, no special effects, no detailing"): one click
+// asks the AI to polish the whole edit, with the owner's approved editing skills and the competitor lessons.
+const POLISH_ASK = 'Polish this whole edit like a professional editor and motion designer, so it never looks basic or generic. Give every scene change the transition that serves it (an accent on a change of topic and on the turn, gentle on the wind-down) and keep cuts inside a scene. Give drawn shots camera life (set-shot camera; texture or film where it fits the look), give their words an animation and the key word an accent colour, add an effect (kind "fx") where a line lands, and keep the hook fast. Show the subject the words name, in the story\'s world (era, places, objects), and change a drawing that does not match its words. Use the SKILLS and the COMPETITOR LESSONS. Change what makes the video better and keep what already works; up to 40 operations.';
 const list = value => (Array.isArray(value) ? [...value] : Object.keys(value || {}));
 // What the inspector offers for each field of a drawing (the drawing vocabulary, sketch.js).
 const VOCAB = Object.freeze({kinds: ['text', 'figure', 'prop', 'arrow', 'bubble', 'fx', 'chart', 'timeline', 'network', 'map', 'crowd', 'quote', 'document', 'gauge', 'loupe', 'ruler'],
@@ -78,7 +82,7 @@ function describeOp(op, timeline, drawn) {
   }
 }
 // The editor's messages: the operations, the rules of this style, the edit as data and the drawings it may change.
-function commandMessages({payload, drawn, spec, focus, ask, audio = null}) {
+function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null}) {
   const fps = payload.fps, secs = frames => Math.round(frames / fps * 100) / 100;
   const kindOf = clip => (drawn.clips[clip.id]?.designed ? 'designed' : drawn.clips[clip.id] ? 'drawn' : clip.mediaType === 'image' ? 'still' : 'footage');
   const edit = {fps, seconds: secs(payload.totalFrames), format: payload.format, scenes: payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, at: secs(scene.startFrame)})),
@@ -94,7 +98,7 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null}) {
   for (const id of around) { const entry = {words: drawn.clips[id].words, sketch: drawn.clips[id].sketch}, size = JSON.stringify(entry).length; if (size > budget) break; budget -= size; drawings[id] = entry; }
   const allowed = [...new Set(['cut', ...(spec.transitions?.allowed || [])])];
   const system = ['You are the editor of this YouTube video: an expert video editor and motion designer working in the program\'s Editing Room. The owner tells you what to change. Turn the instruction into the program\'s edit operations: exactly what the owner asks, plus only what that change needs to work (for example a shorter transition when a clip gets shorter). If something cannot be done with these operations, say so in "explain" and leave it out. The narration is fixed: captions follow it, and words on screen come from it.',
-    'Return JSON only: {"explain": one or two plain sentences for the owner about what you changed and why, "ops": [at most 20 operations]}.',
+    'Return JSON only: {"explain": one or two plain sentences for the owner about what you changed and why, "ops": [at most 20 operations, or 40 when asked to polish the whole edit]}.',
     'OPERATIONS (ids from the data; seconds in seconds):',
     '- {"type":"set-hold","clipId","seconds"}: the clip\'s length; the next clip absorbs the change; never the last clip; both keep at least 0.5 s.',
     `- {"type":"set-transition","clipId","transition","seconds"?}: the join after the clip. transition: ${allowed.join(', ')}. seconds 0.1 to half the shorter clip; "cut" takes no seconds.`,
@@ -114,6 +118,9 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null}) {
     '- {"type":"reset-drawing","clipId"}: back to the approved board\'s drawing.',
     'A character of the cast ("who") wears the clothes the storyboard gave that character in every shot; to dress the cast differently (for example in hides for the stone age), say in "explain" that the storyboard is built again in Room 04. A figure without "who" may carry its own "look".',
     'Text animations ("animate"), entrances ("enter"), effects (kind "fx" with "effect"), poses, expressions, props, colours and every other field follow the DRAWING GUIDE below; use only names it lists.',
+    // 0.88: the owner's approved editing skills for this request and the competitor lessons reach the editor too.
+    ...(skills ? [`SKILLS (the owner's approved editing craft chosen for this request; follow their do rules and respect their avoid rules; they are guidance, not data): ${JSON.stringify(skills)}`] : []),
+    ...(guidance ? [`COMPETITOR LESSONS (techniques the owner chose to learn from competitors; at most 30% reference and at least 70% your own; never copy): ${JSON.stringify(guidance)}`] : []),
     ...(drawn.kit?.length ? [`THE VIDEO'S OWN KIT (use "kit:<id>" where a prop, set or outfit name goes): ${JSON.stringify(drawn.kit)}`] : []),
     ...(drawn.world ? [`THE VIDEO'S WORLD: ${JSON.stringify(drawn.world)} - every place, object and costume belongs to it.`] : []),
     `DRAWING GUIDE:\n${Sk.promptGuide(drawn.primary || 'stickman', {engines: drawn.engines})}`].join('\n');
@@ -284,12 +291,15 @@ class EditingRoom {
       await this.measureCuts(inputs);
       const {alignment, edit} = this.brainInput(inputs, analysis);
       // The brain fixes what its own critic can fix before the owner sees the draft, and lists each fix.
-      const {timeline: payload, fixed} = B.autoFix(B.autoEdit(edit), inputs.spec);
+      let {timeline: payload, fixed} = B.autoFix(B.autoEdit(edit), inputs.spec);
       const skills = this.skillsInForce(inputs.family.id);
       // 0.86: the music and sound effects come with the draft, from the family's own sound library.
       const auto = this.autoAudio(inputs, contentId);
       if (auto?.settings) payload.audio = auto.settings;
-      const meta = {...(auto ? {autoAudio: auto.notes, autoAudioSettings: auto.settings || null} : {}), timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
+      // 0.88: the owner's own changes of the earlier edit come along (each checked again on the new inputs).
+      const carried = this.carryForward(contentId, inputs, payload);
+      payload = carried.payload;
+      const meta = {...(auto ? {autoAudio: auto.notes, autoAudioSettings: auto.settings || null} : {}), ...(carried.from ? {carried: {from: carried.from, kept: carried.kept, left: carried.left}} : {}), timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
       return this.store.transaction(() => {
         const fresh = this.inputs(this.store.content(contentId));
         requireValue(fresh.ready && fresh.scopeHash === inputs.scopeHash, 'The inputs changed while the edit was being prepared. Try again.', 409);
@@ -300,7 +310,7 @@ class EditingRoom {
           timeline = this.timelineRow(id);
         }
         const parent = this.latestRow(timeline.id) || null;
-        const row = this.insertRevision({timeline, payload, parent, actor: 'brain', note: `${parent ? 'Fresh edit from the editing brain (replaces the earlier draft)' : 'First edit from the editing brain'}${fixed.length ? `; it fixed ${fixed.length} of its own finding${fixed.length === 1 ? '' : 's'}` : ''}.`, createdBy: by, meta, ops: [{type: 'auto-edit'}], receipt: {clips: payload.clips.length, graphics: payload.graphics.length}});
+        const row = this.insertRevision({timeline, payload, parent, actor: 'brain', note: `${parent ? 'Fresh edit from the editing brain (replaces the earlier draft)' : 'First edit from the editing brain'}${fixed.length ? `; it fixed ${fixed.length} of its own finding${fixed.length === 1 ? '' : 's'}` : ''}${carried.from ? `; ${carried.kept} of your ${carried.kept + carried.left.length} changes from the earlier edit (r${carried.from.revision}) came along` : ''}.`, createdBy: by, meta, ops: [{type: 'auto-edit'}], receipt: {clips: payload.clips.length, graphics: payload.graphics.length}});
         if (skills.length) this.store.skillRuntime?.recordUsage({jobId: row.id, familyId: inputs.family.id, room: 'editing', taskKey: 'editing.plan', brief: {revisionIds: skills.map(item => item.revisionId), skillIds: skills.map(item => item.id), injectedBytes: 0, dropped: 0}});
         this.store.event(`Editing brain drafted edit r${row.revision} for "${content.title}" (${payload.clips.length} clips, ${alignment.method})`);
         return this.publicRevision(row, {detail: true});
@@ -308,6 +318,42 @@ class EditingRoom {
     } finally {
       this.busy.delete(contentId);
     }
+  }
+
+  // 0.88 (owner review 2026-11-04: an edit went out of date after the visuals were drawn again, and a fresh draft started
+  // from nothing): the owner's own changes of the newest earlier edit of this script are replayed onto the fresh draft,
+  // in order and without the ones the owner undid, each checked again. A changed drawing comes along only while its
+  // shot's board drawing is the same as when the owner changed it; whatever no longer fits is listed, never forced.
+  carryForward(contentId, inputs, payload) {
+    const old = this.db.prepare('SELECT * FROM edit_timelines WHERE content_id=? AND scope_hash<>? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(contentId, inputs.scopeHash);
+    if (!old || this.db.prepare('SELECT 1 FROM edit_timelines WHERE content_id=? AND scope_hash=?').get(contentId, inputs.scopeHash)) return {payload};
+    const rows = this.db.prepare('SELECT * FROM edit_revisions WHERE timeline_id=? ORDER BY revision').all(old.id);
+    let stack = [];
+    for (const row of rows) {
+      const ops = JSON.parse(row.ops || '[]'), receipt = JSON.parse(row.receipt || '{}');
+      if (ops[0]?.type === 'undo') { stack = stack.filter(item => item.revision <= receipt.restored); continue; }
+      if (row.actor === 'brain') { if (!receipt.autoAudio) stack = []; continue; }
+      if (row.actor === 'owner') stack.push({revision: row.revision, ops});
+    }
+    const ops = stack.flatMap(item => item.ops).filter(op => op && typeof op === 'object' && op.type !== 'regenerate-scene');
+    if (!ops.length) return {payload};
+    const oldPlan = (() => { try { return JSON.parse(this.scenes.manifestRow(JSON.parse(old.scope).manifestId).payload); } catch { return null; } })();
+    const sketchOf = (plan, shotId) => plan?.scenes.flatMap(scene => scene.shots).find(shot => shot.id === shotId)?.sketch || null;
+    const spec = inputs.spec, check = this.checkDrawingFor({inputs}), left = [];
+    let working = payload, kept = 0;
+    for (const op of ops) {
+      try {
+        if (op.type === 'set-drawing') {
+          const clip = working.clips.find(item => item.id === op.clipId);
+          if (!clip) throw new Error('its shot is no longer in the edit');
+          if (JSON.stringify(sketchOf(oldPlan, clip.shotId)) !== JSON.stringify(sketchOf(inputs.payload, clip.shotId))) throw new Error('the board drew this shot again, so its new drawing stays');
+        }
+        working = B.applyOp(working, op, {spec, checkDrawing: check}).timeline;
+        kept++;
+      } catch (error) { left.push(`${op.type}${op.clipId ? ` ${working.clips.find(item => item.id === op.clipId)?.label || ''}` : ''}: ${String(error.message).slice(0, 140)}`); }
+    }
+    const last = rows.at(-1);
+    return {payload: working, from: {timelineId: old.id, revision: last.revision}, kept, left: left.slice(0, 20)};
   }
 
   // 0.86 (owner request 2026-11-04: "the program will read the video by itself while editing and add music or sfx by
@@ -446,7 +492,25 @@ class EditingRoom {
       try { sketch = Sk.validate(sketch, {...rules, lenient: true}); times = Sk.timing(sketch, words).elements.map(item => item.t0); } catch { /* shown as stored */ }
       clips[clip.id] = {sketch, edited: !!own, words: words.map(word => word.text).join(' '), times};
     });
-    return {revisionId: row.id, clips, vocab: VOCAB, engines: rules.engines, primary: rules.primary, cast: rules.cast.map(item => ({id: item.id, name: item.name})), kit: Kit.summary(rules.kit), world: state.inputs.payload.world || null};
+    return {revisionId: row.id, clips, vocab: VOCAB, engines: rules.engines, primary: rules.primary, cast: rules.cast.map(item => ({id: item.id, name: item.name})), kit: Kit.summary(rules.kit), world: state.inputs.payload.world || null, audio: this.audioTracks(payload, clips, state, rules.primary)};
+  }
+  // 0.88 (owner review 2026-11-04: "there is just audio, separate music and sfx"): the timeline's music cues and every
+  // sound effect where the render lays it (the same sfxEvents), with the library sound it uses or none yet.
+  audioTracks(payload, clips, state, engine) {
+    let settings = null;
+    try { settings = payload.audio ? Audio.settings(payload.audio) : null; } catch { settings = null; }
+    const music = (() => {
+      if (!settings?.music?.enabled || !this.soundtrack) return [];
+      try { return this.soundtrack.score(settings.music.scoreId).cues.map(cue => ({start: cue.start, end: cue.end, mood: cue.mood, energy: cue.energy, title: cue.asset?.library?.title || cue.asset?.key || null})); } catch { return []; }
+    })();
+    const sfx = (() => {
+      if (!settings?.sfx?.enabled || settings.sfx.density === 'none') return [];
+      const shots = payload.clips.filter(clip => clips[clip.id]?.sketch).map(clip => ({label: clip.label, start: clip.start / payload.fps, seconds: clip.frames / payload.fps, sketch: clips[clip.id].sketch, times: clips[clip.id].times ? {elements: clips[clip.id].times.map(t0 => ({t0}))} : null}));
+      let library = new Map();
+      try { library = new Map((this.soundtrack?.library(state.inputs.family.id) || []).map(item => [item.kind, item])); } catch { /* no sounds listed */ }
+      return M.sfxEvents({clips: shots, density: settings.sfx.density, engine}).map(event => ({...event, sound: library.get(event.kind)?.asset?.key || null, story: M.STORY_SFX.includes(event.kind)}));
+    })();
+    return {music: music.slice(0, 200), sfx: sfx.slice(0, 1000), musicOn: !!settings?.music?.enabled, sfxOn: !!settings?.sfx?.enabled && settings.sfx.density !== 'none', density: settings?.sfx?.density || null};
   }
   // One frame of a clip at a moment inside it: drawn shots are drawn in the local browser exactly as the render draws
   // them (an unsaved drawing can be previewed before it is saved); footage and stills show their source frame there.
@@ -537,7 +601,8 @@ class EditingRoom {
   // itself; the proposal is checked operation by operation and only applied when the owner applies it (applyOps).
   async command(revisionId, input) {
     object(input);
-    const by = person(input.requestedBy), ask = text(input.text, 'Your instruction', 3, 2000);
+    const by = person(input.requestedBy), polish = input.polish === true;
+    const ask = polish ? `${POLISH_ASK}${input.text ? ` The owner adds: ${text(input.text, 'Your instruction', 0, 2000)}` : ''}` : text(input.text, 'Your instruction', 3, 2000);
     const {row, timeline, state, payload} = this.editState(revisionId);
     requireValue(this.latestRow(timeline.id).id === row.id, 'A newer revision of this edit exists. Reload and ask again.', 409);
     // 0.85: the owner asks Claude or ChatGPT (one button each); without a choice, Claude first.
@@ -546,8 +611,12 @@ class EditingRoom {
     const focus = input.clipId ? payload.clips.find(clip => clip.id === input.clipId) : null;
     requireValue(!input.clipId || focus, 'That clip is not in this edit.', 404);
     const score = this.soundtrack?.latestScore?.(timeline.content_id), audio = {settings: payload.audio || null, score: score ? {id: score.id, revision: score.revision, ready: score.ready, current: score.current, cues: score.cues.length, summary: String(score.summary || '').slice(0, 300)} : null};
-    const drawn = this.drawings(row.id), messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio});
-    const family = state.inputs.family, maxTokens = COMMAND_TOKENS, reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`;
+    const family = state.inputs.family, content = this.store.content(timeline.content_id);
+    const skillBrief = this.store.skillRuntime?.brief('editing.plan', family.id, {text: [content.title, family.niche, polish ? 'polish transitions effects animation camera' : ask].join(' '), format: family.format}) || null;
+    let guidance = null;
+    try { guidance = this.scenes.visualGuidance?.(family.id) || null; } catch { guidance = null; }
+    const drawn = this.drawings(row.id), messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance});
+    const maxTokens = polish ? POLISH_TOKENS : COMMAND_TOKENS, reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`;
     this.store.transaction(() => {
       const summary = this.store.usageSummary(family.id);
       requireValue(summary.settledTokens + summary.reservedTokens + reserve <= family.tokenBudget.monthlyLimit, 'The family\'s monthly token limit cannot reserve this request. Raise the limit or wait for next month.', 409);
@@ -562,7 +631,8 @@ class EditingRoom {
     let answer = null;
     try { answer = JSON.parse(reply.content); } catch { /* named below */ }
     requireValue(answer && typeof answer === 'object' && Array.isArray(answer.ops), 'The editor did not answer with edit operations. Nothing changed; ask again in other words.', 502);
-    const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, 20), {scoreId: score?.ready && score.current ? score.id : null});
+    if (skillBrief) this.store.skillRuntime?.recordUsage({jobId: key, familyId: family.id, room: 'editing', taskKey: 'editing.plan', brief: skillBrief});
+    const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, polish ? 40 : 20), {scoreId: score?.ready && score.current ? score.id : null});
     this.store.event(`Edit command on r${row.revision} by ${by}: ${proposal.ops.length} change${proposal.ops.length === 1 ? '' : 's'} proposed`);
     return {revisionId: row.id, explain: String(answer.explain || '').replace(/[\x00-\x1F]/g, ' ').slice(0, 600), ...proposal, usage: reply.usage, provider: who.provider, model: reply.model};
   }
@@ -727,7 +797,7 @@ class EditingRoom {
     const timelineRow = this.timelineRow(row.timeline_id), latest = this.latestRow(timelineRow.id);
     const payload = JSON.parse(row.payload), review = JSON.parse(row.critique);
     const out = {id: row.id, timelineId: row.timeline_id, contentId: timelineRow.content_id, revision: row.revision, latest: latest.id === row.id, actor: row.actor, note: row.note, createdBy: row.created_by, createdAt: row.created_at, payloadHash: row.payload_hash,
-      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || [], ...(payload.meta?.autoAudio ? {autoAudio: payload.meta.autoAudio} : {})};
+      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || [], ...(payload.meta?.autoAudio ? {autoAudio: payload.meta.autoAudio} : {}), ...(payload.meta?.carried ? {carried: payload.meta.carried} : {})};
     if (!detail) return out;
     const approved = new Set((payload.meta?.skills || []).map(item => item.id));
     const withSkill = item => ({...item, skillApproved: item.skill ? approved.has(item.skill) : null});

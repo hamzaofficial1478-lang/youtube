@@ -297,8 +297,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(studyAction&&req.method==='POST'){const [,id,kind]=studyAction;return json(res,200,kind==='retry'?styleStudies.retry(id,body):kind==='review'?styleStudies.review(id,body):styleStudies.styleDraft(id,body));}
         const scanSettings=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/frame-scan-settings$/);
         if(scanSettings&&req.method==='POST')return json(res,200,frameScanner.saveSettings(scanSettings[1],body));
-        const renderAction=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(cancel|retry|review|master|approve-master)$/);
-        if(renderAction&&req.method==='POST'){const [,id,kind]=renderAction;return json(res,200,kind==='cancel'?renderRoom.cancel(id,body):kind==='retry'?renderRoom.retry(id,body):kind==='master'?renderRoom.queueMaster(id,body):kind==='approve-master'?renderRoom.approveMaster(id,body):renderRoom.review(id,body));}
+        const renderAction=pathname.match(/^\/api\/renders\/([a-f0-9-]+)\/(cancel|retry|review|master|approve-master|remove)$/);
+        if(renderAction&&req.method==='POST'){const [,id,kind]=renderAction;return json(res,200,kind==='remove'?renderRoom.remove(id,body):kind==='cancel'?renderRoom.cancel(id,body):kind==='retry'?renderRoom.retry(id,body):kind==='master'?renderRoom.queueMaster(id,body):kind==='approve-master'?renderRoom.approveMaster(id,body):renderRoom.review(id,body));}
         const visualSettings=pathname.match(/^\/api\/families\/([a-f0-9-]+)\/visual-settings$/);
         if(visualSettings&&req.method==='POST')return json(res,200,sceneRoom.saveSettings(visualSettings[1],body));
         const planClear=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/scene-plan-jobs\/clear$/);
