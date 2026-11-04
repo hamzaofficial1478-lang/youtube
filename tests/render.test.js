@@ -164,6 +164,12 @@ test('a changed FFmpeg binary, cancellation and restarts never render silently',
   assert.equal(await renders.processNext(), null);
   assert.match(renders.publicJob(renders.row(first.id)).error, /binary changed since it was pinned/);
   assert.equal(renders.publicJob(renders.row(first.id)).status, 'stale');
+  // 0.88: a render that did not finish can be removed from the list; a finished one cannot.
+  const listed = () => renders.state().contents.find(item => item.contentId === content.id).renders.map(job => job.id);
+  assert.ok(listed().includes(first.id));
+  assert.deepEqual(renders.remove(first.id, {requestedBy: 'Owner'}), {removed: first.id});
+  assert.ok(!listed().includes(first.id), 'it left the list');
+  assert.equal(renders.row(first.id).status, 'stale', 'its record stays for the history');
 
   await ready(renders);
   const second = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});

@@ -1304,6 +1304,16 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   assert.equal(r5.timeline.audio.sfx.enabled, true);
   scenes.ai = {team: () => ({claude: {id: 'claude-1'}, chatgpt: null})};
   await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Anything', ai: 'chatgpt'}), /ChatGPT is not connected/);
+  // 0.88: "Polish the whole edit": one request with the approved editing skills and up to 40 changes.
+  const grammar = env.skills.skills().find(item => item.id === 'editing.transition-grammar');
+  env.skills.approveRevision(grammar.latest.id, {approvedBy: 'Owner', notes: 'Reviewed.', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}});
+  scenes.ai = {team: () => ({claude: {id: 'claude-1'}, chatgpt: null}), complete: async ({messages, maxTokens}) => { asked.push({messages, maxTokens}); return {content: JSON.stringify({explain: 'Polished.', ops: Array.from({length: 45}, () => ({type: 'set-captions', enabled: false}))}), usage: {totalTokens: 90}}; }};
+  const polished = await editing.command(r5.id, {requestedBy: 'Owner', polish: true});
+  assert.match(asked.at(-1).messages[1].content, /INSTRUCTION FROM THE OWNER: Polish this whole edit/);
+  assert.match(asked.at(-1).messages[0].content, /SKILLS \(the owner's approved editing craft[\s\S]*editing\.transition-grammar/);
+  assert.equal(asked.at(-1).maxTokens, 32000);
+  assert.equal(polished.steps.length, 40, 'up to 40 changes');
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM skill_usage WHERE task_key='editing.plan'").get().n >= 1, true, 'the skills it used are recorded');
   scenes.ai = {team: () => ({claude: null, chatgpt: null})};
   await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
 });
@@ -1495,6 +1505,10 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   // 0.86: the draft already carries the video's current score and the library's effects.
   assert.deepEqual([edit.timeline.audio.music.enabled, edit.timeline.audio.music.scoreId, edit.timeline.audio.sfx.enabled], [true, repicked.id, true]);
   assert.match(edit.autoAudio.join(' '), /music on \(score r\d+[\s\S]*sound effects on/);
+  // 0.88: the timeline has its own music row (each cue with its mood and track) and sound-effect row.
+  const tracks = editing.drawings(edit.id).audio;
+  assert.deepEqual([tracks.musicOn, tracks.sfxOn, tracks.music.length], [true, true, repicked.cues.length]);
+  assert.ok(tracks.music.every(cue => cue.mood && cue.title), JSON.stringify(tracks.music));
   // 0.87: a newer score reaches the drafted edit by itself while its audio is still the program's.
   assert.equal(editing.refreshAutoAudio(content.id), null, 'nothing new yet');
   const rescored = room.rulesScore(content.id, {requestedBy: 'Owner'});
@@ -1544,4 +1558,25 @@ test('0.86: a draft without a score gets the free score from its story sections,
   assert.match(asked.notes.join(' '), /Claude is scoring the music from the script/);
   assert.equal(asked.settings.music.enabled, false, 'music waits for the AI\'s score');
   assert.equal(auto(fake(), 'none').settings.sfx.enabled, false, 'a style without effects keeps them off');
+});
+
+// 0.88 (owner review 2026-11-04: after the visuals were approved again the edit was out of date and a fresh draft started
+// from nothing).
+test('0.88: a fresh draft after the visuals changed brings the owner\'s own changes along, without the undone ones', {skip}, async t => {
+  const env = setup(t);
+  const {editing, scenes, content} = env;
+  const {manifest, approval} = await approvedBoard(env);
+  const first = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
+  const clip = first.timeline.clips[1];
+  const r2 = editing.applyOps(first.id, {editedBy: 'Owner', ops: [{type: 'set-hero', clipId: clip.id, hero: !clip.hero}]});
+  const r3 = editing.applyOps(r2.id, {editedBy: 'Owner', ops: [{type: 'set-captions', enabled: false}]});
+  editing.undo(r3.id, {editedBy: 'Owner'});
+  // The visuals are approved again, so the edit goes out of date.
+  scenes.revokeApproval(approval.id, {by: 'Owner', reason: 'Checking that the edit work carries on.'});
+  const again = await scenes.approveVisuals(manifest.id, {approvedBy: 'Owner', confirmations: {rightsReviewed: true, sequenceReviewed: true, warningsAccepted: true}});
+  const fresh = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: again.id});
+  assert.equal(fresh.carried.kept, 1, JSON.stringify(fresh.carried));
+  assert.equal(fresh.timeline.clips.find(item => item.id === clip.id).hero, !clip.hero, 'the hero shot came along');
+  assert.equal(fresh.timeline.captions.enabled, true, 'the undone change did not come back');
+  assert.match(fresh.note, /1 of your 1 changes from the earlier edit \(r4\) came along/);
 });

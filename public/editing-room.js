@@ -61,6 +61,7 @@ function editHow(edit) {
     <li><b>The critic</b> then checks it for slideshow risk, long holds and lazy repeats${fixed ? `; the brain fixed ${fixed} of those itself` : ''}. What is left needs your taste or new visuals.</li>
     <li><b>Drawn shots</b> are drawn by the drawing engine of Room 04, timed to the narrator's words, in your style and looks.</li>
     <li><b>You</b> change anything: click a clip on the timeline and change it in the inspector, or type what you want and ${state.ai?.team?.claude || !state.ai?.team?.chatgpt ? 'Claude' : 'ChatGPT'} proposes the changes (this uses tokens; nothing changes until you apply them).</li>
+    ${edit.carried ? `<li><b>Your changes</b> from the earlier edit (r${edit.carried.from.revision}) came along: ${edit.carried.kept} kept${edit.carried.left.length ? `; not carried (${edit.carried.left.length}): ${esc(edit.carried.left.join('; '))}` : ''}.</li>` : ''}
     <li><b>Music and sound effects</b> ${edit.autoAudio ? `were added by the program when it drafted this edit: ${esc(edit.autoAudio.join('; '))}.` : 'come from Room 07 (Levels and mix).'} Change them in the timeline's Audio row or by asking the editor.</li>
     <li><b>FFmpeg</b> makes the video file when you press Render.</li></ul></details>`;
 }
@@ -69,15 +70,18 @@ function captionLine(group) {
   let index = 0;
   return group.lines.map(line => line.split(' ').map(word => { const out = index === group.emphasis ? `<mark>${esc(word)}</mark>` : esc(word); index++; return out; }).join(' ')).join(' <span class="muted">/</span> ');
 }
+// 0.88 (owner review 2026-11-04: "the sections that are expanded make a mess, make them dropdowns"): each section of the
+// edit is folded under its title; it stays open or closed as the owner left it (render's foldStates).
+const editFold = (title, body) => `<details class="edit-fold"><summary><span class="intel-subhead">${title}</span></summary><div class="edit-fold-body">${body}</div></details>`;
 function editCaptions(edit, stale) {
   const captions = edit.timeline.captions;
   if (!captions) return '<h3 class="intel-subhead">Captions</h3><p class="hint">This edit was drafted before captions existed. Draft a fresh edit to add them.</p>';
   const vertical = edit.timeline.format === 'shorts', groups = captions.groups, edited = groups.filter(group => group.edited).length;
   const toggle = stale ? '' : captions.enabled ? action('Switch captions off', 'tl-captions', 'off', 'secondary') : action('Switch captions on', 'tl-captions', 'on', 'primary');
-  return `<h3 class="intel-subhead">Captions · ${captions.enabled ? 'burned into the render' : 'off'} · ${groups.length} captions</h3>
+  return editFold(`Captions · ${captions.enabled ? 'burned into the render' : 'off'} · ${groups.length} captions`, `
     <p class="hint">${esc(captions.note)} ${vertical ? 'On this vertical video the captions sit above the Shorts buttons and step aside while a full-screen graphic shows its own text.' : 'They sit in the bottom band; graphics stay above it.'} At most one word per caption is lifted in the accent colour: figures and words like "never" or "only", and never in two captions in a row.</p>
     <div class="card-actions">${toggle}<a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.srt" download>Download SRT for YouTube</a><a class="button secondary" href="/api/edit-revisions/${esc(edit.id)}/captions.vtt" download>Download WebVTT</a></div>
-    <details class="scene-history"><summary>Read and correct the captions (${groups.length}${edited ? `, ${edited} corrected by hand` : ''})</summary><div class="history-list caption-list">${groups.map(group => `<div class="history-row"><span class="muted">${renderClock(group.start)}</span><span>${captionLine(group)}${group.edited ? ' <span class="muted">· corrected</span>' : ''}</span>${stale ? '' : action('Correct', 'tl-caption', group.id, 'secondary')}</div>`).join('')}</div></details>`;
+    <details class="scene-history"><summary>Read and correct the captions (${groups.length}${edited ? `, ${edited} corrected by hand` : ''})</summary><div class="history-list caption-list">${groups.map(group => `<div class="history-row"><span class="muted">${renderClock(group.start)}</span><span>${captionLine(group)}${group.edited ? ' <span class="muted">· corrected</span>' : ''}</span>${stale ? '' : action('Correct', 'tl-caption', group.id, 'secondary')}</div>`).join('')}</div></details>`);
 }
 
 // YouTube craft drafts (youtube-agent-skill): chapters, Shorts spans and the retention reader. Nothing here publishes.
@@ -89,7 +93,7 @@ function editCraft(room) {
   const chapterBlock = chapters ? `<details class="scene-history craft-chapters"><summary>YouTube chapters · draft · ${chapters.valid ? `${chapters.chapters.length} chapters, valid` : 'not valid yet'}</summary>${chapters.problems.length ? `<ul class="craft-issues">${chapters.problems.map(problem => `<li>✕ ${esc(problem)}</li>`).join('')}</ul>` : ''}${chapters.chapters.length ? `<pre>${esc(chapters.text)}</pre><p class="hint">Boundaries come from the narration's pauses, the change of topic words across them and the board's scenes. The titles are topic words: rewrite each one before pasting it under the video. YouTube needs 0:00 first, at least 3 chapters and 10 seconds each.</p>` : ''}</details>` : '';
   const shortBlock = shorts?.applicable ? `<details class="scene-history"><summary>Shorts inside this video · ${shorts.candidates.length} candidate${shorts.candidates.length === 1 ? '' : 's'}</summary>${shorts.candidates.length ? `<div class="craft-shorts">${shorts.candidates.map((item, index) => `<div class="craft-short"><div class="card-top"><b>${index + 1}. ${renderClock(item.start)}–${renderClock(item.end)} · ${item.seconds} s</b>${badge(`Opening line ${item.hook.verdict} · ${item.hook.band}`, CRAFT_BAND[item.hook.band] || 'gray')}</div><p>“${esc(item.firstLine)}”</p><p class="hint">Turn: “${esc(item.turnLine)}”${item.lastLine !== item.turnLine ? `<br>Ends: “${esc(item.lastLine)}”` : ' (it also ends the Short)'}</p><p class="hint">${esc(item.why.join(' '))}</p></div>`).join('')}</div><ul class="hint">${shorts.writing.map(line => `<li>${esc(line)}</li>`).join('')}</ul>` : '<p class="hint">No 20-55 second span opens on a complete thought, turns and ends on a line.</p>'}</details>` : shorts ? `<p class="hint">${esc(shorts.reason)}</p>` : '';
   const retention = `<details class="scene-history"><summary>Read a YouTube retention export</summary><p class="hint">Once this video is live: YouTube Studio → Analytics → the video → Engagement → Audience retention → download as CSV, then paste it here. You get the hook leak, the cliffs (with what the narration said at each) and the slide, ending in one fix.</p><textarea id="retention-${esc(room.contentId)}" rows="4" maxlength="200000" aria-label="Retention CSV" placeholder="Video position (%),Absolute audience retention (%)"></textarea><div class="card-actions">${action('Read the export', 'tl-retention', room.contentId, 'secondary')}</div><div id="retention-out-${esc(room.contentId)}" aria-live="polite"></div></details>`;
-  return `<h3 class="intel-subhead">YouTube craft · drafts for you, never published</h3>${chapterBlock}${shortBlock}${retention}`;
+  return editFold(`YouTube craft · drafts for you, never published`, `${chapterBlock}${shortBlock}${retention}`);
 }
 function retentionView(result) {
   const where = cliff => (cliff.atSeconds !== null ? renderClock(cliff.atSeconds) : `position ${cliff.from}`);
@@ -107,18 +111,18 @@ function editAutoFixes(edit) {
 }
 function editFindings(edit, stale) {
   const findings = edit.findings || [];
-  if (!findings.length) return `${editAutoFixes(edit)}<h3 class="intel-subhead">Editor's critique</h3><p class="muted">Nothing left to fix. The edit follows every rule the critic checks.</p>`;
-  return `${editAutoFixes(edit)}<h3 class="intel-subhead">Editor's critique · ${findings.length} finding${findings.length === 1 ? '' : 's'} left</h3><p class="hint">What is left needs new visuals, a new narration or your taste, so the brain did not change it by itself.</p><div class="edit-findings">${findings.map((item, index) => {
+  if (!findings.length) return `${editAutoFixes(edit)}${editFold(`Editor's critique`, `<p class="muted">Nothing left to fix. The edit follows every rule the critic checks.</p>`)}`;
+  return `${editAutoFixes(edit)}${editFold(`Editor's critique · ${findings.length} finding${findings.length === 1 ? '' : 's'} left`, `<p class="hint">What is left needs new visuals, a new narration or your taste, so the brain did not change it by itself.</p><div class="edit-findings">${findings.map((item, index) => {
     const [label, color] = EDIT_SEVERITY[item.severity] || [item.severity, 'gray'];
     return `<div class="edit-finding ${esc(item.severity)}"><div>${badge(label, color)} ${editSkill(item)}</div><p><b>${esc(item.message)}</b><br>${esc(item.fix)}${item.route === 'script' ? ' <span class="muted">(fix it in the script)</span>' : ''}</p>${item.op && !stale ? action('Apply this fix', 'tl-fix', String(index), 'secondary') : ''}</div>`;
-  }).join('')}</div>`;
+  }).join('')}</div>`)}`;
 }
 
 function editGraphics(tl, stale) {
   const add = stale ? '' : `<div class="card-actions">${action('+ Add a graphic', 'tl-graphic-add', '', 'secondary')}</div>`;
-  if (!tl.graphics.length) return `<h3 class="intel-subhead">Motion graphics</h3><p class="muted">The narration has no number, date, quote, list or chapter text that needs a graphic.</p>${add}`;
+  if (!tl.graphics.length) return editFold(`Motion graphics`, `<p class="muted">The narration has no number, date, quote, list or chapter text that needs a graphic.</p>${add}`);
   const statusBadge = status => badge(status === 'accepted' ? 'On screen' : status === 'rejected' ? 'Rejected' : 'Proposed', status === 'accepted' ? 'green' : status === 'rejected' ? 'gray' : 'orange');
-  return `<h3 class="intel-subhead">Motion graphics · only accepted graphics are rendered</h3><div class="history-list">${tl.graphics.map(item => `<div class="history-row edit-graphic-row"><span class="job-dot ${item.status === 'accepted' ? 'completed' : ''}"></span><div><strong>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${renderClock(item.start / tl.fps)} · ${editSeconds(item.frames, tl.fps)} s ${statusBadge(item.status)} ${editSkill(item)}</strong><small>“${esc(item.lines.join(' / '))}”${item.accent ? ` · accent: ${esc(item.accent)}${item.accentSource ? ` (${esc(item.accentSource)})` : ''}` : ''}<br>${esc(item.reason)}</small>${stale ? '' : `<div class="card-actions">${item.status !== 'accepted' ? action('Accept', 'tl-graphic-accept', item.id, 'text-button') : ''}${item.status !== 'rejected' ? action('Reject', 'tl-graphic-reject', item.id, 'text-button danger') : ''}${action('Edit', 'tl-graphic', item.id, 'text-button')}</div>`}</div></div>`).join('')}</div>${add}`;
+  return editFold(`Motion graphics · only accepted graphics are rendered`, `<div class="history-list">${tl.graphics.map(item => `<div class="history-row edit-graphic-row"><span class="job-dot ${item.status === 'accepted' ? 'completed' : ''}"></span><div><strong>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${renderClock(item.start / tl.fps)} · ${editSeconds(item.frames, tl.fps)} s ${statusBadge(item.status)} ${editSkill(item)}</strong><small>“${esc(item.lines.join(' / '))}”${item.accent ? ` · accent: ${esc(item.accent)}${item.accentSource ? ` (${esc(item.accentSource)})` : ''}` : ''}<br>${esc(item.reason)}</small>${stale ? '' : `<div class="card-actions">${item.status !== 'accepted' ? action('Accept', 'tl-graphic-accept', item.id, 'text-button') : ''}${item.status !== 'rejected' ? action('Reject', 'tl-graphic-reject', item.id, 'text-button danger') : ''}${action('Edit', 'tl-graphic', item.id, 'text-button')}</div>`}</div></div>`).join('')}</div>${add}`);
 }
 
 function editClips(tl, stale) {
@@ -159,7 +163,7 @@ async function editSend(edit, ops, note) {
   const person = renderPerson() || 'Owner';
   await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
 }
-const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
+const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
 function editAction(command, id, button) {
   if (TL_COMMANDS.has(command)) return tlAction(command, id, button);
   const {content, edit} = editContext();
@@ -282,7 +286,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
 // in step with the playhead; and the owner can type what to change for Claude to propose. Every change is a new
 // revision, checked like any other.
 const TL = {rev: null, zoom: 1, at: 0, sel: null, drawings: null, loading: false, drafts: {}, command: '', scope: 'clip', proposal: null, busy: false};
-const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['audio', 'Audio', 18]];
+const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['voice', 'Narration', 12], ['music', 'Music', 20], ['sfx', 'Sound effects', 20]];
 const TL_SHOT_KEYS = ['type', 'set', 'mood', 'camera', 'transition', 'film', 'texture', 'look', 'board', 'design'];
 const TL_ADD = {text: {kind: 'text', text: 'New words', style: 'title'}, figure: {kind: 'figure', pose: 'stand', expression: 'happy'}, prop: {kind: 'prop', prop: 'coin'}, fx: {kind: 'fx', effect: 'sparkle'}, arrow: {kind: 'arrow', from: [0.3, 0.6], to: [0.6, 0.4]}, bubble: {kind: 'bubble', text: 'Words', of: 0}};
 const tlSeconds = (frames, fps) => frames / fps;
@@ -334,10 +338,15 @@ function tlTracks(tl, stale) {
   tl.graphics.forEach(item => out.push(`<rect class="tl-graphic ${esc(item.status)}${sel('graphic', item.id)}" x="${x(item.start / tl.fps)}" y="${gy}" width="${Math.max(3, item.frames / tl.fps * pps).toFixed(1)}" height="${gh}" rx="3" data-sel="graphic" data-id="${esc(item.id)}"><title>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${esc(item.status)} · ${esc(item.lines.join(' '))}</title></rect>`));
   const [cy, ch] = rows.captions;
   (tl.captions?.groups || []).forEach(group => out.push(`<rect class="tl-caption${tl.captions.enabled ? '' : ' off'}${group.edited ? ' edited' : ''}${sel('caption', group.id)}" x="${x(group.start)}" y="${cy}" width="${Math.max(2, (group.end - group.start) * pps - 1).toFixed(1)}" height="${ch}" rx="2" data-sel="caption" data-id="${esc(group.id)}"><title>${esc(group.text)}</title></rect>`));
-  const [ay, ah] = rows.audio, audio = tl.audio || {};
-  out.push(`<rect class="tl-voice" x="0" y="${ay}" width="${x(total)}" height="${ah / 2 - 1}" rx="2"><title>Narration</title></rect>`);
-  if (audio.music?.enabled) out.push(`<rect class="tl-music" x="0" y="${ay + ah / 2}" width="${x(total)}" height="${ah / 2}" rx="2"><title>Music under the voice</title></rect>`);
-  if (audio.sfx?.enabled) out.push(`<text class="tl-label" x="4" y="${ay + ah - 2}">sound effects on the drawn moments (${esc(audio.sfx.density || '')})</text>`);
+  // 0.88: narration, music and sound effects each have their own row; a click shows what plays there.
+  const [vy, vh] = rows.voice, tracks = TL.drawings?.audio || {music: [], sfx: []};
+  out.push(`<rect class="tl-voice" x="0" y="${vy}" width="${x(total)}" height="${vh}" rx="2"><title>Narration</title></rect>`);
+  const [my, mh] = rows.music;
+  if (tracks.music.length) tracks.music.forEach((cue, k) => out.push(`<rect class="tl-music${sel('music', String(k))}" x="${x(cue.start)}" y="${my}" width="${Math.max(2, (cue.end - cue.start) * pps - 1).toFixed(1)}" height="${mh}" rx="3" data-sel="music" data-id="${k}"><title>${esc(cue.mood)}${cue.title ? ` · ${esc(cue.title)}` : ''}</title></rect>${(cue.end - cue.start) * pps > 60 ? `<text class="tl-label" x="${(Number(x(cue.start)) + 4).toFixed(1)}" y="${my + mh - 6}">${esc(cue.mood)}</text>` : ''}`));
+  else out.push(`<text class="tl-label muted" x="4" y="${my + mh - 6}">${tracks.musicOn ? 'music on, its score is not ready yet' : 'no music in this edit'}</text>`);
+  const [fy, fh] = rows.sfx;
+  if (tracks.sfx.length) tracks.sfx.forEach((hit, k) => out.push(`<rect class="tl-sfx${hit.sound ? '' : ' missing'}${sel('sfx', String(k))}" x="${(hit.seconds * pps - 3).toFixed(1)}" y="${fy + 3}" width="6" height="${fh - 6}" rx="2" data-sel="sfx" data-id="${k}" data-at="${hit.seconds.toFixed(2)}"><title>${esc(hit.kind)} · ${esc(hit.reason)}${hit.sound ? ` · ${esc(hit.sound)}` : ' · no sound in the library yet'}</title></rect>`));
+  else out.push(`<text class="tl-label muted" x="4" y="${fy + fh - 6}">${tracks.sfxOn ? 'effects on, but no drawn moment earns one' : 'no sound effects in this edit'}</text>`);
   out.push(`<line class="tl-playhead" data-tl-playhead x1="${x(TL.at)}" x2="${x(TL.at)}" y1="0" y2="${H}"></line>`);
   const labels = TL_ROWS.map(([key, label]) => `<text class="tl-row-label" x="6" y="${rows[key][0] + rows[key][1] / 2 + 4}">${label}</text>`).join('');
   return `<div class="tl-board"><svg class="tl-labels" width="92" height="${H}" viewBox="0 0 92 ${H}" aria-hidden="true">${labels}</svg><div class="tl-scroll"><svg class="tl-svg" data-tl-svg data-pps="${pps}" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Edit timeline">${out.join('')}</svg></div></div>`;
@@ -348,13 +357,15 @@ function tlEditor(content, edit, stale) {
   // 0.85: one button per connected AI (owner question 2026-11-04: "why there is no button of ask gpt?").
   const tl = edit.timeline, clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, ais = [['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => team[key]), who = ais.map(([, name]) => name).join(' or ') || null;
   const askButtons = ais.map(([key, name], k) => action(TL.busy === key ? `${name} is reading the edit…` : `Ask ${name}`, 'tl-ask', key, k ? 'secondary' : 'primary')).join('');
+  // 0.88: the whole edit polished by the AI in one request, with the approved editing skills and the competitor lessons.
+  const polishRow = ais.length ? `<div class="tl-polish"><strong>Make the whole edit richer</strong><div class="card-actions">${ais.map(([key, name], k) => action(TL.busy === `polish:${key}` ? `${name} is polishing the edit…` : `Polish with ${name}`, 'tl-polish', key, k ? 'secondary' : 'primary')).join('')}</div><p class="hint">One request reads the whole edit and proposes up to 40 changes: transitions for each scene change, camera life, word animations and colours, effects where a line lands, and drawings that match their words and the story's world. It uses your approved editing skills and the competitor lessons, and tokens from the channel's limit. Anything typed in the box above is added to the request. You see every change before applying it.</p></div>` : '';
   // 0.83: a viewer on top with Play, Pause and Stop, the inspector beside it, the timeline below, as in an editing program.
   const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><small class="muted">Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>`;
   const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span></div>';
   const viewer = stale ? '<div class="tl-viewer"><p class="inline-warning">This edit is out of date, so it cannot play. Draft a new edit.</p></div>' : playViewer(edit, content);
   const commandBox = stale ? '' : `<div class="tl-command"><h4>Tell the editor what to change</h4><textarea data-tl="command" rows="3" maxlength="2000" placeholder="For example: make the title in ${esc(clip.label)} slam in gold, add a sparkle when he says &quot;gold&quot;, and use a whip pan after it.">${esc(TL.command)}</textarea>
     <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? askButtons : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
-    <p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. You can ask for pictures, words, timing, transitions, captions, music and sound effects (music plays once the video has a score in Room 07 Audio). One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
+    ${polishRow}<p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. You can ask for pictures, words, timing, transitions, captions, music and sound effects (music plays once the video has a score in Room 07 Audio). One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
   return `<div class="tl-editor" data-tl-root id="tl-player"><div class="tl-panels">${viewer}<div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${toolbar}${tlTracks(tl, stale)}${legend}${commandBox}</div>`;
 }
 function tlProposal() {
@@ -393,6 +404,14 @@ function tlInspector(edit, stale) {
   const tl = edit.timeline, sel = TL.sel;
   if (!sel) return '<h4>Inspector</h4><p class="hint">Click a clip, a transition, a drawing beat, a graphic or a caption on the timeline. Everything the edit does there is listed here and can be changed.</p>';
   if (sel.kind === 'graphic') { const item = tl.graphics.find(graphic => graphic.id === sel.id); return item ? `<h4>${esc(EDIT_TEMPLATE_NAMES[item.template] || item.template)} · ${renderClock(item.start / tl.fps)} · ${(item.frames / tl.fps).toFixed(2)} s</h4><p>“${esc(item.lines.join(' / '))}” · ${esc(item.status)}</p><p class="hint">${esc(item.reason)}</p>${stale ? '' : `<div class="card-actions">${action('Edit graphic', 'tl-graphic', item.id, 'secondary')}${item.status !== 'accepted' ? action('Accept', 'tl-graphic-accept', item.id, 'text-button') : ''}${item.status !== 'rejected' ? action('Reject', 'tl-graphic-reject', item.id, 'text-button danger') : ''}</div>`}` : ''; }
+  // 0.88: a music cue or a sound effect: what it is, why it is there, and where to change it.
+  if (sel.kind === 'music' || sel.kind === 'sfx') {
+    const tracks = TL.drawings?.audio || {music: [], sfx: []}, item = (sel.kind === 'music' ? tracks.music : tracks.sfx)[Number(sel.id)];
+    if (!item) return '';
+    const change = stale ? '' : `<div class="card-actions">${action('Levels and mix', 'audio-settings', edit.id, 'secondary')}<span class="hint">Or ask the editor below (for example: "softer music", "more sound effects").</span></div>`;
+    return sel.kind === 'music' ? `<h4>Music · ${tlClock(item.start)}–${tlClock(item.end)}</h4><dl class="style-facts"><div><dt>Mood</dt><dd>${esc(item.mood)} · energy ${esc(item.energy)} of 5</dd></div><div><dt>Track</dt><dd>${esc(item.title || 'not chosen yet')}</dd></div></dl>${change}`
+      : `<h4>Sound effect · ${tlClock(item.seconds)}</h4><dl class="style-facts"><div><dt>Sound</dt><dd>${esc(item.kind)}${item.story ? ' (a story sound)' : ''}</dd></div><div><dt>Why here</dt><dd>${esc(item.reason)}</dd></div><div><dt>From the library</dt><dd>${item.sound ? esc(item.sound) : item.story ? 'none yet: Freesound fetches it when connected; until then this moment stays quiet' : 'none yet: add one in the sound library (Freesound fills it when connected)'}</dd></div><div><dt>Density</dt><dd>${esc(tracks.density)}: ${{subtle: 'only the big moments', accent: 'the main moments (each place, each object that makes a sound)', rich: 'every drawn moment (each thing that appears, each place, each word that lands)'}[tracks.density] || ''}</dd></div></dl>${change}`;
+  }
   if (sel.kind === 'caption') { const group = tl.captions?.groups.find(item => item.id === sel.id); return group ? `<h4>Caption · ${tlClock(group.start)}–${tlClock(group.end)}</h4><p>${captionLine(group)}</p><p class="hint">Captions follow the narration; their timing never moves.</p>${stale ? '' : `<div class="card-actions">${action('Correct caption', 'tl-caption', group.id, 'secondary')}</div>`}` : ''; }
   const index = tl.clips.findIndex(item => item.id === sel.clipId), clip = tl.clips[index];
   if (!clip) return '';
@@ -436,6 +455,12 @@ function tlAction(command, id, button) {
   if (command === 'tl-discard') { TL.proposal = null; return render(); }
   const busy = run => { if (button) button.disabled = true; return run().catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); };
   if (command === 'tl-save-drawing' || command === 'tl-reset-drawing') return busy(async () => { await editSend(edit, [{type: 'set-drawing', clipId: id, sketch: command === 'tl-save-drawing' ? TL.drafts[id] : null}]); delete TL.drafts[id]; await refresh(); toast(command === 'tl-save-drawing' ? 'Drawing saved as a new revision.' : 'Back to the board’s drawing.'); });
+  if (command === 'tl-polish') {
+    if (TL.busy) return toast('The editor is still reading the edit.', true);
+    const key = ['claude', 'chatgpt'].includes(id) ? id : 'claude';
+    TL.busy = `polish:${key}`; render();
+    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', polish: true, ai: key, ...(TL.command.trim() ? {text: TL.command.trim()} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
+  }
   if (command === 'tl-ask') {
     const text = TL.command.trim();
     if (text.length < 3) return toast('Write what to change first.', true);

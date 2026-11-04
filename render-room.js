@@ -61,6 +61,7 @@ class RenderRoom {
       CREATE TABLE IF NOT EXISTS master_approvals(id TEXT PRIMARY KEY, render_id TEXT NOT NULL REFERENCES render_jobs(id), source_render_id TEXT NOT NULL, package_approval_id TEXT NOT NULL, approved_by TEXT NOT NULL, notes TEXT NOT NULL, confirmations TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE TRIGGER IF NOT EXISTS master_approvals_final BEFORE UPDATE ON master_approvals BEGIN SELECT RAISE(ABORT, 'A master approval is immutable.'); END;
     `);
+    if (!this.db.prepare('PRAGMA table_info(render_jobs)').all().some(column => column.name === 'cleared_at')) this.db.exec('ALTER TABLE render_jobs ADD COLUMN cleared_at TEXT');
   }
   // Rendering is local: an interrupted render cost nothing and may be retried, but never silently. Every render keeps
   // its finished parts (P11 for masters; 0.84 for previews too, owner test 2026-11-03: a preview stopped at drawing 69
@@ -323,6 +324,21 @@ class RenderRoom {
       this.current.handle?.kill('cancelled');
     }
     return this.publicJob(this.row(id));
+  }
+  // 0.88 (owner review 2026-11-04: a cancelled render stayed in the list with no way to delete it): a render that did not
+  // finish (cancelled, failed, out of date or interrupted) leaves the lists, and its kept parts and work files leave this
+  // PC. Its record stays for the history and the Operations report; a finished render is never removed this way.
+  remove(id, input) {
+    object(input);
+    const by = person(input.requestedBy), row = this.row(id);
+    requireValue(['cancelled', 'failed', 'stale', 'interrupted'].includes(row.status), 'Only a cancelled, failed, out-of-date or stopped render can be removed.', 409);
+    this.store.transaction(() => {
+      this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(id);
+      this.db.prepare('UPDATE render_jobs SET cleared_at=?, updated_at=? WHERE id=?').run(now(), now(), id);
+    });
+    for (const dir of [path.join(this.renderDir, '.work', id), path.join(this.renderDir, row.family_id, row.content_id, id)]) fs.rmSync(dir, {recursive: true, force: true});
+    this.store.event(`Removed ${row.status} render ${id.slice(0, 8)} (${by})`);
+    return {removed: id};
   }
   claim() {
     return this.store.transaction(() => {
@@ -815,9 +831,9 @@ class RenderRoom {
         return {
           contentId: content.id, familyId: content.familyId, title: content.title, contentRevision: content.revision,
           inputs: {ready: inputs.ready, blockers: inputs.blockers, visualApprovalId: inputs.visual.approvalId || null, shots: inputs.visual.shots || 0, style: inputs.spec ? {name: inputs.spec.name, adapter: inputs.spec.renderer.adapter, transition: inputs.spec.transitions.default, fps: inputs.spec.canvas.frameRate} : null, narrationSeconds: inputs.voice?.analysis?.durationSeconds ?? null},
-          renders: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='proxy' ORDER BY created_at DESC, rowid DESC LIMIT 10").all(content.id).map(row => this.publicJob(row)),
+          renders: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='proxy' AND cleared_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 10").all(content.id).map(row => this.publicJob(row)),
           // P11: the final masters, and what a new one would be made from.
-          masters: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='master' ORDER BY created_at DESC, rowid DESC LIMIT 5").all(content.id).map(row => this.publicJob(row)),
+          masters: this.db.prepare("SELECT * FROM render_jobs WHERE content_id=? AND preset='master' AND cleared_at IS NULL ORDER BY created_at DESC, rowid DESC LIMIT 5").all(content.id).map(row => this.publicJob(row)),
           masterFrom: (() => { const id = this.approvedPreview(content.id), pkg = this.packaging?.currentApproval(content.id) || null; return {previewId: id, packageApproval: pkg && pkg.renderId === id ? {id: pkg.id, revision: pkg.revision, approvedBy: pkg.approvedBy} : null}; })(),
         };
       }),
