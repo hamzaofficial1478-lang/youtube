@@ -274,3 +274,20 @@ its last finished step on the same attempt (`resumePlan` with `auto`, counted in
 each pause (`NET_WAIT_MINUTES`) and goes on by itself at most 5 times per storyboard (`NET_AUTO`); after that the owner
 presses Resume. The paused row says the program is waiting and until when (`pause.waitUntil`).
 
+
+## Revoked visuals, building again, and two storyboards (0.86)
+
+Owner review 2026-11-04, two screenshots: "Approve visuals" stayed clickable while the scenes were being drawn again; "Clear them" took away the row of the drawing in progress; revoked drawings could not be deleted or redone; "Build again" started at once, with no question about the storyboard already there.
+
+- **Approve visuals waits for the drawings.** Step 4 of the road shows the button off, with the reason, while drawings are being made or any drawn shot has no drawing of today's sketch (`sceneDrawWait`); the Visual approval card says the same. `approveVisuals` refuses on the server too (`drawState`: active, missing or outdated).
+- **Clear them only clears finished work.** Queued, running and paused jobs stay, and so does the job whose plan is still being drawn (`clearPlanJobs` skips the job whose `manifest_id` is the latest plan while draw jobs are waiting or running); that row shows "Drawing its scenes now: n of N".
+- **Revoked visuals** (the Visual approval card, only while the last approval is revoked and not cleared):
+  - *Delete the revoked drawings* (`deleteRevokedDrawings`, `POST /api/content/:id/revoked-drawings/delete`): the drawn assets of revoked approvals, and drawn assets no shot selects any more, leave the database (their selections too, logged as `deleted`) and their files and thumbnails leave the data folder (a file stays while another asset names it). A drawing that a current approval holds stays; footage and AI images are never touched. The revoked note leaves the page (`visual_approvals.cleared_at`). Refused while drawings are being made.
+  - *Redo the scenes with Claude / ChatGPT* (`redoRevoked`, `POST /api/scene-manifests/:id/redo-revoked`): one redraw job of every drawn shot (purpose `redo`), the AI told the revoke reason; the drawings arrive as a new plan revision, then "Draw the remaining".
+  - Skills are never touched, and the revoke reasons stay: the next storyboard of that script reads them (`ownerRejected`, the planner line THE OWNER REJECTED EARLIER VISUALS).
+- **Building again asks first.** When a storyboard exists (not the rough free draft), "Build again" names it and asks: *keep it* (the default: the job carries `scope.keep`) or *replace it* (approved visuals are revoked now with the reason "Replaced: the storyboard is being built again."), plus a tick "Yes, I want a new storyboard".
+- **Two storyboards** (`compareFor`, the "Two storyboards of this script" box at the top of the road): after a kept build, until the owner chooses (`chooseStoryboard`, `POST /api/scene-plan-jobs/:id/choose`, stored in `scene_plan_jobs.choice`):
+  - *Use the new one*: nothing changes.
+  - *Go back to revision N*: a new revision (source `choice`) with the earlier plan's scenes and shots exactly (same IDs, so its drawings count again).
+  - *Merge the best of both with Claude / ChatGPT*: `mergeBlocks` finds the stretches of the script both storyboards split the same way; one AI answer (reserved first, kind `storyboard_merge`, never retried) picks the version of each stretch whose scenes show the words better (`mergeMessages`, `readPicks`; a stretch without a pick stays new); `mergePlans` builds one plan from those scenes, keeping shot IDs (their drawings carry over) and adding the earlier storyboard's characters to the cast (a clashing ID gets its own). Source `merge`.
+  - Going back and merging need the same script and narration revision (`mergeable`). An owner edit, a merge and a return are never mended (`own` in `insertManifest`), so their drawings stay exactly as they were; the new revision needs the storyboard approval again.

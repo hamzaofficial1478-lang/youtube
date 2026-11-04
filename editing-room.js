@@ -286,7 +286,10 @@ class EditingRoom {
       // The brain fixes what its own critic can fix before the owner sees the draft, and lists each fix.
       const {timeline: payload, fixed} = B.autoFix(B.autoEdit(edit), inputs.spec);
       const skills = this.skillsInForce(inputs.family.id);
-      const meta = {timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
+      // 0.86: the music and sound effects come with the draft, from the family's own sound library.
+      const auto = this.autoAudio(inputs, contentId);
+      if (auto?.settings) payload.audio = auto.settings;
+      const meta = {...(auto ? {autoAudio: auto.notes} : {}), timing: {method: alignment.method, matched: alignment.matched, boundaries: alignment.boundaries, note: analysis.note}, skills: skills.map(item => ({id: item.id, revisionId: item.revisionId})), brain: B.SCHEMA, ...(fixed.length ? {autoFixes: fixed} : {})};
       return this.store.transaction(() => {
         const fresh = this.inputs(this.store.content(contentId));
         requireValue(fresh.ready && fresh.scopeHash === inputs.scopeHash, 'The inputs changed while the edit was being prepared. Try again.', 409);
@@ -305,6 +308,27 @@ class EditingRoom {
     } finally {
       this.busy.delete(contentId);
     }
+  }
+
+  // 0.86 (owner request 2026-11-04: "the program will read the video by itself while editing and add music or sfx by
+  // itself"): a fresh draft gets music and sound effects from the family's own sound library. When the video has no
+  // current score, the free score is made from the story's sections (no AI, nothing paid; Freesound fills missing
+  // tracks by itself when it is connected); the music is on when every cue has a track, the effects when the library
+  // has effects, at the style's density. A family on paid generation (ElevenLabs) is left to Room 07.
+  autoAudio(inputs, contentId) {
+    const st = this.soundtrack;
+    if (!st || st.settings(inputs.family.id).source !== 'library') return null;
+    const notes = [];
+    let score = st.latestScore(contentId);
+    if (!score?.current) {
+      try { score = st.rulesScore(contentId, {requestedBy: 'Program (automatic)'}); notes.push(`a free music score was made from the story's ${score.cues.length} section${score.cues.length === 1 ? '' : 's'}`); }
+      catch (error) { score = null; notes.push(`no music score: ${error.message}`); }
+    }
+    const music = !!(score?.current && score.ready), effects = st.sounds ? st.sounds.tracks('sfx').length : 0, usage = inputs.spec?.audio?.sfxUsage, density = Audio.DENSITIES.includes(usage) && usage !== 'none' ? usage : 'accent', sfx = effects > 0 && usage !== 'none';
+    if (score && !music) notes.push('the music stays off until the sound library has a track for every cue (Freesound fills it by itself when it is connected); switch it on in Levels and mix');
+    if (!effects) notes.push('no sound effects: the sound library has none yet');
+    const on = [...(music ? [`music on (score r${score.revision}, ${score.cues.length} cue${score.cues.length === 1 ? '' : 's'}, ducked under the voice)`] : []), ...(sfx ? [`sound effects on (${density}, from ${effects} library effect${effects === 1 ? '' : 's'}, placed on the drawings' moments)`] : [])];
+    return {settings: music || sfx ? Audio.settings({...Audio.DEFAULTS, music: {...Audio.MUSIC_DEFAULTS, enabled: music, scoreId: music ? score.id : null}, sfx: {...Audio.SFX_DEFAULTS, enabled: sfx, density}}) : null, notes: [...on, ...notes]};
   }
 
   // ------------------------------------------------------------ owner edits
@@ -671,7 +695,7 @@ class EditingRoom {
     const timelineRow = this.timelineRow(row.timeline_id), latest = this.latestRow(timelineRow.id);
     const payload = JSON.parse(row.payload), review = JSON.parse(row.critique);
     const out = {id: row.id, timelineId: row.timeline_id, contentId: timelineRow.content_id, revision: row.revision, latest: latest.id === row.id, actor: row.actor, note: row.note, createdBy: row.created_by, createdAt: row.created_at, payloadHash: row.payload_hash,
-      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || []};
+      critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || [], ...(payload.meta?.autoAudio ? {autoAudio: payload.meta.autoAudio} : {})};
     if (!detail) return out;
     const approved = new Set((payload.meta?.skills || []).map(item => item.id));
     const withSkill = item => ({...item, skillApproved: item.skill ? approved.has(item.skill) : null});
