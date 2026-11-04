@@ -1,0 +1,5 @@
+skills/ghost-editor.json (0.89) restates, in our own words and for narrated faceless videos, the editing method of
+ghost-editor (https://github.com/kurbaitaev/ghost-editor, pinned ce172726c36293722b08eb57b5b307d4f06389e8): SKILL.md,
+references/ (styles, reel JSON, take selection, B-roll, sound and memes) and the recipes' SYSTEM.md files (the thesis,
+invariants, slots and sound of each named style). No script, recipe, sound, meme, font or other file of ghost-editor is
+included. Its recipes credit lemo-opuscar (MIT) for some styles. The MIT licence is kept in LICENSE beside this notice.

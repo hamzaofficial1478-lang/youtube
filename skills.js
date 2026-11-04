@@ -357,6 +357,11 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/whiteboard-craft.json', label: 'whiteboard-animation-vi (CC0): line order, colour after line, brush lanes, the hand, pictures that draw well'},
   {file: 'skills/anime-craft.json', label: 'html-anime (MIT): the anime sequence, drawing budgets, twos, the expensive shot, camera, cel paint, colour scripts, the colour-dip cut'},
   {file: 'skills/youtube-growth.json', label: 'claude-youtube (MIT): hooks, retention scripting, packaging and SEO, Shorts, ideas, strategy, competitors, analytics, monetisation, channel types'},
+  // 0.89 (owner request 2026-11-04): five repositories for drawing, motion, editing and style.
+  {file: 'skills/drawing-craft.json', label: 'claude-drawing-skill (MIT): composition, look-and-fix rounds, and the real failures of 30 drawing mediums with their fixes'},
+  {file: 'skills/anidoodle-craft.json', label: 'anidoodle (Apache-2.0): the craft bar, story, realism, anatomy, styles as marks, motion grammar, camera, acting, review, narration and sound'},
+  {file: 'skills/ghost-editor.json', label: 'ghost-editor (MIT): beats on the word, restraint, sound levels against the voice, style as a system, taste, named edit styles'},
+  {file: 'skills/motion-clone.json', label: 'MotionClone (two repositories, ideas only): dominant motion, scenes at visual jumps, compare and keep only improvements'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -392,7 +397,9 @@ const BRIEF_BYTE_BUDGET = 1800;
 // 0.73 (owner question 2026-10-30, "will the skills be used?"): with every skill approved a script job received 3 of
 // 122 script skills. The creative jobs now carry far more; their limits grow with the brief (scripts add it on top,
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
-const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 14000, 'editing.plan': 8000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 3000, 'visuals.prompt': 2500});
+// 0.89 (owner request 2026-11-04: the new drawing, motion and editing skills used at every step): the planner, the
+// designed-shot worker, the pictures and the editor carry more; the designed shots and pictures are new injection points.
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 // ---------------------------------------------------------------- choosing skills for one request (0.74)
@@ -406,7 +413,10 @@ const QUIET = new Set(('the and for with that this from your you are was were wi
   + 'one two its into than then them they their there these those has have had out our over about each every more most some such very also only '
   + 'just make made use used using video videos channel viewer viewers program owner job jobs room skill skills rule rules look looks engine style design').split(' '));
 // Skills written for one engine reach a plan only when its style uses that engine (a Stickman plan never gets the anime rules).
-const ENGINE_AREAS = Object.freeze({whiteboard: ['whiteboard', 'handdrawn', 'hand'], anime: ['anime'], cinematic: ['cinema', 'cinematic'], doc: ['montage', 'footage', 'cinema'], hybrid: ['montage', 'footage', 'cinema']});
+// 0.89: the mediums of the drawing packs reach only the looks, finishes and film looks drawn in that medium.
+const ENGINE_AREAS = Object.freeze({whiteboard: ['whiteboard', 'handdrawn', 'hand'], anime: ['anime'], cinematic: ['cinema', 'cinematic'], doc: ['montage', 'footage', 'cinema'], hybrid: ['montage', 'footage', 'cinema'],
+  pixel: ['pixel'], collage: ['collage', 'paper'], riso: ['riso'], woodcut: ['woodcut'], engraving: ['engraving'], newsprint: ['newsprint', 'collage'], blueprint: ['blueprint'], deco: ['deco'],
+  screenprint: ['screenprint'], noir: ['noir', 'silent', 'kinescope'], storybook: ['storybook', 'illustrated', 'painted', 'natural'], cartoon: ['cartoon', 'doodle', 'chronicle', 'illustrated']});
 const stemOf = word => { for (const end of ['ically', 'ical', 'ings', 'ing', 'ies', 'ied', 'ers', 'er', 'ed', 'es', 's', 'al', 'y']) if (word.endsWith(end) && word.length - end.length >= 4) return word.slice(0, -end.length); return word; };
 const stemsOf = value => new Set((String(value || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []).filter(word => word.length >= 3 && !QUIET.has(word) && !/^\d+$/.test(word)).map(stemOf));
 const skillText = skill => [skill.id.replace(/[.-]/g, ' '), skill.title, skill.when, skill.summary, skill.tags.join(' ')].join(' ');
@@ -427,10 +437,12 @@ function rankSkills(items, taskKey, context = {}) {
     const engineWords = ENGINE_AREAS[skill.id.split('.')[0]];
     const offFormat = (format === 'long-form' && shorts && !long) || (format === 'shorts' && long && !shorts) || (style && engineWords && !engineWords.some(word => style.has(word)));
     const onFormat = (format === 'shorts' && shorts) || (format === 'long-form' && long);
-    return {item, matched, weight, offFormat, onFormat, primary: skill.tasks[0] === taskKey, area: skill.id.split('.')[0]};
+    // 0.89: a skill written for this video's own engine, look or finish (a pixel skill in a pixel video) comes early.
+    const onEngine = !!(style && engineWords && engineWords.some(word => style.has(word)));
+    return {item, matched, weight, offFormat, onFormat, onEngine, primary: skill.tasks[0] === taskKey, area: skill.id.split('.')[0]};
   });
   const top = Math.max(1, ...scored.map(entry => entry.weight));
-  for (const entry of scored) entry.score = (entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0);
+  for (const entry of scored) entry.score = (entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0) + (entry.onEngine ? 0.35 : 0);
   // The owner's pins and own skills keep their place in front; the rest are taken best first, with each further skill
   // from an area already taken counting a little less (8% for each).
   const fixed = scored.filter(entry => entry.item.pinned || entry.item.origin !== 'builtin'), open = scored.filter(entry => !fixed.includes(entry) && !entry.offFormat), picked = [...fixed], areas = {};
@@ -446,16 +458,17 @@ function rankSkills(items, taskKey, context = {}) {
     areas[entry.area] = (areas[entry.area] || 0) + 1;
     picked.push(entry);
   }
-  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
+  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, ...(entry.onEngine ? {engine: true} : {}), own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
 }
 // The jobs whose AI request carries approved skills (0.73 Skills page: "what reaches each job"); the editing brain applies
 // its skills in code rather than in a prompt.
 const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.plan', 'Scene planner and story director'], ['voice.direction', 'Voice direction'],
   ['audio.mix', 'Music score'], ['competitors.blueprint', 'Competitor blueprint'], ['niche.evaluate', 'Niche go/no-go'], ['niche.discover', 'Niche suggestions'],
-  ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Editing brain (in code)']]);
+  ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Edit commands, Polish and the editing brain'],
+  ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director']]);
 
 // The record of each job that receives a skill brief, by the job it is for (0.79).
-const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs'});
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.

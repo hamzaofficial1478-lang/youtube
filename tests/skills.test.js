@@ -77,21 +77,21 @@ function approveById(skills, id) {
 test('the builtin packs cover every planned source section and seed only drafts', t => {
   const {store, skills} = setup(t);
   const loaded = loadPacks(root);
-  assert.equal(loaded.length, 499, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 7 whiteboard craft + 10 anime craft + 46 claude-youtube + 160 editing-brain skills');
+  assert.equal(loaded.length, 599, 'expected 38 Precision OS + 51 prompt library + 64 mastery bundle + 14 youtube-agent-skill + 17 HyperFrames + 5 claude-video + 14 motion craft + 14 film craft + 23 channel study + 20 studio craft + 16 retention craft + 7 whiteboard craft + 10 anime craft + 46 claude-youtube + 33 drawing craft + 38 anidoodle + 25 ghost-editor + 4 MotionClone + 160 editing-brain skills');
   const ids = new Set(skills.skills().map(item => item.id));
   const missing = PLANNED_IDS.filter(id => !ids.has(id));
   assert.deepEqual(missing, [], `the seeded library is missing planned skills: ${missing.join(', ')}`);
-  assert.equal(ids.size, 499);
+  assert.equal(ids.size, 599);
   const state = skills.state();
-  assert.equal(state.counts.total, 499);
-  assert.equal(state.counts.draft, 499);
+  assert.equal(state.counts.total, 599);
+  assert.equal(state.counts.draft, 599);
   assert.equal(state.counts.approved, 0, 'a freshly seeded library must have nothing approved');
-  assert.equal(state.counts.builtin, 499);
+  assert.equal(state.counts.builtin, 599);
   // Every builtin skill carries its source note so the provenance of a rule stays visible.
   for (const skill of skills.skills()) assert.ok(skill.latest.skill.source.length >= 3, `${skill.id} has no source note`);
   // Re-seeding is idempotent and never adds a second revision to an existing skill.
   const second = new SkillsEngine(store, {root, builtinApproved: false});
-  assert.equal(second.skills().length, 499);
+  assert.equal(second.skills().length, 599);
   assert.deepEqual(second.skills().map(item => item.revisions.length).filter(count => count !== 1), []);
   // Every task key has at least one candidate skill, so no room is left without guidance.
   for (const task of TASK_KEYS) {
@@ -478,8 +478,8 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   const base = `http://127.0.0.1:${server.address().port}`;
   const state = await (await fetch(`${base}/api/state`)).json();
   // 0.73: the program's built-in skills come approved; the owner's own skill goes through the named review.
-  assert.equal(state.skills.counts.total, 499);
-  assert.equal(state.skills.counts.approved, 499);
+  assert.equal(state.skills.counts.total, 599);
+  assert.equal(state.skills.counts.approved, 599);
   assert.equal(state.capabilities.skills, 'approved_skills_injected');
   assert.deepEqual(state.skills.sourceHierarchy, SOURCE_HIERARCHY);
   assert.equal((await fetch(`${base}/skills-room.js`)).status, 200);
@@ -493,13 +493,13 @@ test('HTTP skill routes need the local token, gate approval and expose the libra
   assert.match((await missing.json()).error, /Confirm that the/);
   assert.equal((await send(`/api/skill-revisions/${draft.id}/approve`, review)).status, 200);
   const after = await (await fetch(`${base}/api/state`)).json();
-  assert.equal(after.skills.counts.approved, 500);
+  assert.equal(after.skills.counts.approved, 600);
   assert.equal(after.skills.counts.owner, 1);
   // Reads: the compiled brief puts the owner's skill first; the export holds what is approved.
   const brief = await (await fetch(`${base}/api/skills/brief?taskKey=script.hooks`)).json();
   assert.equal(brief.skillIds[0], 'script.owner-rule');
   assert.ok(brief.skillIds.length >= 2, 'built-in hook skills follow it');
-  assert.equal((await (await fetch(`${base}/api/skills/export`)).json()).skills.length, 500);
+  assert.equal((await (await fetch(`${base}/api/skills/export`)).json()).skills.length, 600);
   assert.equal((await fetch(`${base}/api/skills/brief?taskKey=nope`)).status, 400);
   assert.equal((await send('/api/skill-revisions/00000000-0000-0000-0000-000000000000/approve', review)).status, 404);
   const lesson = await send('/api/skill-lessons/00000000-0000-0000-0000-000000000000/review', {reviewedBy: 'Owner', action: 'approve', reason: 'No such lesson exists.'});
@@ -525,8 +525,8 @@ test('0.39: a whole pack is approved in one named review of the exact drafts sho
   assert.equal(approved.length, 14);
   assert.ok(approved.every(item => item.approved.review.approvedBy === review.approvedBy && item.approved.review.pack === pack), 'each revision carries its own named approval');
   const brief = skills.brief('scene.plan');
-  assert.equal(brief.byteBudget, 14000);
-  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 14000);
+  assert.equal(brief.byteBudget, 16000);
+  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 16000);
   assert.equal(skills.brief('script.candidate').byteBudget, 12000, 'script writing carries a full brief (0.73)');
   assert.equal(skills.brief('research.brief').byteBudget, BRIEF_BYTE_BUDGET, 'jobs with a small fixed limit keep the default share');
   assert.ok(!skills.brief('scene.plan').skillIds.some(id => id.startsWith('profile.')), 'channel profiles reach a family only where pinned');
@@ -596,7 +596,7 @@ test('built-in skills are approved with the program; own skills still need the o
   t.after(() => store.close());
   const skills = new SkillsEngine(store, {root});
   const state = skills.state();
-  assert.deepEqual([state.counts.total, state.counts.approved, state.counts.draft], [499, 499, 0]);
+  assert.deepEqual([state.counts.total, state.counts.approved, state.counts.draft], [599, 599, 0]);
   const one = skills.skills().find(item => item.id === 'hooks.universal-3-hook');
   assert.equal(one.approved.review.approvedBy, 'Built into the program');
   assert.ok(skills.promptBrief('script.candidate').skillIds.length >= 15, 'a script job carries a full brief of approved skills');

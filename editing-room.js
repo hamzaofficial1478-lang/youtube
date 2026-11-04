@@ -612,7 +612,10 @@ class EditingRoom {
     requireValue(!input.clipId || focus, 'That clip is not in this edit.', 404);
     const score = this.soundtrack?.latestScore?.(timeline.content_id), audio = {settings: payload.audio || null, score: score ? {id: score.id, revision: score.revision, ready: score.ready, current: score.current, cues: score.cues.length, summary: String(score.summary || '').slice(0, 300)} : null};
     const family = state.inputs.family, content = this.store.content(timeline.content_id);
-    const skillBrief = this.store.skillRuntime?.brief('editing.plan', family.id, {text: [content.title, family.niche, polish ? 'polish transitions effects animation camera' : ask].join(' '), format: family.format}) || null;
+    // 0.89: the video's engine, looks and finishes decide which engine-specific editing skills fit (a paper-collage
+    // recipe never reaches a stickman edit).
+    const spec = state.inputs.spec, style = require('./scene-room').skillStyle({engine: E.primaryEngine(spec), scope: E.engineScope(spec)}, spec);
+    const skillBrief = this.store.skillRuntime?.brief('editing.plan', family.id, {text: [content.title, family.niche, polish ? 'polish transitions effects animation camera' : ask].join(' '), format: family.format, style}) || null;
     let guidance = null;
     try { guidance = this.scenes.visualGuidance?.(family.id) || null; } catch { guidance = null; }
     const drawn = this.drawings(row.id), messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance});

@@ -788,3 +788,50 @@ Owner test, 2026-11-04: a stone-age script was drawn in the nature clearing, its
 The planner's guide lists the stone age beside the other places of the past, and the free draft finds caves, the stone age, mammoths, spears, flint and campfires in the words. `drawn-scene/30` (old drawings are drawn again).
 
 **Drawings finish inside their shot.** Under the pen (a drawing hand, or the whiteboard look) one thing is drawn at a time, so a short shot with a character, two props and a title used to cut away before the pen was done. The layout now queues every drawing first; when the queue runs past 0.15 s before the cut, the pen draws faster (`PACE`, down to 40% of its usual time, used for drawing on, handwriting and traced pictures) until it fits, and a drawing that still would not finish starts early enough to land. In the other looks an element that arrives late starts early enough for its entrance to finish. A long shot keeps the pen's own pace. The live player and the render use the same engine, so both show it.
+
+## 37. Paper collage and Pixel art in the Motion Graphics engine (0.89.0)
+
+Owner request, 2026-11-04: add paper collage and pixel art to the Motion Graphics engine (from claude-drawing-skill,
+MIT, and anidoodle, Apache-2.0; research/five-repos-2026-11-04.md).
+
+**Two more finishes.** The engine's style setting `atelier.finish` is now `motion`, `anime` (HTML render), `collage`
+(paper collage), `pixel` (pixel art) or `mix`. A mix uses the finishes the owner ticks (`atelier.finishes`, two or
+more of motion, anime, collage, pixel); a mix with nothing ticked is motion graphics and HTML render, as before 0.89.
+Each designed frame of a mixed video names its `finish` (`At.validateFrame` with `finishes`; a frame that names none
+takes the first ticked). Pixel art has a palette setting `atelier.palette`: dusk (Rainy dusk), meadow (Meadow day),
+desert (Desert noon), arcade (Arcade night), handheld (Handheld green, four colours) or `choose` (Claude chooses a
+preset or its own closed palette of 4-16 colours whose first colour is the ground; `At.pixelPalette` refuses one
+where nothing reads 4.5:1 on the ground). The art direction's palette roles come from the pixel palette
+(`At.paletteRoles`). The channel style window and the full style editor show the finish, the pixel palette and the
+mix ticks.
+
+**What the frame worker is told.** `At.contract('collage')`: nothing drawn with a line; pieces are SVG shapes in an
+`<svg viewBox="0 0 W H">`; edges and depth come from the program (`filter="url(#at-torn)"` torn with a white fibrous
+rim along parts of the edge, `url(#at-cut)` scissor-cut, `url(#at-torn-kraft)` kraft with fibres, `url(#at-lift)` a
+piece held above the stack), newspaper and notebook fills (`url(#at-newsprint)`, `url(#at-notebook)`), crayon grain
+`url(#at-crayon)` only on small accents; marks are short crayon strokes stuck to their paper; words are cut letters or
+typed on a strip; a moon has no rays, a bird is two thin arcs, faces are gentle; stop-motion: pieces slide in, drop or
+rise from behind, held above the stack, land and jiggle; build back to front on the words; a hold creeps.
+`At.contract('pixel')`: an `<svg viewBox="0 0 GW GH" shape-rendering="crispEdges">` on the packet's grid, whole cells,
+only the palette's colours, no blends, gradients, blur or rounded corners; the helpers `__atelier.pixel.rect`, `text`
+(a 3x5 bitmap font: capitals, digits, . , ! ? : - % + / '), `sprite` (ASCII rows), `dither` (a 4x4 ordered dither of two
+palette colours as a fill), `glow` (a dithered glow that thins cell by cell) and `band` (a banded, dithered vertical
+gradient); pixel order (masses, shading clusters and dither bands, highlights, lights and glow last); whole-cell moves
+and pose swaps. Both keep the motion graphics lines on the first frame, short copy and no exit, and take a blueprint's
+structure but not its motion rules. The packet carries `finish`, `heldFrames` and, for pixels, `grid` and
+`pixelPalette`.
+
+**The checks.** `At.validateComposition(..., {finish, pixel})`: a collage shot that uses none of the paper filters or
+fills is returned ("Nothing in the shot is paper"); a pixel shot must use `crispEdges` or the helpers, has no blur or
+smooth gradients, and more than two colours outside its palette are returned (one or two are a warning).
+
+**The render.** `At.renderFinish` gives a designed drawing its `finish`, `hold` (collage 2 frames, pixel 3) and, for
+pixel art, its `grid` (320 x 180 cells, 180 x 320 for Shorts); they travel in the drawing job's composition. The
+browser seeks only every `hold`-th frame and copies the held frames (`renderComposition` `hold`), and the encode scales
+a pixel shot to its grid and back with nearest-neighbour sampling (`At.pixelFilter`), so every cell is one sharp
+square at 360p, 720p, 1080p and 1440p. A drawing's hash counts its finish and hold only for these two finishes, so no
+motion graphics or HTML render drawing is outdated by the update. In a sample render a 2 s paper collage took about
+14 s (its paper filters are the costly part) and a pixel shot about 2 s.
+
+**People.** A paper collage video draws its people as cut-paper figures and a pixel video as pixel sprites inside the
+designed shots, so the planner does not send human moments to stick figures (`engines.js`).

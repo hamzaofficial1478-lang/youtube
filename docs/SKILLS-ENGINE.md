@@ -262,3 +262,24 @@ voice directions, niche suggestions, language jobs; edits through their timeline
 (used, failed, stopped half-way, not usable, waiting, running, set aside) and which video it was for. Content Studio
 shows on each draft "Skills chosen for this video", job by job: the skills are chosen again for every job of every
 video from what that job is about (0.74 `rankSkills`), never fixed per channel.
+
+## Skills at every drawing step, and the five new packs (0.89)
+
+Owner request 2026-11-04: the skills must lead the program at every step. Four packs were added from five
+repositories (research/five-repos-2026-11-04.md): `skills/drawing-craft.json` (claude-drawing-skill, MIT, 33),
+`skills/anidoodle-craft.json` (anidoodle, Apache-2.0, 38), `skills/ghost-editor.json` (ghost-editor, MIT, 25) and
+`skills/motion-clone.json` (two MotionClone repositories, ideas only, 4): 599 built-in skills, approved with the
+program like the others.
+
+Three steps that drew without skills now receive them, each recorded in `skill_usage` with its plan job: the
+Motion Graphics frame worker (`motion.template`, 6,000 bytes, chosen for the video's subject and finishes), Claude's
+pictures, ChatGPT's painting prompts and the art director's check (`visuals.prompt`, 4,000 bytes; the paintings get
+the rules as one short line, the art director the checks), and the continuity review (the planner's own `scene.plan`
+skills). Edit commands and Polish choose their `editing.plan` skills with the video's engine as well. The scene
+planner's brief is 16,000 bytes and the editor's 10,000.
+
+Skills written for one medium or finish reach only videos in it (`ENGINE_AREAS`: pixel, collage, riso, woodcut,
+engraving, newsprint, blueprint, deco, screenprint, noir, storybook, cartoon, besides whiteboard, anime and the
+footage engines), and a skill written for the video's own engine, look or finish now scores higher (`rankSkills`
+`onEngine`, shown as `engine` in its reasons). The style words include the Motion Graphics finishes, film looks and
+the picture type (`scene-room.js` `skillStyle`).

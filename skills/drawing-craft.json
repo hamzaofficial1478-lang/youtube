@@ -1,0 +1,1190 @@
+[
+ {
+  "id": "drawing.plan-the-composition",
+  "title": "Plan the composition before the first mark",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "principle",
+  "when": "Planning any drawn shot, picture or painting before it is drawn.",
+  "summary": "A picture is planned before it is drawn: its depth layers, one focal point, its breathing space, where the one accent colour goes and where any words sit. The picture illustrates the idea of the line, not a generic landscape.",
+  "do": [
+   "Lay the depth out first: far, middle, the subject, then a foreground piece in front of it.",
+   "Decide the one focal point the eye lands on, and keep everything else quieter than it.",
+   "Leave real empty space (an ink wash needs about 40% empty paper; watercolour and paper collage also need room to breathe).",
+   "Use the accent colour in one or two places only: the one bright piece is the hero.",
+   "Decide where a title, label or note sits before drawing, so nothing has to be squeezed in later.",
+   "Make the picture show the idea the narrator is saying, in a way a viewer could retell."
+  ],
+  "avoid": [
+   "A pretty picture that has nothing to do with the words.",
+   "Spreading the accent colour everywhere until nothing stands out.",
+   "Filling every corner because the space looked empty."
+  ],
+  "checks": [
+   "Can you name the focal point in one word?",
+   "Is there a far, middle and near layer?",
+   "Is the accent colour in at most two places?"
+  ],
+  "tags": [
+   "composition",
+   "drawing",
+   "focal-point"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 1 (process), restated in our own words.",
+  "priority": 86
+ },
+ {
+  "id": "drawing.look-and-fix",
+  "title": "Render, look, and fix the most visible fault first",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "procedure",
+  "when": "After a picture, painting or designed shot is made and before it is used.",
+  "summary": "Good drawing is iterative: render it, look at it against the medium's list of known failures, fix the most visible problem first, and repeat for two to four rounds, keeping the earlier version to compare.",
+  "steps": [
+   "Render the picture at its real size and look at it as a viewer would.",
+   "Go down the medium's list of known failures one by one.",
+   "Fix only the most visible problem in this round; one change at a time shows what helped.",
+   "Keep the earlier version to compare; stop after two to four rounds or when nothing visible is left."
+  ],
+  "checks": [
+   "Was the most visible fault fixed first?",
+   "Is the new version better than the kept one, side by side?"
+  ],
+  "tags": [
+   "review",
+   "iteration",
+   "drawing"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 1 (process), restated in our own words.",
+  "priority": 78
+ },
+ {
+  "id": "drawing.made-in-stages",
+  "title": "A picture can be seen being made, in its medium's order",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "procedure",
+  "when": "Planning how a drawing or painting appears on screen.",
+  "summary": "Because every mark is placed, a picture can show itself being made: stage by stage in the order its medium is really worked, ending exactly on the finished still. That is something a generated bitmap cannot do.",
+  "do": [
+   "Reveal the picture in its medium's order (pencil then wash; flat masses then shading then highlights; ground then pieces back to front).",
+   "Hold each stage long enough to read, then move to the next one.",
+   "End on the finished still and hold it."
+  ],
+  "avoid": [
+   "Fading the finished picture in from nothing.",
+   "A last stage that differs from the finished picture."
+  ],
+  "tags": [
+   "reveal",
+   "process",
+   "drawing"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 4 (animation), restated in our own words.",
+  "priority": 74
+ },
+ {
+  "id": "collage.torn-paper",
+  "title": "Torn paper collage that reads as real paper",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Any shot, picture or painting in a paper collage look.",
+  "summary": "Paper collage is pieces of paper torn or cut and glued on: a white fibrous rim where paper tears, a small soft shadow where each piece lifts off the one below, and textures that belong to real papers. Most failures come from overdoing one of these.",
+  "do": [
+   "Lay big colour areas in plain coloured paper or kraft; keep crayon texture for small accents and little objects.",
+   "Show the torn white rim clearly (a few pixels wide) and only along parts of an edge, never all the way round.",
+   "Give every piece a soft depth shadow down and to one side; it must never wrap round to the other edge of the frame.",
+   "Draw a moon with a crayon halo and a few sparkles, never rays (rays make it a sun).",
+   "Keep faces gentle: thin lines about 3.5% of the face wide, blush as a soft glow.",
+   "Draw a small bird as two thin arcs, not a short thick blob.",
+   "Keep clouds, balloons and other main pieces whole inside the frame with a margin."
+  ],
+  "avoid": [
+   "Crayon grain over large areas (it reads as scratches).",
+   "A torn rim so thin it disappears, or so even it looks like a sticker.",
+   "Pieces cropped by the frame edge."
+  ],
+  "checks": [
+   "Does each piece have depth from the one below?",
+   "Is the rim visible only along parts of the edge?"
+  ],
+  "numbers": {
+   "rimWidthPx": "5-8 at 1080p",
+   "faceLine": "0.035 x face radius"
+  },
+  "tags": [
+   "collage",
+   "paper",
+   "papercut"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "newsprint.news-collage",
+  "title": "Newspaper collage: clippings, cut photos, labels and stamps",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Shots in a newspaper or magazine collage look, or any look with clippings.",
+  "summary": "A news collage is a kraft ground, torn old newspaper, a halftone photo cut out with scissors, parts each cut out with a typed label and a leader line, one big red paper circle, ransom-note letters and stamps. It reads when every piece stays legible.",
+  "do": [
+   "Cut photo borders that widen and narrow slowly along the outline but never cut into the object.",
+   "Show where flying parts came from: dashed arcs from the opening, the nearest part closest to it.",
+   "Keep a cut word's neighbouring letters small and pale so the chosen word leads.",
+   "Put stamps and postmarks on empty kraft, never on dense print.",
+   "Make the round text of a stamp large enough to read and its ink partly broken, never broken through thin strokes.",
+   "Move a title or the hero so the title never covers the hero's numbers.",
+   "Check every glyph exists in the font before using it."
+  ],
+  "avoid": [
+   "Gear teeth finer than the halftone dots (the gear becomes a grey cake).",
+   "Springs drawn as concentric rings (draw a real spiral: tight inside, loose outside).",
+   "Heavy show-through print that looks like a rendering error.",
+   "Long dark kraft fibres that read as cracks or hairs."
+  ],
+  "tags": [
+   "collage",
+   "newsprint",
+   "evidence"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 64
+ },
+ {
+  "id": "collage.sticker-receipt",
+  "title": "Stickers, receipts, tape and stamps",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Scrapbook, sticker or receipt collages (prices, lists, shopping, travel, plans).",
+  "summary": "A sticker-and-receipt collage is a cream card with die-cut stickers, a thermal receipt, washi tape, a string tag and a rubber stamp. It looks real when the print is the right grey, the stamp is uneven and nothing is cramped.",
+  "do": [
+   "Print a thermal receipt in mid grey with soft edges, faint vertical banding and uneven feed, never jet black like a typewriter.",
+   "Stamp with pressure tilt, large uneven patches and a few missed specks, on a sparse area so the words still read.",
+   "Shorten sticker labels and lower their size until they fit inside the sticker.",
+   "Fill a large empty corner with one more small sticker or a hanging tag.",
+   "Keep a paper's contact shadow light; a dark ring reads as an outline."
+  ],
+  "avoid": [
+   "A loaf of bread with one long cut (draw three crossing scores with flour).",
+   "Flowers drawn as concentric circles (they read as targets or lollipops).",
+   "A stamp over a barcode."
+  ],
+  "tags": [
+   "collage",
+   "sticker",
+   "receipt"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "whiteboard.lab-notebook",
+  "title": "Pencil notebook pages: charts, labels and notes",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Hand-drawn notebook pages, sketched charts and annotated experiments.",
+  "summary": "A notebook page looks hand-made when the pencil keeps its grain and wobble, the chart points are pressed dots, the labels sit in the clear with small arrows, and stuck-on notes point at what they mean.",
+  "do": [
+   "Draw pencil lines about 3 px wide with a little wobble; graphite sits on the paper tooth even under pressure.",
+   "Keep light hatching as continuous pale grey with grain, not a row of dots.",
+   "Draw chart points as small pressed pencil dots, never little circles that read as letters.",
+   "Draw a long curve in two strokes that overlap slightly at the join.",
+   "Put labels below a curve in clear space with a small pencil arrow; put units above the axis ends.",
+   "Align a sticker or note with the exact point it explains, with a dashed pencil line to the axis.",
+   "Start a highlighter stroke at the left edge of the word it marks."
+  ],
+  "avoid": [
+   "Clean vector-like pencil lines (thin, even and too black).",
+   "Arrows hidden under a sticky note added later.",
+   "Coffee rings drawn as soap bubbles (a thin dark rim, a pale even inside, a break in the ring)."
+  ],
+  "tags": [
+   "whiteboard",
+   "pencil",
+   "chart"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 62
+ },
+ {
+  "id": "whiteboard.chalkboard",
+  "title": "Chalk on a board: broken strokes, dust and ghosts",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Chalkboard lessons and any board look with chalk.",
+  "summary": "Chalk only catches the board's tooth: even a full-pressure line leaves small pits and a fuzzy, breaking edge. Big fills are side-of-the-chalk scumble that fades out, and the ghosts of an old lesson sit only in empty places.",
+  "do": [
+   "Leave about 15% pits even in a full-pressure line, with soft broken edges.",
+   "Fill large areas with light pressure that is denser near the subject and fades away at the ends.",
+   "Put half-erased ghosts of old writing in empty places only (the top edge, corners, between title and picture) and keep them faint.",
+   "Make symbols the font lacks by hand-drawing them in one stroke."
+  ],
+  "avoid": [
+   "Chalk lines as clean vector lines.",
+   "A side-of-chalk fill that becomes one dull rectangle over the diagram.",
+   "Eraser smears so strong they wipe the lesson."
+  ],
+  "tags": [
+   "whiteboard",
+   "chalk",
+   "board"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 58
+ },
+ {
+  "id": "pixel.cells-and-palette",
+  "title": "Pixel art: cells, a closed palette and ordered dithering",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Pixel art shots and pictures (the Motion Graphics engine's Pixel art finish).",
+  "summary": "Pixel art is a small canvas painted cell by cell in a limited palette, then enlarged so every cell stays a sharp square. Gradients, glows and reflections are ordered (Bayer) dithers of palette colours, never blends, and words use a tiny bitmap font.",
+  "do": [
+   "Work on a small grid (320 x 180 cells for a 16:9 frame) and enlarge it by a whole number with no smoothing.",
+   "Use a palette declared up front (16 colours or fewer) and nothing else.",
+   "Make gradients as a few bands of palette colours with an ordered dither between them.",
+   "Keep glows small (a radius of about 20 cells, strength 0.4-0.5) and squash neon glows flat.",
+   "Run the sky and the buildings all the way down to the ground line so no band of background shows.",
+   "Write words in a 3 x 5 or similar bitmap font, in capitals."
+  ],
+  "avoid": [
+   "A large glow that becomes a square block of dots.",
+   "Soft gradients, transparency or blur.",
+   "Shrinking hard-edged pixels with a smoothing filter (use box or nearest sampling)."
+  ],
+  "numbers": {
+   "grid": "320x180 (16:9), 180x320 (9:16)",
+   "scaleAt1080": "6",
+   "glowRadiusCells": "<= 20",
+   "glowStrength": "0.4-0.5"
+  },
+  "tags": [
+   "pixel",
+   "palette",
+   "dither"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 72
+ },
+ {
+  "id": "pixel.low-poly-frame",
+  "title": "A low-resolution game frame: framebuffer, dither and camera",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Retro game-frame pictures (low poly or pixel, 1990s look).",
+  "summary": "A retro game frame is drawn small (about 384 x 216), in 15-bit colour with a 4 x 4 ordered dither, then enlarged five times with no smoothing. It reads when the camera is placed like a game's and the composition is not copied from a reference.",
+  "do": [
+   "Place the subject on a third (lower left) and lead the eye along a diagonal, rather than copying a centred reference.",
+   "Keep about a fifth of the frame for sky so the sun and flare can read.",
+   "Put the camera above and behind so the subject's top surface shows.",
+   "Light the shading from slightly higher than the drawn sun so subjects are not grey against the light.",
+   "Keep lens flares as small dots and solid hexagons, away from the centre."
+  ],
+  "avoid": [
+   "A camera height equal to a ledge height (the ledge becomes a glowing crack).",
+   "Hollow flare circles that read as extra objects."
+  ],
+  "tags": [
+   "pixel",
+   "low-poly",
+   "game"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 52
+ },
+ {
+  "id": "storybook.watercolour",
+  "title": "Watercolour that stays clean and transparent",
+  "rooms": [
+   "visuals",
+   "scene"
+  ],
+  "tasks": [
+   "visuals.prompt",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Watercolour pictures, paintings and storybook looks.",
+  "summary": "Watercolour is transparent glazes on toothed paper: wet edges darken, pigment granulates, and whites are the paper. It goes wrong when layers pile up, darks sit in the centre like a target, or the paper grain is too strong.",
+  "do": [
+   "Keep the paper grain fine and light.",
+   "Lay the second, darker layer wet and to one side of a shape, never as a ring in the middle.",
+   "Paint stems first and keep them outside the leaves.",
+   "Stop at three glazes in one place; keep highlights as bare paper or lift them.",
+   "Keep the darker crown layers inside the first crown shape.",
+   "Draw only three to five branches, growing up and out from the trunk into the crown."
+  ],
+  "avoid": [
+   "Muddy colour from too many layers.",
+   "Dark blobs floating outside a tree crown.",
+   "A tangle of branches."
+  ],
+  "tags": [
+   "storybook",
+   "watercolour",
+   "painting"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 60
+ },
+ {
+  "id": "storybook.coloured-pencil",
+  "title": "Coloured pencil that is rich, not faint",
+  "rooms": [
+   "visuals",
+   "scene"
+  ],
+  "tasks": [
+   "visuals.prompt",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Coloured pencil pictures and warm storybook pencil looks.",
+  "summary": "Coloured pencil is short directional hatching whose wax catches the paper tooth; pressure decides how far it reaches into the valleys. Colours must be dense enough to saturate, and white objects need a warm base and cool shadows.",
+  "do": [
+   "Hatch densely enough that the colour saturates where layers cross.",
+   "Use pressure, not a hard grain threshold, to decide how much paper shows.",
+   "Lay white things (cream, porcelain, snow) in warm cream with lilac-grey or blue-grey shadow and a small white highlight.",
+   "Outline in a brown pencil rather than black."
+  ],
+  "avoid": [
+   "Colour so pale it almost disappears.",
+   "White objects that vanish into the paper."
+  ],
+  "tags": [
+   "storybook",
+   "pencil"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "storybook.pen-and-wash",
+  "title": "Pen and wash, gouache and picture-book shapes that read",
+  "rooms": [
+   "visuals",
+   "scene"
+  ],
+  "tasks": [
+   "visuals.prompt",
+   "scene.plan",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Pen-and-wash, gouache and picture-book illustrations of people and props.",
+  "summary": "In pen-and-wash and gouache the trouble is rarely technique but reading: small shapes turning into letters, props reading as other props, and skin going grey. Each shape must say what it is at a glance.",
+  "do": [
+   "Keep paper grain and wash grain light; texture should be felt, not seen.",
+   "Scale offsets and white gaps of washes to the size of the area, so small areas keep their colour.",
+   "Give props their defining features (a watering can leans forward with a long spout from its base and a rose head).",
+   "Use warm skin ramps for skin; keep cool ramps for clothing.",
+   "Paint gouache form as a soft dome toward a frontal light, small strokes for small round forms."
+  ],
+  "avoid": [
+   "A small o under a moustache (it reads as a letter).",
+   "A red domed helmet with a big highlight (it reads as a toadstool).",
+   "Purple-grey shadows on skin."
+  ],
+  "tags": [
+   "storybook",
+   "gouache",
+   "illustration"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 52
+ },
+ {
+  "id": "cartoon.animator-frame",
+  "title": "A hand-drawn cartoon frame like an animator's",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Cartoon drawings with characters and props (cartoon, doodle, chronicle and illustrated looks).",
+  "summary": "A hand-drawn cartoon frame is a blue pencil rough left under a brush line, flat fills a little off register, cel shadows and a crayon sky. It reads when arms grow from the right place, characters do not tangle, and light words only sit on dark blocks.",
+  "do": [
+   "Clip everything seen through a window to the glass.",
+   "Grow arms from the side of the body at mid height, draw them before the body, bend elbows outward, and give gloves a thumb, a cuff and finger seams.",
+   "When two characters stand close, draw only the outer arm of each.",
+   "Keep texture like toast colour on the edge of a face, never across it.",
+   "Put light words only on dark blocks; space white blobs (clouds, gloves, smoke) apart.",
+   "Keep flying crumbs and debris off faces.",
+   "Hang a drip from the front edge down into its puddle, drawn last over the outline."
+  ],
+  "avoid": [
+   "Arms straight out of the top of the head ending in a ball (they read as antennae).",
+   "Diamond-shaped sparkles (use tall four-point stars).",
+   "Coarse paper grain on colour fills."
+  ],
+  "tags": [
+   "cartoon",
+   "characters",
+   "drawing"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 66
+ },
+ {
+  "id": "drawing.isometric-explainer",
+  "title": "Isometric scenes with data cards that point at things",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Isometric cutaways, islands, rooms and systems with labelled instruments.",
+  "summary": "An isometric explainer is a true 2:1 grid with flat planes and one light. It reads when the subject sits on its base with room around it, objects turn so their shapes read, and every data card sits by its instrument with a short leader that never crosses the subject.",
+  "do": [
+   "Keep waves and other screen-horizontal marks along the world's y minus x direction.",
+   "Leave one and a half to two cells of sea along the two front edges so an island reads as an island; put sand only on parts of the shore.",
+   "Turn dishes and signs away from facing the camera so their shape reads.",
+   "Size data cards so the big number is readable, and place each one around its own instrument with a short leader line.",
+   "Put flowers on bushes instead of scattering coloured dots on grass."
+  ],
+  "avoid": [
+   "Leader lines across the roof or the subject.",
+   "An island filling its whole base."
+  ],
+  "tags": [
+   "isometric",
+   "diagram",
+   "explainer"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 58
+ },
+ {
+  "id": "drawing.one-line",
+  "title": "A whole picture as one continuous line",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "template",
+  "when": "Continuous single-line pictures (a journey, a connection, from here to there).",
+  "summary": "In continuous line art the whole picture is one path: shapes strung together in drawing order, one accent colour as the only spot of colour, and the line itself telling where it goes from and to.",
+  "do": [
+   "Plan the order of shapes so one line can visit them all without lifting.",
+   "Let the line enter and leave through the places it connects (a window, a door) to show from where to where.",
+   "Use one accent colour once (a window lighting up).",
+   "Keep sharp corners sharp where the object has them."
+  ],
+  "avoid": [
+   "A path that starts and ends on the ground with no destination.",
+   "A small triangle for a paper plane (draw a three-quarter dart with a centre fold)."
+  ],
+  "tags": [
+   "line-art",
+   "single-line"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 50
+ },
+ {
+  "id": "drawing.shape-morph",
+  "title": "Shape morphs that stay clean through the in-betweens",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "procedure",
+  "when": "One shape turning into another (a drop into a cloud, a cloud into snow, a dot into a card).",
+  "summary": "A morph stays clean when both outlines are normalised (same point count, same direction, same start) and aligned before the in-betweens are drawn. Speed shows through squash, stretch and ghost spacing, never speed lines.",
+  "steps": [
+   "Normalise both outlines: the same number of points, clockwise, starting from the top.",
+   "Align their start points before morphing, and chain the alignment through a sequence of shapes.",
+   "Draw only three ghost copies per change: the middle one lightly filled, the outer ones thin lines.",
+   "Show the path as a dashed trail and keep dots only for corresponding points.",
+   "Redraw the previous key shape after its ghosts so it stays crisp."
+  ],
+  "avoid": [
+   "Speed lines spaced like a ladder.",
+   "Paper texture on the flat shapes (keep it on the exposed paper only).",
+   "Splines over straight edges (they bulge at corners)."
+  ],
+  "tags": [
+   "morph",
+   "transition",
+   "shapes"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "riso.spot-inks",
+  "title": "Risograph and editorial print: few inks, overprint, grain",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Risograph, editorial and two-ink print looks.",
+  "summary": "An editorial riso look uses four or five spot inks, each with grain, uneven density and a few pixels of misregistration. Every other colour comes from overprinting, tone from halftone, and the line wobbles by hand.",
+  "do": [
+   "Choose four or five spot inks and make other colours by overprinting (cyan over yellow makes green).",
+   "Give every ink layer its own grain, uneven density and a small registration offset.",
+   "Shade with halftone, not soft gradients."
+  ],
+  "avoid": [
+   "Flat dead vector fills.",
+   "Too many colours."
+  ],
+  "tags": [
+   "riso",
+   "print",
+   "editorial"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "woodcut.woodblock-and-linocut",
+  "title": "Woodblock and linocut: blocks, carving and contrast",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Woodcut, ukiyo-e and linocut looks.",
+  "summary": "A woodblock print is one block per colour on soft paper with wood grain and registration drift, graded wipes and a black key block. A linocut keeps big black and white masses and carves only where the picture needs light.",
+  "do": [
+   "Print cloud bands and colour blocks fully opaque so lines behind do not show through.",
+   "Put the title cartouche in a clear part of the sky and let other elements give way to it.",
+   "In linocut carve wind and texture densely only inside a few bands, and keep big dark masses.",
+   "Carve a moon's shading as a few concentric arcs on its shadow side, not spots that read as a face.",
+   "Draw smoke as overlapping puffs that grow as they rise, with a thin dark edge where it crosses white."
+  ],
+  "avoid": [
+   "So many white carving marks that the night sky turns grey.",
+   "Chimneys carved like ladders.",
+   "Tree roots flaring into a black triangle."
+  ],
+  "tags": [
+   "woodcut",
+   "print",
+   "linocut"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "screenprint.posters",
+  "title": "Poster print: letterpress, constructivist and pop silkscreen",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Poster, propaganda, circus, pop-art and silkscreen looks.",
+  "summary": "Print posters read through bold shapes and honest print flaws: salt specks only inside solid areas, plates slightly off register, folds that crack the ink, and photos cut out and set on colour blocks so the scissor edge shows.",
+  "do": [
+   "Let ink skip in small specks only inside large solids, never along edges where ink gathers.",
+   "Shade hatching with the tone so lines taper away in the light.",
+   "Set cut-out photos on a colour block or bar so the cut edge is visible.",
+   "Keep numbered labels clear of the shapes that would cover them.",
+   "Pad plates before shifting them off register so the trimmed edge never shows bare paper.",
+   "In pop silkscreen vary the panels' registration and ink amount, but keep the face readable (slightly starved, not empty)."
+  ],
+  "avoid": [
+   "Even speckle over everything like a noise filter.",
+   "An elephant's ears reading as a second head (fan-shaped behind the eye, lower than the crown)."
+  ],
+  "tags": [
+   "screenprint",
+   "poster",
+   "print"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 54
+ },
+ {
+  "id": "deco.streamline",
+  "title": "Art deco: airbrushed streamline and gold lines",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Art deco posters and deco gold looks.",
+  "summary": "An art deco poster has no outlines: forms come from airbrushed light and dark, a long gradient sky, stepped buildings and gold lines that gather into speed lines on the nose of a vehicle.",
+  "do": [
+   "Rake the front of a vehicle forward and down; gather its waist line toward the nose as speed lines.",
+   "Put details (a clock, a crown) on the top storey, never floating above the roof or into the title.",
+   "Draw gold rules from the title to just outside the subtitle, never through it."
+  ],
+  "avoid": [
+   "A vertical front that reads as a tram.",
+   "A single dark red mass with a few thin gold lines."
+  ],
+  "tags": [
+   "deco",
+   "poster"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 48
+ },
+ {
+  "id": "blueprint.drawings",
+  "title": "Blueprints and technical sheets that stay legible",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Blueprint, engineering and technical diagram looks.",
+  "summary": "A blueprint is fine white lines on Prussian blue: sections, elevations, notes and a title block. It works only when the fine lines and small text stay crisp, decimal points survive, and sections show what is cut versus what is seen beyond.",
+  "do": [
+   "Keep fine text and lines sharp; blur only with a true sub-pixel filter.",
+   "Draw very short strokes (a decimal point) as solid dots.",
+   "In a section, show cut parts as solid and parts beyond as thin lines.",
+   "Draw window openings as splayed openings set into the wall, with two lines."
+  ],
+  "avoid": [
+   "Ink dropouts across whole lines of text.",
+   "A spiral stair that reads as stacked floors."
+  ],
+  "tags": [
+   "blueprint",
+   "diagram",
+   "technical"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 50
+ },
+ {
+  "id": "noir.rubber-hose",
+  "title": "1930s rubber-hose cartoons in black and white",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "1930s cartoon looks, silent film, film noir and black-and-white prints of drawn shots.",
+  "summary": "A 1930s cartoon frame is India ink at one pressure, flat grey paint behind, photographed on black-and-white film. It is never clean: soft focus, mid-tone grain, lifted blacks and lowered whites; props are simple and read instantly.",
+  "do": [
+   "Soften the image slightly, more in the corners; put grain heaviest in the mid tones; lift blacks and lower whites.",
+   "Draw a fist as a palm with a scalloped row of four knuckles, finger gaps and a thumb across the front.",
+   "Give a sun a scalloped halo with short thick rays in each notch.",
+   "Make pillows soft superellipses with pulled-in sides and pushed-out corners."
+  ],
+  "avoid": [
+   "A frame so clean it looks like a vector with a filter.",
+   "Flat ellipses above heads (they read as halos)."
+  ],
+  "tags": [
+   "noir",
+   "cartoon",
+   "1930s"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 50
+ },
+ {
+  "id": "drawing.flat-vector-scene",
+  "title": "Flat vector scenes that are not corporate filler",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Flat vector illustration and vector world looks.",
+  "summary": "Flat vector works as large layered shapes and generous sky with a small number of colours, warm against cool. It fails as a wall of objects with faceless corporate figures.",
+  "do": [
+   "Build the scene from a few big layers (hills, mountains, a moon) and leave a big sky.",
+   "Use about seven colours with a clear warm against cool contrast.",
+   "Shade clouds as the cloud minus a copy shifted toward the light, leaving a crescent.",
+   "Put a figure or tent where its outline has one contrasting colour around it."
+  ],
+  "avoid": [
+   "A wall packed with objects and featureless corporate figures.",
+   "Grey translucent smoke over coloured hills.",
+   "Candle-like flames cut flat at the base (use teardrops with side tongues)."
+  ],
+  "tags": [
+   "vector",
+   "flat",
+   "illustration"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 56
+ },
+ {
+  "id": "era.cave-painting",
+  "title": "Cave painting: pigment, rock, fire and animals",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Stone age stories, cave walls, prehistoric animals and campfires.",
+  "summary": "Cave paintings are ochre and charcoal blown and smeared on rock lit by a fire. They read when the pigment is strong, the rock is subtle, the light is one fire, and the animals have their real build.",
+  "do": [
+   "Keep pigment strong and dense; it is not faded watercolour.",
+   "Keep rock texture subtle under raking firelight; only the fire casts shadows.",
+   "Spray hand stencils in many small puffs aimed at the fingertips so the fingers separate.",
+   "Draw a bison with a high front, a tall hump, deep chest and beard, a tucked belly, small rear and short thin legs; a darker red head with a pale almond eye.",
+   "Give deer big antlers sweeping back with about five tines.",
+   "Draw cracks as thin zigzags that never run through animals.",
+   "Make a campfire of many tongues (orange outside, yellow inside), irregular dark stones around it and logs radiating toward the viewer."
+  ],
+  "avoid": [
+   "A bison like a box on table legs.",
+   "Rock texture like sandpaper or quilted cotton.",
+   "A campfire as a white glow."
+  ],
+  "tags": [
+   "stone-age",
+   "cave",
+   "prehistoric"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 64
+ },
+ {
+  "id": "era.petroglyph",
+  "title": "Rock carvings: pecked marks, varnish and age",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Rock art, ancient carvings and prehistoric symbols.",
+  "summary": "Petroglyphs are pecked into sandstone under desert varnish. They read when the varnish is nearly even with separate drip streaks, the pecking is dense enough to fill a shape, and carvings of different ages are visible.",
+  "do": [
+   "Keep the varnish nearly even and draw its drip streaks as separate narrowing, fading runs from the top.",
+   "Peck shapes densely enough to fill them, rough at the outline.",
+   "Give animals deep bodies and thick necks, in staggered rows with space between them.",
+   "Show three ages: fresh, a few centuries old, and almost covered again.",
+   "Draw hoof prints as two lobes meeting in a heart shape; make hand prints big enough to separate fingers."
+  ],
+  "avoid": [
+   "Varnish like wood grain or a curtain of stripes.",
+   "Animals like sausages joined nose to tail."
+  ],
+  "tags": [
+   "rock-art",
+   "prehistoric",
+   "ancient"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 48
+ },
+ {
+  "id": "era.tomb-painting",
+  "title": "Egyptian tomb painting: registers, status and work",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Ancient Egypt stories, harvests, scribes and tomb walls.",
+  "summary": "A tomb wall tells one story across registers, with figures scaled by status. It reads when bending and seated poses are drawn correctly, only the important people wear collars, and tools and loads look like real tools and loads.",
+  "do": [
+   "Tell one story across two or three registers.",
+   "Narrow a figure's shoulders as it leans forward and start both arms from the chest.",
+   "Give collars only to the overseer and the scribe; labourers are bare-chested, some with short hair.",
+   "Draw a hoe as an inverted V, a measuring vessel as a tapered wooden tub, and loads carried on the rear shoulder behind the head.",
+   "Show peeled plaster revealing the red grid and sketch beneath."
+  ],
+  "avoid": [
+   "A bending figure with full-width shoulders.",
+   "Sacks with a fold that reads as a smile."
+  ],
+  "tags": [
+   "egypt",
+   "ancient",
+   "pharaoh"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 50
+ },
+ {
+  "id": "era.mosaic",
+  "title": "Roman mosaic: stones that follow the figure",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Roman stories, floors, harbours and mosaics.",
+  "summary": "A mosaic floor is polished: stones barely raised, laid in rows that follow each figure's outline while the background is laid flat, with a halo row of background stones around every figure.",
+  "do": [
+   "Keep stones nearly flat with small bevels; it is a polished floor, not cobbles.",
+   "Choose stone colours by lightness and opponent colour so a grey fish gets no pink or blue stones.",
+   "Lay outline rows that follow the contour; lay the background flat with one halo row round each figure, two round big ones.",
+   "Make wave borders solid blocks curling back with a white eye.",
+   "Make story objects big enough to read (the stolen fish outside the net, its tail in the octopus's arm)."
+  ],
+  "avoid": [
+   "Stones like pillows.",
+   "Damage like a grey plus sign in the sky (put losses at borders and cracks)."
+  ],
+  "tags": [
+   "rome",
+   "roman",
+   "mosaic"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 46
+ },
+ {
+  "id": "era.stained-glass",
+  "title": "Stained glass: leads, pieces and painted volume",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Medieval, church, seasonal and stained-glass looks.",
+  "summary": "Stained glass is pieces of coloured glass held by dark leads, with volume painted on the glass. Every boundary between regions is a lead, each piece comes from a different part of the sheet, and fine detail is painted, not cut.",
+  "do": [
+   "Keep leads dark and solid, never a translucent grey line.",
+   "Give each piece its own streak direction and phase so streaks never run across neighbours.",
+   "Cut a tree crown as one glass area and paint its volume (a shaded crescent, scalloped lower lines).",
+   "Cut only trunks and big branches; paint thin twigs on the sky.",
+   "Plan the iron bars first and keep birds, nests, the sun and words clear of them.",
+   "Put a short inscription on one piece of glass."
+  ],
+  "avoid": [
+   "A crown of soap-bubble circles.",
+   "Twigs cut as glass that read as ladders.",
+   "A lead line through a word."
+  ],
+  "tags": [
+   "medieval",
+   "church",
+   "glass"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 46
+ },
+ {
+  "id": "era.manuscript-and-codex",
+  "title": "Illuminated manuscripts and inventor's notebooks",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Medieval books, scientists' notebooks, inventions and old documents.",
+  "summary": "An illuminated page and an inventor's codex are judged on text that fits, gold that behaves like metal, hatching laid by hand row by row, and paper that has really aged.",
+  "do": [
+   "Measure the text before placing a picture; keep titles short so they fit one line.",
+   "Treat burnished gold as a mirror of the window light, consistent across the spread.",
+   "Lay gold first and paint around it.",
+   "Hatch row by row with shared row boundaries and small gaps, never curly short strokes.",
+   "Draw feathers by their outer edges, overlapping, with round tips.",
+   "Age paper with large soft yellowing and foxing spots with small cores; ink is warm amber to umber."
+  ],
+  "avoid": [
+   "Parchment like a stucco wall.",
+   "Justified narrow columns with holes between words.",
+   "Exploded parts colliding with the main drawing."
+  ],
+  "tags": [
+   "medieval",
+   "manuscript",
+   "invention"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 48
+ },
+ {
+  "id": "era.silhouettes-and-shadow-play",
+  "title": "Silhouettes and shadow puppets that read as people",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Silhouette portraits, shadow puppetry, period profiles.",
+  "summary": "A silhouette must read from its outline alone, and a shadow puppet from its pierced pattern and the glowing screen. Proportions, hats, hair and raised arms all have to be drawn so the outline still says what it is.",
+  "do": [
+   "Draw ringlets as one swinging tapering strip, hair as a few long strokes, a hat brim along an S curve thick at the crown.",
+   "Keep animal proportions believable before cutting eyes and gaps.",
+   "Make a shadow screen glow amber with a tight hotspot, not a white wall.",
+   "Pierce costume patterns only in parts (a band, a sleeve), leaving large solid areas.",
+   "Raise the far arm when an arm must go high, so the near arm never crosses the face."
+  ],
+  "avoid": [
+   "Ringlets as bunches of grapes.",
+   "Costumes pierced everywhere like fishnet.",
+   "Puppets with long necks and tiny heads."
+  ],
+  "tags": [
+   "silhouette",
+   "shadow-puppet",
+   "period"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 44
+ },
+ {
+  "id": "whiteboard.ballpoint-and-pencil",
+  "title": "Ballpoint doodles and graphite pencil",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Ballpoint, pencil-sketch and doodle looks, board games and sketchbook pages.",
+  "summary": "A ballpoint doodle is one pen of near-constant weight; a graphite sketch is a pressure-led line with grain. Both fail when lines vanish into the paper, pieces are too small to read, or lines cross what was drawn before.",
+  "do": [
+   "Make pencil lines press into the paper by pressure so they stay visible.",
+   "Keep paper grain fine; lay tonal areas in several passes at slightly different angles.",
+   "Draw pieces big enough to read and stop later lines where they meet earlier drawings.",
+   "Put annotations in an empty square, clear of grid lines.",
+   "Draw jumps as smooth arcs with an arrow, counts at the top of the arc."
+  ],
+  "avoid": [
+   "Pencil lines lost to grain.",
+   "Ladder rungs and grid lines crossing characters.",
+   "A fold drawn as a bright white line across the page."
+  ],
+  "tags": [
+   "whiteboard",
+   "pencil",
+   "ballpoint"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 52
+ },
+ {
+  "id": "drawing.childlike-crayon",
+  "title": "Children's crayon drawings that look truly drawn",
+  "rooms": [
+   "scene",
+   "visuals",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "visuals.prompt",
+   "motion.template"
+  ],
+  "kind": "ruleset",
+  "when": "Children's drawings, crayon art, playful kid-made looks.",
+  "summary": "A child's crayon drawing has visible back-and-forth strokes, wax that sits on the paper tooth, and big areas coloured around the things already drawn, the way a child really colours.",
+  "do": [
+   "Show the stroke direction in the fill, with paper dots pulled into short streaks along it.",
+   "Outline things first, then colour sky and grass around them.",
+   "Stop a fill a little inside a boundary instead of overshooting it."
+  ],
+  "avoid": [
+   "Even sandpaper texture with no strokes.",
+   "Waxy relief like clay.",
+   "Hill lines running across faces."
+  ],
+  "tags": [
+   "crayon",
+   "children"
+  ],
+  "source": "claude-drawing-skill (cloveric, MIT), pinned 4886ed8: SKILL.md section 3 (failure list), restated in our own words.",
+  "priority": 44
+ }
+]

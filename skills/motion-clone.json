@@ -1,0 +1,135 @@
+[
+ {
+  "id": "rebuild.dominant-motion",
+  "title": "Clone the dominant motion, ignore the jitter",
+  "rooms": [
+   "scene",
+   "motion",
+   "competitors"
+  ],
+  "tasks": [
+   "motion.template",
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "principle",
+  "when": "Learning a camera move or a subject's motion from a reference clip or a described move.",
+  "summary": "Most of the motion in a clip is carried by a few dominant components (the camera's pan, push or tilt, the subject's main path); the rest is noise or tiny movement. To reuse a move, describe and rebuild only the dominant components.",
+  "do": [
+   "Describe a reference move by its dominant parts: the camera's direction, its speed curve and its distance; the subject's main path and timing.",
+   "Rebuild those parts with the program's own camera moves and paths, timed to the narrator's words.",
+   "Keep camera motion and subject motion apart: clone one without the other when the story needs it."
+  ],
+  "avoid": [
+   "Copying every wobble of a reference (handheld noise reads as a fault in a drawn world).",
+   "Copying a reference's content or look; only the motion is learned."
+  ],
+  "tags": [
+   "motion",
+   "camera",
+   "reference"
+  ],
+  "source": "LPengYang/MotionClone, pinned 8b3d937 (MotionClone, arXiv 2406.05338): the paper's finding that a few dominant temporal-attention components carry the motion, restated as an editing idea; no code used (no licence file).",
+  "priority": 62
+ },
+ {
+  "id": "rebuild.scenes-at-jumps",
+  "title": "Split a reference into scenes at its visual jumps",
+  "rooms": [
+   "scene",
+   "motion",
+   "competitors"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "competitors.blueprint"
+  ],
+  "kind": "procedure",
+  "when": "Studying a reference video or competitor clip the owner provides, frame by frame.",
+  "summary": "A reference is studied scene by scene. Cut it where the picture jumps, and sample each scene's frames so short effects are not missed: its first and last frame, each visual jump with the frame before and after it, then frames spread evenly across the rest.",
+  "steps": [
+   "Scan every frame for visual jumps (cuts, flashes, fast moves).",
+   "Cut scenes near jumps rather than at fixed lengths.",
+   "Sample each scene: its first and last frame, every jump with its neighbours, then fill evenly.",
+   "Read the timestamps of the samples: they are not equally spaced."
+  ],
+  "avoid": [
+   "Even sampling that skips a late flash or a short effect.",
+   "Interpolating a mask or a move across a real cut."
+  ],
+  "tags": [
+   "reference",
+   "style-study",
+   "sampling"
+  ],
+  "source": "blixvip/MotionClone, pinned 9873ef2: app/scene_pipeline.py and app/ai.py, its reference-rebuild method restated; no code copied (no project-wide licence).",
+  "priority": 60
+ },
+ {
+  "id": "rebuild.compare-and-keep-better",
+  "title": "Compare the rebuild to the reference and keep only improvements",
+  "rooms": [
+   "motion",
+   "scene",
+   "qc"
+  ],
+  "tasks": [
+   "motion.template",
+   "scene.plan",
+   "qc.review"
+  ],
+  "kind": "procedure",
+  "when": "Matching a designed shot or a style to a reference, and deciding whether a correction helped.",
+  "summary": "A rebuild is judged against its reference at the same timestamps, per colour channel (grayscale can pass the wrong palette). Only the worst scenes get a correction, a correction is kept only if it improves the match without making any frame much worse, and the earlier version is kept otherwise.",
+  "steps": [
+   "Render the rebuild and compare it to the reference at the same times, per colour channel.",
+   "Correct only the two worst scenes, with the reference and rebuild frames side by side.",
+   "Keep a correction only if the average match improves and no frame gets clearly worse; otherwise keep the earlier version.",
+   "Say candidly what could not be rebuilt (photographs, complex 3D, footage)."
+  ],
+  "avoid": [
+   "Accepting a revision that regresses.",
+   "Claiming a one-to-one match because every layer exists."
+  ],
+  "tags": [
+   "review",
+   "reference",
+   "matching"
+  ],
+  "source": "blixvip/MotionClone, pinned 9873ef2: app/scene_pipeline.py (similarity, bounded correction pass), its reference-rebuild method restated; no code copied (no project-wide licence).",
+  "priority": 58
+ },
+ {
+  "id": "rebuild.layers-not-replay",
+  "title": "Rebuild from editable layers, never by replaying the source",
+  "rooms": [
+   "scene",
+   "motion",
+   "competitors"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "competitors.blueprint"
+  ],
+  "kind": "ruleset",
+  "when": "Designing a shot after a reference (a competitor's look, a style study).",
+  "summary": "A rebuild is made of its own layers (type, shapes, drawings, measured motion), never of the source's frames or full-frame screenshots; small isolated artwork is the only raster allowed. That keeps it original and editable.",
+  "do": [
+   "Rebuild typography, layout, panels, shapes and motion from scratch in the video's own art direction.",
+   "Use many measured key moments where position or scale changes; separate discontinuous scenes into separate layers.",
+   "Keep the layer count bounded (tens, not hundreds) per scene."
+  ],
+  "avoid": [
+   "Embedding a reference's frames, footage or screenshots.",
+   "Replacing detailed artwork with emoji or generic placeholders."
+  ],
+  "tags": [
+   "originality",
+   "rebuild"
+  ],
+  "source": "blixvip/MotionClone, pinned 9873ef2: app/ai.py and app/rebuild_author.py (guides), app/reconstruction.py (audit), its reference-rebuild method restated; no code copied (no project-wide licence).",
+  "priority": 60
+ }
+]

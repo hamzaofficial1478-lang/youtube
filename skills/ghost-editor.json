@@ -1,0 +1,804 @@
+[
+ {
+  "id": "cut.show-it-on-the-word",
+  "title": "Show what the narrator makes the viewer imagine, on the word",
+  "rooms": [
+   "editing",
+   "timeline"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "Planning beats, cards, pictures and effects across a script.",
+  "summary": "Walk the script sentence by sentence and ask what the narrator just made the viewer imagine; show that, on the word. Leave some sentences bare: a quiet stretch makes the next card land.",
+  "do": [
+   "For each sentence, name what the viewer is imagining and put it on screen on the word that names it (within about 0.1 s).",
+   "Leave some sentences without a new card or effect so the next one lands.",
+   "Show only what the narrator said: nothing on screen claims what the voice did not.",
+   "Put a reaction (a meme, a joke beat) on or just after the punchline, never before it."
+  ],
+  "avoid": [
+   "A new graphic on every sentence.",
+   "On-screen text that adds claims the narration never made."
+  ],
+  "tags": [
+   "beats",
+   "timing",
+   "editing"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 84
+ },
+ {
+  "id": "cut.restraint-numbers",
+  "title": "Default to restraint: what top videos actually do",
+  "rooms": [
+   "editing",
+   "timeline"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "formula",
+  "when": "Deciding how many transitions, effects, zooms and inserts a video gets.",
+  "summary": "Measured across top-performing reels, most cuts are hard cuts, shots last about three seconds, and audible effects are sparse and land on graphics rather than cuts. Restraint is the default; every extra device needs a reason.",
+  "do": [
+   "Make most changes plain cuts (113 of 119 transitions in the measured reels were hard cuts).",
+   "Keep a median shot of about 3 s unless the style says otherwise.",
+   "Use about 0.4-0.9 audible effects per 10 s on graphics, not on cuts.",
+   "Hide a jump in the same picture with a short 0.2 s dissolve or a change of shot size, not a zoom on every cut; at most about three comic punch-ins a video."
+  ],
+  "avoid": [
+   "A zoom or whoosh on every cut (owners find it annoying).",
+   "Several punchy transitions in a short video (two at most)."
+  ],
+  "numbers": {
+   "hardCutShare": "113 of 119",
+   "medianShotSeconds": "3",
+   "sfxPer10s": "0.4-0.9 on graphics",
+   "punchInsMax": "3"
+  },
+  "tags": [
+   "restraint",
+   "pacing",
+   "transitions"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 82
+ },
+ {
+  "id": "cut.one-thing-at-a-time",
+  "title": "One card in the band, one thing in the reaction slot",
+  "rooms": [
+   "editing",
+   "timeline"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Layering cards, captions, pictures and reactions.",
+  "summary": "The screen carries one idea at a time: one card in its band and one thing in its reaction slot. A spoken list becomes typography, never a run of half-second clips.",
+  "do": [
+   "Keep one card and one reaction on screen at a time.",
+   "Turn a spoken list into typography (a list builds on screen), not three 0.5 s pictures.",
+   "Use one character per idea and one shot per idea."
+  ],
+  "avoid": [
+   "Captions colliding with cards.",
+   "One 0.5 s picture per noun."
+  ],
+  "tags": [
+   "layout",
+   "clarity"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 74
+ },
+ {
+  "id": "cut.inserts-in-frames",
+  "title": "Inserts sit in a frame; full screen is for the turn",
+  "rooms": [
+   "editing",
+   "timeline"
+  ],
+  "tasks": [
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Using photos, stock or footage inside a drawn or designed video.",
+  "summary": "Pictures from outside the video's world sit inside a frame language (a polaroid, a card, a page, a phone) so the world stays one; full-screen inserts are kept for the turn. Each insert must show the line it sits on.",
+  "do": [
+   "Frame inserts as polaroids, cards, pages or collage pieces; several framed stills beat many video cutaways.",
+   "Check every insert shows the words under it.",
+   "Grade an insert to match the video's world, never the other way round.",
+   "Keep stock video inside a frame unless the style is built on full-screen footage."
+  ],
+  "avoid": [
+   "Full-screen stock strangers in a different colour world.",
+   "Fixed fees of inserts per minute ignored (about three a minute at most when a face or a main picture carries the video)."
+  ],
+  "tags": [
+   "inserts",
+   "broll",
+   "stock"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 66
+ },
+ {
+  "id": "audio.levels-against-the-voice",
+  "title": "Sound effect levels set against this voice",
+  "rooms": [
+   "audio",
+   "editing"
+  ],
+  "tasks": [
+   "audio.mix",
+   "editing.plan"
+  ],
+  "kind": "formula",
+  "when": "Setting sound effect levels, whooshes and impacts in a narrated video.",
+  "summary": "Effects are mixed relative to the narrator's own loudness, not by hand: interface ticks sit lowest, whooshes a little higher, impacts higher still, and none ever louder than the voice. Voice loudness is fixed first; the finished mix is never lifted.",
+  "do": [
+   "Fix the voice loudness first, then set effects relative to the voice's peak: interface sounds about -14 dB, whooshes -12, impacts -8.",
+   "Lead whooshes and hits: start them early so their peak lands on the cut or landing (within a few frames).",
+   "Put paper or prop foley on the landing frame and clicks on the action frame.",
+   "Duck music under every spoken line; under a freeze it almost disappears."
+  ],
+  "avoid": [
+   "Effects louder than the voice.",
+   "Raising the whole finished mix into a limiter.",
+   "A sound effect on top of a spoken word; give it a pause."
+  ],
+  "numbers": {
+   "uiDb": "-14",
+   "whooshDb": "-12",
+   "impactDb": "-8",
+   "voiceLufs": "-16 for the edit"
+  },
+  "tags": [
+   "sfx",
+   "mix",
+   "loudness"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: references/sound-and-memes.md, restated in our own words for narrated faceless videos.",
+  "priority": 76
+ },
+ {
+  "id": "system.style-is-a-system",
+  "title": "A style is a system, not a template",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "procedure",
+  "when": "Defining or keeping a channel's look across many videos.",
+  "summary": "A style that is a template makes every video the same edit. Write it as a system: the invariants that make it the style, a fixed house look, content slots that follow each script with a question that fills them, and a catalogue of the components each video used so the next one uses new ones.",
+  "steps": [
+   "Write the thesis of the style in one sentence.",
+   "List the invariants that make it the style (never change).",
+   "Fix the house look: palette, type, captions, accents, framing.",
+   "Define slots that follow the content (the hook object, the turn, the source, the payoff) and the question that fills each from a new script.",
+   "Record which components each video used, and fill the next video's slots with components the last few did not use."
+  ],
+  "avoid": [
+   "Pasting the previous video's scenes where the script does not call for them.",
+   "Changing the house look by accident."
+  ],
+  "tags": [
+   "style",
+   "system",
+   "variety"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 80
+ },
+ {
+  "id": "system.new-components-every-video",
+  "title": "New components every video, the same house",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Planning a video in a channel style that has made videos before.",
+  "summary": "Videos in one style should feel like one channel without looking like copies: keep the house look and the invariants, and vary the components (props, card treatments, transitions, hook and outro devices) from video to video.",
+  "do": [
+   "Before planning, look at which devices the last several videos used and pick ones they did not.",
+   "Keep the house look (type, captions, palette) fixed.",
+   "Register a new device when it is first used, so it is not repeated next time."
+  ],
+  "avoid": [
+   "The same hook device, transition and outro in every video."
+  ],
+  "tags": [
+   "variety",
+   "channel",
+   "repetition"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 72
+ },
+ {
+  "id": "taste.every-correction-is-taste",
+  "title": "Every correction is taste, in the owner's own words",
+  "rooms": [
+   "editing",
+   "learning",
+   "scene"
+  ],
+  "tasks": [
+   "editing.plan",
+   "editing.review",
+   "scene.plan"
+  ],
+  "kind": "principle",
+  "when": "When the owner corrects an edit, a drawing or a style decision.",
+  "summary": "When the owner corrects something (\"too many zooms\", \"that sound is cheesy\"), fix it and keep it as a rule in their own words, so the next video starts from it. The owner's words outrank the program's own learned rules; the current video's plan still wins.",
+  "do": [
+   "Quote the owner's correction word for word when it becomes a rule.",
+   "Give the owner's rules priority over rules the program learned itself.",
+   "Read the owner's rules before planning the next video in the same style."
+  ],
+  "avoid": [
+   "Paraphrasing the owner into a softer rule.",
+   "Letting an old rule override what this video's plan needs."
+  ],
+  "tags": [
+   "taste",
+   "learning",
+   "owner"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 78
+ },
+ {
+  "id": "captions.readable-and-styled",
+  "title": "Captions that read: size, contrast and one keyword",
+  "rooms": [
+   "captions",
+   "editing"
+  ],
+  "tasks": [
+   "captions.segment",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing caption looks and keyword highlights.",
+  "summary": "Captions must be large and contrasting enough to read on a phone, never over the main subject, with one keyword per phrase lit when the style highlights words.",
+  "do": [
+   "Keep captions at least about 48 px at 1080 wide and at least 3:1 contrast with what is behind them.",
+   "Highlight one keyword per phrase, chosen for meaning.",
+   "Put dark text on light accent colours (lime, yellow pills and tags).",
+   "Keep captions inside the platform's safe area and off the subject."
+  ],
+  "avoid": [
+   "Small, low-contrast captions on a light background.",
+   "Em dashes in on-screen text."
+  ],
+  "tags": [
+   "captions",
+   "readability"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 70
+ },
+ {
+  "id": "motion.kinetic-type-devices",
+  "title": "Kinetic type devices and when each fits",
+  "rooms": [
+   "motion",
+   "editing"
+  ],
+  "tasks": [
+   "motion.template",
+   "editing.plan",
+   "scene.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing an animated typography device for a beat.",
+  "summary": "A small set of kinetic type devices covers most beats; each fits a kind of line, and each needs a reading hold after it lands.",
+  "do": [
+   "Hook: the first 1.5-3 s line built big and fast.",
+   "Drum: a list or a repetition (\"round and round\") beaten out word by word.",
+   "Scramble: a word resolving out of letters, for a reveal or a name.",
+   "Flip stack: options flipping until one sticks.",
+   "Headline swap: \"not X, Y\" with the wrong word replaced by the right one.",
+   "Spring: a section title that pops into place.",
+   "Give each device a reading hold after it lands."
+  ],
+  "avoid": [
+   "More than one or two of these per minute."
+  ],
+  "tags": [
+   "kinetic-type",
+   "typography"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 66
+ },
+ {
+  "id": "reference.study-from-frames",
+  "title": "Study a reference edit from its frames, not an account of it",
+  "rooms": [
+   "competitors",
+   "scene",
+   "editing"
+  ],
+  "tasks": [
+   "competitors.blueprint",
+   "scene.plan",
+   "editing.plan"
+  ],
+  "kind": "procedure",
+  "when": "Learning a style from a reference video the owner provides.",
+  "summary": "To match a reference edit, measure it: a contact sheet, frames every couple of seconds, a second-by-second log of what happens, then map every scene to a word time. Treat any AI's verbal account as a draft and check it against the frames.",
+  "steps": [
+   "Sample the reference: a 1 fps contact sheet and full frames every 2 s.",
+   "Write a second-by-second log of cuts, cards, type and motion.",
+   "Check type, sizes and framing against the frames, not a description.",
+   "Write the style's invariants, house look and slots from what was measured.",
+   "Map each scene of a new video to its words, starting from the closest example."
+  ],
+  "avoid": [
+   "Copying a model's summary of a reference (\"57 swooshes, a yellow caption\") without measuring it."
+  ],
+  "tags": [
+   "reference",
+   "style-study",
+   "competitors"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 64
+ },
+ {
+  "id": "cut.style-prerequisites",
+  "title": "Check a style's prerequisite before planning",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "ruleset",
+  "when": "Choosing a named style for a video.",
+  "summary": "Some styles need material the channel may not have (real screen recordings, one consistent world of footage). If it is missing, say what is missing and propose another style; never fill the gap with stock.",
+  "do": [
+   "Before planning, name what the style needs and check it is there.",
+   "When it is missing, say so and offer the nearest style that works without it."
+  ],
+  "avoid": [
+   "Filling a missing prerequisite with unrelated stock."
+  ],
+  "tags": [
+   "style",
+   "prerequisite"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: SKILL.md, restated in our own words for narrated faceless videos.",
+  "priority": 60
+ },
+ {
+  "id": "collage.tactile-paper",
+  "title": "Tactile paper: a talk told on printed paper, stop-motion",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Paper-based videos, essays, history and ideas told on printed sheets (the Paper collage finish).",
+  "summary": "Every noun becomes a physical sheet that unfurls, curls in or turns on its word; hand marks steer the eye; the paper moves on twos and the payoff on threes.",
+  "do": [
+   "Make paper physical: every sheet enters, leaves and changes by a fold, curl or turn, never a fade or flat slide; every sheet has texture and a contact shadow.",
+   "Step designed motion on twos and the payoff on threes; keep reveals on the voice's clock.",
+   "Give every noun its own paper object on its word (a page, a print, a card, a map, a ticket); a drawn metaphor only when the line is abstract.",
+   "Let hand marks only steer the eye: a white arrow for look here, an underline under paraphrased printed words, an ellipse round the one thing named; marks stay glued to their paper.",
+   "Turn a page slowly to show the other side of an idea (before and after).",
+   "Bookend: the hook object returns with one new object that names the payoff.",
+   "Sound only where something enters or a section changes: a quiet bed, whooshes leading into pushes, foley on marks, one low boom under the big turn; 2.5-3.5 effects per 10 s."
+  ],
+  "avoid": [
+   "A UI swoosh in place of a paper flip.",
+   "Floating marks not attached to paper."
+  ],
+  "tags": [
+   "recipe",
+   "collage",
+   "paper",
+   "stop-motion"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/tactile-paper/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 64
+ },
+ {
+  "id": "recipe.kinetic-doc",
+  "title": "Kinetic doc: the narration made visible in an archive world",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Documentary and history explainers with strong narration.",
+  "summary": "Every word lands on screen as it is spoken in a black-and-white archive world with one red accent; pictures arrive as prints, windows and polaroids; punch lines get their own page.",
+  "do": [
+   "Pop words on as spoken in one centred line: a big heavy word plus small words.",
+   "Keep the world black and white with one red accent.",
+   "Bring pictures in as prints, windows and polaroids.",
+   "Give each punch line its own page."
+  ],
+  "tags": [
+   "recipe",
+   "documentary",
+   "kinetic-type",
+   "archive"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/kinetic-doc/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 56
+ },
+ {
+  "id": "recipe.data-story",
+  "title": "Data story: charts that draw themselves on paper",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Lines that carry a quantity (prices, counts, growth, comparisons).",
+  "summary": "When a line carries a quantity, cut to one cream paper sheet where a chart draws itself mark by mark in red and blue pencil, with handwritten notes; only real numbers, each with its source on screen.",
+  "do": [
+   "Draw the chart mark by mark on the words, in pencil on paper.",
+   "Use only real numbers from the script or its sources, and show the source.",
+   "Annotate the point that matters by hand."
+  ],
+  "avoid": [
+   "Invented or rounded-up numbers."
+  ],
+  "tags": [
+   "recipe",
+   "data",
+   "charts",
+   "evidence"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/data-story/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 58
+ },
+ {
+  "id": "recipe.telestrator",
+  "title": "Telestrator: freeze on the key word and draw on it",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Analysing a moment, a map, a scene or a picture like a sports breakdown.",
+  "summary": "The picture plays, then freezes on the key word and gets drawn on like a sports replay: rings, marker arrows, zones and a rewind, always around the subject, never over a face.",
+  "do": [
+   "Freeze on the word that names what to look at.",
+   "Draw rings, arrows and zones in a marker colour on the frozen frame.",
+   "Rewind or replay once to show the move again."
+  ],
+  "avoid": [
+   "Drawing over a face."
+  ],
+  "tags": [
+   "recipe",
+   "analysis",
+   "freeze",
+   "annotation"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/telestrator/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 54
+ },
+ {
+  "id": "recipe.halftone-dossier",
+  "title": "Halftone dossier: the story as a case file",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Mysteries, true crime, profiles, investigations and secret histories.",
+  "summary": "Every idea is one printed exhibit on cream paper: halftone pages in four flat inks, heavy misregistered headlines, stamps that slam and a profile card.",
+  "do": [
+   "Treat each idea as one exhibit page.",
+   "Print in four flat inks with halftone dots and misregistered headlines.",
+   "Slam a stamp on the key finding.",
+   "Give the subject a profile card."
+  ],
+  "tags": [
+   "recipe",
+   "dossier",
+   "print",
+   "mystery"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/halftone-dossier/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 54
+ },
+ {
+  "id": "recipe.swiss-grid",
+  "title": "Swiss grid: the video as a poster programme",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Clean, serious, design-led explainers and business videos.",
+  "summary": "The frame is one modular page: a six-column grid, one typeface, one signal colour, key words laid out like a poster, a counter and exact quiet motion.",
+  "do": [
+   "Lay everything on a six-column grid.",
+   "Use one typeface and one signal colour.",
+   "Set the key words as a poster composition.",
+   "Keep motion exact and quiet."
+  ],
+  "tags": [
+   "recipe",
+   "swiss",
+   "grid",
+   "typography"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/swiss-grid/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 52
+ },
+ {
+  "id": "recipe.hologram-hud",
+  "title": "Hologram HUD: scan the subject and read it like data",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Technology, science, products, machines and anatomy explainers.",
+  "summary": "The thing being talked about is scanned into a glowing wireframe; target boxes lock onto its parts and values roll in.",
+  "do": [
+   "Scan the subject into a wireframe on the word that names it.",
+   "Lock target boxes onto its parts and roll in their values.",
+   "Keep the HUD around the subject, never over the main detail."
+  ],
+  "tags": [
+   "recipe",
+   "hud",
+   "technology"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/hologram-hud/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 50
+ },
+ {
+  "id": "recipe.news-package",
+  "title": "News package: one story as a news segment",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Current events, explainers about a single story, rundowns.",
+  "summary": "One package system: a sting that flies into the corner as the bug, a strap with a category tab, a split-flap board, schematic cards and a rundown of the points ticked off at the end.",
+  "do": [
+   "Open with a sting that becomes the corner bug.",
+   "Use a strap with a category tab for each section.",
+   "Tick off the rundown of points at the end."
+  ],
+  "tags": [
+   "recipe",
+   "news",
+   "segment"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/news-package/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 50
+ },
+ {
+  "id": "recipe.step-deck",
+  "title": "Step deck: tips as a numbered deck",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "List videos, tips, steps and how-to sequences.",
+  "summary": "Every spoken word lands on its onset sized by how much it matters; each step opens on a card whose giant italic numeral shrinks into place; the picture switches every 1-2 s.",
+  "do": [
+   "Open each step with a giant numeral that shrinks into place.",
+   "Size words by importance as they land.",
+   "Switch pictures every 1-2 s between cards, prints and line drawings."
+  ],
+  "tags": [
+   "recipe",
+   "list",
+   "steps",
+   "numbers"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/step-deck/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 54
+ },
+ {
+  "id": "recipe.product-page",
+  "title": "Product page: show the named thing, do not tell it",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Reviews and explainers of a named tool, book, app or object.",
+  "summary": "Every what or how line becomes a white page: the real picture, rebuilt interface and hairline drawings that a virtual camera moves through on the words, with two-tier headlines (heavy sans plus italic serif).",
+  "do": [
+   "Build each line as a page the camera moves through.",
+   "Use hairline drawings and the real picture of the thing.",
+   "Set two-tier headlines: a heavy sans word and an italic serif word."
+  ],
+  "tags": [
+   "recipe",
+   "product",
+   "review"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/product-page/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 48
+ },
+ {
+  "id": "recipe.vector-explainer",
+  "title": "Vector explainer: one continuous world a camera travels",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Animated explainers with a narrator and no footage.",
+  "summary": "One continuous drawn world that a camera travels through, a subject that draws itself, serif headlines and word-reveal captions.",
+  "do": [
+   "Build one continuous world and travel the camera through it instead of cutting.",
+   "Let the subject draw itself on its words.",
+   "Use serif headlines and captions revealed word by word."
+  ],
+  "tags": [
+   "recipe",
+   "explainer",
+   "vector",
+   "world"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/explainer-vector/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 56
+ },
+ {
+  "id": "whiteboard.marker-board",
+  "title": "Whiteboard: the thought is drawn while it is said",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "Whiteboard explainers (the Hand-drawn engine).",
+  "summary": "Each sentence is drawn live in rough marker strokes with a visible marker following the stroke, handwriting for words, an eraser between pages, and the spoken word swept in colour in the captions.",
+  "do": [
+   "Draw each thought while it is said, the marker visible on the stroke.",
+   "Wipe the board with an eraser between pages of ideas.",
+   "Sweep the spoken word in an accent colour in the captions."
+  ],
+  "tags": [
+   "recipe",
+   "whiteboard",
+   "marker"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/whiteboard/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 54
+ },
+ {
+  "id": "recipe.list-over-pictures",
+  "title": "A list read over pictures, the type doing the talking",
+  "rooms": [
+   "scene",
+   "editing",
+   "motion"
+  ],
+  "tasks": [
+   "scene.plan",
+   "motion.template",
+   "editing.plan"
+  ],
+  "kind": "template",
+  "when": "List videos over pictures (places, observations, facts in a row).",
+  "summary": "The voice names one observation every 4-6 s; one big word per line in an italic serif for mood or a heavy sans for facts, with a subline, word flashes and collage pages between.",
+  "do": [
+   "Give each observation one big word plus a subline.",
+   "Use an italic serif for moods and places, a heavy sans for facts.",
+   "Change the picture with each observation, every 4-6 s."
+  ],
+  "tags": [
+   "recipe",
+   "list",
+   "typography"
+  ],
+  "source": "ghost-editor (kurbaitaev, MIT), pinned ce17272: recipes/seoul-list/SYSTEM.md, restated in our own words for narrated faceless videos.",
+  "priority": 48
+ }
+]

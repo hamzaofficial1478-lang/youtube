@@ -1164,6 +1164,44 @@ test('anime atelier: the planner hears the finish, the frame worker gets the col
   assert.ok(list.every(shot => shot.frame.html), 'compositions in the script that swap drawings pass');
 });
 
+// 0.89 (owner request 2026-11-04): pixel art in the Motion Graphics engine, and the approved skills reach the frame
+// worker and the continuity review, each use recorded.
+test('pixel atelier: the frame worker gets the grid, palette and approved craft skills; the drawing job carries the hold and grid', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
+  const {SkillsEngine} = require('../skills');
+  const raws = [];
+  const pixel = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><svg id="${id}-px" viewBox="0 0 320 180" width="100%" height="100%" shape-rendering="crispEdges"><rect width="320" height="180" fill="#5FA8E0"/><rect id="${id}-sun" x="40" y="30" width="20" height="20" fill="#FFE07A"/></svg><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-sun', {x: 0}, {x: 60, duration: 2}, 0); window.__timelines["${id}"] = tl;</script></div></template>`;
+  const frame = {blueprint: 'compose', focal: 'the sun', roles: 'sun = time', beats: [{show: 'the sun crosses the sky'}], type: 'hook', beat: 'playful'};
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw) { raws.push(input.raw); return pixel(JSON.parse(input.raw.split('\n\n')[0]).frameId); }
+    const all = input.sentences;
+    return {summary: 'A day in pixels.', cast: [], scenes: [{sentenceStart: all[0].n, sentenceEnd: all.at(-1).n, purpose: 'hook', direction: 'A sunny day.', onScreenText: '', shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: '', frame}]}],
+      direction: {read: 'A cheerful little day told in retro game pixels for curious viewers.', dials: {variance: 3, motion: 5, density: 4}, fonts: {display: 'Consolas', body: 'Segoe UI'}, motion: 'stepped cells', signature: 'the sun', avoid: []}};
+  }});
+  const {room, content, ids, store, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false, storyMap: false, revise: {atelier: {finish: 'pixel', palette: 'meadow'}}});
+  new SkillsEngine(store, {root: path.join(__dirname, '..')}).attach();
+  narrate(10);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const system = network.calls.find(call => call.path === '/v1/messages').body.system;
+  assert.match(system, /ATELIER SHOTS, PIXEL ART[\s\S]*style's Meadow day/, 'the planner reads the pixel guide');
+  const manifest = latestManifest(room, content.id), shot = shots(manifest)[0];
+  assert.deepEqual([manifest.plan.direction.finish, manifest.plan.direction.pixel.name, manifest.plan.direction.palette.canvas], ['pixel', 'Meadow day', '#5FA8E0']);
+  assert.ok(shot.frame.html, 'a composition in the palette on the cell grid passes');
+  // The frame worker: the grid and palette, and the approved craft skills for designed shots, pixel ones first.
+  const packet = JSON.parse(raws[0].split('\n\n')[0]);
+  assert.deepEqual([packet.finish, packet.grid, packet.heldFrames, packet.pixelPalette.length], ['pixel', '320x180', 3, 16]);
+  assert.match(raws[0], /Craft skills the owner approved for designed shots[\s\S]*pixel\.cells-and-palette/);
+  const used = task => store.db.prepare('SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key=?').get(queued.job.id, task);
+  assert.ok(JSON.parse(used('motion.template').skill_ids).includes('pixel.cells-and-palette'), 'the frame worker\'s skills are recorded with the job');
+  assert.ok(!JSON.parse(used('scene.plan').skill_ids).some(id => id.startsWith('collage.')), 'paper skills stay out of a pixel video');
+  // The drawing job carries how the render shows it: held on threes, on the 320 x 180 grid.
+  const drawn = room.queueDrawAll(manifest.id, {requestedBy: 'Owner'});
+  assert.ok(drawn.queued >= 1);
+  const scope = JSON.parse(store.db.prepare("SELECT scope FROM visual_jobs WHERE kind='draw' ORDER BY created_at DESC LIMIT 1").get().scope);
+  assert.deepEqual([scope.composition.finish, scope.composition.hold, scope.composition.grid], ['pixel', 3, [320, 180]]);
+});
+
 // 0.80 (owner review 2026-11-02): a second storyboard for the same script needs a yes; an over-budget plan says whose
 // limit it is with its numbers; finished jobs can be cleared; a job that never reached the AI holds nothing.
 test('a second storyboard needs a yes, the budget message names the channel limit, and finished jobs can be cleared', async t => {
