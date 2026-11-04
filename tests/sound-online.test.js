@@ -167,9 +167,9 @@ test('0.78: Freesound failures are named, a slow search is tried once more, and 
   const store = new Store(':memory:', {artifactRoot: dataRoot});
   t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
   const net = network(), quota = new QuotaLedger(store);
-  // The first search for "warm music" is slow; its second try answers.
+  // The first search for "piano music" (0.90: a cue is searched by its own words first) is slow; its second try answers.
   let slowOnce = true;
-  const flaky = async (url, options) => { if (slowOnce && String(url).includes('/apiv2/search/') && new URL(String(url)).searchParams.get('query') === 'warm music') { slowOnce = false; throw new DOMException('slow', 'TimeoutError'); } return net.fetch(url, options); };
+  const flaky = async (url, options) => { if (slowOnce && String(url).includes('/apiv2/search/') && new URL(String(url)).searchParams.get('query') === 'piano music') { slowOnce = false; throw new DOMException('slow', 'TimeoutError'); } return net.fetch(url, options); };
   const connectors = new ConnectorSlots(store, protector, flaky);
   const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
   const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: flaky, pauseMs: 0});
@@ -180,17 +180,17 @@ test('0.78: Freesound failures are named, a slow search is tried once more, and 
   assert.ok(queued, 'a new score with moods the library lacks asks Freesound by itself');
   const scope = JSON.parse(store.db.prepare('SELECT scope, created_by FROM sound_imports WHERE id=?').get(queued.id).scope);
   assert.equal(scope.contentId, 'video-1');
-  assert.ok(['warm', 'tense'].every(mood => scope.moods.some(item => item.mood === mood && item.need === 3)), JSON.stringify(scope.moods));
+  assert.deepEqual(scope.cues.map(cue => [cue.id, cue.mood]), [['cue001', 'warm'], ['cue002', 'tense']], 'each cue of the video is searched (0.90), not just its moods');
   assert.equal(store.db.prepare('SELECT created_by FROM sound_imports WHERE id=?').get(queued.id).created_by, 'Program (automatic)');
   assert.equal(online.autoFill('video-1', [{mood: 'warm'}]), null, 'quiet while an import already runs');
   const done = await online.processNextFill();
   assert.equal(done.progress.failed, 0, JSON.stringify(done.progress.problems));
-  assert.equal(net.calls.filter(call => new URL(call.url).searchParams.get('query') === 'warm music').length, 1, 'the slow search was asked once more and answered');
-  assert.ok(new URL(net.calls.find(call => call.url.includes('query=warm+music')).url).searchParams.get('page_size') <= 25, 'smaller music searches');
+  assert.equal(net.calls.filter(call => new URL(call.url).searchParams.get('query') === 'piano music').length, 1, 'the slow search was asked once more and answered');
+  assert.ok(new URL(net.calls.find(call => call.url.includes('query=piano+music')).url).searchParams.get('page_size') <= 25, 'smaller music searches');
   // The library says where its sounds came from.
   const sources = library.state().bySource;
   assert.equal(sources[0].id, 'freesound');
-  assert.ok(sources[0].music >= 6 && sources[0].sfx >= 1, JSON.stringify(sources));
+  assert.ok(sources[0].music >= 2, JSON.stringify(sources));
 });
 
 // 0.87 (owner request 2026-11-04): Freesound is asked only for the sounds this video's drawings need, and for music in
@@ -212,9 +212,58 @@ test('0.87: a video asks Freesound only for the sounds its drawings need, and fo
   assert.equal(done.status, 'completed', JSON.stringify(done.progress));
   const queries = net.calls.slice(before).filter(call => call.url.includes('/apiv2/search/')).map(call => new URL(call.url).searchParams.get('query'));
   assert.deepEqual(queries.filter(q => !/music$/.test(q)), ['campfire crackling', 'elephant trumpet'], 'only the effects the drawings need');
-  assert.equal(queries.find(q => /music$/.test(q)), 'curious tribal music', 'the story\'s world first');
+  assert.equal(queries.find(q => /music$/.test(q)), 'tribal music', 'the story\'s world first');
   const picked = M.pickEffects(library.tracks('sfx'));
   assert.ok(picked.fire && picked.animal && !picked.whoosh);
   const music = library.tracks('music');
   assert.ok(music.length && music.every(track => track.tags.includes('tribal')) && music.some(track => track.tags.includes('curious')), JSON.stringify(music.map(track => track.tags)));
+});
+
+// 0.90 (owner request 2026-11-04: "the program should search Freesound according to the video, not random music or
+// sfx that never match"): each cue is searched by its own words, each story sound for the thing on screen, the found
+// track goes to its cue, nothing is searched twice, and a recent video's tracks are not used again.
+test('0.90: Freesound is searched per cue and per thing on screen; each cue keeps the track found for it', async t => {
+  const {cueSearch, rankFound, subjectQueries} = require('../sound-online');
+  const pizz = cueSearch({mood: 'curious', prompt: 'Light pizzicato strings and soft marimba, 96 BPM, no vocals'}, 'tribal');
+  assert.deepEqual(pizz.queries, ['tribal pizzicato music', 'tribal curious music', 'curious tribal music']);
+  assert.ok(['tribal', 'pizzicato', 'strings', 'marimba', 'curious'].every(word => pizz.want.includes(word)), pizz.want.join(' '));
+  const free = cueSearch({mood: 'curious', prompt: 'Instrumental background music for a YouTube video about stone age finance: curious, tribal, cinematic, steady groove'});
+  assert.ok(free.queries.every(q => !/stone|finance|youtube/.test(q)), `topic words are never searched: ${free.queries}`);
+  assert.deepEqual(subjectQueries('animal', 'mammoth'), ['elephant trumpet']);
+  assert.deepEqual(subjectQueries('fire', 'cave'), ['cave fire crackling', 'campfire crackling']);
+  const ranked = rankFound([{id: 'a', tags: ['music'], title: 'loop', downloads: 90000}, {id: 'b', tags: ['tribal', 'drums'], title: 'tribal drums', downloads: 40}], ['tribal', 'drums']);
+  assert.equal(ranked[0].id, 'b', 'a sound that says what the video needs beats a merely popular one');
+
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'sound-video-'));
+  const store = new Store(':memory:', {artifactRoot: dataRoot});
+  t.after(() => { store.close(); fs.rmSync(dataRoot, {recursive: true, force: true}); });
+  const net = network(), connectors = new ConnectorSlots(store, protector, net.fetch), quota = new QuotaLedger(store);
+  const analyze = async file => ({durationSeconds: fs.statSync(file).size > 3000 ? 150 : 1.2, integratedLoudnessLufs: -16, maxVolumeDb: -2});
+  const library = new SoundLibrary(store, {dataRoot, analyze}), online = new SoundOnline(store, connectors, library, quota, {fetch: net.fetch, pauseMs: 0});
+  const saved = connectors.save({name: 'Freesound', provider: 'freesound', key: 'free-key-0123456789', termsConfirmed: true});
+  await connectors.test(saved.id, saved.revision);
+  const filled = [];
+  online.onFilled = scope => filled.push(scope);
+  const cues = [{id: 'cue001', mood: 'curious', prompt: 'Light pizzicato strings and soft marimba', start: 0, end: 40}, {id: 'cue002', mood: 'dramatic', prompt: 'Big taiko drums and low brass', start: 40, end: 90}];
+  const needs = {kinds: [], subjects: [{kind: 'fire', subject: 'campfire'}, {kind: 'animal', subject: 'mammoth'}, {kind: 'waves', subject: 'harbor'}], flavour: 'tribal', recent: []};
+  const before = net.calls.length;
+  assert.ok(online.autoFill('video-3', cues, needs));
+  const done = await online.processNextFill();
+  assert.equal(done.progress.failed, 0, JSON.stringify(done.progress.problems));
+  const queries = net.calls.slice(before).filter(call => call.url.includes('/apiv2/search/')).map(call => new URL(call.url).searchParams.get('query'));
+  assert.deepEqual(queries, ['campfire crackling', 'elephant trumpet', 'harbor seagulls water', 'tribal pizzicato music', 'tribal taiko music']);
+  const sfx = library.tracks('sfx');
+  assert.ok(M.subjectEffect(sfx, 'fire', 'campfire') && M.subjectEffect(sfx, 'animal', 'mammoth') && M.subjectEffect(sfx, 'waves', 'harbor'), 'each thing on screen has its own sound');
+  assert.equal(M.subjectEffect(sfx, 'waves', 'ocean'), null, 'another thing does not take it');
+  const picks = filled[0].picks;
+  assert.ok(picks.cue001.track && picks.cue002.track && picks.cue001.track !== picks.cue002.track, JSON.stringify(picks));
+  assert.ok(library.tracks('music').find(track => track.id === picks.cue002.track).tags.includes('taiko'), 'the track carries the words it was found by');
+  // Asked again for the same video: the library already answers every cue and thing, so nothing is searched.
+  assert.equal(online.autoFill('video-3', cues, needs), null);
+  assert.throws(() => online.autoFill('video-3', cues, needs, 'Owner', {strict: true}), /already has music for every cue/);
+  // The next video with the same cues: the tracks of recent videos are avoided, so it gets new ones.
+  assert.ok(online.autoFill('video-4', cues, {...needs, subjects: [], recent: [picks.cue001.track, picks.cue002.track]}));
+  await online.processNextFill();
+  const next = filled[1].picks;
+  assert.ok(next.cue001.track !== picks.cue001.track && next.cue002.track !== picks.cue002.track, JSON.stringify(next));
 });

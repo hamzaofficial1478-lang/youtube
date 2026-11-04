@@ -6,7 +6,8 @@ const SCHEMA = 'ytprod.audio/1';
 const DEFAULTS = Object.freeze({schema: SCHEMA, mode: 'normalize', targetLufs: -16, truePeakDb: -2});
 const MIX_FILTERS = Object.freeze(['amix', 'adelay', 'afade', 'atrim', 'asplit', 'sidechaincompress', 'alimiter', 'volume', 'anull', 'anullsink', 'asetpts', 'acrossover']);
 const REQUIRED_FILTERS = Object.freeze(['aformat', 'loudnorm', 'silencedetect', ...MIX_FILTERS]);
-const MUSIC_DEFAULTS = Object.freeze({enabled: false, levelLufs: -26, duck: 'medium', fadeSeconds: 1.5, scoreId: null});
+// 0.90: the bed starts 6 dB under the voice and dips a few dB more while the narrator speaks (it was -26 with a 15-20 dB dip).
+const MUSIC_DEFAULTS = Object.freeze({enabled: false, levelLufs: -22, duck: 'medium', fadeSeconds: 1.5, scoreId: null});
 const SFX_DEFAULTS = Object.freeze({enabled: false, density: 'accent', levelDb: -12});
 const DUCKS = Object.freeze(['off', 'light', 'medium', 'strong']), DENSITIES = Object.freeze(['none', 'subtle', 'accent', 'rich']);
 const fail = message => { throw Object.assign(new Error(message), {status: 400}); };

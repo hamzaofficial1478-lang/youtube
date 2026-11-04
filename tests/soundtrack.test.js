@@ -73,8 +73,8 @@ test('real FFmpeg mixes music under the voice and effects on top, for every duck
 test('the voice-over carve: under the voice the music gives up its speech band and keeps its bass', {skip: !R.resolveExecutable('ffmpeg') && 'FFmpeg is not installed'}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'carve-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
-  // The voice: a 2.5 kHz tone from 3 s on; the music: pink noise all the way through.
-  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'sine=f=2500:d=8:sample_rate=48000,volume=0.5,afade=t=in:st=3:d=0.01', '-y', path.join(dir, 'voice.wav')]);
+  // The voice: a loud 2.5 kHz tone (lavfi's sine starts at 1/8, so volume 4 is 0.5) from 3 s on; the music: pink noise all the way through.
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'sine=f=2500:d=8:sample_rate=48000,volume=4,afade=t=in:st=3:d=0.01', '-y', path.join(dir, 'voice.wav')]);
   await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'anoisesrc=d=8:c=pink:a=0.4:r=48000', '-y', path.join(dir, 'music.wav')]);
   const graph = M.mixGraph({music: [{start: 0, end: 8, entry: 'cut', exit: 'cut', measuredLufs: -20}], sfx: [], settings: {music: {...A.MUSIC_DEFAULTS, enabled: true, duck: 'medium'}, sfx: A.SFX_DEFAULTS}});
   assert.match(graph, /acrossover=split=300 4000/);
@@ -86,6 +86,31 @@ test('the voice-over carve: under the voice the music gives up its speech band a
   const bass = await drop('lowpass=f=150,lowpass=f=150,lowpass=f=150'), speech = await drop('highpass=f=500,highpass=f=500,lowpass=f=1000,lowpass=f=1000,lowpass=f=1000');
   assert.ok(speech >= 6, `the speech band makes room (${speech.toFixed(1)} dB)`);
   assert.ok(speech - bass >= 3, `the bass stays (${bass.toFixed(1)} dB against ${speech.toFixed(1)} dB)`);
+});
+
+// 0.90 (owner report 2026-11-04: music and effects could not be heard). The old carve pushed the music about 20 dB
+// under a normal voice. Now the dip under the voice is a few dB, it grows from light to strong, and the music between
+// lines plays at its level.
+test('0.90: under a normal voice the music dips a few dB, not twenty', {skip: !R.resolveExecutable('ffmpeg') && 'FFmpeg is not installed'}, async t => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dip-'));
+  t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
+  // The voice: a 1 kHz tone at about -16 LUFS (lavfi's sine starts at 1/8) from 3 s on; the music: pink noise. The level is read with 1 kHz notched out.
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'sine=f=1000:d=8:sample_rate=48000,volume=1.94,afade=t=in:st=3:d=0.01', '-y', path.join(dir, 'voice.wav')]);
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'anoisesrc=d=8:c=pink:a=0.2:r=48000', '-y', path.join(dir, 'music.wav')]);
+  const notch = Array(4).fill('bandreject=f=1000:width_type=q:w=1').join(',');
+  const dips = {};
+  for (const duck of ['light', 'medium', 'strong']) {
+    fs.writeFileSync(path.join(dir, 'graph.txt'), M.mixGraph({music: [{start: 0, end: 8, entry: 'cut', exit: 'cut', measuredLufs: -20}], sfx: [], settings: {music: {...A.MUSIC_DEFAULTS, enabled: true, duck}, sfx: A.SFX_DEFAULTS}, voiceLufs: -16, targetLufs: -16}));
+    await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'voice.wav', '-i', 'music.wav', '-filter_complex_script', 'graph.txt', '-map', '[out]', '-y', 'mix.wav'], {cwd: dir});
+    const level = async (from, to) => Number(/RMS level dB: (-?[\d.]+)/.exec((await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'mix.wav', '-af', `atrim=${from}:${to},${notch},astats=measure_overall=RMS_level:measure_perchannel=none`, '-f', 'null', '-'], {cwd: dir})).stderr)[1]);
+    dips[duck] = (await level(0.5, 2.5)) - (await level(4, 7.5));
+  }
+  assert.ok(dips.medium >= 2 && dips.medium <= 10, `medium dips ${dips.medium.toFixed(1)} dB`);
+  assert.ok(dips.light < dips.medium && dips.medium < dips.strong, `light ${dips.light.toFixed(1)}, medium ${dips.medium.toFixed(1)}, strong ${dips.strong.toFixed(1)} dB`);
+  assert.ok(dips.strong <= 16, `even strong leaves the music audible (${dips.strong.toFixed(1)} dB)`);
+  // The levels follow the voice's real loudness: a narration kept at -20 LUFS gets music 4 dB lower than at -16.
+  const gains = voiceLufs => M.mixGains({music: [{measuredLufs: -20}], settings: {music: {levelLufs: -22}, sfx: {levelDb: -12}}, voiceLufs, targetLufs: -16}).music[0];
+  assert.equal(gains(-16) - gains(-20), 4);
 });
 
 // 0.41: an effect's hit lands on its moment (video-use: start the file its attack earlier).
@@ -165,4 +190,18 @@ test('0.87: story sounds follow the drawings and places, the world colours the m
   const out = SoundtrackRoom.prototype.soundtrackFor.call(fakeRoom, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
   assert.deepEqual(out.skipped.sort(), ['animal', 'crowd', 'fire']);
   assert.ok(out.sfx.length && out.sfx.every(item => ['wind', 'pop'].includes(item.kind)), JSON.stringify(out.sfx.map(item => item.kind)));
+  // 0.90: each story sound names its thing on screen, Freesound is searched for it, and the render plays the sound found
+  // for that thing (a mammoth's trumpet, not any animal); the owner's pick for the slot still wins.
+  assert.deepEqual(M.storySubjects(shots, {density: 'accent'}), [{kind: 'fire', subject: 'campfire'}, {kind: 'fire', subject: 'cave'}, {kind: 'animal', subject: 'mammoth'}, {kind: 'wind', subject: 'prehistoric'}, {kind: 'crowd', subject: 'crowd'}].sort((a, b) => (a.subject < b.subject ? -1 : 1)));
+  assert.deepEqual(M.storySubjects(shots, {density: 'none'}), []);
+  assert.equal(events.find(item => item.kind === 'animal').subject, 'mammoth');
+  assert.equal(events.find(item => item.kind === 'pop')?.subject, undefined, 'only story sounds name a thing');
+  const trumpet = {id: 'a'.repeat(64), kind: 'sfx', tags: ['animal', 'mammoth', 'elephant', 'trumpet'], title: 'elephant trumpet', seconds: 2};
+  assert.equal(M.subjectEffect([trumpet, {...trumpet, id: 'b'.repeat(64), tags: ['animal', 'roar']}], 'animal', 'mammoth').id, trumpet.id);
+  const withOwn = {...fakeRoom, sounds: {tracks: () => [trumpet]}, soundAsset: id => ({id, probe: {peakDb: -6}, library: {}}), settings: () => ({source: 'library', sfxPicks: {}})};
+  const own = SoundtrackRoom.prototype.soundtrackFor.call(withOwn, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
+  assert.ok(own.sfx.some(item => item.kind === 'animal' && item.measuredPeakDb === -6), 'the mammoth plays its own sound though the animal slot is empty');
+  assert.ok(!own.skipped.includes('animal'));
+  const picked = SoundtrackRoom.prototype.soundtrackFor.call({...withOwn, settings: () => ({source: 'library', sfxPicks: {animal: 'c'.repeat(64)}}), library: () => [{kind: 'pop', asset}, {kind: 'animal', asset}, {kind: 'wind', asset}]}, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
+  assert.ok(picked.sfx.some(item => item.kind === 'animal' && item.measuredPeakDb === -3), 'the owner\'s pick for the slot wins');
 });

@@ -158,11 +158,19 @@ class SoundtrackRoom {
   needs(inputs) {
     const usage = inputs.spec?.audio?.sfxUsage, density = M.DENSITIES.includes(usage) && usage !== 'none' ? usage : 'accent';
     const sketches = inputs.manifest.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.sketch));
-    return {kinds: usage === 'none' ? [] : M.neededEffects(sketches, {density, engine: inputs.engine}), flavour: M.ERA_MUSIC[inputs.manifest.plan.world?.era] || null};
+    // 0.90: also the things on screen its story sounds belong to, and the tracks of recent videos (so it gets new ones).
+    return {kinds: usage === 'none' ? [] : M.neededEffects(sketches, {density, engine: inputs.engine}), subjects: usage === 'none' ? [] : M.storySubjects(sketches, {density, engine: inputs.engine}),
+      flavour: M.ERA_MUSIC[inputs.manifest.plan.world?.era] || null, recent: this.recentTracks(inputs.family.id, inputs.content.id)};
   }
   // Ask Freesound again for a video whose score or effects are not complete (EditingRoom.autoAudio).
-  askFreesound(contentId) {
+  // 0.90: the owner's "Find sounds for this video" click uses the same needs and says why nothing was queued.
+  askFreesound(contentId, {by = null} = {}) {
     const inputs = this.scoreInputs(contentId), score = this.latestScore(contentId);
+    if (by) {
+      requireValue(inputs.ready, inputs.blockers[0], 409);
+      requireValue(this.onScored && this.settings(inputs.family.id).source === 'library', 'This channel takes its music from ElevenLabs, not the sound library.', 409);
+      return this.onScored(contentId, score?.current ? score.cues : [], this.needs(inputs), {by: person(by), strict: true});
+    }
     if (!inputs.ready || !this.onScored || this.settings(inputs.family.id).source !== 'library') return null;
     try { return this.onScored(contentId, score?.current ? score.cues : [], this.needs(inputs)); } catch (error) { console.error('Automatic Freesound fill:', error.message); return null; }
   }
@@ -272,13 +280,16 @@ class SoundtrackRoom {
   }
   // The video's music picked again from the library (0.74: after Freesound added music for its moods). Same cues and
   // timing, a new revision; nothing happens when the score is out of date or the tracks would not change.
-  repickTracks(contentId, by) {
+  // 0.90: `picks` are the tracks Freesound found for single cues ({cueId: {track, prompt}}); a cue keeps its own while
+  // its prompt is unchanged.
+  repickTracks(contentId, by, picks = {}) {
     const latest = this.latestScore(contentId);
     if (!latest?.current) return null;
     const inputs = this.scoreInputs(contentId), tracks = inputs.ready ? this.libraryTracks(inputs.family.id) : [];
     if (!tracks.length) return null;
     const row = this.scoreRow(latest.id), payload = JSON.parse(row.payload);
-    const cues = M.assignTracks(payload.cues.map(({track, offset, ...cue}) => cue), tracks, {recent: this.recentTracks(inputs.family.id, contentId)});
+    const own = cue => picks?.[cue.id]?.prompt === cue.prompt && tracks.some(track => track.id === picks[cue.id].track) ? picks[cue.id].track : null;
+    const cues = M.assignTracks(payload.cues.map(({track, offset, ...cue}) => (own(cue) ? {...cue, track: own(cue)} : cue)), tracks, {recent: this.recentTracks(inputs.family.id, contentId)});
     if (hash(cues.map(cue => cue.track)) === hash(payload.cues.map(cue => cue.track))) return latest;
     return this.store.transaction(() => this.insertScore({inputs, score: {summary: payload.summary, cues}, warnings: payload.warnings || [], source: row.source, note: 'Music picked again after Freesound added tracks for this video', createdBy: by}));
   }
@@ -491,13 +502,19 @@ class SoundtrackRoom {
         return {label: clip.label, start, seconds, sketch, times: Sk.timing(sketch, words.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: word.start - start})))};
       });
       out.events = M.sfxEvents({clips, density: config.sfx.density, engine});
-      const library = new Map(this.library(content.familyId).map(item => [item.kind, item]));
+      const settings = this.settings(content.familyId), library = new Map(this.library(content.familyId).map(item => [item.kind, item]));
+      // 0.90: a story sound plays the sound found for its own thing (the campfire, the mammoth) when the library has one,
+      // unless the owner chose the slot's sound.
+      const sounds = settings.source === 'library' && this.sounds ? this.sounds.tracks('sfx') : [];
+      const own = event => (event.subject && !settings.sfxPicks?.[event.kind] ? M.subjectEffect(sounds, event.kind, event.subject) : null);
+      for (const event of out.events) { const found = own(event); if (found) event.own = this.soundAsset(found.id); }
       // A story sound the library lacks is left out (0.87); the other effects stay required.
-      out.skipped = [...new Set(out.events.filter(event => M.STORY_SFX.includes(event.kind) && !library.get(event.kind)?.asset).map(event => event.kind))];
-      out.events = out.events.filter(event => !out.skipped.includes(event.kind));
-      const missing = [...new Set(out.events.map(event => event.kind))].filter(kind => !library.get(kind)?.asset);
-      requireValue(!missing.length, this.settings(content.familyId).source === 'library' ? `Your sound library has no sound for: ${missing.join(', ')}. Import effects whose names say what they are (for example "whoosh"), or choose one per slot in Room 07.` : `Generate the sound-effect library first (missing: ${missing.join(', ')}).`, 409);
-      for (const event of out.events) { const asset = library.get(event.kind).asset; out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, ...this.fileOf(asset)}); }
+      out.skipped = [...new Set(out.events.filter(event => M.STORY_SFX.includes(event.kind) && !event.own && !library.get(event.kind)?.asset).map(event => event.kind))];
+      out.events = out.events.filter(event => !(M.STORY_SFX.includes(event.kind) && !event.own && !library.get(event.kind)?.asset));
+      const missing = [...new Set(out.events.filter(event => !event.own).map(event => event.kind))].filter(kind => !library.get(kind)?.asset);
+      requireValue(!missing.length, settings.source === 'library' ? `Your sound library has no sound for: ${missing.join(', ')}. Import effects whose names say what they are (for example "whoosh"), or choose one per slot in Room 07.` : `Generate the sound-effect library first (missing: ${missing.join(', ')}).`, 409);
+      for (const {own: found, ...event} of out.events) { const asset = found || library.get(event.kind).asset; out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, ...this.fileOf(asset)}); }
+      out.events = out.events.map(({own: found, ...event}) => event);
     }
     return out;
   }

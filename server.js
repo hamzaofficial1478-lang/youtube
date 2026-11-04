@@ -80,7 +80,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const soundLibrary=new SoundLibrary(store,{dataRoot,renders:renderRoom,ffmpeg,ffprobe});
   const soundtrack=new SoundtrackRoom(store,connectors,sceneRoom,{dataRoot,ai,renders:renderRoom,ffmpeg,ffprobe,sounds:soundLibrary});
   // 0.61: Freesound effects and Jamendo music, searched and added on the owner's click.
-  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);try{store.repairUnreachedJobs();}catch(error){console.error('Repairing unreached jobs:',error.message);}soundOnline.onFilled=(scope,by)=>{const repicked=soundtrack.repickTracks(scope.contentId,by);try{editingRoom.refreshAutoAudio(scope.contentId);}catch(error){console.error('Updating the edit\'s music:',error.message);}return repicked;};soundtrack.onScored=(contentId,cues,needs)=>soundOnline.autoFill(contentId,cues,needs);soundtrack.onScoreChanged=contentId=>editingRoom.refreshAutoAudio(contentId);
+  const soundOnline=new SoundOnline(store,connectors,soundLibrary,quota);try{store.repairUnreachedJobs();}catch(error){console.error('Repairing unreached jobs:',error.message);}soundOnline.onFilled=(scope,by)=>{const repicked=soundtrack.repickTracks(scope.contentId,by,scope.picks);try{editingRoom.refreshAutoAudio(scope.contentId);}catch(error){console.error('Updating the edit\'s music:',error.message);}return repicked;};soundtrack.onScored=(contentId,cues,needs,click)=>click?soundOnline.autoFill(contentId,cues,needs,click.by,{strict:true}):soundOnline.autoFill(contentId,cues,needs);soundtrack.onScoreChanged=contentId=>editingRoom.refreshAutoAudio(contentId);
   editingRoom.soundtrack=soundtrack;
   const voiceRuntime=new VoiceRuntime(store,connectors,{artifactDir:path.join(dataRoot,'voice-artifacts'),...voiceOptions,ffmpeg,ffprobe});
   let timer, ffmpegAvailable=null, ticks=0;
@@ -170,6 +170,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(exported){const data=store.exportContent(exported[1]),name=`${String(data.content.title||'draft').replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-+|-+$/g,'').slice(0,60)||'draft'}-v${data.content.revision}`;if(url.searchParams.get('format')==='json'){res.setHeader('Content-Disposition',`attachment; filename="content-${exported[1]}-v${data.content.revision}.json"`);return json(res,200,data);}const file=Documents.docxFile(Documents.planningBlocks(data));res.writeHead(200,{'Content-Type':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','Content-Length':file.length,'Content-Disposition':`attachment; filename="${encodeURIComponent(name)}.docx"; filename*=UTF-8''${encodeURIComponent(name)}.docx`,'Cache-Control':'no-store'});return res.end(file);}
         // The live player (0.83): the drawing engine, the edit as playable data, its narration and its painted pictures.
         if(pathname==='/engine.js'){res.writeHead(200,{'Content-Type':'text/javascript; charset=utf-8','Cache-Control':'no-store'});return res.end(engineScript());}
+        // 0.90: the edit's own music and effect files for the live player.
+        const editSound=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/sound\/([a-f0-9]{64})$/);
+        if(editSound){const {file,mime}=editingRoom.soundFile(editSound[1],editSound[2]);return sendMedia(req,res,file,mime);}
         const playerData=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(player|narration)$/);
         if(playerData){if(playerData[2]==='player')return json(res,200,editingRoom.player(playerData[1]));const {file,mime}=editingRoom.narrationFile(playerData[1]);return sendMedia(req,res,file,mime);}
         const artFile=pathname.match(/^\/api\/art\/([a-f0-9]{64})$/);
@@ -368,6 +371,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/sound-online/add'&&req.method==='POST')return json(res,200,await soundOnline.add(body));
         if(pathname==='/api/trend-niche-suggest'&&req.method==='POST')return json(res,200,await trends.suggestNiche(body));
         if(pathname==='/api/sound-online/fill'&&req.method==='POST')return json(res,200,soundOnline.queueFill(body));
+        const videoSounds=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/freesound$/);if(videoSounds&&req.method==='POST')return json(res,200,soundtrack.askFreesound(videoSounds[1],{by:body?.requestedBy||'Owner'}));
         const soundImport=pathname.match(/^\/api\/sound-imports\/([a-f0-9-]+)\/continue$/);
         if(soundImport&&req.method==='POST')return json(res,200,soundLibrary.continueImport(soundImport[1]));
         const soundEdit=pathname.match(/^\/api\/sounds\/([a-f0-9]{64})$/);

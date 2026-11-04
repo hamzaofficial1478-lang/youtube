@@ -444,7 +444,9 @@ class RenderRoom {
           // Each effect hits on its moment: its attack (the build before the hit) is measured once per file.
           const attacks = new Map();
           for (const hit of soundtrack.sfx) if (!attacks.has(hit.sha256)) attacks.set(hit.sha256, M.attackOf((await exec('measure effect attack', job.paths.ffmpeg, M.attackArgs(this.localFile(hit.relativePath), hit.measuredPeakDb), 60000)).stderr));
-          const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx.map(hit => ({...hit, attackSeconds: attacks.get(hit.sha256)})), settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS}});
+          // 0.90: music and effects keep their balance with the voice's real loudness (a narration kept at its own level).
+          const voiceLufs = config.mode === 'normalize' ? config.targetLufs : measured.integratedLufs;
+          const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx.map(hit => ({...hit, attackSeconds: attacks.get(hit.sha256)})), settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS}, voiceLufs, targetLufs: config.targetLufs});
           fs.writeFileSync(path.join(work, 'mix-graph.txt'), graph);
           const mixed = path.join(work, 'mix.wav'), mixArgs = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', narrationFile, ...files.flatMap((file, k) => [...(loops.has(k) ? ['-stream_loop', '-1'] : []), '-i', file]), '-filter_complex_script', 'mix-graph.txt', '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s24le', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-y', mixed];
           this.progress(job.id, `mixing ${soundtrack.music.length} music cue(s) and ${soundtrack.sfx.length} sound effect(s)`, 0, total);

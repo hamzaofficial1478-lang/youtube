@@ -59,7 +59,8 @@ class PackagingRoom {
     const approvedRender = this.approvedRender(contentId);
     const voice = this.store.voiceProfiles(family.id).at(-1)?.rights?.ownershipBasis || null;
     // The library tracks the approved render plays, for their credit lines (0.60).
-    const music = approvedRender ? (JSON.parse(this.db.prepare('SELECT scope FROM render_jobs WHERE id=?').get(approvedRender.id).scope).edit?.soundtrack?.music || []).map(cue => { try { return this.db.prepare('SELECT title, attribution FROM sounds WHERE id=?').get(cue.sha256) || null; } catch { return null; } }).filter(Boolean) : [];
+    // 0.90: effects too (a CC BY sound from Freesound needs its credit as much as a track does).
+    const music = approvedRender ? (track => [...(track?.music || []), ...(track?.sfx || [])])(JSON.parse(this.db.prepare('SELECT scope FROM render_jobs WHERE id=?').get(approvedRender.id).scope).edit?.soundtrack).map(cue => { try { return this.db.prepare('SELECT title, attribution FROM sounds WHERE id=?').get(cue.sha256) || null; } catch { return null; } }).filter(Boolean) : [];
     return {content, family, shots, spec, chapters, approvedRender, voice, music, blockers, ready: !blockers.length};
   }
   // The newest render the owner approved in Room 08 that is still current (the package's video).

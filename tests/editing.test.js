@@ -1493,6 +1493,11 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   assert.equal(repicked.revision, scored.revision + 1);
   assert.equal(repicked.cues[0].asset.library.title, 'mystery suspense curious investigation', 'the curious cue takes the better fitting new track');
   assert.match(repicked.note, /picked again/);
+  // 0.90: a track Freesound found for one cue goes to that cue while its prompt is unchanged.
+  const epic = repicked.cues[1].asset.id, mine = room.repickTracks(content.id, 'Owner', {[repicked.cues[0].id]: {track: epic, prompt: repicked.cues[0].prompt}});
+  assert.equal(mine.cues[0].asset.id, epic, 'the cue keeps the track found for it');
+  const again = room.repickTracks(content.id, 'Owner', {[repicked.cues[0].id]: {track: epic, prompt: 'another prompt'}});
+  assert.equal(again.cues[0].asset.library.title, 'mystery suspense curious investigation', 'a changed prompt picks again');
   // The effect slots are filled by the sounds' names; the owner can choose another one per slot.
   const slots = room.library(family.id), slot = kind => slots.find(item => item.kind === kind);
   assert.deepEqual([slot('whoosh').asset.key, slot('cash').asset.key, slot('thunder').asset], ['whoosh', 'cash register ching', null]);
@@ -1503,7 +1508,7 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   // The render: the edit names the score, the 12 s track under a 20 s cue loops, and the mix is checked.
   const edit = await editing.generate(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id});
   // 0.86: the draft already carries the video's current score and the library's effects.
-  assert.deepEqual([edit.timeline.audio.music.enabled, edit.timeline.audio.music.scoreId, edit.timeline.audio.sfx.enabled], [true, repicked.id, true]);
+  assert.deepEqual([edit.timeline.audio.music.enabled, edit.timeline.audio.music.scoreId, edit.timeline.audio.sfx.enabled], [true, again.id, true]);
   assert.match(edit.autoAudio.join(' '), /music on \(score r\d+[\s\S]*sound effects on/);
   // 0.88: the timeline has its own music row (each cue with its mood and track) and sound-effect row.
   const tracks = editing.drawings(edit.id).audio;
