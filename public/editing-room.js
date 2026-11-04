@@ -502,6 +502,7 @@ function playLoad(edit) {
     await Promise.all([data.fonts.heading, data.fonts.body, data.fonts.hand].map(name => document.fonts.load(`40px "${name}"`).catch(() => null)));
     if (PLAY.rev !== data.revisionId) return;
     PLAY.data = data;
+    playSoundsLoad(data.audio);
     PLAY.audio = new Audio(data.narration);
     PLAY.audio.preload = 'auto';
     PLAY.audio.addEventListener('ended', () => { if (PLAY.playing) playPause(); });
@@ -615,7 +616,50 @@ function playTick() {
   if (t >= playTotal() - 0.5 / PLAY.data.fps) { TL.at = Math.max(0, playTotal() - 1 / PLAY.data.fps); playPause(); return; }
   TL.at = t;
   playDraw(t);
+  playSounds(t);
   PLAY.raf = requestAnimationFrame(playTick);
+}
+// 0.90 (owner report 2026-11-04: "the music and sound effects are added but I cannot hear them"): the player played
+// only the narration. Music cues play from their in-point with their fades, a little quieter while the narrator speaks
+// (the edit's ducking), and effects fire on their moments, at the render's levels (the render also evens out the
+// narration and carves the music under it, so the final mix sounds a little cleaner).
+function playSoundsLoad(audio) {
+  playSoundsStop();
+  PLAY.sounds = {note: audio?.note || '', dip: Math.pow(10, -(audio?.dipDb || 0) / 20), speech: audio?.speech || [],
+    music: (audio?.music || []).map(cue => { const el = new Audio(cue.src); el.preload = 'auto'; el.loop = !!cue.loop; return {cue, el}; }),
+    sfx: (audio?.sfx || []).map(hit => ({hit})), bank: {}, last: null};
+  for (const {hit} of PLAY.sounds.sfx) if (!PLAY.sounds.bank[hit.src]) { const el = new Audio(hit.src); el.preload = 'auto'; PLAY.sounds.bank[hit.src] = el; }
+}
+function playSoundsStop() {
+  for (const {el} of PLAY.sounds?.music || []) el.pause();
+  for (const el of Object.values(PLAY.sounds?.bank || {})) el.pause();
+  if (PLAY.sounds) PLAY.sounds.last = null;
+}
+function playSounds(t) {
+  const S = PLAY.sounds;
+  if (!S || PLAY.silent) return;
+  const speaking = S.speech.some(([a, b]) => t >= a - 0.05 && t < b + 0.2);
+  for (const item of S.music) {
+    const {cue, el} = item;
+    if (t < cue.start || t >= cue.end) { if (!el.paused) el.pause(); continue; }
+    const into = t - cue.start, fade = Math.min(1, cue.fadeIn > 0 ? into / cue.fadeIn : 1, cue.fadeOut > 0 ? (cue.end - t) / cue.fadeOut : 1);
+    // The dip follows the voice smoothly, as the render's compressor does.
+    item.duck = (item.duck ?? 1) + ((speaking ? S.dip : 1) - (item.duck ?? 1)) * 0.15;
+    el.volume = Math.max(0, Math.min(1, cue.volume * fade * item.duck));
+    const want = cue.offset + into, length = Number.isFinite(el.duration) && el.duration > 0 ? el.duration : null;
+    if (el.paused && !(length && !cue.loop && want >= length - 0.05)) {
+      try { el.currentTime = cue.loop && length ? want % length : want; } catch { /* not loaded yet; it starts from where it can */ }
+      el.play().catch(() => {});
+    }
+  }
+  // Effects whose moment passed since the last frame fire once (a seek or a start never fires the ones before it).
+  if (S.last !== null && t > S.last) for (const {hit} of S.sfx) if (hit.at > S.last && hit.at <= t) {
+    const base = S.bank[hit.src], el = base.paused ? base : base.cloneNode();
+    el.volume = Math.max(0, Math.min(1, hit.volume));
+    try { el.currentTime = 0; } catch { /* plays from the start anyway */ }
+    el.play().catch(() => {});
+  }
+  S.last = t;
 }
 function playStart() {
   if (!PLAY.data || PLAY.playing) return;
@@ -633,6 +677,7 @@ function playHalt() {
   if (PLAY.playing && !PLAY.silent && PLAY.audio) TL.at = PLAY.audio.currentTime;
   PLAY.playing = false; cancelAnimationFrame(PLAY.raf);
   PLAY.audio?.pause(); PLAY.video?.pause(); PLAY.video = null;
+  playSoundsStop();
 }
 function playPause() { playHalt(); render(); }
 function playSeek(t) {
@@ -640,6 +685,7 @@ function playSeek(t) {
   if (!PLAY.playing) return;
   PLAY.t0 = performance.now() - TL.at * 1000;
   if (!PLAY.silent) PLAY.audio.currentTime = TL.at;
+  playSoundsStop(); // music finds its place again on the next frame; effects before the new spot stay quiet
 }
 function playViewer(edit, content) {
   const data = PLAY.data, [W, H] = playSize(data || {vertical: edit.timeline.format === 'shorts'}), total = edit.timeline.totalFrames / edit.timeline.fps, clip = tlClipAt(edit.timeline, TL.at);
@@ -648,7 +694,7 @@ function playViewer(edit, content) {
   const video = tlRender(content);
   const rendered = video ? `<details class="tl-rendered" data-keep-open="tl-rendered"><summary>The rendered video (r${video.scope.edit.revision}${video.scope.edit.revisionId === edit.id ? '' : ', an earlier revision'} · ${renderSizeName(video)})</summary><video class="tl-video" data-tl-video src="/api/renders/${esc(video.id)}/video" controls preload="metadata"></video><p class="hint">The finished file, with music and the caption look. Playing it moves the playhead too.</p></details>` : '';
   return `<div class="tl-viewer"><div class="tl-screen ${data?.vertical || edit.timeline.format === 'shorts' ? 'vertical' : ''}"><canvas data-tl-canvas width="${W}" height="${H}" aria-label="The edit at the playhead"></canvas>${status}</div>${transport}
-    <p class="hint">Live: drawn shots are drawn exactly as the render draws them, on the narrator's words. Here transitions show as dissolves and captions plainly; music, graphics and the caption look come with the render. Space plays and pauses.</p>${rendered}</div>`;
+    <p class="hint">Live, with the narration, music and sound effects. Space plays and pauses.${PLAY.sounds?.note ? ` ${esc(PLAY.sounds.note)}` : ''}</p>${rendered}</div>`;
 }
 // Clicks on the timeline: select an item and move the playhead there; the ruler only moves the playhead.
 document.addEventListener('click', event => {

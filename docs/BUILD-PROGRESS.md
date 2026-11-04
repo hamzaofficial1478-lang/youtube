@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-11-04. Current application: 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
+Last updated: 2026-11-04. Current application: 0.90.0: music and effects you can hear, in the live player too, simple volume steps, Freesound searched for each video, a cleaner Audio Room, on top of 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next: the owner pulls 0.89.0 and restarts; opens a channel on the Motion Graphics engine, chooses Paper collage or Pixel art (or ticks a mix) in the channel's style window, builds a storyboard with Claude and draws the scenes in Room 04 to judge the two looks; Skills -> Usage then lists the skills each step used (designed shots, pictures, the review, the editor).
+Next: the owner pulls 0.90.0 and restarts; presses Play in the Editing Room to hear the music and effects with the narration, sets the volumes in Room 07 (plain steps, Reset to defaults), presses "Find sounds for this video" with Freesound connected, and renders a preview to judge the mix.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,19 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-11-04 - 0.90.0: music and effects you can hear, Freesound by the video, a cleaner Audio Room
+
+Owner report with two screenshots: music and effects were on the timeline but could not be heard; simpler volume controls with a default button; Freesound searched according to the video, not a few library tracks or random sounds; the Audio Room was messy; every description in the program short or a dropdown.
+
+- **Why it was silent.** The live player played only the narration, and in a render the 0.28 carve and duck pushed the music about 20 dB under a normal voice (fixed threshold 0.02, ratios up to 20). With "Keep original levels" the music's level also ignored the narration's real loudness.
+- **Mix** (`music.js` `DUCK`, `mixGains`; `render-room.js` `voiceLufs`): the threshold sits just under the narration, ratios are gentle (light, medium, strong), levels are relative to the narration's measured loudness, the default music level is -22 LUFS. Measured: medium dips about 3 dB, strong about 6 dB, light about 1.6 dB.
+- **Live player** (`EditingRoom.player` `audio`, `GET /api/edit-revisions/:id/sound/:sha256`, public/editing-room.js `playSounds`): music cues from their in-point with fades and a dip while the narrator speaks, effects on their moments, stop and seek handled.
+- **Levels window**: volume steps, ducking and how many effects in words, Reset to defaults, exact numbers under Advanced; Room 07 shows the levels in words.
+- **Freesound by the video** (`sound-online.js` `cueSearch`, `subjectQueries`, `rankFound`, `queueFill` cues/subjects/recent; `music.js` `storySubjects`, `subjectEffect`; `soundtrack.js` `needs`, `repickTracks` picks, `soundtrackFor` own sounds, `askFreesound`; `POST /api/content/:id/freesound`): each cue by its own style words and world, each story sound by its thing on screen, ranked by match, never a recent video's track, nothing searched twice; the render plays each thing's own sound unless the owner picked the slot. CC BY effects are credited in the description.
+- **Screen**: the Audio Room has a short header, Levels first, one Sound library card; `foldLong` folds long paragraphs program-wide to their first sentence with More/Less; the activation policy is a dropdown.
+- **Tests**: @@TESTS@@ tests/soundtrack.test.js "0.90" (the dip measured with real FFmpeg; story subjects and own sounds at render), tests/sound-online.test.js "0.90" (queries, ranking, picks, nothing twice, recent avoided), tests/editing.test.js 0.60 (a cue keeps its found track). Browser on a throwaway copy: the levels steps, Reset and the saved levels in words; the live player playing a cue at volume 0.13 with an effect lined up and Stop pausing it; folding checked on 13 pages and 11 rooms with no page errors.
+- **Not tested**: a live Freesound search (the per-video queries ran against a fake Freesound), real speech and real music in a render on the owner's PC, and how the player sounds on laptop speakers.
 
 ### 2026-11-04 - 0.89.0 paper collage and pixel art, and five repositories' skills in every drawing step
 

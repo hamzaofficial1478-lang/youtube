@@ -210,3 +210,34 @@ Before 0.87 a new score already asked Freesound for its moods and for every empt
 - **Music of the story's world.** The plan's era sets a flavour (`ERA_MUSIC`: prehistoric tribal, ancient, medieval, early-modern orchestral, future futuristic): the free score writes it into every cue, Freesound is searched for "<mood> <flavour> music" first and then "<mood> music", and fetched tracks are tagged with their mood and flavour so the cues pick them.
 - **The edit follows by itself.** After a new score, or when Freesound has added what this video needed, `EditingRoom.refreshAutoAudio` switches the music on (or onto the newer score) and the effects on, as a new edit revision by the program, while the edit's audio is still what the program set (`meta.autoAudioSettings`); an owner's own mix is never overridden. A fill that found nothing does not ask again (`autoAudio(..., {ask: false})`).
 - **Who scores the music.** The channel's soundtrack setting `autoScore` (Room 07 → Soundtrack settings): `free` (default: the program's score from the story's sections and world) or `ai` (when an edit is drafted, Claude or ChatGPT scores the music from the script by itself, using tokens from the channel's limit; the music switches on when that score and its tracks are ready).
+
+## Music and effects you can hear; Freesound searched for each video (0.90)
+
+Owner report 2026-11-04, with two screenshots (the timeline's Music and Sound effects rows, and the levels at "Keep original levels", music -20.5 LUFS, medium ducking, rich effects at -12 dB): "the music and sound effects are added but I cannot hear any of them". Also: simpler volume controls with a default button, Freesound searched according to the video rather than a few library tracks, a cleaner Audio Room, and every description in the program short or a dropdown.
+
+**Why nothing was heard.** Two causes.
+
+- The live player in the Editing Room (0.83) played only the narration. Music and effects came only with a render.
+- In a render the 0.28 voice-over carve and duck (`acrossover` at 300 Hz and 4 kHz, then `sidechaincompress` with a fixed threshold of 0.02 and ratios up to 20 on the speech band and up to 3 on the whole bed) pushed a -20.5 LUFS bed down to about -36 LUFS under a -16 LUFS voice: 20 dB under the narration, which is inaudible on laptop speakers. With "Keep original levels" a quiet narration made it worse, because the music's level ignored the voice's real loudness.
+
+**The mix now** (`music.js` `DUCK`, `mixGains`, `mixGraph`).
+
+- The ducking is a few dB. The compressor's threshold sits just under the narration's own loudness (`voiceLufs` + `rel`), and each choice has a gentle ratio for the whole bed and the speech band: light (bed 1.6, carve 1.4), medium (bed 3, carve 2), strong (8 dB lower threshold, bed 4, carve 2). Measured with a 1 kHz tone at -16 LUFS over pink noise, medium dips about 3 dB, strong about 6 dB (tests/soundtrack.test.js "0.90"). Between lines the music plays at its level.
+- Levels follow the narration's real loudness: the render passes the measured loudness when the narration is kept as it is, and the target when it is evened out, so "Music normal" means the same distance under the voice on every channel.
+- The default music level is -22 LUFS (was -26), 6 dB under a -16 LUFS voice.
+
+**The live player plays them.** `EditingRoom.player` sends the music cues and effects exactly as the render takes them (`soundtrackFor`, with the gains of `M.mixGains`), and the page plays each cue from its in-point with its fades, a little lower while the narrator speaks, and each effect on its moment. Files are served only when the edit's own soundtrack names them (`GET /api/edit-revisions/:id/sound/:sha256`). The render still evens out the narration and carves the music, so the final mix sounds a little cleaner than the player.
+
+**Simple controls.** The Levels window has plain steps: music volume (Very quiet, Quiet, Normal, Loud, Louder: 14, 10, 6, 3 and 0 dB under the voice), how much the music drops while the narrator speaks (No, A little, Some, A lot), effects volume and how many effects (Few, Some, Many), and **Reset to defaults**. The exact numbers stay under "Advanced". Room 07 shows the saved levels in words ("Music normal, lower under the voice · Effects normal, some").
+
+**Freesound searched for each video** (`sound-online.js` `cueSearch`, `subjectQueries`, `rankFound`; `music.js` `storySubjects`, `subjectEffect`).
+
+- Each music cue is searched by its own words: the story's world (tribal for the stone age) and the instruments and style its prompt names (pizzicato, marimba, taiko, brass), then by fewer of them, then by its mood. Words about the topic (the niche, the title) are never searched, because they do not describe music.
+- Each story sound is searched for the thing on screen that makes it (`SUBJECT_QUERY`: the campfire crackles, the mammoth trumpets, the harbour has gulls and water), then for its kind. Each event of the edit names its thing (`subject`), and the render plays the sound found for that thing rather than any sound of its kind, unless the owner chose the slot's sound.
+- Results are ranked by how well their tags and name match the words wanted, then by downloads and rating, Freesound's relevance order breaking ties (the old fill took the most downloaded result whatever it was).
+- A track that a recent video of the channel used is never taken again for a new video, so each video gets its own music. Each cue keeps the track found for it (`repickTracks(contentId, by, picks)`, while the cue's prompt is unchanged), and found files are tagged with the words they were found by.
+- Nothing is searched twice: a cue the library already answers (a track tagged with its words, not used by a recent video) and a thing that already has its sound are skipped. At most 12 cues and 12 things per video, one search a second, inside the hourly allowance.
+- "Find sounds for this video" in Room 07 (`POST /api/content/:id/freesound`) does the same on a click and says why nothing was queued.
+- CC BY effects are credited in the video description too (before, only music was).
+
+**A cleaner room.** The Audio Room has a short header, the Levels card first, the score with three buttons (Score with Claude, Free score, Find sounds for this video), and one Sound library card with the effect slots folded inside. Program-wide, a paragraph longer than about two lines shows its first sentence and "More" (`foldLong` in public/app.js; warnings, errors and paragraphs with controls stay as they are), and stays open across refreshes like every dropdown.

@@ -30,6 +30,32 @@ const PROVIDERS = Object.freeze({
 const SLOT_QUERY = Object.freeze({whoosh: 'whoosh', 'swoosh-up': 'swoosh rise', pop: 'pop', impact: 'impact hit', stamp: 'stamp paper', boom: 'boom explosion', zap: 'electric zap', thunder: 'thunder', ding: 'ding bell', right: 'correct answer', wrong: 'wrong buzzer', tick: 'clock tick', riser: 'riser', sparkle: 'magic sparkle', cash: 'cash register', glitch: 'glitch', scribble: 'pencil scribble', boing: 'boing', heartbeat: 'heartbeat', typing: 'typing keyboard',
   fire: 'campfire crackling', animal: 'elephant trumpet', waves: 'ocean waves', rain: 'rain', wind: 'wind', crowd: 'crowd murmur', birds: 'birds chirping', drum: 'tribal drum hit', clash: 'sword clash', stone: 'stone knock'});
 
+// 0.90 (owner request 2026-11-04: "search Freesound according to the video, not random music or effects that never
+// match"). A story sound is searched for the thing on screen that makes it, then for its kind.
+const SUBJECT_QUERY = Object.freeze({campfire: 'campfire crackling', fire: 'fire burning', candle: 'candle flame', mammoth: 'elephant trumpet', ship: 'ship creaking waves', galleon: 'wooden ship creaking',
+  waves: 'ocean waves', rain: 'rain', storm: 'storm rain thunder', snow: 'cold wind', sword: 'sword clash', shield: 'shield hit', 'stone-axe': 'stone tool knock', spear: 'spear stone',
+  ocean: 'ocean waves', beach: 'beach waves', harbor: 'harbor seagulls water', nature: 'forest birds', park: 'park birds', village: 'village birds ambience', mountains: 'mountain wind', desert: 'desert wind',
+  prehistoric: 'plains wind', cave: 'cave fire crackling', market: 'market crowd', street: 'street ambience', city: 'city ambience', stage: 'audience applause', battlefield: 'battle swords', crowd: 'crowd murmur'});
+const subjectQueries = (kind, subject) => [...new Set([SUBJECT_QUERY[subject] || String(subject).replace(/-/g, ' '), SLOT_QUERY[kind]].filter(Boolean))];
+// A music cue is searched by its own words: the story's world, the instruments and style its prompt names, its mood;
+// then by fewer of them. Words about the topic (a niche, a title) are never searched: they do not describe music.
+const MUSIC_STYLE = new Set(('piano strings guitar acoustic marimba pizzicato synth synthesizer drums percussion flute cello violin viola orchestra orchestral ambient cinematic lofi electronic ukulele harp '
+  + 'bass brass horn horns trumpet bells xylophone glockenspiel kalimba bongo tabla sitar oud didgeridoo ethnic folk celtic medieval ancient tribal futuristic retro chiptune jazz funk hiphop trap rock edm house '
+  + 'techno dubstep classical baroque waltz march organ pad pads arpeggio banjo harmonica accordion saxophone clarinet oboe timpani taiko').split(' '));
+function cueSearch(cue, flavour = null) {
+  const said = M.words(`${cue.prompt || ''}`), moods = M.words(cue.mood).filter(word => M.moodFamilies(word).length || Object.hasOwn(M.MOOD_TAGS, word));
+  const style = [...new Set([...(flavour ? M.words(flavour) : []), ...said.filter(word => MUSIC_STYLE.has(word))])], lead = moods[0] || M.moodFamilies(`${cue.mood} ${cue.prompt}`)[0] || 'background';
+  const queries = [style.length ? `${style.slice(0, 2).join(' ')} music` : null, style.length ? `${style[0]} ${lead} music` : null, flavour ? `${lead} ${flavour} music` : null, `${lead} music`];
+  return {queries: [...new Set(queries.filter(Boolean))].slice(0, 3), want: [...new Set([...style, ...moods, ...M.moodFamilies(`${cue.mood} ${cue.prompt}`)])].slice(0, 8)};
+}
+// The found sounds in the order they fit: their tags and name against the words wanted, then how much they are used,
+// Freesound's own relevance order breaking ties.
+function rankFound(items, want) {
+  const wanted = new Set(want);
+  return items.map((item, k) => ({item, fit: [...new Set([...item.tags, ...M.words(item.title)])].filter(word => wanted.has(word)).length * 2 + Math.log10(1 + (item.downloads || 0)) * 0.4 + (item.rating || 0) * 0.1 - k * 0.05}))
+    .sort((a, b) => b.fit - a.fit).map(({item}) => item);
+}
+
 // A licence a monetized video may use: CC0, or CC BY of any version (credit required).
 function licenceOf(value) {
   const text = String(value || '').trim().toLowerCase();
@@ -56,7 +82,7 @@ class FreesoundClient {
     const url = new URL('search/', PROVIDERS.freesound.api);
     url.searchParams.set('query', clean(query, 100));
     url.searchParams.set('filter', `license:("Creative Commons 0" OR "Attribution") duration:[${kind === 'sfx' ? '0.1 TO 8' : '20 TO 900'}]`);
-    url.searchParams.set('fields', 'id,name,tags,license,username,duration,previews,url');
+    url.searchParams.set('fields', 'id,name,tags,license,username,duration,previews,url,num_downloads,avg_rating');
     url.searchParams.set('page_size', String(Math.max(1, Math.min(60, limit))));
     url.searchParams.set('sort', sort);
     this.requests++;
@@ -71,7 +97,7 @@ class FreesoundClient {
     const data = await response.json();
     return (data.results || []).map(item => ({provider: 'freesound', id: String(item.id), title: clean(String(item.name || '').replace(/\.(wav|mp3|ogg|flac|aiff?)$/i, '').replace(/[-_]+/g, ' '), 120) || `Sound ${item.id}`, author: clean(item.username, 60) || 'unknown',
       seconds: Number(item.duration) || 0, tags: (item.tags || []).map(tag => clean(tag, 30).toLowerCase()).filter(Boolean).slice(0, 15), licence: licenceOf(item.license), page: String(item.url || `https://freesound.org/s/${item.id}/`),
-      preview: item.previews?.['preview-hq-mp3'] || null, download: item.previews?.['preview-hq-mp3'] || null, kind: 'sfx'}));
+      preview: item.previews?.['preview-hq-mp3'] || null, download: item.previews?.['preview-hq-mp3'] || null, downloads: Number(item.num_downloads) || 0, rating: Number(item.avg_rating) || 0, kind: 'sfx'}));
   }
 }
 class JamendoClient {
@@ -129,11 +155,18 @@ class SoundOnline {
   // the music and sfx as per the need of usage"), Freesound is asked by itself, if it is connected and confirmed. Quiet
   // when there is nothing to find, no connection, or another import already running.
   // 0.87: only the effects this video's drawings earn (kinds), and music in the story's world first (flavour).
-  autoFill(contentId, cues, {kinds = null, flavour = null} = {}, by = 'Program (automatic)') {
+  // 0.90: every cue is searched by its own words and every story sound for its own thing, avoiding the tracks of the
+  // channel's recent videos; `strict` (the owner's click) says why nothing was queued instead of staying quiet.
+  autoFill(contentId, cues, {kinds = null, subjects = [], flavour = null, recent = []} = {}, by = 'Program (automatic)', {strict = false} = {}) {
     const connector = this.connectors.list?.().find(item => item.provider === 'freesound' && item.test?.status === 'passed' && !item.busy);
-    if (!connector) return null;
-    try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, music: cues.map(cue => `${cue.mood || ''} ${cue.prompt || ''}`.trim()).filter(Boolean).slice(0, 40), perMood: 3, contentId, ...(kinds ? {kinds, effects: kinds.length > 0} : {}), ...(flavour ? {flavour} : {})}); }
-    catch (error) { if (error instanceof InputError) return null; throw error; }
+    if (!connector) { requireValue(!strict, 'Connect and test Freesound in Connections first.', 409); return null; }
+    try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, cues: cues.slice(0, 40).map((cue, k) => ({id: cue.id || `cue${String(k + 1).padStart(3, '0')}`, mood: cue.mood || '', prompt: cue.prompt || '', seconds: Math.round((cue.end - cue.start) || 30)})), subjects, recent, contentId, ...(kinds ? {kinds, effects: kinds.length > 0} : {}), ...(flavour ? {flavour} : {})}); }
+    catch (error) { if (error instanceof InputError && !strict) return null; throw error; }
+  }
+  // A cue the library already answers: a track tagged with every word the cue is searched by, not used by a recent video.
+  cueCovered(cue, flavour, recent) {
+    const {want} = cueSearch(cue, flavour), need = want.slice(0, 3);
+    return need.length ? this.library.tracks('music').find(track => !recent.includes(track.id) && need.every(word => (track.tags || []).includes(word))) || null : null;
   }
   remember(items) {
     const until = Date.now() + CACHE_MINUTES * 60000;
@@ -207,13 +240,18 @@ class SoundOnline {
     const wanted = input.music === 'all' ? Object.keys(M.MOOD_TAGS) : input.music ? M.moodFamilies(input.music.join(' ')) : [];
     const counts = this.moodCounts(), moods = wanted.filter(mood => counts[mood] < perMood).map(mood => ({mood, need: perMood - counts[mood]}));
     const contentId = typeof input.contentId === 'string' && input.contentId.length <= 80 ? input.contentId : null, flavour = typeof input.flavour === 'string' && /^[a-z -]{2,30}$/.test(input.flavour) ? input.flavour : null;
-    requireValue(kinds.length || moods.length, input.music ? 'Your library already has every effect and enough music for these moods.' : 'Every effect slot already has a sound.', 409);
+    const recent = Array.isArray(input.recent) ? input.recent.filter(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id)).slice(0, 400) : [];
+    requireValue(input.cues === undefined || (Array.isArray(input.cues) && input.cues.length <= 40 && input.cues.every(cue => cue && typeof cue.id === 'string' && cue.id.length <= 40 && typeof cue.mood === 'string' && cue.mood.length <= 80 && typeof cue.prompt === 'string' && cue.prompt.length <= 600)), 'Cues must be a list of at most 40 cues.');
+    requireValue(input.subjects === undefined || (Array.isArray(input.subjects) && input.subjects.length <= 40 && input.subjects.every(item => item && Object.hasOwn(M.SFX, item.kind) && typeof item.subject === 'string' && /^[a-z-]{2,30}$/.test(item.subject))), 'Story sounds must be a list of kinds and things.');
+    const sfx = this.library.tracks('sfx'), cues = (input.cues || []).filter(cue => !this.cueCovered(cue, flavour, recent)).slice(0, 12).map(cue => ({id: cue.id, mood: cue.mood, prompt: cue.prompt, seconds: Number.isFinite(cue.seconds) ? Math.max(3, Math.min(900, cue.seconds)) : 30}));
+    const subjects = (input.subjects || []).filter(item => !M.subjectEffect(sfx, item.kind, item.subject)).slice(0, 12).map(({kind, subject}) => ({kind, subject}));
+    requireValue(kinds.length || moods.length || cues.length || subjects.length, input.cues ? 'Your library already has music for every cue of this video and a sound for each of its things.' : input.music ? 'Your library already has every effect and enough music for these moods.' : 'Every effect slot already has a sound.', 409);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM sound_imports WHERE status IN ('queued','running')").get(), 'An import is already running. Wait for it to finish.', 409);
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO sound_imports(id,folder,status,scope,progress,error,created_by,created_at,updated_at) VALUES(?,?,'queued',?,?,NULL,?,?,?)")
-        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, moods, contentId, ...(flavour ? {flavour} : {}), licence: 'CC0 or CC BY via Freesound', kind: moods.length ? 'mixed' : 'sfx'}), JSON.stringify({total: kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
-      this.store.event(`Queued Freesound: ${kinds.length} empty effect slot(s)${moods.length ? `, music for ${moods.map(item => item.mood).join(', ')}` : ''}, by ${by}`);
+        .run(id, 'online:freesound', JSON.stringify({source: 'freesound', online: 'freesound', connector: ref, kinds, moods, cues, subjects, recent, contentId, ...(flavour ? {flavour} : {}), licence: 'CC0 or CC BY via Freesound', kind: moods.length || cues.length ? 'mixed' : 'sfx'}), JSON.stringify({total: kinds.length + moods.length + cues.length + subjects.length, done: 0, added: 0, already: 0, failed: 0, problems: []}), by, at, at);
+      this.store.event(`Queued Freesound: ${kinds.length} empty effect slot(s)${subjects.length ? `, sounds for ${subjects.map(item => item.subject).join(', ')}` : ''}${cues.length ? `, music for ${cues.length} cue(s) of a video` : ''}${moods.length ? `, music for ${moods.map(item => item.mood).join(', ')}` : ''}, by ${by}`);
       return this.library.publicImport(this.library.importRow(id));
     });
   }
@@ -222,7 +260,8 @@ class SoundOnline {
     const row = this.store.transaction(() => { const next = this.db.prepare("SELECT * FROM sound_imports WHERE status='queued' AND folder LIKE 'online:%' ORDER BY created_at, rowid LIMIT 1").get(); if (next) this.db.prepare("UPDATE sound_imports SET status='running', updated_at=? WHERE id=?").run(now(), next.id); return next; });
     if (!row) return null;
     this.busy = true;
-    const scope = JSON.parse(row.scope), moods = scope.moods || [], progress = {total: scope.kinds.length + moods.length, done: 0, added: 0, already: 0, failed: 0, problems: []};
+    const scope = JSON.parse(row.scope), moods = scope.moods || [], cues = scope.cues || [], subjects = scope.subjects || [], recent = scope.recent || [];
+    const progress = {total: scope.kinds.length + moods.length + cues.length + subjects.length, done: 0, added: 0, already: 0, failed: 0, problems: [], picks: {}};
     const save = () => this.db.prepare('UPDATE sound_imports SET progress=?, updated_at=? WHERE id=?').run(JSON.stringify(progress), now(), row.id);
     try {
       const filled = M.pickEffects(this.library.tracks('sfx'));
@@ -253,8 +292,47 @@ class SoundOnline {
         } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${mood} music: ${clean(error.message, 140)}`); }
         finally { progress.done++; save(); }
       }
-      // The video it was asked for picks its music again from the fuller library.
-      if (scope.contentId && this.onFilled) { try { await this.onFilled(scope, row.created_by); } catch (error) { progress.problems.push(`picking the video's music again: ${clean(error.message, 140)}`); save(); } }
+      // 0.90: a story sound for each thing on screen (the campfire, the mammoth), searched for that thing first.
+      const searched = new Map(), search = async (query, options) => { const key = `${options.kind}:${query}`; if (!searched.has(key)) searched.set(key, await this.fillSearch(this.connection('freesound', scope.connector), query, options)); return searched.get(key); };
+      for (const {kind, subject} of subjects) {
+        try {
+          if (M.subjectEffect(this.library.tracks('sfx'), kind, subject)) { progress.already++; continue; }
+          const want = [...subject.split('-'), ...M.EFFECT_WORDS[kind]];
+          let found = null;
+          for (const query of subjectQueries(kind, subject)) {
+            found = rankFound((await search(query, {kind: 'sfx', limit: 20, sort: 'score'})).filter(item => item.licence.ok && item.download && item.seconds <= Math.max(3, M.SFX[kind].seconds * 5)), want)[0];
+            if (found) break;
+          }
+          requireValue(found, 'no CC0 or CC BY sound found');
+          this.remember([found]);
+          const added = await this.add({requestedBy: row.created_by, ref: `freesound:${found.id}`, connector: scope.connector, kind: 'sfx', slot: `${kind} ${subject.replace(/-/g, ' ')}`});
+          if (added.added) progress.added++; else progress.already++;
+        } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${subject}: ${clean(error.message, 140)}`); }
+        finally { progress.done++; save(); }
+      }
+      // 0.90: music for each cue of the video, searched by the cue's own words; never a track a recent video used.
+      const taken = new Set();
+      for (const cue of cues) {
+        try {
+          const {queries, want} = cueSearch(cue, scope.flavour), covered = this.cueCovered(cue, scope.flavour, recent);
+          if (covered) { progress.picks[cue.id] = {track: covered.id, prompt: cue.prompt}; progress.already++; continue; }
+          let pick = null;
+          for (const query of queries) {
+            const usable = (await search(query, {kind: 'music', limit: 25, sort: 'score'})).filter(item => item.licence.ok && item.download && item.seconds >= Math.min(45, Math.max(15, cue.seconds * 0.5)) && !taken.has(item.id));
+            pick = rankFound(usable, want).find(item => { const known = this.db.prepare('SELECT id FROM sounds WHERE source=? AND page_url=?').get(item.provider, item.page); return !known || !recent.includes(known.id); });
+            if (pick) break;
+          }
+          requireValue(pick, 'no CC0 or CC BY music found');
+          taken.add(pick.id);
+          this.remember([pick]);
+          const added = await this.add({requestedBy: row.created_by, ref: `freesound:${pick.id}`, connector: scope.connector, kind: 'music', slot: want.join(' ')});
+          progress.picks[cue.id] = {track: added.id, prompt: cue.prompt};
+          if (added.added) progress.added++; else progress.already++;
+        } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${cue.mood || 'cue'} music: ${clean(error.message, 140)}`); }
+        finally { progress.done++; save(); }
+      }
+      // The video it was asked for picks its music again from the fuller library (each searched cue its own track).
+      if (scope.contentId && this.onFilled) { try { await this.onFilled({...scope, picks: progress.picks}, row.created_by); } catch (error) { progress.problems.push(`picking the video's music again: ${clean(error.message, 140)}`); save(); } }
       this.db.prepare("UPDATE sound_imports SET status='completed', updated_at=? WHERE id=?").run(now(), row.id);
       return this.library.publicImport(this.library.importRow(row.id));
     } catch (error) {
@@ -265,4 +343,4 @@ class SoundOnline {
   }
 }
 
-module.exports = {SoundOnline, FreesoundClient, JamendoClient, PROVIDERS, SLOT_QUERY, licenceOf, creditLine};
+module.exports = {SoundOnline, FreesoundClient, JamendoClient, PROVIDERS, SLOT_QUERY, SUBJECT_QUERY, subjectQueries, cueSearch, rankFound, licenceOf, creditLine};

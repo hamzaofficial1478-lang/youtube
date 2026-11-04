@@ -293,3 +293,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .edit-fold-body{padding:0 0 10px}
 .tl-polish{margin:10px 0;padding:10px 12px;border:1px solid #cfe2d6;border-radius:8px;background:#f1f7f2}
 .tl-polish p{margin:6px 0 0}
+/* 0.90: long descriptions fold to their first sentence (foldLong in app.js). */
+details.more-text{margin:0 0 1em}details.more-text>summary{cursor:pointer;list-style:none;line-height:1.65}details.more-text>summary::-webkit-details-marker{display:none}
+details.more-text .more-label,details.more-text .less-label{color:inherit;font-weight:600;font-size:11px;white-space:nowrap;text-decoration:underline;text-underline-offset:2px}details.more-text .less-label,details.more-text[open] .more-label,details.more-text[open] .more-lead{display:none}details.more-text[open] .less-label{display:inline}details.more-text>p{margin:4px 0 0}
+.production-notice{margin-top:18px;font-size:12px;color:#5f6f66}.production-notice>summary{cursor:pointer}.production-notice>p{margin:6px 0 0}

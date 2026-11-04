@@ -157,6 +157,9 @@ function sfxFor(el, engine) {
   if (el.kind === 'arrow') return ['whoosh', 3];
   return null;
 }
+// The thing on screen a story sound belongs to (0.90): the campfire, the mammoth, the crowd. Freesound is searched for
+// it, and the render plays the sound found for it rather than any sound of its kind.
+const subjectOf = (el, kind) => (STORY_SFX.includes(kind) ? (el.kind === 'prop' ? el.prop : el.kind === 'crowd' ? 'crowd' : null) : null);
 const TRANSITION_SFX = Object.freeze({'whip-left': 'whoosh', 'whip-right': 'whoosh', zoom: 'swoosh-up', pop: 'pop', ink: 'scribble', glitch: 'glitch', 'slide-up': 'swoosh-up'});
 // sfxEvents: every effect the edit earns at this density, in seconds of the video, no two within 0.18 s
 // (the more important one stays). clips: [{start, seconds, sketch?, times?}] in timeline order.
@@ -167,7 +170,7 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
   for (const clip of clips) {
     if (!clip.sketch) continue;
     // A new place is heard once as the story arrives there.
-    if (clip.sketch.set !== place && SET_SFX[clip.sketch.set]) events.push({seconds: round(clip.start + 0.1, 3), kind: SET_SFX[clip.sketch.set], need: 2, bed: true, reason: `arriving at the ${clip.sketch.set}`});
+    if (clip.sketch.set !== place && SET_SFX[clip.sketch.set]) events.push({seconds: round(clip.start + 0.1, 3), kind: SET_SFX[clip.sketch.set], subject: clip.sketch.set, need: 2, bed: true, reason: `arriving at the ${clip.sketch.set}`});
     place = clip.sketch.set;
     const kind = TRANSITION_SFX[clip.sketch.transition];
     if (kind) events.push({seconds: Math.max(0, clip.start - 0.05), kind, need: 1, reason: `${clip.sketch.transition} opening`});
@@ -176,7 +179,7 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
       const hit = sfxFor(el, clip.sketch.engine || engine);
       if (!hit || starts[i] >= clip.seconds - 0.05) return;
       const delay = el.kind === 'text' && el.style === 'stamp' ? 0.14 : el.kind === 'prop' && el.enter === 'drop' ? 0.38 : 0;
-      events.push({seconds: round(clip.start + starts[i] + delay, 3), kind: hit[0], need: hit[1], reason: `${el.kind === 'fx' ? el.effect : el.kind === 'text' ? `${el.style} text` : el.prop || el.kind} in ${clip.label || 'a drawn shot'}`});
+      events.push({seconds: round(clip.start + starts[i] + delay, 3), kind: hit[0], ...(subjectOf(el, hit[0]) ? {subject: subjectOf(el, hit[0])} : {}), need: hit[1], reason: `${el.kind === 'fx' ? el.effect : el.kind === 'text' ? `${el.style} text` : el.prop || el.kind} in ${clip.label || 'a drawn shot'}`});
     });
   }
   // A place's sound is a bed under the moment, so it never pushes out an effect (or the other way round).
@@ -203,6 +206,18 @@ function neededEffects(sketches, {density = 'accent', engine = 'stickman'} = {})
   }
   return [...kinds].filter(kind => SFX[kind]).sort();
 }
+// The things a video's story sounds belong to, once each ({kind, subject}), read from the plan like neededEffects.
+function storySubjects(sketches, {density = 'accent', engine = 'stickman'} = {}) {
+  const rank = DENSITY_RANK[density] || 0, found = new Map();
+  if (!rank) return [];
+  let place = null;
+  for (const sketch of sketches.filter(Boolean)) {
+    if (sketch.set !== place && SET_SFX[sketch.set] && rank >= 2) found.set(sketch.set, SET_SFX[sketch.set]);
+    place = sketch.set;
+    for (const el of sketch.elements || []) { const hit = sfxFor(el, sketch.engine || engine), subject = hit && hit[1] <= rank && subjectOf(el, hit[0]); if (subject) found.set(subject, hit[0]); }
+  }
+  return [...found].map(([subject, kind]) => ({kind, subject})).sort((a, b) => (a.subject < b.subject ? -1 : 1));
+}
 
 // ---------------------------------------------------------------- the mix
 // One FFmpeg filter graph: the finished narration (input 0) stays as it is; music cues sit at their times with
@@ -211,29 +226,44 @@ function neededEffects(sketches, {density = 'accent', engine = 'stickman'} = {})
 // music: [{start, end, entry, exit, measuredLufs}], sfx: [{seconds, measuredPeakDb, attackSeconds?}], settings: {music, sfx}.
 // An effect hits on its moment (0.41, from video-use): a file whose sound builds before its hit (a whoosh, a riser)
 // starts that much earlier (attackSeconds, measured at render, at most 2 s).
-function mixGraph({music = [], sfx = [], settings}) {
-  const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]'], beds = [], hits = [];
+// 0.90 (owner report 2026-11-04: "the music and sound effects are added but I cannot hear them"): measured on a
+// -16 LUFS voice, the 0.28 carve and duck pushed a -20.5 LUFS bed down to -36 LUFS under speech (20 dB under the
+// voice, inaudible on laptop speakers). Now the threshold sits just under the voice's own loudness and the ratios are
+// gentle: under a steady -16 LUFS tone the bed dips about 1.5 (light), 3 (medium) or 6 dB (strong), a little more in
+// the speech band; real speech, which peaks above its average, dips it a little more. tests/soundtrack.test.js measures it.
+const DUCK = Object.freeze({light: {rel: -4, bed: 1.6, carve: 1.4}, medium: {rel: -4, bed: 3, carve: 2}, strong: {rel: -8, bed: 4, carve: 2}});
+// The levels of the music and the effects are set as if the narration were at the loudness target, so a narration kept
+// at its own level (mode source) keeps the same balance: they move with the voice's real loudness (voiceLufs).
+// Returns the gain in dB of every cue and hit; the live player uses the same numbers.
+function mixGains({music = [], sfx = [], settings, voiceLufs = null, targetLufs = null}) {
+  const shift = Number.isFinite(voiceLufs) && Number.isFinite(targetLufs) ? voiceLufs - targetLufs : 0, clamp = value => round(Math.max(-40, Math.min(12, value)), 2);
+  return {music: music.map(cue => clamp(settings.music.levelLufs + shift - (Number.isFinite(cue.measuredLufs) ? cue.measuredLufs : -14))),
+    sfx: sfx.map(hit => clamp(settings.sfx.levelDb + shift - (Number.isFinite(hit.measuredPeakDb) ? hit.measuredPeakDb : -3)))};
+}
+function mixGraph({music = [], sfx = [], settings, voiceLufs = null, targetLufs = null}) {
+  const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]'], beds = [], hits = [], gains = mixGains({music, sfx, settings, voiceLufs, targetLufs});
   music.forEach((cue, k) => {
     const input = k + 1, length = round(cue.end - cue.start, 3), fadeIn = cue.entry === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.02, fadeOut = cue.exit === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.05;
-    const gain = round(Math.max(-40, Math.min(12, settings.music.levelLufs - (Number.isFinite(cue.measuredLufs) ? cue.measuredLufs : -14))), 2), delay = Math.round(cue.start * 1000);
+    const gain = gains.music[k], delay = Math.round(cue.start * 1000);
     const from = round(cue.offset || 0, 3);
     parts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=${from}:${round(from + length, 3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${round(fadeIn, 3)},afade=t=out:st=${round(Math.max(0, length - fadeOut), 3)}:d=${round(fadeOut, 3)},volume=${gain}dB,adelay=${delay}|${delay}[m${k}]`);
     beds.push(`[m${k}]`);
   });
   sfx.forEach((hit, k) => {
-    const input = music.length + k + 1, gain = round(Math.max(-40, Math.min(12, settings.sfx.levelDb - (Number.isFinite(hit.measuredPeakDb) ? hit.measuredPeakDb : -3))), 2), delay = Math.round(Math.max(0, hit.seconds - Math.min(2, Math.max(0, hit.attackSeconds || 0))) * 1000);
+    const input = music.length + k + 1, gain = gains.sfx[k], delay = Math.round(Math.max(0, hit.seconds - Math.min(2, Math.max(0, hit.attackSeconds || 0))) * 1000);
     parts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume=${gain}dB,adelay=${delay}|${delay}[s${k}]`);
     hits.push(`[s${k}]`);
   });
   const layers = ['[voice]'];
   if (beds.length) {
     parts.push(`${beds.join('')}amix=inputs=${beds.length}:normalize=0:duration=longest[bed]`);
-    const ratio = {off: 1, light: 3, medium: 6, strong: 10}[settings.music.duck] || 6;
+    const duck = settings.music.duck === 'off' ? null : DUCK[settings.music.duck] || DUCK.medium;
     // Voice-over carve (HyperFrames voiceover-carve): the music makes room only where speech lives, so under the
-    // voice it keeps its bass and its top and comes back between phrases; the whole bed dips a little as well.
+    // voice it keeps its bass and its top and comes back between phrases; the whole bed dips as well (0.90: gently).
     // ponytail: one fixed speech band (300 Hz-4 kHz, around speech's 2 kHz); per-voice band analysis if a bed still masks.
-    parts.push(ratio > 1 ? [`[bed]acrossover=split=300 4000[low][mid][high]`, `[mid][key]sidechaincompress=threshold=0.02:ratio=${Math.min(20, ratio * 2)}:attack=15:release=250[room]`,
-      '[low][room][high]amix=inputs=3:normalize=0[carved]', `[carved][level]sidechaincompress=threshold=0.02:ratio=${round(Math.max(1.5, ratio / 3), 2)}:attack=15:release=350[music]`].join(';')
+    const threshold = duck ? round(10 ** (((Number.isFinite(voiceLufs) ? voiceLufs : Number.isFinite(targetLufs) ? targetLufs : -16) + duck.rel) / 20), 5) : 0;
+    parts.push(duck ? [`[bed]acrossover=split=300 4000[low][mid][high]`, `[mid][key]sidechaincompress=threshold=${threshold}:ratio=${duck.carve}:attack=15:release=250[room]`,
+      '[low][room][high]amix=inputs=3:normalize=0[carved]', `[carved][level]sidechaincompress=threshold=${threshold}:ratio=${duck.bed}:attack=15:release=350[music]`].join(';')
       : '[bed]anull[music];[key]anullsink;[level]anullsink');
     layers.push('[music]');
   } else parts.push('[key]anullsink;[level]anullsink');
@@ -340,7 +370,20 @@ function pickEffects(sounds, picks = {}) {
   return out;
 }
 
+// The library sound found for one thing on screen (0.90): tagged with the thing's words and saying its kind. Null when
+// the library has none, and the effect slot plays instead.
+function subjectEffect(sounds, kind, subject) {
+  const need = String(subject || '').toLowerCase().split('-').filter(Boolean);
+  let best = null, bestFit = 0;
+  for (const sound of sounds) {
+    const tags = tagsOf(sound);
+    if (!need.length || !need.every(word => tags.has(word))) continue;
+    const fit = EFFECT_WORDS[kind].filter(word => tags.has(word)).length + (tags.has(kind) ? 1 : 0);
+    if (fit > bestFit || (best && fit === bestFit && (sound.seconds < best.seconds || (sound.seconds === best.seconds && sound.id < best.id)))) { best = sound; bestFit = fit; }
+  }
+  return best;
+}
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {DUCK, mixGains, STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, storySubjects, subjectEffect, words, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

@@ -553,7 +553,7 @@ class EditingRoom {
   // transition), stills and footage with their in-point, speed and camera move, the joins, the captions and the
   // narration. The page draws drawn clips with the render's own engine (/engine.js), so a paused frame is the render's.
   player(revisionId) {
-    const {row, state, payload} = this.editState(revisionId), spec = state.inputs.spec, engine = E.primaryEngine(spec), primary = E.ENGINES[engine]?.draws ? engine : 'motion';
+    const {row, timeline, state, payload} = this.editState(revisionId), spec = state.inputs.spec, engine = E.primaryEngine(spec), primary = E.ENGINES[engine]?.draws ? engine : 'motion';
     const ordered = payload.clips.map(clip => { const asset = state.inputs.assets[clip.shotId]; return {label: clip.label, sceneId: clip.sceneId, clipId: clip.id, sketch: asset.origin === 'drawn' && !asset.composition ? structuredClone(payload.drawings?.[clip.id] || asset.sketch) : null}; });
     Sk.carry(ordered);
     const clips = payload.clips.map((clip, index) => {
@@ -565,9 +565,51 @@ class EditingRoom {
       if (asset.origin === 'drawn') return {...base, kind: 'video', src, inSeconds: 0, speed: 1, preview: true};
       return {...base, kind: asset.mediaType === 'video' ? 'video' : 'still', src, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, move: clip.move || null};
     });
-    return {revisionId: row.id, revision: row.revision, fps: payload.fps, totalFrames: payload.totalFrames, vertical: payload.format === 'shorts', narration: `/api/edit-revisions/${row.id}/narration`,
+    return {revisionId: row.id, revision: row.revision, fps: payload.fps, totalFrames: payload.totalFrames, vertical: payload.format === 'shorts', narration: `/api/edit-revisions/${row.id}/narration`, audio: this.playerAudio(row, state, payload, timeline.content_id),
       palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: F.resolve(spec.typography.headingFont), body: F.resolve(spec.typography.bodyFont), hand: F.resolve('Segoe Print')}, drawing: spec.drawing || null,
       clips, joins: payload.joins.map(join => ({type: join.type, frames: join.frames})), captions: payload.captions?.enabled ? payload.captions.groups.map(group => ({start: group.start, end: group.end, lines: group.lines})) : null};
+  }
+  // 0.90 (owner report 2026-11-04: "the music and sound effects are added but I cannot hear them"): the player played
+  // only the narration. Now it gets the edit's music cues and sound effects exactly as the render takes them
+  // (soundtrackFor), at the render's gains (M.mixGains), with the dip of the music while the narrator speaks. A soundtrack
+  // the render would refuse is named instead, so the owner hears why there is no music.
+  playerSoundtrack(state, payload, contentId) {
+    const config = payload.audio ? Audio.settings(payload.audio) : null;
+    if (!config || !Audio.mixes(config) || !this.soundtrack) return {config, track: null};
+    const engine = E.primaryEngine(state.inputs.spec), drawings = {};
+    for (const clip of payload.clips.filter(item => state.inputs.assets[item.shotId].origin === 'drawn' && !state.inputs.assets[item.shotId].composition)) drawings[clip.id] = {sketch: payload.drawings?.[clip.id] || state.inputs.assets[clip.shotId].sketch};
+    return {config, track: this.soundtrack.soundtrackFor({content: this.store.content(contentId), timeline: payload, config, drawings, engine})};
+  }
+  playerAudio(row, state, payload, contentId) {
+    const round = value => Math.round(value * 1000) / 1000;
+    let built;
+    try { built = this.playerSoundtrack(state, payload, contentId); } catch (error) { return {note: `No music or sound effects in the player: ${error.message}`}; }
+    const {config, track} = built;
+    if (!track) return {note: config && (config.music?.enabled || config.sfx?.enabled) ? 'Music and sound effects are not available in this program.' : 'Music and sound effects are off in this edit (Levels and mix).'};
+    const gains = M.mixGains({music: track.music, sfx: track.sfx, settings: {music: config.music, sfx: config.sfx}}), volume = db => round(Math.min(1, 10 ** (db / 20)), 4);
+    const url = sha => `/api/edit-revisions/${row.id}/sound/${sha}`, fade = config.music.fadeSeconds || 0;
+    // The narrator's phrases (caption groups) are when the music dips.
+    const speech = (payload.captions?.groups || []).map(group => [round(group.start, 3), round(group.end, 3)]);
+    return {
+      dipDb: {off: 0, light: 2, medium: 4, strong: 7}[config.music.duck] ?? 4, speech, // about the render's dip under speech
+      music: track.music.map((cue, k) => ({start: cue.start, end: cue.end, offset: cue.offset || 0, loop: Number.isFinite(cue.trackSeconds) && cue.trackSeconds < (cue.offset || 0) + cue.end - cue.start + 0.05, fadeIn: cue.entry === 'fade' ? Math.min(fade, (cue.end - cue.start) / 3) : 0, fadeOut: cue.exit === 'fade' ? Math.min(fade, (cue.end - cue.start) / 3) : 0, volume: volume(gains.music[k]), src: url(cue.sha256)})),
+      sfx: track.sfx.map((hit, k) => ({at: round(hit.seconds, 3), kind: hit.kind, volume: volume(gains.sfx[k]), src: url(hit.sha256)})),
+      ...(track.skipped?.length ? {note: `Left out (the sound library has none yet): ${track.skipped.join(', ')}.`} : {}),
+    };
+  }
+  // One music or effect file of this edit's soundtrack, for the player (only files the soundtrack names).
+  // The edit's files are remembered for a minute: a player asks for each file, often in several byte ranges.
+  soundFile(revisionId, sha256) {
+    if (this.soundFiles?.revisionId !== revisionId || Date.now() - this.soundFiles.at > 60000) {
+      const {timeline, state, payload} = this.editState(revisionId), {track} = this.playerSoundtrack(state, payload, timeline.content_id);
+      this.soundFiles = {revisionId, at: Date.now(), items: [...(track?.music || []), ...(track?.sfx || [])]};
+    }
+    const item = this.soundFiles.items.find(entry => entry.sha256 === sha256);
+    requireValue(item, 'That sound is not part of this edit.', 404);
+    const file = this.renders.localFile(item.relativePath);
+    requireValue(fs.existsSync(file), 'The sound file is missing from the sound library.', 404);
+    const ext = item.relativePath.split('.').pop().toLowerCase();
+    return {file, mime: {wav: 'audio/wav', mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', flac: 'audio/flac', opus: 'audio/ogg', aac: 'audio/aac'}[ext] || 'application/octet-stream'};
   }
   // One drawn clip as the render draws it: the checked drawing with its element times and the words it speaks.
   playerDrawing(payload, index, sketch, primary) {
