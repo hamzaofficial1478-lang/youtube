@@ -26,7 +26,7 @@
   const ENTER_SECONDS = {pop: 0.4, slide: 0.4, drop: 0.42, draw: 0.75, fade: 0.3, grow: 0.5, mask: 0.6, swing: 0.55, blur: 0.5, rise: 0.45, land: 0.42, none: 0};
   // Drawing-on is the hand-drawn look and takes its time there; elsewhere a drawing is on screen quickly.
   const enterSeconds = (enter, engine = D?.engine) => (enter === 'draw' && engine !== 'handdrawn' && !PEN ? 0.45 : (enter === 'draw' ? PACE : 1) * (ENTER_SECONDS[enter] ?? 0.34));
-  const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind']);
+  const SCREEN_FX = new Set(['flash', 'confetti', 'money-rain', 'rain', 'snow', 'glitch', 'wind', 'leaves']);
   const BACKDROP_FX = new Set(['burst', 'glow', 'speedlines', 'shockwave', 'pulse', 'nightfall']);
   // Places under the open sky (nightfall draws its sun, moon and stars only there).
   const OUTDOOR_SETS = new Set(['none', 'abstract', 'street', 'city', 'road', 'park', 'nature', 'mountains', 'desert', 'beach', 'night', 'storm', 'castle', 'harbor', 'market', 'village', 'battlefield', 'prehistoric']);
@@ -1701,6 +1701,8 @@
     const rand = K.seeded(tm.seed);
     switch (el.effect) {
       case 'flash': if (local < 0.3) { ctx.fillStyle = `rgba(255,255,255,${0.9 * (1 - local / 0.3)})`; ctx.fillRect(0, 0, W, H); } break;
+      // 0.91: leaves thrown up in celebration (the stone age's confetti): they fly up from below, turn and drift down.
+      case 'leaves': for (let k = 0; k < 46; k++) { const x0 = (0.1 + rand() * 0.8) * W, up = 0.55 + rand() * 0.35, t = Math.min(1.6, local * (0.9 + rand() * 0.5)), y = H * (1.05 - up * 2.2 * t + 0.9 * t * t), a = local * (1.5 + rand() * 3) + rand() * 6; if (y > H * 1.08 && t > 0.3) continue; ctx.save(); ctx.translate(x0 + Math.sin(local * 1.8 + k) * 40 * u, y); ctx.rotate(a); ctx.fillStyle = ['#5FA052', '#7DB548', '#3E8A47', '#A4C64A', '#C9A33A'][k % 5]; ctx.beginPath(); ctx.ellipse(0, 0, 17 * u, 7.5 * u, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = 'rgba(30,60,30,0.6)'; ctx.lineWidth = 1.4 * u; ctx.beginPath(); ctx.moveTo(-16 * u, 0); ctx.lineTo(16 * u, 0); ctx.stroke(); ctx.restore(); } break;
       case 'confetti': for (let k = 0; k < 70; k++) { const x0 = rand() * W, v = 0.35 + rand() * 0.5, y = -0.1 * H + (local * v + rand() * 0.3) * H * 0.9, a = local * (2 + rand() * 4) + rand() * 6; if (y > H * 1.05) continue; ctx.save(); ctx.translate(x0 + Math.sin(local * 2 + k) * 20 * u, y); ctx.rotate(a); ctx.fillStyle = [C.red, C.blue, C.yellow, C.green, C.pink, C.orange][k % 6]; ctx.fillRect(-7 * u, -4 * u, 14 * u, 8 * u); ctx.restore(); } break;
       case 'money-rain': for (let k = 0; k < 12; k++) { const x0 = rand() * W, y = (-0.15 + ((local * (0.18 + rand() * 0.12) + rand()) % 1.2)) * H; K.render(K.PROPS.money(K.frame(x0 + Math.sin(local * 2 + k) * 30 * u, y, 90 * u, 1, Math.sin(local * 2 + k) * 0.6), {tl: local + k, seed: k}), 1, k); } break;
       case 'rain': ctx.save(); ctx.strokeStyle = 'rgba(120,170,230,0.6)'; ctx.lineWidth = 2.5 * u; for (let k = 0; k < 90; k++) { const x = rand() * W * 1.1, f = (local * (1.4 + rand() * 0.4) + rand()) % 1; ctx.beginPath(); ctx.moveTo(x, f * H); ctx.lineTo(x - 10 * u, f * H + 34 * u); ctx.stroke(); } ctx.restore(); break;

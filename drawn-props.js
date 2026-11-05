@@ -40,6 +40,17 @@
     {pts: c.pts([[0, -0.52], [0.065, -0.34], [0.03, -0.27], [-0.03, -0.27], [-0.065, -0.34], [0, -0.52]]), fill: '#7D8A93'}, ...[-0.26, -0.22].map(y => ({pts: c.pts([[-0.026, y], [0.026, y + 0.03]]), width: 0.8}))]; };
   P['stone-axe'] = (b, g) => { const c = pivot(b, 0, 0.4, Math.sin(g.tl * 1.5) * 0.04); return [{pts: c.pts([[-0.035, 0.45], [-0.03, -0.32], [0.03, -0.32], [0.035, 0.45], [-0.035, 0.45]]), fill: C.wood},
     {pts: c.blob(0.12, -0.3, 0.2, 0.12, 6, 0.16), fill: '#8E9AA3'}, ...[-0.36, -0.28].map(y => ({pts: c.pts([[-0.04, y], [0.04, y + 0.07]]), width: 0.9}))]; };
+  // 0.91 (owner review 2026-11-04: "it says mammoth tusk but drew a cross"; pebbles on the table): a heap of pebbles, a
+  // mammoth tusk and a leaf.
+  P.pebble = (b, g) => [[-0.22, 0.36, 0.13, 0.09], [0, 0.38, 0.15, 0.1], [0.21, 0.37, 0.12, 0.085], [-0.1, 0.25, 0.12, 0.085], [0.11, 0.26, 0.12, 0.08], [0, 0.14, 0.1, 0.075]]
+    .map(([x, y, rx, ry], k) => ({pts: b.blob(x, y - (k === 5 ? Math.max(0, Math.sin(g.tl * 2)) * 0.01 : 0), rx, ry, 7, 0.08 + k * 0.01), fill: ['#9AA3A8', '#8B8F86', '#A7A08F', '#7F8A8F', '#B0A99A', '#959B9E'][k]}));
+  // The tusk: a thick ivory curve, its width measured across the curve (the normal), tapering to a point.
+  P.tusk = (b, g) => { const c = pivot(b, 0, 0.1, Math.sin(g.tl * 1.2) * 0.03), n = 14, at = (t, side) => { const w = 0.1 * (1 - t) ** 0.8 + 0.008, x = -0.36 + 0.7 * t, y = 0.3 - 0.62 * t * t, dx = 0.7, dy = -1.24 * t, len = Math.hypot(dx, dy); return [x - side * w * dy / len, y + side * w * dx / len]; };
+    const outline = [...Array.from({length: n + 1}, (_, k) => at(k / n, -1)), ...Array.from({length: n + 1}, (_, k) => at(1 - k / n, 1))];
+    return [{pts: c.pts([...outline, outline[0]]), fill: '#F2E8CF'}, {pts: c.pts([at(0.08, -1), at(0.08, 1)]), width: 0.8}, {pts: c.pts([at(0.4, -0.3), at(0.75, -0.3)]), color: '#FFFFFF', width: 0.6}]; };
+  P.leaf = (b, g) => { const c = pivot(b, 0, 0.42, Math.sin(g.tl * 2) * 0.06), n = 10, side = (t, k) => [k * 0.22 * Math.sin(Math.PI * t) + 0.04 * Math.sin(Math.PI * t * 2), 0.38 - 0.8 * t];
+    const outline = [...Array.from({length: n + 1}, (_, k) => side(k / n, -1)), ...Array.from({length: n + 1}, (_, k) => side(1 - k / n, 1))];
+    return [{pts: c.pts([...outline, outline[0]]), fill: '#5FA052'}, {pts: c.pts([[0, 0.5], [0, 0.38], [0.02, -0.38]]), width: 0.8}, ...[-0.15, 0.05, 0.22].map(y => ({pts: c.pts([[0.005, y], [0.12, y - 0.1]]), width: 0.5}))]; };
   P.mammoth = (b, g) => { const step = k => Math.sin(g.tl * 3 + k * Math.PI / 2) * 0.03, trunk = pivot(b, 0.4, -0.06, Math.sin(g.tl * 1.6) * 0.12), fur = '#7A5236';
     return [{pts: b.pts([[-0.37, -0.06], [-0.46, 0.1]]), width: 1}, ...[-0.28, -0.14, 0.1, 0.24].map((x, k) => ({pts: b.pts([[x - 0.045, 0.1], [x + 0.045, 0.1], [x + 0.045 + step(k), 0.48], [x - 0.045 + step(k), 0.48], [x - 0.045, 0.1]]), fill: k % 2 ? '#5E3F29' : '#6B4A2B'})),
       {pts: b.blob(-0.03, -0.02, 0.37, 0.25, 9, 0.05), fill: fur}, ...[-0.25, -0.12, 0.02, 0.15].map(x => ({pts: b.pts([[x, 0.18], [x + 0.02, 0.27]]), width: 0.7})),

@@ -247,7 +247,11 @@ function atelierFrame(raw, label, warnings, format, finish = 'motion', script = 
 // Fills timing into a plan and returns {payload, issues, warnings}.
 // The narrator (an everyman) when a drawn plan names no characters.
 const DEFAULT_CAST = Object.freeze([{id: 'c1', name: 'Narrator', role: 'Guides the viewer through the video', look: {...Sk.DEFAULT_LOOK}}]);
-function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, map = null, pictures = null, kit = null, world = null, grade = null, design: rawDesign = null, format = 'long-form'}) {
+// 0.91 (owner report 2026-11-04: "I drew the scenes again after the update and they were the same"): drawing again
+// draws the same storyboard; the story's world (places, clothes, objects) is set when a storyboard is planned. A plan
+// records the scene rules it was planned with, and one planned with older rules can be brought up to today's.
+const SCENE_RULES = 'scene-rules/2';
+function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, terms, summary = '', cast = [], primary = 'stickman', review = null, mend = false, direction = null, compose = null, map = null, pictures = null, kit = null, world = null, grade = null, design: rawDesign = null, format = 'long-form', rules = null}) {
   const timed = timeSentences(sentences, narrationSeconds);
   const issues = [], warnings = [];
   // An adaptive style's video design (0.64): checked part by part; the plan is checked by the spec it makes.
@@ -319,7 +323,7 @@ function buildPayload({scenes, sentences, narrationSeconds, spec: styleSpec, ter
   const mix = D.measureMix(out, {primary, seconds: narrationSeconds});
   warnings.push(...mix.notes, ...(map?.unusable ? ['The story director\'s answer was not usable, so the parts were planned without its map.'] : map?.warnings || []));
   return {
-    payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut} : {}), ...(design ? {design} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
+    payload: {timing: {method: 'word-share', narrationSeconds: round(narrationSeconds), words: sentences.reduce((sum, item) => sum + item.words, 0), note: 'Estimated from word counts; caption alignment will measure exact timing later.'}, summary: String(summary).slice(0, 600), sentences: timed, scenes: out, ...(drawnPlan ? {engine: primary, cast: castOut, ...((mend ? SCENE_RULES : rules) ? {rules: mend ? SCENE_RULES : rules} : {})} : {}), ...(design ? {design} : {}), ...(review ? {review} : {}), ...(mended.length ? {continuity: mended} : {}),
       ...(out.some(scene => scene.shots.some(shot => shot.frame)) ? {direction: At.validateDirection(direction, {lenient: true, finish, script: spec.atelier?.script, finishes, palette: spec.atelier?.palette, warn: message => warnings.push(`Art direction: ${message}`), fallback: {canvas: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}})} : {}), ...(compose ? {compose} : {}), ...(pictures ? {pictures} : {}), ...(kit && Object.keys(kit).length ? {kit} : {}), ...(storyWorld ? {world: storyWorld} : {}), ...(E.GRADES[grade] ? {grade} : {}), mix, ...(map?.beats ? {map: {version: map.version, structure: map.structure, chapters: map.chapters, beats: map.beats}} : {})},
     issues, warnings,
   };
@@ -720,19 +724,21 @@ class SceneRoom {
       // Owner review 2026-10-21: a free draft looked like a finished video and was judged as one; it says what it is.
       warnings: [...(row.source === 'rules' ? [ROUGH_DRAFT] : []), ...currentWarnings(checks.warnings, payload)],
       sceneCount: payload.scenes.length, shotCount: payload.scenes.reduce((sum, scene) => sum + scene.shots.length, 0), narrationSeconds: payload.timing.narrationSeconds,
+      // 0.91: planned with older scene rules (a storyboard with drawn shots that today's world, era and clothing fixes never saw).
+      oldRules: !!payload.engine && payload.rules !== SCENE_RULES,
       scope: this.scopeOf(row, inputs),
     };
     if (detail) result.plan = payload;
     return result;
   }
   // Must run inside a transaction.
-  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null, map = null, pictures = null, kit = null, world = null, grade = null, design = null}) {
+  insertManifest({inputs, content, scenes, summary, source, parentId = null, note, createdBy, sentences = null, cast = [], review = null, direction = null, compose = null, map = null, pictures = null, kit = null, world = null, grade = null, design = null, rules = null}) {
     const spec = inputs.spec, family = inputs.family, primary = inputs.engine || 'stickman';
     const baseSentences = sentences || splitSentences(content.script, family.primaryLocale);
     // An owner edit, a merge of two storyboards and a return to an earlier one keep their drawings exactly (0.86).
     const own = ['edit', 'merge', 'choice'].includes(source), mended = !own ? mendShots(scenes, inputs.sources, designedSpec(spec).motion.cameraMoves) : [];
     structural(scenes, baseSentences.length, inputs.sources, designedSpec(spec).motion.cameraMoves, {primary, cast: Sk.validateCast(cast, {lenient: true, kit}), kit});
-    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: !own, direction, compose, pictures, map, kit, world, grade, design, format: family.format});
+    const built = buildPayload({scenes, sentences: baseSentences.map(({n, text: value, words}) => ({n, text: value, words})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: this.competitorTerms(family), summary, cast, primary, review, mend: !own, direction, compose, pictures, map, kit, world, grade, design, format: family.format, rules});
     const latest = this.latestManifestRow(content.id), revision = (latest?.revision || 0) + 1, id = randomUUID(), at = now();
     this.db.prepare('INSERT INTO scene_manifests(id,family_id,content_id,revision,content_revision,voice_approval_id,style_revision_id,style_spec_hash,source,parent_id,change_note,payload,payload_hash,checks,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
       .run(id, family.id, content.id, revision, content.revision, inputs.voice.approvalId, inputs.style.revisionId, inputs.style.specHash, source, parentId, note, JSON.stringify(built.payload), hash(built.payload), JSON.stringify({issues: built.issues, warnings: [...mended.slice(0, 10), ...(mended.length > 10 ? [`${mended.length - 10} more shots had a camera move outside the style; they use the style's moves.`] : []), ...built.warnings]}), createdBy, at);
@@ -1604,7 +1610,7 @@ class SceneRoom {
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
       if (this.latestManifestRow(row.content_id).id !== row.id || content.revision !== job.scope.contentRevision || inputs.voice.approvalId !== job.scope.voiceApprovalId || inputs.style.revisionId !== job.scope.styleRevisionId) return close('stale', 'The plan, script, narration or style changed while the picture was drawn. It was not saved.');
       const report = {pictures: (payload.pictures?.pictures || 0) + 1, drawn: (payload.pictures?.drawn || 0) + 1, tokens: (payload.pictures?.tokens || 0) + pictures.tokens, notes: [...(payload.pictures?.notes || []), `${label}: a picture was added by ${job.created_by}.`]};
-      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, sketch => ({...withPicture(sketch), elements: withPicture(sketch).elements.map(item => (item.kind === 'picture' ? drawn : item))}))), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: report, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: 'edit', parentId: row.id, note: `A paid picture for ${label}`, createdBy: job.created_by});
+      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, sketch => ({...withPicture(sketch), elements: withPicture(sketch).elements.map(item => (item.kind === 'picture' ? drawn : item))}))), summary: payload.summary, rules: payload.rules || null, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: report, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: 'edit', parentId: row.id, note: `A paid picture for ${label}`, createdBy: job.created_by});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -1693,6 +1699,27 @@ class SceneRoom {
     requireValue(shot.source === 'generated-graphics' && shot.sketch, 'Only a drawn shot changes with words. A designed shot has "Redesign"; a footage shot has "Edit" and "Change".', 409);
     return this.queueRedraw({row, content, inputs, payload, labels: [shot.label], input, createdBy, ask});
   }
+  // 0.91 (owner report 2026-11-04: "Claude can ask the program to redraw those scenes, but it did nothing"): the
+  // Editing Room's editor asks for several shots at once, each with its own words. One job, on the newest plan.
+  changeShots(manifestId, input) {
+    object(input);
+    const createdBy = person(input.requestedBy), asked = this.manifestRow(manifestId), row = this.latestManifestRow(asked.content_id);
+    const content = this.store.content(row.content_id), inputs = this.inputs(content);
+    requireValue(inputs.ready, inputs.blockers[0], 409);
+    const scope = this.scopeOf(row, inputs);
+    requireValue(scope.current, `${scope.issues[0]} Use “Refresh for current narration and style” first.`, 409);
+    requireValue(Array.isArray(input.changes) && input.changes.length >= 1 && input.changes.length <= 20, 'Name 1-20 shots to draw again.');
+    const payload = JSON.parse(row.payload), shots = payload.scenes.flatMap(scene => scene.shots), lines = [];
+    for (const change of input.changes) {
+      const shot = shots.find(item => item.label === change?.label), ask = String(change?.ask || '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim();
+      requireValue(shot, `${String(change?.label || 'That shot').slice(0, 12)} is not in the newest storyboard.`, 404);
+      requireValue(shot.source === 'generated-graphics' && shot.sketch, `${shot.label} is not a drawn shot; a footage shot changes in Room 04.`, 409);
+      requireValue(ask.length >= 3 && ask.length <= 300, `Say what ${shot.label} should show (3-300 characters).`);
+      lines.push(`${shot.label}: ${ask}`);
+    }
+    const labels = [...new Set(input.changes.map(change => change.label))];
+    return this.queueRedraw({row, content, inputs, payload, labels, input, createdBy, ask: lines.join(' | ').slice(0, 3000)});
+  }
   queueRedraw({row, content, inputs, payload, labels, input, createdBy, ask = null, purpose = null}) {
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true), settings = this.settings(inputs.family.id);
     const scenes = payload.scenes.filter(scene => scene.shots.some(shot => labels.includes(shot.label))).length, chunks = Math.ceil(scenes / 8);
@@ -1736,7 +1763,7 @@ class SceneRoom {
       if (!drawn.size) return close('quality_failed', `Claude returned no drawings, so the ${labels.length} shot${labels.length === 1 ? ' keeps its drawing' : 's keep their drawings'} from the words.${review?.notes?.[0] ? ` ${review.notes[0]}` : ''}`);
       // The new drawings land on the same shots (same IDs); everything else is the plan as it was.
       const scenes = payload.scenes.map((scene, si) => sceneOf(scene, true, scene.shots.map((shot, hi) => ({...shotOf(plan.scenes[si].shots[hi], false), id: shot.id}))));
-      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: plan.cast || payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: pictures ? {...pictures, earlier: payload.pictures || null} : payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, review: {report: review.report, changes: [...(payload.review?.changes || []), ...review.changes], notes: review.notes}, source: 'edit', parentId: row.id, note: `Claude drew ${drawn.size} of ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, rules: payload.rules || null, cast: plan.cast || payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: pictures ? {...pictures, earlier: payload.pictures || null} : payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, review: {report: review.report, changes: [...(payload.review?.changes || []), ...review.changes], notes: review.notes}, source: 'edit', parentId: row.id, note: `Claude drew ${drawn.size} of ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -1761,7 +1788,7 @@ class SceneRoom {
       const content = this.store.content(row.content_id), inputs = this.inputs(content);
       if (this.latestManifestRow(row.content_id).id !== row.id || content.revision !== job.scope.contentRevision || inputs.voice.approvalId !== job.scope.voiceApprovalId || inputs.style.revisionId !== job.scope.styleRevisionId) return close('stale', 'The plan, script, narration or style changed during the redesign. The new design was not saved.');
       const report = {...(payload.compose || {shots: 1, designed: 1, notes: []}), tokens: (payload.compose?.tokens || 0) + compose.tokens};
-      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: report, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes: payload.scenes.map(scene => sceneOf(scene, true, () => fresh)), summary: payload.summary, rules: payload.rules || null, cast: payload.cast || [], direction: payload.direction || null, compose: report, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: 'edit', parentId: row.id, note: `Redesigned ${label}${reason ? `: ${reason}` : ''}`, createdBy: job.created_by, sentences: payload.sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       close('completed', null, created.id);
       return this.publicManifest(created, {detail: true});
     });
@@ -1845,6 +1872,9 @@ class SceneRoom {
       scene.sentenceEnd = following.sentenceEnd;
       scene.shots = [...scene.shots, ...following.shots].slice(0, MAX_SHOTS_PER_SCENE);
       note = `Merged ${payload.scenes[index].label} with ${payload.scenes[index + 1].label}`;
+    } else if (op === 'update-rules') {
+      requireValue(payload.engine, 'Only a storyboard with drawn shots has scene rules to update.', 409);
+      note = 'Updated to today\'s scene rules: the story\'s places, clothes and objects';
     } else if (op === 'refresh-scope') {
       requireValue(content.revision === row.content_revision, 'The script itself changed. Create a new plan instead.', 409);
       sameScope = false;
@@ -1860,7 +1890,7 @@ class SceneRoom {
     requireValue(input.expectedRevision === row.revision, 'The plan changed in another tab. Reload before editing.', 409);
     return this.store.transaction(() => {
       requireValue(this.latestManifestRow(row.content_id).id === row.id, 'The plan changed in another tab. Reload before editing.', 409);
-      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: 'edit', parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
+      const created = this.insertManifest({inputs, content, scenes, summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null, source: op === 'update-rules' ? 'rules-update' : 'edit', rules: payload.rules || null, parentId: row.id, note, createdBy, sentences: sentences.map(({n, text: value, words}) => ({n, text: value, words}))});
       return this.publicManifest(created, {detail: true});
     });
   }
@@ -2558,7 +2588,7 @@ class SceneRoom {
     const inputs = this.inputs(content);
     requireValue(inputs.ready, inputs.blockers[0], 409);
     const earlierRow = this.manifestRow(compare.earlier.manifestId), earlier = JSON.parse(earlierRow.payload), fresh = JSON.parse(latest.payload);
-    const carry = payload => ({summary: payload.summary, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null});
+    const carry = payload => ({summary: payload.summary, rules: payload.rules || null, cast: payload.cast || [], direction: payload.direction || null, compose: payload.compose || null, pictures: payload.pictures || null, map: payload.map || null, kit: payload.kit || null, world: payload.world || null, grade: payload.grade || null, design: payload.design || null});
     if (choice === 'previous') {
       return this.store.transaction(() => {
         const created = this.insertManifest({inputs, content, scenes: planScenes(earlier), ...carry(earlier), source: 'choice', parentId: earlierRow.id, note: `Back to the earlier storyboard (revision ${earlierRow.revision}), chosen over revision ${latest.revision}`, createdBy: by});

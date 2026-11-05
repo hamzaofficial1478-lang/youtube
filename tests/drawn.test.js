@@ -456,4 +456,11 @@ test('0.85 a stone-age story lives in caves and open land, and its people wear h
   assert.ok(fixes.some(fix => fix.label === 'S01A' && /hides/.test(fix.fix)));
   // The free draft finds the stone age in the words.
   assert.equal(Sk.fromText('In the stone age, hunters chased a mammoth.').set, 'prehistoric');
+  // 0.91 (owner review 2026-11-04): coins and paper confetti did not exist yet; pebbles count and leaves are thrown.
+  const party = [{label: 'S02C', words: 'Then somebody wins.', sketch: Sk.validate({set: 'prehistoric', elements: [{kind: 'prop', prop: 'coin'}, {kind: 'fx', effect: 'confetti'}, {kind: 'prop', prop: 'tusk'}]})}];
+  const swapped = Sk.worldMend(party, world);
+  assert.deepEqual(party[0].sketch.elements.map(el => el.prop || el.effect), ['pebble', 'leaves', 'tusk']);
+  assert.ok(swapped.some(fix => /pebbles and thrown leaves/.test(fix.fix)));
+  assert.equal(Sk.validate({elements: [{kind: 'prop', prop: 'pebbles'}]}, {lenient: true}).elements[0].prop, 'pebble', 'the plural is the same prop');
+  assert.equal(Sk.fromText('He traded a mammoth tusk for pebbles.').elements.some(el => el.prop === 'tusk' || el.prop === 'pebble'), true);
 });

@@ -835,3 +835,13 @@ motion graphics or HTML render drawing is outdated by the update. In a sample re
 
 **People.** A paper collage video draws its people as cut-paper figures and a pixel video as pixel sprites inside the
 designed shots, so the planner does not send human moments to stick figures (`engines.js`).
+
+## 38. Pebbles, a mammoth tusk, leaves, and the stone age's celebrations (0.91.0)
+
+Owner review 2026-11-04 of a stone-age finance video: "it says mammoth tusk but drew a cross", pebbles not on the table, and leaves thrown in celebration because this is the stone age.
+
+- New props: `pebble` (a heap of pebbles, what stone-age people count, trade and save; "pebbles" and "stones" mean it too), `tusk` (a mammoth tusk; "ivory" too) and `leaf`.
+- New effect: `leaves` (green leaves thrown up that turn and drift down, the stone age's confetti; heard as a rising swoosh).
+- `Sk.worldMend` in a stone-age story swaps coins, money, money bags, piggy banks, cards and dollar signs for pebbles, and confetti or money rain for thrown leaves, with a named fix.
+- The planner's guide lists them with the stone age. The free draft finds tusks and pebbles in the words.
+- `drawn-scene/31`.

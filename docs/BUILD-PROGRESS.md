@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-11-04. Current application: 0.90.0: music and effects you can hear, in the live player too, simple volume steps, Freesound searched for each video, a cleaner Audio Room, on top of 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
+Last updated: 2026-11-04. Current application: 0.91.0: the editor reaches named shots and adds effects, sets the music feel and has shots drawn again; effects by meaning; old storyboards updated to today's rules; pebbles, tusk and leaves, on top of 0.90.0: music and effects you can hear, in the live player too, simple volume steps, Freesound searched for each video, a cleaner Audio Room, on top of 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next: the owner pulls 0.90.0 and restarts; presses Play in the Editing Room to hear the music and effects with the narration, sets the volumes in Room 07 (plain steps, Reset to defaults), presses "Find sounds for this video" with Freesound connected, and renders a preview to judge the mix.
+Next: the owner pulls 0.91.0 and restarts; in Room 04 presses "Update to today's rules" when the storyboard says it was planned with older rules, draws the changed shots and approves the visuals; makes a fresh draft and asks Claude in the Editing Room by shot label (for example "S18C: two winners") for the fixes, the effects and the music feel; plays the edit to listen.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,19 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-11-05 - 0.91.0: an editor that does what you ask, effects by meaning, storyboards on today's rules
+
+The owner's review of a stone-age video. The editor used tokens and changed almost nothing. Asked to add effects, it switched them all off. Redrawing gave the same scenes, nearly every effect was a pop, and there were twelve scene notes (S18C two winners, S21B pebbles on the table, S02C a win with thrown leaves, S06A and S09A rough line effects, S09B a groan, S11B facing, S16B a mammoth tusk drawn as a cross, S20C and the end need explanatory graphics).
+
+- **Why the editor did nothing.** With nothing selected it sent drawings in order until about 90 KB, so S18C-S21B of a long video never reached it. It had no operation for one effect, the music or a redraw. Applying a 40-change polish was refused at 20.
+- **Editor** (editing-room.js `namedClips`, `compactSketch`, `musicFeel`, `redrawShots`, `saveOps`; editing-brain.js `add-sfx`/`remove-sfx`; scene-room.js `changeShots`): named shots first, pictures and kit shapes kept out of the request, the effects in the edit shown, new operations add-sfx, remove-sfx, set-music and redraw-shot, up to 60 operations applied, and a toast that says what happens after a redraw.
+- **Sound by meaning** (music.js `MEANING_SFX`, `meaningsOf`, `meaningKinds`, `applySfxEdits`): cheer, sad, groan, gasp, laugh, ding, boom and riser on the narrator's word; no sound for people walking on; pops rare; Freesound fetches the meaning sounds a script needs.
+- **Music feel** (music.js `rulesScore` `feel`; soundtrack.js; Room 07 Free score): one feel for the whole video, searched by its own mood words; the edit's music follows new tracks for the same cues.
+- **Storyboards** (scene-room.js `SCENE_RULES`, `oldRules`, `update-rules`; public/scene-room.js): plans record their scene rules; older ones say so and update in one click; the drawing step says that drawing again keeps the same scenes.
+- **Stone age** (sketch.js, drawn-props.js, drawn-engine.js): props pebble, tusk and leaf, effect leaves, coins become pebbles and confetti becomes leaves; `drawn-scene/31`.
+- **Tests**: @@TESTS@@ tests/soundtrack.test.js "0.91", tests/editing.test.js "full control" (named shots, effects, redraw through Room 04) and "0.60" (the music feel and following new tracks), tests/scene.test.js "atelier shots" (several shots with their own words, the rules update), tests/drawn.test.js stone age (swaps, plurals). The new props and leaves were drawn and checked by eye.
+- **Not tested**: a live Claude or ChatGPT edit command (the tests answer for the AI), the owner's own video and storyboard (they live on the laptop), and how the new effects sound on Freesound's real files.
 
 ### 2026-11-04 - 0.90.0: music and effects you can hear, Freesound by the video, a cleaner Audio Room
 

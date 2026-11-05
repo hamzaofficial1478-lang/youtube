@@ -310,3 +310,22 @@ Owner review 2026-11-04 (three screenshots and nine questions).
 - **Narration, Music and Sound effects rows** (`audioTracks`): each music cue with its mood and track, and each sound effect on its moment (the same `sfxEvents` the render uses) with the library sound it uses, or dashed when the library has none yet. A click shows what it is and why it is there, and opens Levels and mix. "Sound effects on drawn moments (rich)" means the density: subtle plays only the big moments, accent the main ones (each place and each object that makes a sound), rich every drawn moment.
 - **Polish the whole edit with Claude / ChatGPT** (`command` with `polish: true`): one request reads the whole edit and proposes up to 40 changes (transitions per scene change, camera life, word animations and colours, effects where a line lands, drawings that match their words and the story's world), with the owner's approved editing skills (`editing.plan` brief, recorded in `skill_usage`) and the competitor lessons (`visualGuidance`); typed words are added to it. Every typed request now gets the skills and lessons too. Nothing changes until the owner applies.
 - **Folded sections** (`editFold`): the critique, motion graphics, captions and YouTube craft start folded under their titles and stay as the owner leaves them.
+
+## The editor that does what you ask (0.91)
+
+Owner report 2026-11-04: Claude used tokens in the Editing Room and changed almost nothing; asked to add sound effects, it switched them all off; asked twice to change the same scenes, nothing happened, although the program could have had them drawn again.
+
+**Why.** Three causes.
+
+- With nothing selected, the editor sent the drawings in order until about 90 KB of data. In a long video, shots such as S18C, S20C and S21B never reached it, so it could only explain that it could not change them. A drawn picture's path data and the kit's shapes filled much of that room.
+- It had no operation for one sound effect, the music's feel, or a shot drawn again. The only sound operation was the whole mix, so "add effects" could end as "effects off".
+- A polish proposes up to 40 changes, but applying refused more than 20.
+
+**Now.**
+
+- The shots the instruction names come first (`namedClips`: shot labels like "S18C", whole scenes like "S20", "the end" and "the hook"), then the others in order while they fit in about 120 KB. Pictures and kit shapes stay in the program (`compactSketch`; an `art` or `kit` change from the editor is ignored). Shots that did not fit are listed by label, and the editor says so when it needs one.
+- `add-sfx` {seconds, kind} and `remove-sfx` {seconds? kind?} are kept on the edit (`timeline.sfxEdits`, `M.applySfxEdits`). The render, the live player and the timeline's Sound effects row all use them. The editor sees the effects already in the edit (`AUDIO.effects`) and is told never to switch them off unless asked.
+- `set-music` {feel} makes a free score in the owner's words when applied (`rulesScore` `feel`), and the edit's music plays it at the owner's levels. When the program later finds better tracks for the same cues, the owner's music follows them (`refreshAutoAudio`). Only the score changes; levels and effects stay as they are.
+- `redraw-shot` {clipId, ask} goes to Room 04 when applied (`SceneRoom.changeShots`: one "change with words" job for several shots, each with its own words, on the newest storyboard). A painted picture is painted again. After it, the owner draws the changed shots, approves the visuals and makes a fresh draft; the edit's own changes come along (0.88).
+- The prompt asks for every point of the instruction to become operations, or a line in "explain" saying why not.
+- Applying takes up to 60 operations.

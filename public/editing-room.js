@@ -161,7 +161,7 @@ function editContext() {
 }
 async function editSend(edit, ops, note) {
   const person = renderPerson() || 'Owner';
-  await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
+  return api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
 }
 const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
 function editAction(command, id, button) {
@@ -365,7 +365,7 @@ function tlEditor(content, edit, stale) {
   const viewer = stale ? '<div class="tl-viewer"><p class="inline-warning">This edit is out of date, so it cannot play. Draft a new edit.</p></div>' : playViewer(edit, content);
   const commandBox = stale ? '' : `<div class="tl-command"><h4>Tell the editor what to change</h4><textarea data-tl="command" rows="3" maxlength="2000" placeholder="For example: make the title in ${esc(clip.label)} slam in gold, add a sparkle when he says &quot;gold&quot;, and use a whip pan after it.">${esc(TL.command)}</textarea>
     <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? askButtons : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
-    ${polishRow}<p class="hint">${who ? `${who} proposes the changes; the program checks each one and nothing changes until you apply them. You can ask for pictures, words, timing, transitions, captions, music and sound effects (music plays once the video has a score in Room 07 Audio). One request uses tokens from the family's monthly limit.` : ''}</p>${tlProposal()}</div>`;
+    ${polishRow}<p class="hint">${who ? `Name the shots (for example S18C). Ask for drawings, words, timing, transitions, captions, music, sound effects, or a shot drawn again. Nothing changes until you apply.` : ''}</p>${tlProposal()}</div>`;
   return `<div class="tl-editor" data-tl-root id="tl-player"><div class="tl-panels">${viewer}<div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${toolbar}${tlTracks(tl, stale)}${legend}${commandBox}</div>`;
 }
 function tlProposal() {
@@ -469,7 +469,10 @@ function tlAction(command, id, button) {
     TL.busy = ['claude', 'chatgpt'].includes(id) ? id : 'claude'; render();
     return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ai: TL.busy, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
   }
-  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh(); toast(`${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
+  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { const saved = await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh();
+    // 0.91: shots drawn again go to Room 04; the owner is told what happens next.
+    const redraw = saved?.redraw, changed = p.ops.filter(op => op.type !== 'redraw-shot').length;
+    toast(redraw ? `${changed ? `${changed} change${changed === 1 ? '' : 's'} applied. ` : ''}Room 04 is drawing ${redraw.labels.join(', ')} again. When it is done: draw them, approve the visuals, then press Fresh draft here (your changes come along).` : `${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
   return toast('Unknown action.', true);
 }
 // ------------------------------------------------------------ the live player (0.83, owner request 2026-11-03)

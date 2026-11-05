@@ -137,10 +137,13 @@ class SoundtrackRoom {
     object(input);
     const by = person(input.requestedBy), inputs = this.scoreInputs(contentId);
     requireValue(inputs.ready, inputs.blockers[0], 409);
-    let score = M.rulesScore({scenes: inputs.manifest.plan.scenes, durationSeconds: inputs.durationSeconds, moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche, era: inputs.manifest.plan.world?.era || null});
+    // 0.91: the owner may describe the music ("calm but a bit energetic"); the whole video keeps that feel.
+    const feel = input.feel === undefined || input.feel === null || input.feel === '' ? null : String(input.feel).replace(/[\x00-\x1f\x7f<>]+/g, ' ').replace(/\s+/g, ' ').trim();
+    requireValue(feel === null || (feel.length >= 3 && feel.length <= 120), 'Describe the music in a few words (3-120 characters).');
+    let score = M.rulesScore({scenes: inputs.manifest.plan.scenes, durationSeconds: inputs.durationSeconds, moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche, era: inputs.manifest.plan.world?.era || null, feel});
     const tracks = this.libraryTracks(inputs.family.id);
     if (tracks.length) score = {...score, cues: M.assignTracks(score.cues, tracks, {recent: this.recentTracks(inputs.family.id, contentId)})};
-    const created = this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: tracks.length ? 'Free score from the story sections, tracks from your sound library' : 'Free score from the story sections', createdBy: by}));
+    const created = this.store.transaction(() => this.insertScore({inputs, score, warnings: [], source: 'rules', note: feel ? `Free score: "${feel}"` : tracks.length ? 'Free score from the story sections, tracks from your sound library' : 'Free score from the story sections', createdBy: by}));
     this.scored(inputs, created);
     return created;
   }
@@ -159,7 +162,8 @@ class SoundtrackRoom {
     const usage = inputs.spec?.audio?.sfxUsage, density = M.DENSITIES.includes(usage) && usage !== 'none' ? usage : 'accent';
     const sketches = inputs.manifest.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.sketch));
     // 0.90: also the things on screen its story sounds belong to, and the tracks of recent videos (so it gets new ones).
-    return {kinds: usage === 'none' ? [] : M.neededEffects(sketches, {density, engine: inputs.engine}), subjects: usage === 'none' ? [] : M.storySubjects(sketches, {density, engine: inputs.engine}),
+    const text = (inputs.manifest.plan.sentences || []).map(item => item.text).join(' ');
+    return {kinds: usage === 'none' ? [] : M.neededEffects(sketches, {density, engine: inputs.engine, text}), subjects: usage === 'none' ? [] : M.storySubjects(sketches, {density, engine: inputs.engine}),
       flavour: M.ERA_MUSIC[inputs.manifest.plan.world?.era] || null, recent: this.recentTracks(inputs.family.id, inputs.content.id)};
   }
   // Ask Freesound again for a video whose score or effects are not complete (EditingRoom.autoAudio).
@@ -499,9 +503,11 @@ class SoundtrackRoom {
       const words = (timeline.captions?.groups || []).flatMap(group => group.words);
       const clips = timeline.clips.filter(clip => drawings[clip.id]?.sketch).map(clip => {
         const start = clip.start / timeline.fps, seconds = clip.frames / timeline.fps, sketch = Sk.validate(drawings[clip.id].sketch, {primary: engine, lenient: true});
-        return {label: clip.label, start, seconds, sketch, times: Sk.timing(sketch, words.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: word.start - start})))};
+        const own = words.filter(word => word.start >= start - 0.01 && word.start < start + seconds).map(word => ({text: word.text, start: word.start - start}));
+        return {label: clip.label, start, seconds, sketch, words: own, times: Sk.timing(sketch, own)};
       });
-      out.events = M.sfxEvents({clips, density: config.sfx.density, engine});
+      // 0.91: the effects the drawings and the words earn, with the edit's own additions and removals.
+      out.events = M.applySfxEdits(M.sfxEvents({clips, density: config.sfx.density, engine}), timeline.sfxEdits);
       const settings = this.settings(content.familyId), library = new Map(this.library(content.familyId).map(item => [item.kind, item]));
       // 0.90: a story sound plays the sound found for its own thing (the campfire, the mammoth) when the library has one,
       // unless the owner chose the slot's sound.

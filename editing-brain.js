@@ -812,7 +812,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio', 'set-drawing']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio', 'set-drawing', 'add-sfx', 'remove-sfx']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -954,6 +954,18 @@ function applyOp(source, op, {spec, checkDrawing = null} = {}) {
   } else if (op.type === 'set-audio') {
     timeline.audio = Audio.settings(op.settings);
     receipt.changed.push('audio');
+  } else if (op.type === 'add-sfx' || op.type === 'remove-sfx') {
+    // 0.91 (owner report 2026-11-04: asked to add effects, the editor could only switch them all off): one sound effect
+    // added at a moment, or the effects of a kind (or the one nearest a moment) taken out. Kept in order on the edit and
+    // laid over the effects the drawings earn (music.js applySfxEdits).
+    const kinds = Object.keys(require('./music').SFX), seconds = timeline.totalFrames / fps;
+    const at = op.seconds === undefined || op.seconds === null ? null : Number(op.seconds);
+    if (at !== null && !(Number.isFinite(at) && at >= 0 && at <= seconds)) throw opError(`Give the moment in seconds, from 0 to ${Math.floor(seconds)}.`);
+    if (op.kind !== undefined && op.kind !== null && !kinds.includes(op.kind)) throw opError(`Sound effects are: ${kinds.join(', ')}.`);
+    if (op.type === 'add-sfx' && (at === null || !op.kind)) throw opError('Say which effect and at what second.');
+    if (op.type === 'remove-sfx' && at === null && !op.kind) throw opError('Say which kind of effect to take out, or at what second.');
+    timeline.sfxEdits = [...(timeline.sfxEdits || []), {op: op.type === 'add-sfx' ? 'add' : 'remove', ...(at !== null ? {seconds: Math.round(at * 1000) / 1000} : {}), ...(op.kind ? {kind: op.kind} : {})}].slice(-400);
+    receipt.changed.push('sfx');
   } else if (op.type === 'set-captions') {
     if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
     if (typeof op.enabled !== 'boolean') throw opError('Captions must be switched on or off.');
