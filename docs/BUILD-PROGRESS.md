@@ -1,12 +1,12 @@
 # YouTube Control Room - detailed build process
 
-Last updated: 2026-11-04. Current application: 0.91.0: the editor reaches named shots and adds effects, sets the music feel and has shots drawn again; effects by meaning; old storyboards updated to today's rules; pebbles, tusk and leaves, on top of 0.90.0: music and effects you can hear, in the live player too, simple volume steps, Freesound searched for each video, a cleaner Audio Room, on top of 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
+Last updated: 2026-11-04. Current application: 0.92.0: every proposed change applies, renders wait for a slow PC and reuse earlier shots, download, editing during a render, on top of 0.91.0: the editor reaches named shots and adds effects, sets the music feel and has shots drawn again; effects by meaning; old storyboards updated to today's rules; pebbles, tusk and leaves, on top of 0.90.0: music and effects you can hear, in the live player too, simple volume steps, Freesound searched for each video, a cleaner Audio Room, on top of 0.89.0: Paper collage and Pixel art in the Motion Graphics engine, the skills of five more repositories in every drawing step, on top of 0.88.0: fresh drafts carry the owner's changes, music and sound-effect rows, Polish the whole edit, Remove for unfinished renders, folded sections, on top of 0.87.0: each video's music and story sounds fetched by the program itself and switched on in the edit.
 
 ## Resume here
 
 Read AGENTS.md (the delivery rule: GitHub `main` is the source of truth since 2026-10-28), README.md, build-status.json and the newest implementation-log entry below; then the room document for the work at hand. CONTINUATION-REVIEW.md holds the 2026-10-28 review.
 
-Next: the owner pulls 0.91.0 and restarts; in Room 04 presses "Update to today's rules" when the storyboard says it was planned with older rules, draws the changed shots and approves the visuals; makes a fresh draft and asks Claude in the Editing Room by shot label (for example "S18C: two winners") for the fixes, the effects and the music feel; plays the edit to listen.
+Next: the owner pulls 0.92.0 and restarts; presses Retry on the failed render (it now waits longer and names the slow shot and step), downloads the finished video, polishes the edit and applies every change; a second render after changes draws only the changed shots.
 
 ## Owner decisions (2026-10-04)
 
@@ -153,6 +153,17 @@ Use actual owner evidence and measured capacity to reach 10-15 families.
 <!-- CHECKLIST:END -->
 
 ## Implementation log
+
+### 2026-11-05 - 0.92.0: every change applies, renders that wait and reuse, download, editing during a render
+
+Owner report with two screenshots. "Apply 29 changes" from a ChatGPT polish was refused ("Send 1-20 edit operations"). A 1080p render failed on S01A, S01B and S01C, three tries each. Questions: how does rendering happen, can it work in packets like a download manager, add a download button, and what happens to the buttons while a video renders.
+
+- **Changes** (editing-room.js `opsCap`, `answerTokens`, `applyOps`, `editDrawing`): two changes a shot for a polish, one for a request, all applied at once (up to 1,000); a kind change replaces the element in place.
+- **Render waits** (motion.js `send`, `evaluate`, `render`; render-room.js): minutes for setup and the first frame (measured about 5 s here for a shot whose hand traces painted pictures, where 30 s was the old limit for everything), two minutes a frame after, doubling on each retry, one browser after a stall, the step and shot named.
+- **Parts reused** (render-room.js `cacheKey`, `cacheGet`, `cachePut`, `cachePrune`; backup.js): drawn shots kept by their exact recipe and reused by later renders; pruned past 8 GB; not backed up.
+- **Screen**: Download the video (public/render-room.js `renderFileName`); the Editing Room's road says editing goes on during a render; "Last steps".
+- **Tests**: @@TESTS@@ tests/editing.test.js "full control" (scaled caps, kind change) and "a preview render that stops" (retries wait longer; a third render drawn entirely from the cache gives the same file).
+- **Not tested**: the owner's laptop and video (the render that failed there), Windows Edge under load, and how much faster a real second render is (it depends on how many shots changed).
 
 ### 2026-11-05 - 0.91.0: an editor that does what you ask, effects by meaning, storyboards on today's rules
 

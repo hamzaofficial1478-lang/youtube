@@ -13,7 +13,8 @@ const {InputError} = require('./store');
 
 const DEFAULTS = Object.freeze({auto: true, everyHours: 24, keep: 14, folder: null});
 // Logs, launcher notes and the restore files describe this run, not the owner's work.
-const SKIP = new Set(['backups', 'server.log', 'server-error.log', 'launcher-process.json', 'restore-request.json', 'restore-result.json', 'backup-settings.json']);
+// render-cache (0.92) holds drawn shots kept for later renders; they are made again on demand, so backups leave them out.
+const SKIP = new Set(['backups', 'render-cache', 'server.log', 'server-error.log', 'launcher-process.json', 'restore-request.json', 'restore-result.json', 'backup-settings.json']);
 const MARGIN = 1024 ** 3; // a backup leaves at least 1 GB free on its drive
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };

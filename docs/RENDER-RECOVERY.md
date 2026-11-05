@@ -122,3 +122,27 @@ An approval is current only while all of these hold. Otherwise the room shows th
 ## Removing a render that did not finish (0.88)
 
 A cancelled, failed, out-of-date or stopped render has a **Remove** button (`RenderRoom.remove`, `POST /api/renders/:id/remove`): it leaves the lists (`render_jobs.cleared_at`), and its kept parts (`render_stages`) and work and output folders leave this PC, so a later render starts from the beginning. Its record stays for the history and the Operations report. A finished render is never removed this way.
+
+## How a render works, waiting for a slow PC, and parts reused by later renders (0.92)
+
+Owner questions 2026-11-05, with a screenshot of a failed 1080p render ("The browser did not answer Runtime.evaluate in time", with three messages about S01A, S01B and S01C, three tries each): how does rendering happen, does a model render, why three different shots, and can the work be broken into packets like a download manager?
+
+**How it works.** Rendering is free and local: no AI and no internet. The program's drawing engine runs in a hidden copy of Edge or Chrome on this PC and draws every drawn shot frame by frame from its drawing and the narrator's word times. FFmpeg encodes each shot, joins the shots with their transitions, lays the captions and graphics, mixes the narration, music and effects, and checks the result. Every drawn shot is already its own part (a packet): up to three browsers draw three shots side by side (that is why three shots were named), and every finished part is kept with its checksum, so a stop or a retry goes on from the parts already made.
+
+**Why it failed.** A shot's first frame plans how the hand traces its painted pictures. On a 4-core test PC that took about 5 s; every later frame took about 0.1 s. Every request to the drawing browser had 30 s. On a busy laptop with three browsers sharing the processor, that first frame ran past 30 s, three times on each of the first three shots.
+
+**Now.**
+
+- A shot's setup and its first frame get minutes; each later frame gets two minutes (`MotionRenderer.render` `setupMs`, `frameMs`).
+- Each retry of a stalled browser waits twice as long (`timeoutMs` doubles).
+- After a stall, the other browsers finish their current shot and stop, so one browser has the processor for the rest.
+- The message names the step ("while drawing frame 1 of 66", "while loading its painted pictures") and, after the last try, the shot.
+- When nothing was finished yet, the card says so instead of "0 finished parts are kept".
+
+**Parts reused by later renders.** A drawn shot is kept in `<data>/render-cache/drawn` under the exact recipe that made it: drawing, words, size, frame rate, drawing-engine version, encoder settings and the pinned FFmpeg build. A later render of any revision copies a shot with the same recipe instead of drawing it again, so after a change only the changed shots are drawn. The cache keeps the newest 8 GB (oldest out first). Backups leave it out because it is made again on demand. A third render of the same edit in the tests drew nothing and gave the same file, byte for byte.
+
+**Not done, and why.** Rendering at low quality and then raising it would only enlarge the small picture (blurry lines and words), so it is not used for the video. For a quick look, the live player in the Editing Room plays the edit without any render, and the 360p and 720p previews render faster.
+
+**Download.** A finished preview has **Download the video**, saved as `<title>-r<revision>-<height>p.mp4`. Masters and language editions already had their download links.
+
+**Editing during a render.** Not locked. A render works on the revision it started from, so changes make a new revision and a running render carries on. The Editing Room's road says so. A render still waiting to start becomes out of date when the edit changes, and the road says that too.

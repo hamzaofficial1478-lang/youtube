@@ -85,6 +85,39 @@ class RenderRoom {
     this.db.prepare('INSERT OR REPLACE INTO render_stages(job_id,key,file,command,sha256,meta,created_at) VALUES(?,?,?,?,?,?,?)').run(jobId, key, path.basename(file), createHash('sha256').update(JSON.stringify(command)).digest('hex'), R.fileSha256(file), meta ? JSON.stringify(meta) : null, now());
   }
   stagesOf(jobId) { return this.db.prepare('SELECT COUNT(*) AS count FROM render_stages WHERE job_id=?').get(jobId).count; }
+  // 0.92 (owner request 2026-11-05: "break the work into packets like a download manager"): every drawn shot is already
+  // its own part, drawn side by side and kept on a stop. Now a part is also kept for later renders under the exact
+  // recipe that made it (drawing, words, size, frame rate, engine version, encoder and FFmpeg build), so a new
+  // revision draws only the shots that changed. The cache is local and rebuilt on demand, never backed up.
+  cacheKey(command) { return createHash('sha256').update(JSON.stringify(command)).digest('hex'); }
+  cacheGet(key) {
+    const dir = path.join(this.dataRoot, 'render-cache', 'drawn'), file = path.join(dir, `${key}.mp4`), info = (() => { try { return JSON.parse(fs.readFileSync(path.join(dir, `${key}.json`), 'utf8')); } catch { return null; } })();
+    if (!info || !fs.existsSync(file) || R.fileSha256(file) !== info.sha256) return null;
+    try { const at = new Date(); fs.utimesSync(file, at, at); } catch { /* the order of pruning only */ }
+    return {file, meta: info.meta};
+  }
+  cachePut(key, file, meta) {
+    const dir = path.join(this.dataRoot, 'render-cache', 'drawn'), tmp = path.join(dir, `${key}.${process.pid}.tmp`);
+    try {
+      fs.mkdirSync(dir, {recursive: true});
+      fs.copyFileSync(file, tmp);
+      fs.renameSync(tmp, path.join(dir, `${key}.mp4`));
+      fs.writeFileSync(path.join(dir, `${key}.json`), JSON.stringify({sha256: R.fileSha256(path.join(dir, `${key}.mp4`)), meta}));
+    } catch { fs.rmSync(tmp, {force: true}); }
+  }
+  // The oldest kept shots go first when the cache passes its size (8 GB by default).
+  cachePrune(limitBytes = 8 * 1024 ** 3) {
+    const dir = path.join(this.dataRoot, 'render-cache', 'drawn');
+    let files;
+    try { files = fs.readdirSync(dir).filter(name => name.endsWith('.mp4')).map(name => { const stat = fs.statSync(path.join(dir, name)); return {name, size: stat.size, at: stat.mtimeMs}; }); } catch { return 0; }
+    let total = files.reduce((sum, item) => sum + item.size, 0), removed = 0;
+    for (const item of files.sort((a, b) => a.at - b.at)) {
+      if (total <= limitBytes) break;
+      fs.rmSync(path.join(dir, item.name), {force: true}); fs.rmSync(path.join(dir, item.name.replace(/\.mp4$/, '.json')), {force: true});
+      total -= item.size; removed++;
+    }
+    return removed;
+  }
 
   // ------------------------------------------------------------ readiness and pinned build
   latestReadiness() {
@@ -491,7 +524,8 @@ class RenderRoom {
           // its shot, so parallel drawing changes nothing in the picture).
           const renderers = Array.from({length: Math.max(1, Math.min(3, Math.floor(os.cpus().length / 2), drawings.length))}, () => new MotionRenderer({browser: this.browser}));
           this.current.handle = {kill: () => { renderers.forEach(item => item.close()); }};
-          let next = 0, finished = 0;
+          // 0.92: after a stall the other browsers finish their shot and stop, so one browser has the processor.
+          let next = 0, finished = 0, stalled = false;
           const drawOne = async (renderer, k) => {
             const [clipId, drawing] = drawings[k];
             const index = tl.clips.findIndex(item => item.id === clipId), clip = tl.clips[index], extra = index < tl.clips.length - 1 ? tl.joins[index].frames : 0;
@@ -513,16 +547,31 @@ class RenderRoom {
                 vertical: scope.format === 'shorts', width: size.width, height: size.height, fps, duration: seconds + 0.1, outDir: path.join(work, folder)});
               }
             };
-            const kept = this.stageDone(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION});
-            if (kept) { files[clipId] = path.join(work, file); drawnInfo.push({clipId, label: clip.label, ...kept.meta, index: k}); logs.push({step: `reused drawing ${clip.label}`, ok: true, stderr: ''}); this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total); return; }
+            const command = {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION};
+            // 0.92: the same shot drawn by an earlier render (same recipe, same encoder and FFmpeg build) is copied, not drawn.
+            const cacheKey = this.cacheKey({...command, grid: drawing.composition?.grid || null, encode: 'libx264 slow crf12 yuv420p', ffmpeg: scope.ffmpeg?.sha256 || null, renderer: R.RENDERER_VERSION});
+            const kept = this.stageDone(job.id, `drawn:${clipId}`, path.join(work, file), command);
+            if (kept) { files[clipId] = path.join(work, file); drawnInfo.push({clipId, label: clip.label, ...kept.meta, index: k}); if (!this.cacheGet(cacheKey)) this.cachePut(cacheKey, path.join(work, file), kept.meta); logs.push({step: `reused drawing ${clip.label}`, ok: true, stderr: ''}); this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total); return; }
+            const cached = this.cacheGet(cacheKey);
+            if (cached) {
+              fs.copyFileSync(cached.file, path.join(work, file));
+              files[clipId] = path.join(work, file);
+              drawnInfo.push({clipId, label: clip.label, ...cached.meta, index: k});
+              this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), command, cached.meta);
+              logs.push({step: `reused ${clip.label} from an earlier render`, ok: true, stderr: ''});
+              this.progress(job.id, `reused ${clip.label} from an earlier render (${++finished} of ${drawings.length})`, 0, total);
+              return;
+            }
             // 0.84: a browser that stalls, crashes or drops its connection is restarted up to three times for a shot.
             let drawn;
             for (let tries = 1; !drawn; tries++) {
               try { drawn = await drawIt(); } catch (error) {
-                if (tries > 3 || this.current.cancelledBy || !BROWSER_LOST.test(String(error.message))) throw error;
-                await renderer.close(); await renderer.start();
+                if (tries > 3 || this.current.cancelledBy || !BROWSER_LOST.test(String(error.message))) throw tries > 3 ? new InputError(`${clip.label}: ${error.message} It was tried 3 more times, each waiting longer.`, error.status || 504) : error;
+                stalled = true;
+                // Each new try waits twice as long (a slow PC gets the time it needs).
+                await renderer.close(); renderer.timeoutMs *= 2; await renderer.start();
                 fs.rmSync(path.join(work, folder), {recursive: true, force: true});
-                logs.push({step: `redraw ${clip.label} after the drawing browser stopped answering (${tries} of 3)`, ok: true, stderr: ''});
+                logs.push({step: `redraw ${clip.label} after the drawing browser stopped answering (${tries} of 3)`, ok: true, stderr: String(error.message).slice(0, 300)});
               }
             }
             // Pixel art (0.89) keeps every cell one sharp square at any output size.
@@ -532,13 +581,14 @@ class RenderRoom {
             fs.rmSync(path.join(work, folder), {recursive: true, force: true});
             files[clipId] = path.join(work, file);
             drawnInfo.push({clipId, label: clip.label, frames: drawn.frames, framesSha256: drawn.sha256, index: k});
-            this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), {drawing: createHash('sha256').update(JSON.stringify([carried[clipId] || drawing.sketch || null, drawing.composition || null])).digest('hex'), words, size, fps, seconds, engine: Sk.VERSION}, {frames: drawn.frames, framesSha256: drawn.sha256});
+            this.stageRecord(job.id, `drawn:${clipId}`, path.join(work, file), command, {frames: drawn.frames, framesSha256: drawn.sha256});
+            this.cachePut(cacheKey, path.join(work, file), {frames: drawn.frames, framesSha256: drawn.sha256});
             this.progress(job.id, `drew ${clip.label} (${++finished} of ${drawings.length})`, 0, total);
           };
           try {
             await Promise.all(renderers.map(item => item.start()));
-            await Promise.all(renderers.map(async renderer => {
-              while (next < drawings.length) {
+            await Promise.all(renderers.map(async (renderer, lane) => {
+              while (next < drawings.length && !(stalled && lane > 0)) {
                 if (this.current.cancelledBy) throw Object.assign(new InputError('The render was cancelled.', 409), {cancelled: true});
                 await drawOne(renderer, next++);
               }
@@ -722,6 +772,7 @@ class RenderRoom {
       };
       this.store.transaction(() => {
         this.db.prepare("UPDATE render_jobs SET status='completed', result=?, progress=NULL, updated_at=? WHERE id=?").run(JSON.stringify(result), now(), job.id);
+        try { this.cachePrune(); } catch (error) { console.error('Pruning the render cache:', error.message); }
         this.store.event(`${job.preset === 'edition' ? `${scope.edition.language} edition` : master ? 'Final master' : 'Proxy render'} ${job.id.slice(0, 8)} finished: QC ${result.qcPassed ? 'passed' : 'found issues'} (${result.renderSeconds} s)`);
         this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
       });
@@ -734,7 +785,7 @@ class RenderRoom {
       // "The render failed." and its cause could not be found).
       if (!cancelled && !(error instanceof InputError)) console.error(`${now()} Render ${job.id} failed:`, error?.stack || error);
       const message = cancelled ? `Cancelled by ${this.current.cancelledBy || 'the owner'} while running.` : error instanceof InputError ? error.message : `The render failed: ${String(error?.message || error).slice(0, 200)}`;
-      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', !cancelled ? `${message} ${this.stagesOf(job.id)} finished part${this.stagesOf(job.id) === 1 ? ' is' : 's are'} kept; a retry continues from them.` : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-3)}), now(), job.id);
+      this.db.prepare('UPDATE render_jobs SET status=?, error=?, progress=?, updated_at=? WHERE id=?').run(cancelled ? 'cancelled' : 'failed', !cancelled ? (kept => `${message} ${kept ? `${kept} finished part${kept === 1 ? ' is' : 's are'} kept; a retry continues from them.` : 'Nothing was finished yet; a retry starts again (shots drawn by earlier renders are still reused).'}`)(this.stagesOf(job.id)) : message, JSON.stringify({stage: 'stopped', logs: logs.slice(-6)}), now(), job.id);
       fs.rmSync(finalDir, {recursive: true, force: true});
       if (cancelled) this.db.prepare('DELETE FROM render_stages WHERE job_id=?').run(job.id);
       keepWork = !cancelled;
