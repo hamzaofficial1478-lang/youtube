@@ -1193,14 +1193,19 @@ test('a preview render that stops keeps its finished drawings and continues from
   // stops right after the first drawn shot is kept.
   const original = MotionRenderer.prototype.render;
   let stalls = 0;
-  MotionRenderer.prototype.render = function (...args) { if (stalls < 2) { stalls++; return Promise.reject(Object.assign(new Error('The browser did not answer Runtime.evaluate in time.'), {name: 'InputError'})); } return original.apply(this, args); };
+  const waits = [];
+  MotionRenderer.prototype.render = function (...args) { waits.push(this.timeoutMs); if (stalls < 2) { stalls++; return Promise.reject(Object.assign(new Error('The browser did not answer Runtime.evaluate in time.'), {name: 'InputError'})); } return original.apply(this, args); };
   t.after(() => { MotionRenderer.prototype.render = original; });
+  // The first render kept its drawn shots for later renders (0.92); this one starts without them.
+  assert.ok(fs.readdirSync(path.join(dataRoot, 'render-cache', 'drawn')).some(name => name.endsWith('.mp4')), 'drawn shots are kept for later renders');
+  fs.rmSync(path.join(dataRoot, 'render-cache'), {recursive: true, force: true});
   const record = renders.stageRecord.bind(renders);
   renders.stageRecord = (...args) => { record(...args); if (args[1].startsWith('drawn:')) throw new Error('simulated power cut'); };
   const second = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
   assert.equal(await renders.processNext(), null);
   renders.stageRecord = record; MotionRenderer.prototype.render = original;
   assert.equal(stalls, 2, 'the stalled browser was restarted, not the render failed');
+  assert.ok(waits.slice(2).length && waits.slice(2).every(wait => wait >= waits[0] * 2), `0.92: after a stall every try waits at least twice as long (${waits.join(', ')})`);
   assert.equal(renders.row(second.id).status, 'failed');
   assert.equal(renders.stagesOf(second.id), 1, 'the finished drawing is kept');
   assert.match(renders.row(second.id).error, /1 finished part is kept; a retry continues from them/);
@@ -1215,6 +1220,15 @@ test('a preview render that stops keeps its finished drawings and continues from
   assert.equal(result.logs.filter(item => /^reused drawn:/.test(item.step) || /reused drawing/.test(item.step)).length, 1, 'the kept drawing was reused, not drawn again');
   assert.equal(result.video.sha256, whole, 'a resumed preview is the preview made in one go');
   assert.equal(renders.stagesOf(second.id), 0, 'a finished render clears its kept parts');
+  // 0.92: a later render of the same edit draws nothing again: every drawn shot comes from the earlier render.
+  const third = renders.queueRender(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, editRevisionId: edit.id});
+  MotionRenderer.prototype.render = function () { throw new Error('nothing should be drawn again'); };
+  const finished = await renders.processNext();
+  MotionRenderer.prototype.render = original;
+  assert.equal(finished?.status, 'completed', `${renders.row(third.id).status}: ${renders.row(third.id).error}`);
+  const again = JSON.parse(renders.row(third.id).result);
+  assert.ok(again.logs.some(item => /from an earlier render/.test(item.step)));
+  assert.equal(again.video.sha256, whole, 'the same video to the byte');
 });
 
 test('full control (0.54): every drawn shot is shown and changed inside the edit, any moment previews as a frame, typed commands become checked operations', {skip: skip || noBrowser}, async t => {
@@ -1313,6 +1327,13 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   assert.match(asked.at(-1).messages[0].content, /SKILLS \(the owner's approved editing craft[\s\S]*editing\.transition-grammar/);
   assert.equal(asked.at(-1).maxTokens, 32000);
   assert.equal(polished.steps.length, 40, 'up to 40 changes');
+  // 0.92 (owner report 2026-11-05: "Apply 29 changes" was refused at 20): a long video gets room for more changes, and
+  // all of them apply at once; a change of an element's kind replaces it in its place.
+  const {opsCap, answerTokens, editDrawing} = require('../editing-room'), long = {clips: Array.from({length: 150}, (_, k) => ({id: `c${k}`}))};
+  assert.deepEqual([opsCap(long, true), opsCap(long, false), opsCap({clips: [1, 2]}, true)], [300, 150, 40]);
+  assert.deepEqual([answerTokens(40, true), answerTokens(300, true)], [32000, 64000]);
+  const swapped = editDrawing({elements: [{kind: 'prop', prop: 'tree', x: 0.3, y: 0.7, at: 'the shelf'}]}, {type: 'set-element', element: 0, changes: {kind: 'figure', pose: 'cheer', prop: null}});
+  assert.deepEqual(swapped.elements[0], {x: 0.3, y: 0.7, at: 'the shelf', kind: 'figure', pose: 'cheer'});
   assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM skill_usage WHERE task_key='editing.plan'").get().n >= 1, true, 'the skills it used are recorded');
   // 0.91 (owner report 2026-11-04: "Claude consumed tokens and changed nothing"): the shots the owner names are sent
   // first, a painted picture's data stays in the program, and the editor can add and take out sound effects, set the

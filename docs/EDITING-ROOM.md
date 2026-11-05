@@ -329,3 +329,11 @@ Owner report 2026-11-04: Claude used tokens in the Editing Room and changed almo
 - `redraw-shot` {clipId, ask} goes to Room 04 when applied (`SceneRoom.changeShots`: one "change with words" job for several shots, each with its own words, on the newest storyboard). A painted picture is painted again. After it, the owner draws the changed shots, approves the visuals and makes a fresh draft; the edit's own changes come along (0.88).
 - The prompt asks for every point of the instruction to become operations, or a line in "explain" saying why not.
 - Applying takes up to 60 operations.
+
+## Every change applies, however long the video (0.92)
+
+Owner report 2026-11-05: "Apply 29 changes" was refused with "Send 1-20 edit operations", and a 10-15 minute video could need more than 100 fixes.
+
+- The editor's answer carries up to two changes a shot for a polish (40 to 400) and one a shot for a request (20 to 200) (`opsCap`). The room for its answer grows with them, about 180 tokens a change, at most 64,000 (`answerTokens`).
+- Applying takes up to 1,000 changes at once.
+- A change of an element's kind (a prop that should be a figure) replaces the element in its place, keeping where and when it appears, instead of failing with "an element keeps its kind".

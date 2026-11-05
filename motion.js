@@ -95,40 +95,47 @@ class MotionRenderer {
     this.version = (await this.send('Runtime.evaluate', {expression: 'navigator.userAgent', returnByValue: true})).result.value;
     return this;
   }
-  send(method, params = {}) {
+  send(method, params = {}, timeoutMs = this.timeoutMs) {
     return new Promise((resolve, reject) => {
       const id = ++this.nextId;
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new InputError(`The browser did not answer ${method} in time.`, 504)); }, this.timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new InputError(`The browser did not answer ${method} in time.`, 504)); }, timeoutMs);
       this.pending.set(id, message => { clearTimeout(timer); if (message.error) reject(new InputError(`Browser error: ${message.error.message}`, 502)); else resolve(message.result); });
       this.socket.send(JSON.stringify({id, method, params}));
     });
   }
-  async evaluate(expression) {
-    const result = await this.send('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true});
+  async evaluate(expression, timeoutMs = this.timeoutMs) {
+    const result = await this.send('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true}, timeoutMs);
     if (result.exceptionDetails) throw new InputError(`Motion template error: ${result.exceptionDetails.exception?.description?.split('\n')[0] || result.exceptionDetails.text}`, 502);
     return result.result.value;
   }
   // Renders one graphic to numbered lossless PNG frames (f00000.png ...; `format: 'jpeg'` exists for quick
   // previews only). Returns the frame count, the frame pattern and a hash of all frames.
+  // 0.92 (owner's failed render 2026-11-05: "The browser did not answer Runtime.evaluate in time" on S01A-S01C, three
+  // tries each): a shot's setup and its first frame plan how the hand traces its painted pictures, which takes seconds
+  // on a fast PC and much longer on a busy laptop drawing three shots at once. They get minutes (setupMs); every later
+  // frame gets two minutes (frameMs). A stall says which step it was.
   async render({template, data, palette, fonts, finish = 'clean', drawing = null, vertical = false, width, height, fps, duration, outDir, format = 'png', onFrame = () => {}, images = {}}) {
+    const setupMs = Math.max(this.timeoutMs * 10, 300000), frameMs = Math.max(this.timeoutMs * 4, 120000);
+    const step = async (what, wait, work) => { try { return await work(); } catch (error) { if (error.status === 504) throw new InputError(`The drawing browser did not answer in time while ${what} (it waited ${Math.round(wait / 1000)} s).`, 504); throw error; } };
     if (!this.injected) {
       if (this.dirty) { await this.blank(); this.dirty = false; }
       await this.send('Emulation.setDeviceMetricsOverride', {width, height, deviceScaleFactor: 1, mobile: false});
-      await this.evaluate(pageScript() + '\ntrue');
+      await step('loading the drawing engine', setupMs, () => this.evaluate(pageScript() + '\ntrue', setupMs));
       this.injected = true;
     }
     // The faces this PC really has (fonts.js): a missing style font is drawn in its chosen look-alike, never an accident.
     fonts = {heading: F.resolve(fonts?.heading), body: F.resolve(fonts?.body), hand: F.resolve(fonts?.hand || 'Segoe Print')};
     const params = {template, data, palette, fonts, finish, drawing, vertical, width, height, fps, duration};
     // Painted pictures (ChatGPT, 2026-10-22) arrive as checked data and are decoded before the layout needs their size.
-    await this.evaluate(`window.DIMG = {}; Promise.all(Object.entries(${JSON.stringify(images || {})}).map(([key, src]) => new Promise(done => { const image = new Image(); image.onload = done; image.onerror = done; image.src = src; window.DIMG[key] = image; }))).then(() => true)`);
-    await this.evaluate(`MOTION.setup(${JSON.stringify(params)})`);
+    await step('loading its painted pictures', setupMs, () => this.evaluate(`window.DIMG = {}; Promise.all(Object.entries(${JSON.stringify(images || {})}).map(([key, src]) => new Promise(done => { const image = new Image(); image.onload = done; image.onerror = done; image.src = src; window.DIMG[key] = image; }))).then(() => true)`, setupMs));
+    await step('setting up the shot', setupMs, () => this.evaluate(`MOTION.setup(${JSON.stringify(params)})`, setupMs));
     // Wait for the named fonts (system fonts resolve immediately; a missing one falls back).
-    await this.evaluate(`Promise.all([${JSON.stringify(fonts.heading)}, ${JSON.stringify(fonts.body)}, ${JSON.stringify(fonts.hand)}].map(name => document.fonts.load('40px "' + name + '"'))).then(() => true)`);
+    await step('loading its fonts', setupMs, () => this.evaluate(`Promise.all([${JSON.stringify(fonts.heading)}, ${JSON.stringify(fonts.body)}, ${JSON.stringify(fonts.hand)}].map(name => document.fonts.load('40px "' + name + '"'))).then(() => true)`, setupMs));
     fs.mkdirSync(outDir, {recursive: true});
     const frames = Math.max(1, Math.round(duration * fps)), hash = createHash('sha256');
     for (let index = 0; index < frames; index++) {
-      const url = await this.evaluate(`MOTION.renderFrame(${index}/${fps}) && document.getElementById('stage').toDataURL(${format === 'jpeg' ? "'image/jpeg', 0.95" : "'image/png'"})`);
+      const wait = index ? frameMs : setupMs;
+      const url = await step(`drawing frame ${index + 1} of ${frames}`, wait, () => this.evaluate(`MOTION.renderFrame(${index}/${fps}) && document.getElementById('stage').toDataURL(${format === 'jpeg' ? "'image/jpeg', 0.95" : "'image/png'"})`, wait));
       const bytes = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
       hash.update(bytes);
       fs.writeFileSync(path.join(outDir, `f${String(index).padStart(5, '0')}.${format === 'jpeg' ? 'jpg' : 'png'}`), bytes);

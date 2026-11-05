@@ -31,9 +31,14 @@ const OVERRIDE_SKILL = {'set-transition': 'editing.transition-grammar', 'set-mov
 const OVERRIDE_REPEAT = 2;
 // One typed instruction (0.54): the editor's answer is a short list of operations.
 const COMMAND_TOKENS = 24000, POLISH_TOKENS = 32000;
+// 0.92 (owner report 2026-11-05: "Apply 29 changes" was refused at 20; "a 10 to 15 minute video could need more than 100
+// fixes"): how many changes one answer may carry grows with the video (two per shot for a polish, one per shot for a
+// request), and so does the room the answer gets (about 180 tokens a change).
+function opsCap(payload, polish) { const shots = payload.clips.length; return polish ? Math.min(400, Math.max(40, shots * 2)) : Math.min(200, Math.max(20, shots)); }
+const answerTokens = (cap, polish) => Math.min(64000, (polish ? POLISH_TOKENS : COMMAND_TOKENS) + Math.max(0, cap - (polish ? 40 : 20)) * 180);
 // 0.88 (owner review 2026-11-04: "the editing looks too generic and basic, no special effects, no detailing"): one click
 // asks the AI to polish the whole edit, with the owner's approved editing skills and the competitor lessons.
-const POLISH_ASK = 'Polish this whole edit like a professional editor and motion designer, so it never looks basic or generic. Give every scene change the transition that serves it (an accent on a change of topic and on the turn, gentle on the wind-down) and keep cuts inside a scene. Give drawn shots camera life (set-shot camera; texture or film where it fits the look), give their words an animation and the key word an accent colour, add an effect (kind "fx") where a line lands, and keep the hook fast. Show the subject the words name, in the story\'s world (era, places, objects), and change a drawing that does not match its words. Use the SKILLS and the COMPETITOR LESSONS. Change what makes the video better and keep what already works; up to 40 operations.';
+const POLISH_ASK = 'Polish this whole edit like a professional editor and motion designer, so it never looks basic or generic. Give every scene change the transition that serves it (an accent on a change of topic and on the turn, gentle on the wind-down) and keep cuts inside a scene. Give drawn shots camera life (set-shot camera; texture or film where it fits the look), give their words an animation and the key word an accent colour, add an effect (kind "fx") where a line lands, and keep the hook fast. Show the subject the words name, in the story\'s world (era, places, objects), and change a drawing that does not match its words. Use the SKILLS and the COMPETITOR LESSONS. Change what makes the video better and keep what already works; as many operations as the edit needs, within the limit given.';
 const list = value => (Array.isArray(value) ? [...value] : Object.keys(value || {}));
 // What the inspector offers for each field of a drawing (the drawing vocabulary, sketch.js).
 const VOCAB = Object.freeze({kinds: ['text', 'figure', 'prop', 'arrow', 'bubble', 'fx', 'chart', 'timeline', 'network', 'map', 'crowd', 'quote', 'document', 'gauge', 'loupe', 'ruler'],
@@ -53,7 +58,14 @@ function editDrawing(sketch, op) {
   if (!Number.isSafeInteger(index) || !sketch.elements[index]) throw new Error(`There is no element ${Number.isSafeInteger(index) ? index + 1 : index} in this drawing.`);
   if (op.type === 'remove-element') { sketch.elements.splice(index, 1); return sketch; }
   if (!op.changes || typeof op.changes !== 'object' || Array.isArray(op.changes)) throw new Error('Give the element changes as an object.');
-  for (const [key, value] of Object.entries(op.changes)) { if (key === 'kind') throw new Error('An element keeps its kind; remove it and add another.'); if (key === 'art' && sketch.elements[index].kind === 'picture') continue; if (value === null) delete sketch.elements[index][key]; else sketch.elements[index][key] = value; }
+  // 0.92 (owner's screenshot 2026-11-05: three changes "Not possible: an element keeps its kind"): a new kind replaces the
+  // element in its place, keeping where and when it appears; the drawing check then makes it whole or names what is wrong.
+  if (op.changes.kind !== undefined && op.changes.kind !== sketch.elements[index].kind) {
+    const keep = Object.fromEntries(['x', 'y', 'at', 'until', 'then', 'enter', 'size', 'layer'].filter(key => sketch.elements[index][key] !== undefined).map(key => [key, sketch.elements[index][key]]));
+    sketch.elements[index] = Object.fromEntries(Object.entries({...keep, ...op.changes}).filter(([, value]) => value !== null));
+    return sketch;
+  }
+  for (const [key, value] of Object.entries(op.changes)) { if (key === 'kind') continue; if (key === 'art' && sketch.elements[index].kind === 'picture') continue; if (value === null) delete sketch.elements[index][key]; else sketch.elements[index][key] = value; }
   return sketch;
 }
 // A plain sentence for each proposed operation, so the owner sees what will change before applying it.
@@ -86,7 +98,7 @@ function describeOp(op, timeline, drawn) {
   }
 }
 // The editor's messages: the operations, the rules of this style, the edit as data and the drawings it may change.
-function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null}) {
+function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null, cap = 20}) {
   const fps = payload.fps, secs = frames => Math.round(frames / fps * 100) / 100;
   const kindOf = clip => (drawn.clips[clip.id]?.designed ? 'designed' : drawn.clips[clip.id] ? 'drawn' : clip.mediaType === 'image' ? 'still' : 'footage');
   const edit = {fps, seconds: secs(payload.totalFrames), format: payload.format, scenes: payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, at: secs(scene.startFrame)})),
@@ -105,7 +117,7 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
   for (const id of around) { const entry = {words: drawn.clips[id].words, sketch: compactSketch(drawn.clips[id].sketch)}, size = JSON.stringify(entry).length; if (size > budget) { left.push(id); continue; } budget -= size; drawings[id] = entry; }
   const allowed = [...new Set(['cut', ...(spec.transitions?.allowed || [])])];
   const system = ['You are the editor of this YouTube video: an expert video editor and motion designer working in the program\'s Editing Room. The owner tells you what to change. Turn the instruction into the program\'s edit operations: exactly what the owner asks, plus only what that change needs to work (for example a shorter transition when a clip gets shorter). If something cannot be done with these operations, say so in "explain" and leave it out. The narration is fixed: captions follow it, and words on screen come from it.',
-    'Return JSON only: {"explain": one or two plain sentences for the owner about what you changed and why, "ops": [at most 20 operations, or 40 when asked to polish the whole edit]}.',
+    `Return JSON only: {"explain": one or two plain sentences for the owner about what you changed and why, "ops": [at most ${cap} operations]}.`,
     'OPERATIONS (ids from the data; seconds in seconds):',
     '- {"type":"set-hold","clipId","seconds"}: the clip\'s length; the next clip absorbs the change; never the last clip; both keep at least 0.5 s.',
     `- {"type":"set-transition","clipId","transition","seconds"?}: the join after the clip. transition: ${allowed.join(', ')}. seconds 0.1 to half the shorter clip; "cut" takes no seconds.`,
@@ -470,7 +482,8 @@ class EditingRoom {
     object(input);
     const by = person(input.editedBy);
     // 0.91: a polish proposes up to 40 changes; they are applied together (it was limited to 20 and refused).
-    requireValue(Array.isArray(input.ops) && input.ops.length >= 1 && input.ops.length <= 60, 'Send 1-60 edit operations.');
+    // 0.92: every change the editor proposed can be applied at once (1,000 is only a sanity bound).
+    requireValue(Array.isArray(input.ops) && input.ops.length >= 1 && input.ops.length <= 1000, 'Send 1-1,000 edit operations.');
     input.ops.forEach(op => object(op, 'Edit operation'));
     const redraws = input.ops.filter(op => op.type === 'redraw-shot'), musics = input.ops.filter(op => op.type === 'set-music');
     // A new score in the owner's words is made first (free, from the sound library); the edit's music then plays it.
@@ -746,8 +759,8 @@ class EditingRoom {
     const skillBrief = this.store.skillRuntime?.brief('editing.plan', family.id, {text: [content.title, family.niche, polish ? 'polish transitions effects animation camera' : ask].join(' '), format: family.format, style}) || null;
     let guidance = null;
     try { guidance = this.scenes.visualGuidance?.(family.id) || null; } catch { guidance = null; }
-    const drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance});
-    const maxTokens = polish ? POLISH_TOKENS : COMMAND_TOKENS, reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`;
+    const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap});
+    const maxTokens = answerTokens(cap, polish), reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`;
     this.store.transaction(() => {
       const summary = this.store.usageSummary(family.id);
       requireValue(summary.settledTokens + summary.reservedTokens + reserve <= family.tokenBudget.monthlyLimit, 'The family\'s monthly token limit cannot reserve this request. Raise the limit or wait for next month.', 409);
@@ -763,7 +776,7 @@ class EditingRoom {
     try { answer = JSON.parse(reply.content); } catch { /* named below */ }
     requireValue(answer && typeof answer === 'object' && Array.isArray(answer.ops), 'The editor did not answer with edit operations. Nothing changed; ask again in other words.', 502);
     if (skillBrief) this.store.skillRuntime?.recordUsage({jobId: key, familyId: family.id, room: 'editing', taskKey: 'editing.plan', brief: skillBrief});
-    const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, polish ? 40 : 20), {scoreId: score?.ready && score.current ? score.id : null});
+    const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, cap), {scoreId: score?.ready && score.current ? score.id : null});
     this.store.event(`Edit command on r${row.revision} by ${by}: ${proposal.ops.length} change${proposal.ops.length === 1 ? '' : 's'} proposed`);
     return {revisionId: row.id, explain: String(answer.explain || '').replace(/[\x00-\x1F]/g, ' ').slice(0, 600), ...proposal, usage: reply.usage, provider: who.provider, model: reply.model};
   }
@@ -960,4 +973,4 @@ class EditingRoom {
   }
 }
 
-module.exports = {EditingRoom, ANALYSIS_VERSION, VOCAB, editDrawing, describeOp, commandMessages, namedClips, compactSketch};
+module.exports = {EditingRoom, ANALYSIS_VERSION, VOCAB, editDrawing, describeOp, commandMessages, namedClips, compactSketch, opsCap, answerTokens};
