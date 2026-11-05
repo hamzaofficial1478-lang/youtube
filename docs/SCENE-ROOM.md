@@ -318,3 +318,15 @@ Owner report 2026-11-05: "the detailing sector is still too weak" - scenes misse
 Detailing is the AI's work and advice, never a silent mend: drawing the same storyboard again draws it the same way. An older storyboard gains it when it is built again (or reviewed through Change with words or a redraw).
 
 **Tiles.** Every Room 04 tile is the chosen video's own. "Shots ready (this video)" counts only drawings made with today's drawing and not being drawn again right now (`sceneShotsTile`, `drawState` `redrawing`), so a redraw counts up from 0 and says what the rest are: drawing now, drawn with older rules, or not drawn. The AI image tile is the channel's month and the stock tile every channel's hour, and they say so. **Locked inputs** folds (open while something blocks).
+
+## Changing one shot, Resume, and skills that rotate (0.94)
+
+Owner report 2026-11-05: Resume said "this one is running", a change of S18C said "1 of 7", the changed scenes kept the same objects and stickman, and the skills looked hard-coded.
+
+**Resume.** While a storyboard waits for the internet the program checks every 30 seconds and goes on by itself. The page used to stop refreshing then, so it still showed "Paused" and Resume answered with an error. It now keeps looking, and Resume on a job that is already going on says so.
+
+**One shot means one shot.** A painted picture (ChatGPT's) is finished, like a drawn one (Claude's). Before 0.94 the picture step took painted pictures for unfinished ones, so changing one shot painted the video's painted pictures again; that was the "1 of 7". A change now paints only the shots it drew, and the AI may change only the shots asked for. The board marks the shot: "Being drawn again", or "Redraw paused" while it waits.
+
+**Drawn afresh.** The asked shot no longer reaches the AI as its old drawing to edit. It gets what the shot had as `rejected` (place, camera, mood, list of elements) and the DRAW AGAIN line: a new composition, staging, camera, set dressing, poses and expressions, more of the words, and a new painting from the new describe; cast and place stay unless the request or the words move them. The long-shot fix keeps its sketches (its new shots have nothing to reject).
+
+**Skills rotate.** Skills are chosen for each job from everything approved, never a fixed list, but the same video always ranked the same ones first. Each time a skill was given to an earlier storyboard or redraw of this video, it counts 10% less for the next attempt (`triedSkills`, `rankSkills` `tried`): the job's core rules stay and about half of the rest is new. A change's own words help choose them. Skills → Usage says which skills were used on this video before.

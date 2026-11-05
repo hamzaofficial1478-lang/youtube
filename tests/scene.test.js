@@ -526,6 +526,10 @@ test('painted pictures (0.53, 0.56): ChatGPT paints in the look\'s visual rules 
   assert.ok(manifest.plan.pictures.painted >= backdrops.length);
   const rows = store.db.prepare("SELECT status FROM intelligence_usage WHERE kind='picture'").all();
   assert.ok(rows.length && rows.every(row => row.status === 'settled' || row.status === 'unknown'), 'every painting is reserved and settled or marked unknown');
+  // 0.94 (owner report: changing S18C said "picture 1 of 7"): painted and drawn pictures are finished, so a later job
+  // (a change of one shot) never paints them again.
+  const before = painted.length, again = await room.illustrate({id: 'later-job', content_id: content.id, attempts: 1, scope: {illustrate: {budget: 50, natural: 50, tokenLimit: 20000}, connector: {id: ids.claude}}}, manifest.plan);
+  assert.deepEqual([again.pictures, painted.length], [null, before], 'nothing to paint again');
 });
 
 test('a plan stopped mid-way marks its picture and frame reservations unknown too, never left reserved', t => {
@@ -1007,11 +1011,13 @@ test('HTTP routes need the local token and serve the scene state, previews and t
 
 test('atelier shots: Claude plans an art direction and frames, a frame worker designs each, the program checks it and Room 04 draws it', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
   const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#2A3350}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
-  let lastRaw = '', redesignFails = false, lastAsk = null;
+  let lastRaw = '', redesignFails = false, lastAsk = null, lastDraw = null;
   const asked = [], frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the number', roles: 'number = foreground subject', beats: [{show: 'the number counts up in the centre'}], motions: ['counting-dynamic-scale', 'not-a-rule'], type: 'evidence', persuasion: 'worked example', beat: `surprise ${n}`});
   const network = fakeNetwork({claudePlan: input => {
-    if (input.drawNow) lastAsk = input.ownerAsks || null;
-    if (input.drawNow) return {report: 'Drew the shots that were not designed.', changes: input.drawNow.map(label => ({label, reason: 'A counter carries the number.', sketch: {engine: 'motion', elements: [{kind: 'text', style: 'counter', text: '45', x: 0.5, y: 0.4}]}}))};
+    if (input.drawNow) { lastAsk = input.ownerAsks || null; lastDraw = input; }
+    // A change also returns a drawing for a shot it was not asked about (0.94: only the asked shots may change).
+    const stray = input.ownerAsks ? input.scenes.flatMap(scene => scene.shots).filter(shot => !input.drawNow.includes(shot.label) && shot.sketch).slice(0, 1).map(shot => ({label: shot.label, reason: 'Not asked.', sketch: {engine: 'motion', elements: [{kind: 'text', style: 'title', text: 'Not asked', x: 0.5, y: 0.4}]}})) : [];
+    if (input.drawNow) return {report: 'Drew the shots that were not designed.', changes: [...input.drawNow.map(label => ({label, reason: 'A counter carries the number.', sketch: {engine: 'motion', elements: [{kind: 'text', style: 'counter', text: '45', x: 0.5, y: 0.4}]}})), ...stray]};
     if (input.raw) {
       const packet = JSON.parse(input.raw.split('\n\n')[0]), retry = input.raw.includes('failed these checks');
       asked.push(`${packet.frameId}${retry ? ':retry' : ''}`);
@@ -1114,10 +1120,18 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   assert.equal(changed.job.status, 'queued');
   await room.processNextPlan();
   assert.equal(lastAsk, 'Count up to 45 and make the number bigger', 'the request reaches Claude as ownerAsks');
+  // 0.94: the shot is designed afresh: Claude gets what it had as "rejected", never the drawing to edit, and the prompt says so.
+  const askedShot = lastDraw.scenes.flatMap(scene => scene.shots).find(shot => shot.label === 'S02A');
+  assert.ok(askedShot.rejected && !askedShot.sketch, 'the old drawing is not handed over to be edited');
+  assert.deepEqual(askedShot.rejected.elements, ['text counter 45']);
+  const changeCall = network.calls.filter(call => call.path === '/v1/messages').reverse().find(call => /DRAW AGAIN/.test(call.body.system));
+  assert.ok(changeCall, 'the review is told to draw the asked shot again from scratch');
   assert.equal(room.publicPlanJob(room.planJobRow(changed.job.id)).status, 'completed');
   const afterChange = latestManifest(room, content.id);
   assert.equal(afterChange.revision, redrawn.revision + 1);
   assert.deepEqual(shots(afterChange).map(shot => shot.id), shots(redrawn).map(shot => shot.id), 'every shot keeps its ID');
+  assert.deepEqual(shots(afterChange).filter(shot => shot.label !== 'S02A').map(shot => JSON.stringify(shot.sketch || null)), shots(redrawn).filter(shot => shot.label !== 'S02A').map(shot => JSON.stringify(shot.sketch || null)), 'only the asked shot changed');
+  assert.match(afterChange.changeNote || '', /Drawn again as asked: S02A/);
   assert.equal(require('../live').list().length, 0, 'the live view forgets the finished job');
   // 0.91: the Editing Room's editor asks for several shots at once, each with its own words, as one job.
   const drawnLabels = shots(afterChange).filter(shot => shot.sketch && !shot.frame).map(shot => shot.label).slice(0, 2);
@@ -1315,6 +1329,9 @@ test('Stop really stops the AI, the storyboard pauses with every finished part, 
   mode = 'go';
   assert.deepEqual(await room.resumeWhenOnline(), [queued.job.id]);
   assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).pause.auto, 1);
+  // 0.94: the owner's Resume on a page that still showed it paused is no error: it is already going on.
+  const again = room.resumePlan(queued.job.id);
+  assert.deepEqual([again.already, again.status], [true, 'queued']);
   await room.processNextPlan();
   job = room.publicPlanJob(room.planJobRow(queued.job.id));
   assert.equal(job.status, 'completed', job.error);
