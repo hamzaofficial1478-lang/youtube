@@ -337,3 +337,18 @@ test('words carry a colour: lenient for Claude, strict for owner edits, and the 
   assert.match(Sk.promptGuide('stickman'), /"color"\?: accent\|ink\|red/);
   assert.deepEqual(Sk.validate(drawing).elements.map(item => item.color), ['gold', undefined], 'a checked drawing checks the same again');
 });
+
+test('0.93 detailing: the words name things, places and feelings, and shots that leave them out are named', () => {
+  assert.deepEqual(Sk.breakdown('He traded a mammoth tusk for three pebbles at the market on the table, and everyone cheered.'), {things: ['pebble', 'tusk', 'desk'], places: ['market'], feelings: ['happy']}, '"mammoth tusk" is a tusk; a table is drawn as the desk');
+  assert.deepEqual(Sk.breakdown('Food was scarce, so watch the world and follow your heart.').things, [], 'loose words and figures of speech ask for no drawing');
+  assert.deepEqual(Sk.breakdown('Gold coins and paper money.').things, ['coin', 'money']);
+  const shot = (label, elements, set = 'market') => ({label, sketch: Sk.validate({set, elements})});
+  const scenes = [{label: 'S01', words: 'He traded a mammoth tusk at the market and everyone cheered.', shots: [shot('S01A', [{kind: 'figure', pose: 'stand', expression: 'neutral'}, {kind: 'prop', prop: 'pebble'}])]},
+    {label: 'S02', words: 'Three pebbles bought a spear at the market.', shots: [shot('S02A', [{kind: 'figure', pose: 'point', expression: 'happy'}, {kind: 'prop', prop: 'pebble'}, {kind: 'prop', prop: 'spear'}, {kind: 'fx', effect: 'sparkles'}])]}];
+  const notes = Sk.detailNotes(scenes);
+  assert.equal(notes.length, 3, notes.join(' | '));
+  assert.match(notes[0], /^S01: its words name tusk, but no shot shows it/);
+  assert.match(notes[1], /^S01: the line is happy, but every face is plain/);
+  assert.match(notes[2], /^S01A shows only 2 things/);
+  assert.deepEqual(Sk.detailNotes([{label: 'S03', words: 'The price rose to 400.', shots: [shot('S03A', [{kind: 'text', style: 'counter', text: '400'}])]}]), [], 'a deliberately simple number shot is fine');
+});
