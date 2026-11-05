@@ -798,6 +798,13 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
   // The review is a second pass with each shot's own words; its redraws land in the plan with their reasons.
   const reviewCall = network.calls.filter(call => call.path === '/v1/messages').find(call => /continuity supervisor/.test(call.body.system));
   assert.ok(JSON.parse(reviewCall.body.messages[0].content).scenes[0].shots[0].words.length > 0, 'the review sees the words of each shot');
+  // 0.93 detailing: the planner reads what each sentence names, and the review is told what the drawings leave out.
+  const planInput = JSON.parse(network.calls.find(call => call.path === '/v1/messages').body.messages[0].content);
+  assert.deepEqual(planInput.sentences[0].see, {things: ['coin'], places: [], feelings: []}, 'the hook names a coin');
+  assert.deepEqual(planInput.sentences[1].see.places, ['market']);
+  assert.match(system, /DETAILING \(owner review 2026-11-05/);
+  assert.match(reviewCall.body.system, /Any "detailNotes" were found by the program/);
+  assert.ok(JSON.parse(reviewCall.body.messages[0].content).detailNotes.some(note => /^S01: its words are at the market, but no shot is there/.test(note)), 'the bank set is not the market the words name');
   assert.match(system, /"cast": \[characters\]/);
   let plan = latestManifest(room, content.id);
   assert.deepEqual(plan.plan.cast.map(item => [item.id, item.name, item.look.hair, item.look.outfit]), [['c1', 'Ava', 'bun', 'suit']]);
@@ -806,6 +813,7 @@ test('drawn scenes: a cast, shots that start on their words, Claude\'s drawings 
   assert.deepEqual(plan.plan.review.changes, [{label: 'S01A', reason: 'Ava reacts on the word.'}]);
   assert.match(plan.plan.review.report, /Ava reacting to the coin/);
   assert.ok(plan.warnings.some(item => /^S02B drawing: Element 2: "dragon" is not in the prop library/.test(item)), plan.warnings.join(' | '));
+  assert.ok(plan.warnings.some(item => /^Detail: S01: its words are at the market/.test(item)), 'what the review left is listed on the plan');
   assert.deepEqual(plan.plan.scenes[1].shots[1].sketch.elements.map(el => el.kind), ['figure', 'text']);
   // A shot with a cue starts when its words are spoken, not at an even split of the scene.
   const scene = plan.plan.scenes[0], cueShot = scene.shots[1], spoken = Cap.wordTimings({sentences: plan.plan.sentences, pauses: [], narrationSeconds: plan.plan.timing.narrationSeconds});
@@ -1349,7 +1357,7 @@ test('drawings are counted, Stop stops the waiting ones and Draw the remaining g
   store.transaction(() => room.insertManifest({inputs, content, scenes, summary: 'Long shots', source: 'claude', note: 'Fixture plan.', createdBy: 'Owner'}));
   const manifest = latestManifest(room, content.id), drawing = () => room.state().contents.find(item => item.contentId === content.id).drawing;
   assert.ok(manifest.issues.some(item => /^S01A would hold [\d.]+ s, above the style's 4\.5 s shot limit/.test(item)), manifest.issues[0]);
-  assert.deepEqual(drawing(), {total: 30, current: 0, outdated: 0, missing: 30, active: 0});
+  assert.deepEqual(drawing(), {total: 30, current: 0, outdated: 0, missing: 30, active: 0, redrawing: 0});
   assert.equal(room.queueDrawAll(manifest.id, {requestedBy: 'Owner'}).queued, 30);
   assert.equal(drawing().active, 30);
   assert.deepEqual(room.stopDrawing(manifest.id), {stopped: 30, finishing: 0});
@@ -1533,6 +1541,8 @@ test('0.86: Approve visuals waits for every drawing, Clear keeps the job being d
   const fresh = drawFake(shotsOf(manifest)[0]);
   store.db.prepare("INSERT INTO visual_jobs(id,family_id,content_id,manifest_id,shot_id,kind,capability_id,status,scope,attempts,created_by,created_at,updated_at) VALUES('dj-1',?,?,?,?,'draw','drawn-scene','running','{}',0,'Owner',?,?)").run(base.family.id, content.id, manifest.id, shotsOf(manifest)[0].id, new Date().toISOString(), new Date().toISOString());
   await assert.rejects(approve(), /being drawn now/);
+  // 0.93: a shot being drawn again is not counted as ready by Room 04's tile, even when its old drawing is current.
+  assert.deepEqual([state().drawing.current, state().drawing.redrawing, state().drawing.active], [shotsOf(manifest).length, 1, 1]);
   // Clear leaves the storyboard job whose plan is being drawn.
   store.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at,manifest_id) VALUES('pj-1',?,?,'completed','{}',1,'Owner',?,?,?)").run(base.family.id, content.id, new Date().toISOString(), new Date().toISOString(), manifest.id);
   assert.deepEqual(room.clearPlanJobs(content.id), {cleared: 0});
@@ -1553,7 +1563,7 @@ test('0.86: Approve visuals waits for every drawing, Clear keeps the job being d
   assert.equal(store.db.prepare('SELECT COUNT(*) AS n FROM visual_selections WHERE content_id=?').get(content.id).n, 0);
   assert.equal(state().approvals[0].clearedAt !== undefined, true);
   assert.throws(() => room.deleteRevokedDrawings(content.id, {requestedBy: 'Owner'}), /no revoked visuals/);
-  assert.deepEqual(state().drawing, {total: shotsOf(manifest).length, current: 0, outdated: 0, missing: shotsOf(manifest).length, active: 0});
+  assert.deepEqual(state().drawing, {total: shotsOf(manifest).length, current: 0, outdated: 0, missing: shotsOf(manifest).length, active: 0, redrawing: 0});
   // Building again: keep the storyboard there is (or revoke its visuals), then choose.
   const build = extra => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude, ...extra});
   const kept = build({previous: 'keep'});

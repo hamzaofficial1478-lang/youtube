@@ -94,7 +94,7 @@ const PROP_SYNONYMS = Object.freeze({
   explosion: 'bomb', dynamite: 'bomb', bin: 'trash', garbage: 'trash', rubbish: 'trash', food: 'burger', fruit: 'apple', bulb_: 'lightbulb', pen: 'pencil', loudspeaker: 'megaphone', speaker: 'megaphone',
   goal: 'target', bullseye: 'target', protection: 'shield', security: 'lock', king: 'crown', queen: 'crown', water: 'drop', ocean: 'waves', sea: 'waves', wave: 'waves', flame: 'fire', fireball: 'fire',
   tv_: 'tv', television: 'tv', cpu: 'gear', ai: 'robot', satellite_: 'satellite', germs: 'virus', heartbeat: 'heart', love: 'heart', mind: 'brain', head: 'brain', death: 'skull', poisoned: 'skull',
-  gold_bars: 'gold', 'gold-bar': 'gold', gem: 'diamond', jewel: 'diamond', rich: 'moneybag', bank: 'building', chart_up: 'chart-up', growth: 'chart-up', decline: 'chart-down', loss: 'chart-down', pie: 'pie-chart',
+  table: 'desk', tables: 'desk', gold_bars: 'gold', 'gold-bar': 'gold', gem: 'diamond', jewel: 'diamond', rich: 'moneybag', bank: 'building', chart_up: 'chart-up', growth: 'chart-up', decline: 'chart-down', loss: 'chart-down', pie: 'pie-chart',
 });
 
 const fail = message => { throw Object.assign(new Error(message), {status: 400}); };
@@ -721,4 +721,62 @@ function promptGuide(primary = 'stickman', {pictures = false, painted = false, l
   ].join('\n');
 }
 
-module.exports = {worldOf, worldCast, TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, PICTURE_TYPES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};
+// ---------------------------------------------------------------- script breakdown and detail (0.93)
+// Owner review 2026-11-05: "the detailing is still too weak: visuals, objects and expressions must fit the script".
+// What a sentence names that can be drawn, read literally from the words: things (props of the vocabulary or the video's
+// own kit), places (sets), feelings (faces) and figures. The planner gets it per sentence; the review gets the shots that
+// leave something out. Words that are usually figures of speech ("the key point", "at this stage") are not counted.
+const FIGURATIVE = new Set(['key', 'heart', 'star', 'target', 'sign', 'check', 'cross', 'plus', 'minus', 'question', 'exclamation', 'warning', 'percent', 'dollar', 'no-sign', 'head', 'drop', 'card', 'box', 'bag', 'lock', 'ladder', 'chart', 'chart-up', 'chart-down', 'pie-chart', 'bomb', 'bell', 'magnet', 'gear', 'trophy', 'medal', 'flag', 'arrow-up', 'arrow-down', 'brain', 'eye', 'sun', 'fire', 'glass', 'sand', 'bone', 'trash', 'gift']);
+const PLACE_NAMES = Object.freeze(['office', 'kitchen', 'classroom', 'lab', 'hospital', 'bank', 'shop', 'street', 'city', 'road', 'park', 'mountains', 'desert', 'beach', 'ocean', 'throne', 'castle', 'chamber', 'harbor', 'market', 'village', 'battlefield', 'cave', 'bedroom']);
+const PLACE_SAY = Object.freeze({mountains: ['mountain', 'mountains'], ocean: ['ocean', 'sea'], harbor: ['harbor', 'harbour', 'port'], throne: ['throne'], lab: ['lab', 'laboratory'], shop: ['shop', 'store']});
+const FEELINGS = Object.freeze([['happy', /\b(happy|happily|joy\w*|cheer\w*|celebrat\w*|smil\w*|delight\w*|glad|wins?|won|winners?)\b/], ['sad', /\b(sad\w*|grief|griev\w*|cry|cries|cried|tears|lost|lose|loses|loss|died|death)\b/],
+  ['angry', /\b(anger|angry|furious|rage|shout\w*)\b/], ['scared', /\b(fear\w*|afraid|scared|terrif\w*|panic\w*)\b/], ['surprised', /\b(surpris\w*|shock\w*|suddenly|gasp\w*|wow)\b/],
+  ['worried', /\b(worr\w*|nervous|anxious|doubt\w*)\b/], ['proud', /\b(proud|pride|brag\w*)\b/], ['curious', /\b(curious|wonder\w*|myster\w*)\b/], ['disgusted', /\b(groan\w*|disgust\w*|sigh\w*)\b/], ['laugh', /\b(laugh\w*|funny|joke\w*)\b/]]);
+const said = text => ` ${String(text || '').toLowerCase().replace(/[^a-z0-9' -]+/g, ' ').replace(/\s+/g, ' ').trim()} `;
+const sayIn = (spoken, name) => { const word = name.replace(/-/g, ' '); return [word, `${word}s`, `${word}es`].some(form => spoken.includes(` ${form} `)); };
+// Synonym words too loose to ask for a drawing ("food" is not a burger, "the world" is rarely a globe, "watch" is a verb).
+const SEE_SKIP = new Set(['food', 'fruit', 'world', 'earth', 'watch', 'note', 'rich', 'death', 'poisoned', 'office', 'bank', 'home', 'ocean', 'sea', 'wave', 'water', 'king', 'queen', 'ai', 'speaker', 'present', 'file', 'pc', 'screen', 'tower', 'mobile', 'bill', 'pie', 'loss', 'growth', 'decline', 'stats', 'statistics']);
+// Things that stand for each other once drawn (a stone-age story trades pebbles where the words say money).
+const SAME_THING = [['coin', 'money', 'moneybag', 'gold', 'pebble', 'diamond', 'piggy-bank'], ['house', 'building', 'castle'], ['ship', 'galleon'], ['laptop', 'monitor', 'phone', 'tv'], ['paper', 'letter', 'newspaper', 'book'], ['mammoth', 'tusk']];
+function breakdown(text, {kit = null} = {}) {
+  const spoken = said(text), found = [], places = [], feelings = [];
+  for (const prop of PROPS) if (!FIGURATIVE.has(prop) && sayIn(spoken, prop)) found.push([prop, prop]);
+  for (const [word, prop] of Object.entries(PROP_SYNONYMS)) if (!SEE_SKIP.has(word) && !FIGURATIVE.has(prop) && PROPS.includes(prop) && !found.some(([, have]) => have === prop) && sayIn(spoken, word.replace(/_$/, ''))) found.push([word.replace(/_$/, ''), prop]);
+  // In "mammoth tusk" or "gold coin" the last word is the thing; the first only describes it.
+  const things = found.filter(([word]) => !found.some(([other]) => other !== word && [other, `${other}s`].some(form => spoken.includes(` ${word.replace(/-/g, ' ')} ${form} `)))).map(([, prop]) => prop);
+  for (const item of Object.values(kit || {})) { const name = String(item?.name || '').toLowerCase(); if (name && name.length >= 3 && spoken.includes(` ${name} `)) things.push(`kit:${item.id}`); }
+  for (const place of PLACE_NAMES) if ((PLACE_SAY[place] || [place]).some(word => sayIn(spoken, word))) places.push(place);
+  for (const [feeling, pattern] of FEELINGS) if (pattern.test(spoken)) feelings.push(feeling);
+  return {things: [...new Set(things)], places, feelings};
+}
+// The shots a scene should fill in: each scene is [{label, words, shots: [{label, sketch, words?}]}]. Returns plain notes
+// for the review: a thing its words name that no shot shows, a place it names that no shot is in, a feeling no face
+// shows, and a drawn shot with too little in it.
+const INFO_KINDS = new Set(['chart', 'map', 'timeline', 'network', 'quote', 'document', 'gauge', 'loupe', 'ruler', 'picture']);
+const BIG_TEXT = new Set(['title', 'headline', 'chapter', 'statement', 'poster', 'versus', 'counter', 'number']);
+function detailNotes(scenes, {kit = null} = {}) {
+  const notes = [];
+  for (const scene of scenes) {
+    const drawn = scene.shots.filter(shot => shot.sketch && shot.sketch.type !== 'natural');
+    if (!drawn.length) continue;
+    const wanted = breakdown(scene.words, {kit}), elements = drawn.flatMap(shot => shot.sketch.elements || []);
+    const pictured = said(drawn.flatMap(shot => (shot.sketch.elements || []).filter(el => el.kind === 'picture').map(el => el.describe || '')).join(' '));
+    const shown = new Set(elements.flatMap(el => [el.kind, el.prop, el.kit ? `kit:${el.kit}` : null].filter(Boolean)));
+    const seen = thing => shown.has(thing) || (SAME_THING.find(group => group.includes(thing)) || []).some(other => shown.has(other)) || (!thing.startsWith('kit:') && sayIn(pictured, thing));
+    const missing = wanted.things.filter(thing => !seen(thing));
+    if (missing.length) notes.push(`${scene.label}: its words name ${missing.map(item => item.replace(/^kit:/, 'kit item ')).join(', ')}, but no shot shows ${missing.length === 1 ? 'it' : 'them'}; draw ${missing.length === 1 ? 'it' : 'each'} in the shot where it is said (when the line means the thing itself).`);
+    const sets = new Set(drawn.map(shot => shot.sketch.set));
+    const placeMissing = wanted.places.filter(place => !sets.has(place));
+    if (placeMissing.length && !drawn.some(shot => (shot.sketch.elements || []).some(el => el.kind === 'picture' && el.backdrop))) notes.push(`${scene.label}: its words are at the ${placeMissing[0]}, but no shot is there; set the ${placeMissing[0]} (or a kit place like it).`);
+    const people = elements.filter(el => el.kind === 'figure');
+    if (wanted.feelings.length && people.length && !people.some(el => (el.expression && el.expression !== 'neutral') || (el.emote && el.emote !== 'none') || (el.steps || []).some(step => step.expression && step.expression !== 'neutral'))) notes.push(`${scene.label}: the line is ${wanted.feelings[0]}, but every face is plain; give the people the faces of that moment (expression, emote, a pose that acts it).`);
+    for (const shot of drawn) {
+      const items = (shot.sketch.elements || []).filter(el => el.kind !== 'fx');
+      if (items.some(el => INFO_KINDS.has(el.kind) || (el.kind === 'text' && BIG_TEXT.has(el.style)))) continue;
+      if (items.length < 3) notes.push(`${shot.label} shows only ${items.length} thing${items.length === 1 ? '' : 's'}; build the moment: the place's details, what its words name, and something alive (a pose, an expression, an effect).`);
+    }
+  }
+  return notes;
+}
+
+module.exports = {breakdown, detailNotes, worldOf, worldCast, TEXT_ANIMS, LAYERS, TEXTURES, MAP_STYLES, FILMS, DOCS, MAP_VIEWS, CROWD_POSES, MAX_PICTURES, PICTURE_TYPES, BOARDS, STICK_LOOKS, DESIGNS, CHART_TYPES, worldNotes, worldMend, VERSION, POSES, EXPRESSIONS, EMOTES, LOOK, DEFAULT_LOOK, PROPS, SETS, MOODS, CAMERAS, TRANSITIONS, ENTERS, TEXT_STYLES, WORD_COLORS, FX, PROP_MOTIONS, SIZES, MAX_ELEMENTS, MAX_CAST, validate, validateCast, validateSetting, continuity, mend, carry, timing, matchPhrase, fromText, promptGuide};

@@ -304,3 +304,17 @@ Owner report 2026-11-04: after the 0.85 stone-age update the scenes were drawn a
 - One planned with older rules says so in step 1 of the road ("Planned with older scene rules") and offers **Update to today's rules**. That is a plan edit (`op: 'update-rules'`, source `rules-update`, free): the same scenes and shots, mended by today's world, era and clothing rules. The changed shots are then drawn in step 3.
 - When everything is drawn, step 3 says that drawing again keeps the same scenes; to change one, use Change with words on its shot.
 - `changeShots` is the several-shots form of Change with words, used by the Editing Room's editor.
+
+## Detailing: the storyboard draws what the script names (0.93)
+
+Owner report 2026-11-05: "the detailing sector is still too weak" - scenes missed objects the words named, places and expressions; the Room 04 tile said 77/77 while every scene was being drawn again; and each video and channel must keep its own data.
+
+**What the program reads.** `Sk.breakdown(text, {kit})` lists what a sentence names that can be drawn: props by their name and safe synonyms (a table is the desk), the story's kit items, places and feelings. Figures of speech (a key idea, a heart, a target) and loose words ("food", "the world", "watch") ask for nothing. In "mammoth tusk" or "gold coin" only the last word is the thing.
+
+**The planner** gets each sentence's `see` and the DETAILING line: every named thing in the shot where it is said, the place, faces and poses that act the feeling, and 2-4 details of the story's world laid out in depth with something alive.
+
+**The continuity review** gets `detailNotes` (`Sk.detailNotes`): a scene whose words name a thing no shot shows (pebbles count for money in the stone age), a place no shot is in, a feeling with plain faces, or a story shot with fewer than three things (numbers, charts, maps, big words and pictures are fine on their own). It redraws those shots or says in notes why one stays simple. What is still missing after the review is listed on the plan as `Detail:` warnings (12 at most).
+
+Detailing is the AI's work and advice, never a silent mend: drawing the same storyboard again draws it the same way. An older storyboard gains it when it is built again (or reviewed through Change with words or a redraw).
+
+**Tiles.** Every Room 04 tile is the chosen video's own. "Shots ready (this video)" counts only drawings made with today's drawing and not being drawn again right now (`sceneShotsTile`, `drawState` `redrawing`), so a redraw counts up from 0 and says what the rest are: drawing now, drawn with older rules, or not drawn. The AI image tile is the channel's month and the stock tile every channel's hour, and they say so. **Locked inputs** folds (open while something blocks).
