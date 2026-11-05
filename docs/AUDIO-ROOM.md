@@ -241,3 +241,13 @@ Owner report 2026-11-04, with two screenshots (the timeline's Music and Sound ef
 - CC BY effects are credited in the video description too (before, only music was).
 
 **A cleaner room.** The Audio Room has a short header, the Levels card first, the score with three buttons (Score with Claude, Free score, Find sounds for this video), and one Sound library card with the effect slots folded inside. Program-wide, a paragraph longer than about two lines shows its first sentence and "More" (`foldLong` in public/app.js; warnings, errors and paragraphs with controls stay as they are), and stays open across refreshes like every dropdown.
+
+## Sound effects that follow the story, and the music's feel (0.91)
+
+Owner review 2026-11-04: almost every effect on the timeline was a pop; no cheers at a moment of joy, nothing at a loss or a groan, nothing at a new idea, the truth or a strategy. The owner also wanted one calm but slightly energetic piece of music under the whole video.
+
+- **Pops.** Every person walking on and every object appearing earned a pop at "rich" density, and stick figures walk on in nearly every shot. Now people make no sound when they appear. A small pop or scribble plays only where nothing else sounds within 0.8 s (1.5 s of a meaningful sound), and once a shot.
+- **Meaning.** The narrator's words choose the sound (`M.MEANING_SFX`, `meaningsOf`), placed on the word itself. Joy and wins cheer; a loss falls (`sad`); a groan groans; a surprise gasps; a joke laughs; the truth lands with a low `boom`; a new idea, a plan or a strategy dings; a mystery builds with a `riser`. One meaning per shot, the same one not twice within 6 s, all at the subtle density and above (boom, riser and plan words from accent).
+- **New sounds.** `cheer`, `groan`, `gasp`, `sad` and `laugh` are story sounds: optional, fetched from Freesound for the video that needs them (`neededEffects` now reads the script's words), and left out when the library has none.
+- **The music's feel.** Room 07's "Free score" asks "How should the music feel?". With a feel, the whole video keeps it in long cues (a track loops under a long cue), searched on Freesound by its own mood words (for example "calm energetic music"). The editor's `set-music` does the same.
+- The edit's own effect changes (`add-sfx`, `remove-sfx`) are described in EDITING-ROOM.md.

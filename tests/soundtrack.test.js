@@ -205,3 +205,34 @@ test('0.87: story sounds follow the drawings and places, the world colours the m
   const picked = SoundtrackRoom.prototype.soundtrackFor.call({...withOwn, settings: () => ({source: 'library', sfxPicks: {animal: 'c'.repeat(64)}}), library: () => [{kind: 'pop', asset}, {kind: 'animal', asset}, {kind: 'wind', asset}]}, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
   assert.ok(picked.sfx.some(item => item.kind === 'animal' && item.measuredPeakDb === -3), 'the owner\'s pick for the slot wins');
 });
+
+// 0.91 (owner review 2026-11-04: "almost all the sound effects are pops; no cheers at the moment of joy, nothing at a
+// loss, at a groan, at a new idea or the truth"): effects follow what the words mean, people walking on make no sound,
+// a small pop only where nothing else sounds; the edit adds and removes effects; the owner's music feel.
+test('0.91: sound effects follow the meaning of the words, pops are rare, and the edit adds or removes effects', () => {
+  const sketch = elements => ({engine: 'stickman', set: 'prehistoric', camera: 'still', elements});
+  const clips = [
+    {label: 'S02C', start: 10, seconds: 4, sketch: sketch([{kind: 'figure'}, {kind: 'prop', prop: 'tree'}]), words: [{text: 'Then', start: 0.2}, {text: 'somebody', start: 0.5}, {text: 'wins.', start: 1.1}]},
+    {label: 'S09B', start: 14, seconds: 4, sketch: sketch([{kind: 'figure'}, {kind: 'figure'}]), words: [{text: 'Two', start: 0.1}, {text: 'friends', start: 0.4}, {text: 'groan.', start: 0.9}]},
+    {label: 'S12A', start: 18, seconds: 4, sketch: sketch([{kind: 'figure'}]), words: [{text: 'They', start: 0.1}, {text: 'lost', start: 0.4}, {text: 'everything.', start: 0.7}]},
+    {label: 'S15A', start: 22, seconds: 4, sketch: sketch([{kind: 'prop', prop: 'lightbulb'}]), words: [{text: 'Then', start: 0.1}, {text: 'came', start: 0.3}, {text: 'an', start: 0.5}, {text: 'idea.', start: 0.6}]},
+    {label: 'S16A', start: 26, seconds: 4, sketch: sketch([{kind: 'prop', prop: 'tree'}, {kind: 'prop', prop: 'tree'}, {kind: 'figure'}]), words: [{text: 'Nothing', start: 0.1}, {text: 'happened.', start: 0.6}]},
+  ];
+  const rich = M.sfxEvents({clips, density: 'rich'}), kinds = rich.map(item => item.kind);
+  assert.ok(['cheer', 'groan', 'sad', 'ding'].every(kind => kinds.includes(kind)), kinds.join(' '));
+  assert.equal(rich.find(item => item.kind === 'cheer').seconds, 11.1, 'the cheer lands on "wins"');
+  assert.equal(rich.find(item => item.kind === 'groan').seconds, 14.9);
+  assert.ok(kinds.filter(kind => kind === 'pop').length <= 1, `people walking on make no sound; a pop only once a shot (${kinds.join(' ')})`);
+  assert.deepEqual(M.sfxEvents({clips, density: 'subtle'}).map(item => item.kind), ['cheer', 'groan', 'sad', 'ding'], 'even few effects keep the moments that matter');
+  assert.deepEqual(M.meaningKinds('Two friends groan. The truth is simple. What if?', 'rich'), ['groan', 'boom', 'riser']);
+  assert.deepEqual(M.neededEffects([], {density: 'accent', text: 'Somebody wins.'}), ['cheer'], 'Freesound is asked for the meanings the script needs');
+  // The edit's own changes: take out every pop, add a gasp, take out the effect nearest a moment.
+  const edited = M.applySfxEdits(rich, [{op: 'remove', kind: 'pop'}, {op: 'add', seconds: 20, kind: 'gasp'}, {op: 'remove', seconds: 14.8}]);
+  assert.ok(!edited.some(item => item.kind === 'pop' || item.kind === 'groan'));
+  assert.equal(edited.find(item => item.kind === 'gasp').reason, 'added in the edit');
+  // The owner's music feel: one feel for the whole video, in long cues, searched by its own words.
+  const free = M.rulesScore({scenes: [{purpose: 'hook', startSeconds: 0, durationSeconds: 40}, {purpose: 'turn', startSeconds: 40, durationSeconds: 360}], durationSeconds: 400, feel: 'calm but a bit energetic'});
+  assert.deepEqual(free.cues.map(cue => [cue.start, cue.end, cue.mood, cue.energy]), [[0, 200, 'calm energetic', 3], [200, 400, 'calm energetic', 3]]);
+  assert.match(free.summary, /calm but a bit energetic/);
+  assert.equal(require('../sound-online').cueSearch(free.cues[0]).queries[0], 'calm energetic music');
+});

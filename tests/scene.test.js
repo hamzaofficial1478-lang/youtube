@@ -1111,6 +1111,23 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   assert.equal(afterChange.revision, redrawn.revision + 1);
   assert.deepEqual(shots(afterChange).map(shot => shot.id), shots(redrawn).map(shot => shot.id), 'every shot keeps its ID');
   assert.equal(require('../live').list().length, 0, 'the live view forgets the finished job');
+  // 0.91: the Editing Room's editor asks for several shots at once, each with its own words, as one job.
+  const drawnLabels = shots(afterChange).filter(shot => shot.sketch && !shot.frame).map(shot => shot.label).slice(0, 2);
+  assert.throws(() => room.changeShots(afterChange.id, {requestedBy: 'Owner', connector: ids.claude, changes: [{label: 'S99Z', ask: 'Anything at all'}]}), /not in the newest storyboard/);
+  assert.throws(() => room.changeShots(afterChange.id, {requestedBy: 'Owner', connector: ids.claude, changes: [{label: designedLabel, ask: 'Show the whole chart'}]}), /not a drawn shot/);
+  const several = room.changeShots(afterChange.id, {requestedBy: 'Owner', connector: ids.claude, changes: drawnLabels.map((label, k) => ({label, ask: k ? 'Put the pebbles on the table' : 'Two winners, not one'}))});
+  assert.deepEqual(JSON.parse(room.planJobRow(several.job.id).scope).redraw.labels, drawnLabels);
+  await room.processNextPlan();
+  assert.equal(lastAsk, drawnLabels.map((label, k) => `${label}: ${k ? 'Put the pebbles on the table' : 'Two winners, not one'}`).join(' | '), 'each shot carries its own words');
+  // 0.91: a storyboard planned before today's scene rules says so, and is brought up to them as a new revision.
+  const current = latestManifest(room, content.id);
+  assert.equal(current.oldRules, false, 'a plan made today has today\'s rules');
+  const row = room.manifestRow(current.id), old = JSON.parse(row.payload);
+  delete old.rules;
+  assert.equal(room.publicManifest({...row, payload: JSON.stringify(old)}).oldRules, true, 'a plan made before today\'s rules is named');
+  const updated = room.editManifest(current.id, {op: 'update-rules', createdBy: 'Owner', expectedRevision: current.revision});
+  assert.deepEqual([updated.source, updated.oldRules, updated.revision], ['rules-update', false, current.revision + 1]);
+  assert.match(updated.changeNote, /today's scene rules/);
 });
 
 test('0.39: approved skills travel with every scene plan and are logged; a style film look reaches the planner', t => {

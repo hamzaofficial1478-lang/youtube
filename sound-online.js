@@ -28,7 +28,8 @@ const PROVIDERS = Object.freeze({
 });
 // What each empty effect slot is searched for.
 const SLOT_QUERY = Object.freeze({whoosh: 'whoosh', 'swoosh-up': 'swoosh rise', pop: 'pop', impact: 'impact hit', stamp: 'stamp paper', boom: 'boom explosion', zap: 'electric zap', thunder: 'thunder', ding: 'ding bell', right: 'correct answer', wrong: 'wrong buzzer', tick: 'clock tick', riser: 'riser', sparkle: 'magic sparkle', cash: 'cash register', glitch: 'glitch', scribble: 'pencil scribble', boing: 'boing', heartbeat: 'heartbeat', typing: 'typing keyboard',
-  fire: 'campfire crackling', animal: 'elephant trumpet', waves: 'ocean waves', rain: 'rain', wind: 'wind', crowd: 'crowd murmur', birds: 'birds chirping', drum: 'tribal drum hit', clash: 'sword clash', stone: 'stone knock'});
+  fire: 'campfire crackling', animal: 'elephant trumpet', waves: 'ocean waves', rain: 'rain', wind: 'wind', crowd: 'crowd murmur', birds: 'birds chirping', drum: 'tribal drum hit', clash: 'sword clash', stone: 'stone knock',
+  cheer: 'crowd cheering', groan: 'disappointed groan', gasp: 'surprised gasp', sad: 'sad sting', laugh: 'group laughter'});
 
 // 0.90 (owner request 2026-11-04: "search Freesound according to the video, not random music or effects that never
 // match"). A story sound is searched for the thing on screen that makes it, then for its kind.
@@ -45,7 +46,7 @@ const MUSIC_STYLE = new Set(('piano strings guitar acoustic marimba pizzicato sy
 function cueSearch(cue, flavour = null) {
   const said = M.words(`${cue.prompt || ''}`), moods = M.words(cue.mood).filter(word => M.moodFamilies(word).length || Object.hasOwn(M.MOOD_TAGS, word));
   const style = [...new Set([...(flavour ? M.words(flavour) : []), ...said.filter(word => MUSIC_STYLE.has(word))])], lead = moods[0] || M.moodFamilies(`${cue.mood} ${cue.prompt}`)[0] || 'background';
-  const queries = [style.length ? `${style.slice(0, 2).join(' ')} music` : null, style.length ? `${style[0]} ${lead} music` : null, flavour ? `${lead} ${flavour} music` : null, `${lead} music`];
+  const queries = [style.length ? `${style.slice(0, 2).join(' ')} music` : null, style.length ? `${style[0]} ${lead} music` : null, moods.length > 1 ? `${moods.slice(0, 2).join(' ')} music` : null, flavour ? `${lead} ${flavour} music` : null, `${lead} music`];
   return {queries: [...new Set(queries.filter(Boolean))].slice(0, 3), want: [...new Set([...style, ...moods, ...M.moodFamilies(`${cue.mood} ${cue.prompt}`)])].slice(0, 8)};
 }
 // The found sounds in the order they fit: their tags and name against the words wanted, then how much they are used,

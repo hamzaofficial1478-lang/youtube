@@ -180,7 +180,7 @@ function audioAction(command, id) {
     if (!connection()) return toast('Set up and test a Claude connection first.', true);
     return renderDialog('st-score', 'Ask Claude to score the video', 'CLAUDE · USES TOKENS OR YOUR PLAN ALLOWANCE', `<p class="hint">Claude reads the approved scene plan, the narrator's delivery and the style's music moods, and returns instrumental cues with prompts. Tokens are reserved first; nothing is retried by itself. Generating the music is a separate click.</p><div class="form-grid">${renderNameField()}</div>`, 'Ask Claude', {contentId: id, mode: 'claude', connector: {id: connection().id, revision: connection().revision}});
   }
-  if (command === 'audio-score-rules') return renderDialog('st-score', 'Free score', 'LOCAL · NO COST', `<p class="hint">One cue per story section, with moods from the style. You can ask Claude for a richer score later.</p><div class="form-grid">${renderNameField()}</div>`, 'Make the free score', {contentId: id, mode: 'rules'});
+  if (command === 'audio-score-rules') return renderDialog('st-score', 'Free score', 'LOCAL · NO COST', `<p class="hint">Leave the feel empty for music that follows the story's parts.</p><div class="form-grid">${renderNameField()}<label class="full">How should the music feel? (optional)<input name="feel" maxlength="120" placeholder="calm but a bit energetic"></label></div>`, 'Make the free score', {contentId: id, mode: 'rules'});
   if (command === 'audio-cue-track' || command === 'audio-sfx-pick') {
     const [owner, key] = id.split('|'), music = command === 'audio-cue-track';
     return api(`/api/sounds?kind=${music ? 'music' : 'sfx'}&limit=500`, null, 'GET').then(result => {

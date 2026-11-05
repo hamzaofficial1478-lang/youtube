@@ -291,3 +291,16 @@ Owner review 2026-11-04, two screenshots: "Approve visuals" stayed clickable whi
   - *Go back to revision N*: a new revision (source `choice`) with the earlier plan's scenes and shots exactly (same IDs, so its drawings count again).
   - *Merge the best of both with Claude / ChatGPT*: `mergeBlocks` finds the stretches of the script both storyboards split the same way; one AI answer (reserved first, kind `storyboard_merge`, never retried) picks the version of each stretch whose scenes show the words better (`mergeMessages`, `readPicks`; a stretch without a pick stays new); `mergePlans` builds one plan from those scenes, keeping shot IDs (their drawings carry over) and adding the earlier storyboard's characters to the cast (a clashing ID gets its own). Source `merge`.
   - Going back and merging need the same script and narration revision (`mergeable`). An owner edit, a merge and a return are never mended (`own` in `insertManifest`), so their drawings stay exactly as they were; the new revision needs the storyboard approval again.
+
+## Drawing again, and storyboards planned with older rules (0.91)
+
+Owner report 2026-11-04: after the 0.85 stone-age update the scenes were drawn again, and a fresh draft was made, but the places, clothes and objects stayed as before.
+
+**Why.** "Draw them all again" draws the same storyboard with today's drawing engine. The story's world (places of the era, people in hides, objects of the time) is set when a storyboard is planned, and a storyboard planned before those rules never saw them. A fresh draft in the Editing Room starts from the same approved board.
+
+**Now.**
+
+- Every storyboard with drawn shots records the scene rules it was planned with (`payload.rules`, `SCENE_RULES`). Every revision carries the mark on: owner edits, pictures, redraws, merges and returns.
+- One planned with older rules says so in step 1 of the road ("Planned with older scene rules") and offers **Update to today's rules**. That is a plan edit (`op: 'update-rules'`, source `rules-update`, free): the same scenes and shots, mended by today's world, era and clothing rules. The changed shots are then drawn in step 3.
+- When everything is drawn, step 3 says that drawing again keeps the same scenes; to change one, use Change with words on its shot.
+- `changeShots` is the several-shots form of Change with words, used by the Editing Room's editor.

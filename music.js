@@ -52,7 +52,17 @@ function validate(raw, durationSeconds, {lenient = false, warn = () => {}} = {})
 
 // The free score: the scenes grouped into story sections, one cue per section, moods from the style.
 const PURPOSE_MOOD = Object.freeze({hook: ['punchy', 4], context: ['curious', 3], explain: ['curious', 3], example: ['light', 3], evidence: ['focused', 3], turn: ['dramatic', 4], recap: ['warm', 2], close: ['warm', 2], 'call-to-action': ['uplifting', 3]});
-function rulesScore({scenes, durationSeconds, moods = [], niche = '', era = null}) {
+// 0.91 (owner request 2026-11-04: "just add a calm but a bit energetic music in the background"): with the owner's
+// feel the whole video keeps that one feel, in long cues (a track loops under a long one) instead of one per section.
+function rulesScore({scenes, durationSeconds, moods = [], niche = '', era = null, feel = null}) {
+  if (feel) {
+    const said = String(feel).toLowerCase(), family = moodFamilies(said), lift = /energetic|upbeat|lively|bright|driving|bouncy|punchy/.test(said), calm = /calm|soft|gentle|relaxed|chill|quiet|slow/.test(said);
+    const named = words(said).filter(word => Object.hasOwn(MOOD_TAGS, word) || Object.values(MOOD_TAGS).some(list => list.includes(word))).slice(0, 3);
+    const mood = named.length ? named.join(' ') : family[0] || 'calm', energy = Math.max(1, Math.min(5, 3 + (lift ? 1 : 0) - (calm ? 1 : 0))), flavour = ERA_MUSIC[era] ? `, ${ERA_MUSIC[era]}` : '';
+    const count = Math.max(1, Math.round(durationSeconds / 180)), length = durationSeconds / count;
+    return validate({summary: `Free score: ${clean(feel, 120)}.`, cues: Array.from({length: count}, (_, k) => ({start: k * length, end: k === count - 1 ? durationSeconds : (k + 1) * length, mood, energy,
+      prompt: `Instrumental background music: ${clean(feel, 120)}${flavour}, steady under a voice-over, no vocals, energy ${energy} of 5.`, entry: k === 0 ? 'fade' : 'cut', exit: k === count - 1 ? 'fade' : 'cut'}))}, durationSeconds);
+  }
   const sections = [];
   for (const scene of scenes) {
     const [mood, energy] = PURPOSE_MOOD[scene.purpose] || ['curious', 3], last = sections.at(-1);
@@ -124,9 +134,45 @@ const SFX = Object.freeze({
   drum: {seconds: 1.5, prompt: 'deep tribal drum hit'},
   clash: {seconds: 1.0, prompt: 'swords clashing, metal on metal'},
   stone: {seconds: 0.8, prompt: 'stone tool knocking on rock'},
+  // 0.91 (owner review 2026-11-04: "no cheers at the moment of joy, nothing matching at a loss, a groan, a new idea"):
+  // the sounds of what the story feels, placed on the narrator's words.
+  cheer: {seconds: 2.0, prompt: 'small crowd cheering and clapping'},
+  groan: {seconds: 1.2, prompt: 'people groaning in disappointment'},
+  gasp: {seconds: 0.8, prompt: 'surprised gasp'},
+  sad: {seconds: 2.0, prompt: 'short sad descending melody sting'},
+  laugh: {seconds: 1.5, prompt: 'warm group laughter'},
 });
 // Story sounds are welcome but never required: a video plays without one the library lacks.
-const STORY_SFX = Object.freeze(['fire', 'animal', 'waves', 'rain', 'wind', 'crowd', 'birds', 'drum', 'clash', 'stone']);
+const STORY_SFX = Object.freeze(['fire', 'animal', 'waves', 'rain', 'wind', 'crowd', 'birds', 'drum', 'clash', 'stone', 'cheer', 'groan', 'gasp', 'sad', 'laugh']);
+// What a line means, heard on its word (0.91): joy cheers, a loss falls, a groan groans, a surprise gasps, a joke
+// laughs, the truth lands with a low boom, a new idea or a plan dings, a mystery builds. The need is the least density
+// that plays it; the first meaning found in a shot wins and the same one is not heard again within 6 s.
+const MEANING_SFX = Object.freeze([
+  {kind: 'cheer', need: 1, words: ['win', 'wins', 'won', 'winner', 'winners', 'winning', 'victory', 'celebrate', 'celebrates', 'celebrated', 'celebration', 'cheer', 'cheers', 'cheered', 'hooray', 'success', 'succeeds', 'succeeded', 'triumph', 'champion']},
+  {kind: 'sad', need: 1, words: ['lose', 'loses', 'lost', 'loss', 'losses', 'loser', 'broke', 'ruined', 'ruin', 'sad', 'sadly', 'cry', 'cries', 'cried', 'tears', 'fail', 'fails', 'failed', 'failure', 'starve', 'starved', 'hungry', 'died', 'dies', 'death', 'empty-handed', 'nothing left']},
+  {kind: 'groan', need: 1, words: ['groan', 'groans', 'groaned', 'sigh', 'sighs', 'sighed', 'ugh', 'disappointed', 'disappointment', 'complain', 'complains', 'grumble', 'grumbles']},
+  {kind: 'gasp', need: 1, words: ['suddenly', 'shock', 'shocked', 'shocking', 'surprise', 'surprised', 'surprising', 'gasp', 'gasps', 'wow', 'unbelievable', 'incredible', 'astonishing']},
+  {kind: 'laugh', need: 1, words: ['laugh', 'laughs', 'laughed', 'laughing', 'joke', 'jokes', 'funny', 'giggle', 'giggles']},
+  {kind: 'boom', need: 2, words: ['truth', 'secret', 'secrets', 'reveal', 'reveals', 'revealed', 'turns out', 'real reason', 'the catch', 'hidden']},
+  {kind: 'ding', need: 1, words: ['idea', 'ideas', 'realise', 'realises', 'realised', 'realize', 'realizes', 'realized', 'discover', 'discovers', 'discovered', 'invent', 'invents', 'invented', 'figured', 'figures out', 'clever', 'genius', 'solution']},
+  {kind: 'ding', need: 2, words: ['strategy', 'strategies', 'plan', 'trick', 'rule', 'rules', 'lesson', 'method', 'system']},
+  {kind: 'riser', need: 2, words: ['mystery', 'mysterious', 'curious', 'curiosity', 'wonder', 'wondered', 'what if', 'imagine', 'question', 'puzzle']},
+]);
+const tokens = text => String(text || '').toLowerCase().replace(/[^a-z' -]+/g, ' ').split(/[\s]+/).map(word => word.replace(/^'+|'+$/g, '')).filter(Boolean);
+// The meaning of a shot's words, with the time of the word that says it: [{kind, need, at, word}].
+function meaningsOf(words) {
+  const said = (words || []).map(word => ({...word, token: tokens(word.text)[0] || ''})), found = [];
+  for (const group of MEANING_SFX) {
+    for (let i = 0; i < said.length; i++) {
+      const one = said[i].token, two = i + 1 < said.length ? `${one} ${said[i + 1].token}` : '';
+      const hit = group.words.find(item => item === one || item === two);
+      if (hit) { found.push({kind: group.kind, need: group.need, at: said[i].start, word: hit}); break; }
+    }
+  }
+  return found.sort((a, b) => MEANING_SFX.findIndex(item => item.kind === a.kind) - MEANING_SFX.findIndex(item => item.kind === b.kind));
+}
+// The meaning kinds a whole text needs (for fetching them before the edit, like neededEffects).
+const meaningKinds = (text, density = 'accent') => { const rank = DENSITY_RANK[density] || 0, all = tokens(text), joined = ` ${all.join(' ')} `; return MEANING_SFX.filter(group => group.need <= rank && group.words.some(word => joined.includes(` ${word} `))).map(group => group.kind); };
 // The sound a place makes when the story arrives there (once, when the place changes).
 const SET_SFX = Object.freeze({ocean: 'waves', beach: 'waves', harbor: 'waves', storm: 'rain', nature: 'birds', park: 'birds', village: 'birds', mountains: 'wind', desert: 'wind', prehistoric: 'wind', cave: 'fire',
   market: 'crowd', street: 'crowd', city: 'crowd', stage: 'crowd', battlefield: 'clash'});
@@ -149,11 +195,11 @@ function elementStarts(sketch, times, duration) {
 }
 // The effect an element earns, and the least density that plays it.
 function sfxFor(el, engine) {
-  if (el.kind === 'fx') return {burst: ['impact', 2], flash: ['zap', 2], shake: ['impact', 2], punch: ['impact', 2], confetti: ['sparkle', 2], 'money-rain': ['cash', 2], cross: ['wrong', 1], check: ['right', 1], sparkles: ['sparkle', 3], shockwave: ['boom', 2], glitch: ['glitch', 2], scan: ['typing', 3], hearts: ['sparkle', 3], 'ink-splat': ['impact', 3], pulse: ['heartbeat', 3], progress: ['riser', 3]}[el.effect] || null;
+  if (el.kind === 'fx') return {burst: ['impact', 2], flash: ['zap', 2], shake: ['impact', 2], punch: ['impact', 2], confetti: ['sparkle', 2], leaves: ['swoosh-up', 2], 'money-rain': ['cash', 2], cross: ['wrong', 1], check: ['right', 1], sparkles: ['sparkle', 3], shockwave: ['boom', 2], glitch: ['glitch', 2], scan: ['typing', 3], hearts: ['sparkle', 3], 'ink-splat': ['impact', 3], pulse: ['heartbeat', 3], progress: ['riser', 3]}[el.effect] || null;
   if (el.kind === 'text') return {stamp: ['stamp', 1], counter: ['tick', 2], headline: ['swoosh-up', 2], number: ['impact', 2], pop: ['pop', 3], title: ['whoosh', 3], highlight: ['scribble', 3], label: ['pop', 3]}[el.style] || null;
   if (el.kind === 'crowd') return ['crowd', 2];
   if (el.kind === 'prop') { if (el.enter === 'drop') return ['impact', 2]; if (el.prop === 'bolt') return ['zap', 2]; if (PROP_SFX[el.prop]) return [PROP_SFX[el.prop], 2]; if (['coin', 'money', 'moneybag', 'gold'].includes(el.prop)) return ['cash', 3]; return [engine === 'handdrawn' ? 'scribble' : 'pop', 3]; }
-  if (el.kind === 'figure') return [engine === 'handdrawn' ? 'scribble' : 'pop', 3];
+  // 0.91: people walk on in nearly every shot, so their entrance makes no sound (it filled the timeline with pops).
   if (el.kind === 'arrow') return ['whoosh', 3];
   return null;
 }
@@ -175,11 +221,14 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
     const kind = TRANSITION_SFX[clip.sketch.transition];
     if (kind) events.push({seconds: Math.max(0, clip.start - 0.05), kind, need: 1, reason: `${clip.sketch.transition} opening`});
     const starts = elementStarts(clip.sketch, clip.times, clip.seconds);
+    // What the line means, on its word (one meaning per shot, the strongest).
+    const meaning = meaningsOf(clip.words).find(item => item.at < clip.seconds - 0.1 && item.need <= rank);
+    if (meaning && meaning.need <= rank) events.push({seconds: round(clip.start + Math.max(0, meaning.at), 3), kind: meaning.kind, need: meaning.need, meaning: true, shot: clip.label, reason: `"${meaning.word}" in ${clip.label || 'a drawn shot'}`});
     clip.sketch.elements.forEach((el, i) => {
       const hit = sfxFor(el, clip.sketch.engine || engine);
       if (!hit || starts[i] >= clip.seconds - 0.05) return;
       const delay = el.kind === 'text' && el.style === 'stamp' ? 0.14 : el.kind === 'prop' && el.enter === 'drop' ? 0.38 : 0;
-      events.push({seconds: round(clip.start + starts[i] + delay, 3), kind: hit[0], ...(subjectOf(el, hit[0]) ? {subject: subjectOf(el, hit[0])} : {}), need: hit[1], reason: `${el.kind === 'fx' ? el.effect : el.kind === 'text' ? `${el.style} text` : el.prop || el.kind} in ${clip.label || 'a drawn shot'}`});
+      events.push({seconds: round(clip.start + starts[i] + delay, 3), kind: hit[0], ...(subjectOf(el, hit[0]) ? {subject: subjectOf(el, hit[0])} : {}), need: hit[1], shot: clip.label ?? clip.start, reason: `${el.kind === 'fx' ? el.effect : el.kind === 'text' ? `${el.style} text` : el.prop || el.kind} in ${clip.label || 'a drawn shot'}`});
     });
   }
   // A place's sound is a bed under the moment, so it never pushes out an effect (or the other way round).
@@ -187,15 +236,41 @@ function sfxEvents({clips, density = 'accent', engine = 'stickman'}) {
   for (const event of events.filter(item => item.need <= rank).sort((a, b) => a.seconds - b.seconds || a.need - b.need)) {
     const near = chosen.find(item => !!item.bed === !!event.bed && Math.abs(item.seconds - event.seconds) < 0.18);
     if (!near) chosen.push(event);
-    else if (event.need < near.need) chosen.splice(chosen.indexOf(near), 1, event);
+    else if (event.need < near.need || (event.meaning && !near.meaning && event.need === near.need)) chosen.splice(chosen.indexOf(near), 1, event);
   }
-  return chosen.map(({need, bed, ...item}) => item);
+  // 0.91: the same meaning is not heard twice within 6 s, and a small sound (an object's pop or scribble) only where
+  // nothing else sounds within 0.8 s, never within 1.5 s of a meaning, and once a shot.
+  const kept = [], popped = new Set();
+  for (const event of chosen) {
+    if (event.meaning && kept.some(item => item.meaning && item.kind === event.kind && event.seconds - item.seconds < 6)) continue;
+    if (event.need === 3 && !event.bed) {
+      const shot = event.shot;
+      if (popped.has(shot) || chosen.some(item => item !== event && !item.bed && (item.need < 3 || item.meaning) && Math.abs(item.seconds - event.seconds) < (item.meaning ? 1.5 : 0.8))) continue;
+      popped.add(shot);
+    }
+    kept.push(event);
+  }
+  return kept.map(({need, bed, meaning, shot, ...item}) => item);
 }
 
+// The edit's own changes to its sound effects (0.91: editor operations add-sfx and remove-sfx), in order: a removal
+// with a moment takes the nearest effect within half a second (of its kind, when named); without a moment it takes
+// every effect of that kind; an addition lays one effect at its moment.
+function applySfxEdits(events, edits = []) {
+  let out = [...events];
+  for (const edit of edits || []) {
+    if (edit.op === 'add') out.push({seconds: edit.seconds, kind: edit.kind, reason: 'added in the edit', added: true});
+    else if (Number.isFinite(edit.seconds)) {
+      const near = out.filter(item => (!edit.kind || item.kind === edit.kind) && Math.abs(item.seconds - edit.seconds) <= 0.5).sort((a, b) => Math.abs(a.seconds - edit.seconds) - Math.abs(b.seconds - edit.seconds))[0];
+      if (near) out = out.filter(item => item !== near);
+    } else if (edit.kind) out = out.filter(item => item.kind !== edit.kind);
+  }
+  return out.sort((a, b) => a.seconds - b.seconds);
+}
 // Every kind of effect a video's drawings earn at a density, read from the plan (no timing needed): what Freesound
 // fetches for this video (0.87).
-function neededEffects(sketches, {density = 'accent', engine = 'stickman'} = {}) {
-  const rank = DENSITY_RANK[density] || 0, kinds = new Set();
+function neededEffects(sketches, {density = 'accent', engine = 'stickman', text = ''} = {}) {
+  const rank = DENSITY_RANK[density] || 0, kinds = new Set(meaningKinds(text, density));
   if (!rank) return [];
   let place = null;
   for (const sketch of sketches.filter(Boolean)) {
@@ -298,7 +373,9 @@ const EFFECT_WORDS = Object.freeze({
   boom: ['boom', 'explosion', 'explode', 'blast', 'bang'], zap: ['zap', 'electric', 'spark', 'laser', 'shock'], thunder: ['thunder', 'storm', 'lightning'],
   ding: ['ding', 'bell', 'notification', 'chime'], right: ['correct', 'success', 'win', 'positive', 'achievement', 'level'], wrong: ['wrong', 'error', 'buzzer', 'fail', 'negative', 'denied'],
   tick: ['tick', 'clock', 'ticking', 'timer', 'countdown'], riser: ['riser', 'rising', 'build', 'buildup', 'tension', 'swell'], sparkle: ['sparkle', 'magic', 'shimmer', 'twinkle', 'glitter', 'fairy'],
-  cash: ['cash', 'register', 'coin', 'coins', 'money', 'ching'], glitch: ['glitch', 'digital', 'static', 'distortion', 'stutter'], scribble: ['scribble', 'pencil', 'marker', 'writing', 'pen', 'chalk', 'drawing'],
+  cash: ['cash', 'register', 'coin', 'coins', 'money', 'ching'],
+  cheer: ['cheer', 'cheering', 'cheers', 'applause', 'clapping', 'celebration', 'victory', 'yay', 'hooray'], groan: ['groan', 'groaning', 'disappointed', 'sigh', 'ugh', 'moan'],
+  gasp: ['gasp', 'gasping', 'surprised', 'surprise', 'shock'], sad: ['sad', 'sadness', 'melancholy', 'sorrow', 'trombone', 'lose', 'fail'], laugh: ['laugh', 'laughter', 'laughing', 'giggle', 'chuckle'], glitch: ['glitch', 'digital', 'static', 'distortion', 'stutter'], scribble: ['scribble', 'pencil', 'marker', 'writing', 'pen', 'chalk', 'drawing'],
   boing: ['boing', 'spring', 'bounce', 'cartoon'], heartbeat: ['heartbeat', 'heart', 'pulse'], typing: ['typing', 'keyboard', 'typewriter', 'keys'],
   fire: ['fire', 'campfire', 'crackle', 'crackling', 'flames', 'burning', 'bonfire'], animal: ['elephant', 'trumpet', 'trumpeting', 'mammoth', 'roar', 'animal'], waves: ['waves', 'wave', 'ocean', 'sea', 'surf', 'shore'],
   rain: ['rain', 'raining', 'rainfall', 'drizzle'], wind: ['wind', 'windy', 'gust', 'breeze', 'howling'], crowd: ['crowd', 'people', 'murmur', 'chatter', 'market', 'audience'], birds: ['birds', 'bird', 'chirp', 'chirping', 'birdsong', 'tweet'],
@@ -386,4 +463,4 @@ function subjectEffect(sounds, kind, subject) {
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {DUCK, mixGains, STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, storySubjects, subjectEffect, words, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {DUCK, mixGains, applySfxEdits, MEANING_SFX, meaningsOf, meaningKinds, STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, storySubjects, subjectEffect, words, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

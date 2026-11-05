@@ -1314,8 +1314,36 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   assert.equal(asked.at(-1).maxTokens, 32000);
   assert.equal(polished.steps.length, 40, 'up to 40 changes');
   assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM skill_usage WHERE task_key='editing.plan'").get().n >= 1, true, 'the skills it used are recorded');
+  // 0.91 (owner report 2026-11-04: "Claude consumed tokens and changed nothing"): the shots the owner names are sent
+  // first, a painted picture's data stays in the program, and the editor can add and take out sound effects, set the
+  // music's feel and have Room 04 draw a shot again.
+  const {namedClips, compactSketch} = require('../editing-room'), payload = editing.timelinePayload(editing.revisionRow(r5.id)).timeline;
+  const last = payload.clips.at(-1), second = payload.clips[1];
+  assert.deepEqual(namedClips(`Fix ${second.label.toLowerCase()} please`, payload), [second.id]);
+  assert.ok(namedClips('the explanation at the end needs a graph', payload).includes(last.id));
+  assert.equal(compactSketch({elements: [{kind: 'picture', art: 'M0 0L9 9'.repeat(500)}], kit: [{id: 'k1', shapes: [1, 2, 3]}]}).elements[0].art, '(the drawn picture, kept as it is)');
+  scenes.ai = {team: () => ({claude: {id: 'claude-1', provider: 'claude-code', revision: 1}, chatgpt: null}), complete: async ({messages}) => { asked.push({messages}); return {content: JSON.stringify({explain: 'A cheer on the win, no more pops, two winners drawn again.', ops: [
+    {type: 'add-sfx', seconds: 1, kind: 'cheer'}, {type: 'remove-sfx', kind: 'pop'}, {type: 'add-sfx', seconds: 1, kind: 'kazoo'},
+    {type: 'redraw-shot', clipId: drawnClip.id, ask: 'Two winners, not one'}, {type: 'set-music', feel: 'calm but a bit energetic'}]}), usage: {totalTokens: 70}}; }};
+  const fixes = await editing.command(r5.id, {requestedBy: 'Owner', text: `In ${drawnClip.label} add a cheer, remove the pops and draw two winners`});
+  assert.match(asked.at(-1).messages[0].content, /"type":"add-sfx"[\s\S]*"type":"redraw-shot"/);
+  assert.match(asked.at(-1).messages[1].content, /"effects":\[/, 'the editor sees the effects in the edit');
+  assert.deepEqual(fixes.steps.map(step => step.ok), [true, true, false, true, false]);
+  assert.match(fixes.steps[2].error, /Sound effects are:/);
+  assert.match(fixes.steps[4].error, /Music is not available/, 'a new score needs the Audio Room');
+  const redrawCalls = [];
+  scenes.changeShots = (manifestId, input) => { redrawCalls.push({manifestId, input}); return {job: {id: 'job-1'}}; };
+  const r6 = editing.applyOps(r5.id, {editedBy: 'Owner', ops: fixes.ops});
+  assert.deepEqual(r6.timeline.sfxEdits, [{op: 'add', seconds: 1, kind: 'cheer'}, {op: 'remove', kind: 'pop'}]);
+  assert.deepEqual(r6.redraw.labels, [drawnClip.label]);
+  assert.deepEqual(redrawCalls[0].input.changes, [{label: drawnClip.label, ask: 'Two winners, not one'}]);
+  assert.ok(!editing.revisionRow(r6.id).ops.includes('redraw-shot'), 'the edit keeps only its own changes');
+  // A redraw on its own changes nothing in the edit.
+  const alone = editing.applyOps(r6.id, {editedBy: 'Owner', ops: [{type: 'redraw-shot', clipId: drawnClip.id, ask: 'Pebbles on the table'}]});
+  assert.equal(alone.revision, r6.revision);
+  delete scenes.changeShots;
   scenes.ai = {team: () => ({claude: null, chatgpt: null})};
-  await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
+  await assert.rejects(editing.command(r6.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
 });
 
 // ---------------------------------------------------------------- P08c music and sound effects
@@ -1541,6 +1569,21 @@ test('0.60: music and effects come from the owner\'s sound library: imported onc
   // The owner's own mix is never overridden by the program.
   room.rulesScore(content.id, {requestedBy: 'Owner'});
   assert.equal(editing.refreshAutoAudio(content.id), null);
+  // 0.91 (owner request 2026-11-04: "just add a calm but a bit energetic music"): the editor's set-music makes a free
+  // score in that feel and the edit plays it, keeping the owner's levels; when the program finds better tracks for the
+  // same cues, the music follows them.
+  sounds.update(cues[0].sha256, {updatedBy: 'Owner', enabled: true});
+  const felt = editing.applyOps(mixed.id, {editedBy: 'Owner', ops: [{type: 'set-music', feel: 'calm but a bit energetic'}]});
+  const feltScore = room.latestScore(content.id);
+  assert.match(feltScore.summary, /calm but a bit energetic/);
+  assert.deepEqual([felt.timeline.audio.music.enabled, felt.timeline.audio.music.scoreId, felt.timeline.audio.music.levelLufs], [true, feltScore.id, -26], 'the new score plays at the owner\'s level');
+  const other = sounds.tracks('music').find(track => track.id !== feltScore.cues[0].track);
+  const better = room.repickTracks(content.id, 'Owner', {[feltScore.cues[0].id]: {track: other.id, prompt: feltScore.cues[0].prompt}});
+  assert.notEqual(better.id, feltScore.id);
+  const follows = editing.refreshAutoAudio(content.id);
+  assert.deepEqual([follows.timeline.audio.music.scoreId, follows.timeline.audio.music.levelLufs], [better.id, -26]);
+  assert.match(follows.note, /tracks found for score/);
+  assert.throws(() => editing.applyOps(follows.id, {editedBy: 'Owner', ops: [{type: 'set-music', feel: 'x'}]}), /Describe the music/);
 });
 
 test('0.86: a draft without a score gets the free score from its story sections, music only when every cue has a track, effects at the style\'s density', () => {
