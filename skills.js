@@ -442,7 +442,10 @@ function rankSkills(items, taskKey, context = {}) {
     return {item, matched, weight, offFormat, onFormat, onEngine, primary: skill.tasks[0] === taskKey, area: skill.id.split('.')[0]};
   });
   const top = Math.max(1, ...scored.map(entry => entry.weight));
-  for (const entry of scored) entry.score = (entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0) + (entry.onEngine ? 0.35 : 0);
+  // context.tried (0.94): {skillId: times} given to earlier attempts at this same work (a storyboard drawn again); each
+  // earlier use counts 10% less, so a new attempt brings skills it has not tried yet while the job's core rules stay.
+  const tried = context.tried && typeof context.tried === 'object' ? context.tried : {};
+  for (const entry of scored) entry.score = ((entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0) + (entry.onEngine ? 0.35 : 0)) * 0.8 ** (Number(tried[entry.item.skill.id]) || 0);
   // The owner's pins and own skills keep their place in front; the rest are taken best first, with each further skill
   // from an area already taken counting a little less (8% for each).
   const fixed = scored.filter(entry => entry.item.pinned || entry.item.origin !== 'builtin'), open = scored.filter(entry => !fixed.includes(entry) && !entry.offFormat), picked = [...fixed], areas = {};
@@ -458,7 +461,7 @@ function rankSkills(items, taskKey, context = {}) {
     areas[entry.area] = (areas[entry.area] || 0) + 1;
     picked.push(entry);
   }
-  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, ...(entry.onEngine ? {engine: true} : {}), own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
+  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, ...(entry.onEngine ? {engine: true} : {}), ...(tried[entry.item.skill.id] ? {tried: Number(tried[entry.item.skill.id])} : {}), own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
 }
 // The jobs whose AI request carries approved skills (0.73 Skills page: "what reaches each job"); the editing brain applies
 // its skills in code rather than in a prompt.

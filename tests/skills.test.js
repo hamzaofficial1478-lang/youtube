@@ -642,6 +642,15 @@ test('0.74: each request gets the skills that fit it, never a fixed list, and th
   const used = engine.usage(5)[0];
   assert.equal(used.reasons[0].id, 'story.case-file-mystery');
   assert.equal(used.reasons[0].forJob, true);
+  // 0.94 (owner report: a storyboard drawn again got the same skills): skills an earlier attempt at the same video used
+  // count less, so the next attempt brings ones it has not tried; the reason says so.
+  const first = pick('scene.plan', {text: 'The ship that vanished', style: 'engine stickman look classic', format: 'long-form'});
+  const tried = Object.fromEntries(first.skillIds.map(id => [id, 1]));
+  const second = pick('scene.plan', {text: 'The ship that vanished', style: 'engine stickman look classic', format: 'long-form', tried});
+  assert.ok(second.skillIds.some(id => !first.skillIds.includes(id)), 'new skills come in');
+  assert.ok(second.skillIds.filter(id => !first.skillIds.includes(id)).length >= first.skillIds.length / 3, 'about half are new');
+  assert.ok(first.skillIds.slice(0, 2).every(id => second.skillIds.includes(id)), 'the core rules of the job stay');
+  assert.ok(second.reasons.filter(why => why.tried).every(why => why.tried === 1));
 });
 
 // 0.79 (owner question 2026-11-02: "why some skills show completed and some pending?"): only script jobs wrote an

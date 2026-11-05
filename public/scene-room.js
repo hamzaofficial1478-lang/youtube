@@ -67,7 +67,10 @@ function sceneAsset(content, id) { return content.assets.find(item => item.id ==
 function sceneActiveJobs(content, shotId = null) { return content.jobs.filter(job => ['queued', 'running'].includes(job.status) && (!shotId || job.shotId === shotId)); }
 function sceneBusy() {
   const contents = state?.scenes?.contents || [];
-  return contents.some(content => content.planJobs.some(job => ['queued', 'running'].includes(job.status)) || sceneActiveJobs(content).length);
+  // 0.94: a storyboard waiting for the internet goes on by itself, so the page keeps looking (it used to stay "Paused"
+  // after the program had resumed it, and Resume then said it was running).
+  const waiting = job => job.status === 'paused' && job.pause?.waitUntil && Date.parse(job.pause.waitUntil) > Date.now();
+  return contents.some(content => content.planJobs.some(job => ['queued', 'running'].includes(job.status) || waiting(job)) || sceneActiveJobs(content).length);
 }
 function sceneSpec(content) { const found = typeof styleRevisionById === 'function' ? styleRevisionById(content.inputs.style.revisionId) : null; return found?.revision.spec || null; }
 function sceneNarration(manifest, scene) { return manifest.plan.sentences.slice(scene.sentenceStart - 1, scene.sentenceEnd).map(item => item.text).join(' '); }
@@ -230,8 +233,10 @@ function sceneShotCard(content, manifest, scene, shot) {
   const jobs = content.jobs.filter(job => job.shotId === shot.id), active = jobs.find(job => ['queued', 'running'].includes(job.status));
   const failed = !active && jobs.find(job => ['failed', 'interrupted', 'blocked_quota', 'blocked_budget', 'stale'].includes(job.status) && job.updatedAt >= (selection?.selectedAt || ''));
   const count = content.candidateCounts[shot.id] || 0, editable = manifest.scope.current;
+  // 0.94: the shot a change is drawing again says so on the board, so it is clear which shot is being worked on.
+  const redraw = content.planJobs.find(job => ['queued', 'running', 'paused'].includes(job.status) && job.redraw?.labels?.includes(shot.label));
   const media = asset?.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual for ${esc(shot.label)}" loading="lazy">` : `<span class="shot-empty">${active ? (active.kind === 'search' ? 'Searching…' : active.kind === 'import' ? 'Downloading…' : active.kind === 'draw' ? 'Drawing…' : 'Generating…') : 'No visual yet'}</span>`;
-  return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}</div>
+  return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}${redraw ? `<span class="shot-redraw ${redraw.status === 'paused' ? 'paused' : ''}">${redraw.status === 'paused' ? 'Redraw paused' : 'Being drawn again'}</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
       <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? (shot.frame ? sceneFrameSummary(shot.frame) : sceneSketchSummary(shot.sketch, manifest.plan.cast)) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
@@ -340,7 +345,7 @@ function sceneAction(command, id, button) {
   if (command === 'scene-plan-resume') {
     const [jobId, aiId] = String(id).split('|');
     if (button) button.disabled = true;
-    return api(`/api/scene-plan-jobs/${jobId}/resume`, aiId ? {connector: sceneConnectorRef(aiId)} : {}).then(() => { toast('Resumed: it goes on from the last finished step.'); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
+    return api(`/api/scene-plan-jobs/${jobId}/resume`, aiId ? {connector: sceneConnectorRef(aiId)} : {}).then(job => { toast(job?.already ? 'It is already going on: the program resumed it by itself when the internet came back.' : 'Resumed: it goes on from the last finished step.'); return refresh(); }).catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; });
   }
   if (command === 'scene-net-check') {
     if (button) button.disabled = true;
