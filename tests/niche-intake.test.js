@@ -218,8 +218,9 @@ test('niche suggestions: sub-niches from a channel and its competitors, new nich
   assert.equal(done.status, 'completed');
   assert.deepEqual(done.result.suggestions.map(item => item.viralChance), ['high', 'high', 'high']);
   assert.match(asked.system || JSON.stringify(asked.messages), /sub-niches of the channel family's niche/);
-  assert.match(asked.system, /owner-approved skill brief/);
-  assert.ok(usedSkills.every(id => JSON.stringify(asked.messages).includes(id)));
+  // 0.95: the skills are the owner's directives in the instructions, no longer in the data.
+  assert.match(asked.system, /DIRECTION FROM THE OWNER'S SKILLS/);
+  assert.ok(usedSkills.every(id => asked.system.includes(`[${id}]`)));
   assert.match(JSON.stringify(asked.messages), /Why renters quietly get richer[\s\S]*Is renting forever actually fine/);
   assert.equal(store.db.prepare('SELECT kind FROM intelligence_usage WHERE job_id=?').get(done.id).kind, 'niche_suggest');
   assert.equal(niches.tokenSummary().settled, 4500, 'suggestions count against the Niche Factory monthly limit');

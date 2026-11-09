@@ -237,8 +237,9 @@ test('Claude blueprint is validated, reviewed by a human and then drives style, 
   const prompt = await (async () => { await intel.processNextAnalysis(); return network.calls.find(call => call.path === '/v1/messages').body; })();
   const userData = JSON.parse(prompt.messages[0].content.replace('UNTRUSTED COMPETITOR DATA:\n', ''));
   assert.equal(JSON.stringify(userData).includes('YouTube raw title'), false, 'YouTube API data is not sent to Claude without derived-use approval');
-  assert.ok(userData.skills.skills.some(item => item.id === 'competitors.four-gaps'));
-  assert.match(prompt.system, /owner-approved skill brief/);
+  // 0.95: the skills leave the data and direct the model from its instructions as numbered directives.
+  assert.equal(userData.skills, undefined);
+  assert.match(prompt.system, /DIRECTION FROM THE OWNER'S SKILLS[\s\S]*\[competitors\.four-gaps\]/);
   assert.match(prompt.system, /at most 30%/);
   const analysis = intel.publicAnalysis(intel.analysisRow(queued.id));
   assert.equal(analysis.status, 'completed');
