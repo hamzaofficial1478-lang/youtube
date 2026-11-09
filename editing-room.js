@@ -604,9 +604,10 @@ class EditingRoom {
     const sfx = (() => {
       if (!settings?.sfx?.enabled || settings.sfx.density === 'none') return [];
       const shots = payload.clips.filter(clip => clips[clip.id]?.sketch).map(clip => ({label: clip.label, start: clip.start / payload.fps, seconds: clip.frames / payload.fps, sketch: clips[clip.id].sketch, words: clips[clip.id].spoken || [], times: clips[clip.id].times ? {elements: clips[clip.id].times.map(t0 => ({t0}))} : null}));
-      let library = new Map();
-      try { library = new Map((this.soundtrack?.library(state.inputs.family.id) || []).map(item => [item.kind, item])); } catch { /* no sounds listed */ }
-      return M.applySfxEdits(M.sfxEvents({clips: shots, density: settings.sfx.density, engine}), payload.sfxEdits).map(event => ({...event, sound: library.get(event.kind)?.asset?.key || null, story: M.STORY_SFX.includes(event.kind)}));
+      let turn = () => null;
+      try { turn = this.soundtrack?.effectTurns(state.inputs.family.id) || turn; } catch { /* no sounds listed */ }
+      // The take each effect plays in turn (0.96), as the render takes it.
+      return M.applySfxEdits(M.sfxEvents({clips: shots, density: settings.sfx.density, engine}), payload.sfxEdits).map(event => ({...event, sound: turn(event.kind)?.key || null, story: M.STORY_SFX.includes(event.kind)}));
     })();
     return {music: music.slice(0, 200), sfx: sfx.slice(0, 1000), musicOn: !!settings?.music?.enabled, sfxOn: !!settings?.sfx?.enabled && settings.sfx.density !== 'none', density: settings?.sfx?.density || null};
   }

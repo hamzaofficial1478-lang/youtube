@@ -63,6 +63,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   // The Skills Engine attaches its runtime to the store so the prompt-building rooms can reach
   // the approved skill brief. Nothing is injected until a skill revision is approved by a human.
   const skills=new SkillsEngine(store,{root}).attach();
+  // 0.96: no AI request leaves without the owner's skills; one a room sent without them gets its job's at the gate.
+  ai.skills=skills.gate();
   const quota=new QuotaLedger(store),competitorIntel=new CompetitorIntelligence(store,connectors,quota,styles,ai),nicheFactory=new NicheFactory(store,connectors,quota,styles,ai,{shotDir:path.join(dataRoot,'niche-shots')}),trends=new TrendScanner(store,connectors,quota,ai);
   // The channel's assigned style, for the niche words and topic ideas (0.76).
   trends.styleOf=familyId=>{const handoff=styles.handoffs().find(item=>item.familyId===familyId&&item.ready);if(!handoff)return null;const spec=JSON.parse(styles.revisionRow(handoff.revisionId).spec);return {name:spec.name,summary:String(spec.summary||'').slice(0,300),...(spec.drawing?.look?{look:spec.drawing.look}:{})};};
@@ -187,7 +189,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       // 0.78: the owner's own narration file arrives as the raw body (up to 500 MB, streamed to disk), with its fields in the query.
       const narrationFile=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/narration-file$/);
       if(narrationFile&&req.method==='POST')return json(res,200,await voiceRuntime.attach(narrationFile[1],req,Object.fromEntries(url.searchParams)));
-      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:262144);let result;
+      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:pathname==='/api/skills/read-files'?56*1024*1024:pathname==='/api/skills/import'?8*1024*1024:262144);let result;
       // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
       const listAction=pathname.match(/^\/api\/manage\/([a-z-]+)\/(delete|export)$/);
       if(listAction&&req.method==='POST'){if(listAction[2]==='delete')return json(res,200,lists.delete(listAction[1],body));const file=await lists.export(listAction[1],body);res.writeHead(200,{'Content-Type':file.type,'Content-Length':file.data.length,'Content-Disposition':`attachment; filename="${file.name}"`,'Cache-Control':'no-store'});return res.end(file.data);}
@@ -330,6 +332,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const visualRevoke=pathname.match(/^\/api\/visual-approvals\/([a-f0-9-]+)\/revoke$/);
         if(visualRevoke&&req.method==='POST')return json(res,200,sceneRoom.revokeApproval(visualRevoke[1],body));
         if(pathname==='/api/skills'&&req.method==='POST')return json(res,200,skills.saveOwnerSkill(body));
+        // 0.96: a skills folder or .zip is read first (kept, thrown out, assigned jobs), then imported and approved by name.
+        if(pathname==='/api/skills/read-files'&&req.method==='POST')return json(res,200,skills.readFiles(body));
         if(pathname==='/api/skills/import'&&req.method==='POST')return json(res,200,skills.importPack(body));
         if(pathname==='/api/skills/packs/approve'&&req.method==='POST')return json(res,200,skills.approvePack(body));
         if(pathname==='/api/skill-bindings'&&req.method==='POST')return json(res,200,skills.bind(body));

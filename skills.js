@@ -10,6 +10,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
+const Import = require('./skill-import');
 
 class SkillError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -362,6 +363,13 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/anidoodle-craft.json', label: 'anidoodle (Apache-2.0): the craft bar, story, realism, anatomy, styles as marks, motion grammar, camera, acting, review, narration and sound'},
   {file: 'skills/ghost-editor.json', label: 'ghost-editor (MIT): beats on the word, restraint, sound levels against the voice, style as a system, taste, named edit styles'},
   {file: 'skills/motion-clone.json', label: 'MotionClone (two repositories, ideas only): dominant motion, scenes at visual jumps, compare and keep only improvements'},
+  // 0.96 (owner request 2026-11-09): fifteen repositories, each brain given to its engine or room (docs/research/fifteen-repos-2026-11-09.md).
+  {file: 'skills/anthropic-design.json', label: 'anthropics/skills (Apache-2.0): design philosophy first, anti-defaults, plan-review-build-critique, boldness in one place, seeded variation'},
+  {file: 'skills/content-strategy.json', label: 'claude-skills (MIT): human script rhythm, specific over vague, long-form architecture, one keyword in four places, positioning and pillars'},
+  {file: 'skills/animation-craft.json', label: 'ClaudeAnimationBase (MIT), Synfig, OpenToonz, PixiJS: timing sheets, an event in every shot, acting faces, arcs, overlap, twos, joints, particles'},
+  {file: 'skills/sound-craft.json', label: 'earshot (MIT): which events get a sound, the sync window, takes, the drop on the turn, foley by material, cheap tells'},
+  {file: 'skills/film-gauntlet.json', label: 'motion-video-kit (MIT): builder never judges, fix the biggest gap, one persistent actor, cause to effect, varied compositions, frozen time'},
+  {file: 'skills/explainer-craft.json', label: 'video-talkcraft and Remotion (ideas only), autoclip, ffmpeg-skill, threejs-skills: beats by meaning, shot types, element budget, clip scores'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -399,7 +407,7 @@ const BRIEF_BYTE_BUDGET = 1800;
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
 // 0.89 (owner request 2026-11-04: the new drawing, motion and editing skills used at every step): the planner, the
 // designed-shot worker, the pictures and the editor carry more; the designed shots and pictures are new injection points.
-const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000});
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000, 'qc.review': 4000, 'script.review': 4000});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 // ---------------------------------------------------------------- choosing skills for one request (0.74)
@@ -468,10 +476,10 @@ function rankSkills(items, taskKey, context = {}) {
 const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.plan', 'Scene planner and story director'], ['voice.direction', 'Voice direction'],
   ['audio.mix', 'Music score'], ['competitors.blueprint', 'Competitor blueprint'], ['niche.evaluate', 'Niche go/no-go'], ['niche.discover', 'Niche suggestions'],
   ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Edit commands, Polish and the editing brain'],
-  ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director']]);
+  ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director'], ['script.review', 'Script review by the second writer'], ['qc.review', 'Frame scan (Room 08)']]);
 
 // The record of each job that receives a skill brief, by the job it is for (0.79).
-const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs'});
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.
@@ -784,7 +792,27 @@ class SkillsEngine {
     });
   }
 
+  // 0.96: what a skills folder or .zip gives, before anything is saved: the skills (checked by validateSkill) with the
+  // jobs each is assigned to, the files kept and the files thrown out with the reason (skill-import.js).
+  readFiles(input) {
+    object(input, 'Request');
+    const name = text(input.name || 'skills', 'Folder or file name', 1, 120);
+    let files = [], dropped = [];
+    if (typeof input.zip === 'string') {
+      need(/^[A-Za-z0-9+/=]+$/.test(input.zip), 'Attach a .zip file.');
+      try { ({files, dropped} = Import.zipFiles(Buffer.from(input.zip, 'base64'))); } catch (error) { throw new SkillError(error.message); }
+    } else {
+      need(Array.isArray(input.files) && input.files.length >= 1 && input.files.length <= Import.LIMITS.entries, 'Choose a folder with at least one text file.');
+      files = input.files.map(file => ({path: text(file?.path, 'File path', 1, 500), text: typeof file?.text === 'string' ? file.text : ''}));
+      dropped = (Array.isArray(input.skipped) ? input.skipped : []).slice(0, Import.LIMITS.entries).map(file => ({path: String(file?.path || '').slice(0, 500), why: Import.keepFile(String(file?.path || ''), Number(file?.size) || 0) === true ? 'not read by the page' : Import.keepFile(String(file?.path || ''), Number(file?.size) || 0)}));
+    }
+    const result = Import.fromFiles(files, {name, dropped, validate: validateSkill});
+    need(result.skills.length, `No skills were found in "${name}". A skill is a SKILL.md (or any Markdown or text file) with rules in lists or sentences, or a JSON skill pack.`);
+    return result;
+  }
   // Import a pack of skills as drafts. A duplicate ID becomes a new revision, never an overwrite.
+  // 0.96: pack names the import (a folder or .zip name), and approve {approvedBy, confirmations} approves the new
+  // revisions by name in the same step, so the owner's skills reach the models at once.
   importPack(input) {
     object(input, 'Request');
     const createdBy = person(input.createdBy, 'Your name');
@@ -793,13 +821,20 @@ class SkillsEngine {
     need(Array.isArray(input.skills) && input.skills.length >= 1 && input.skills.length <= 500, 'An import holds 1-500 skills.');
     const skills = input.skills.map(entry => validateSkill(entry));
     need(new Set(skills.map(item => item.id)).size === skills.length, 'The import repeats a skill ID.');
+    const pack = input.pack === undefined || input.pack === null ? 'Imported pack' : `Imported: ${text(input.pack, 'Pack name', 1, 120)}`;
+    const approve = input.approve ? (() => {
+      object(input.approve, 'Approval');
+      const by = person(input.approve.approvedBy, 'Reviewer name'), confirmations = object(input.approve.confirmations, 'Review confirmations');
+      for (const [key, label] of [['wordingReviewed', 'you may use this wording'], ['numbersReviewed', 'numbers, limits and checks are right for this program'], ['scopeReviewed', 'the jobs each skill is assigned to are right']]) need(confirmations[key] === true, `Confirm that ${label}.`);
+      return by;
+    })() : null;
     return this.store.transaction(() => {
       const created = [], revised = [], unchanged = [];
       for (const skill of skills) {
         const existing = this.db.prepare('SELECT * FROM skills WHERE id=?').get(skill.id);
         const at = now();
         if (!existing) {
-          this.db.prepare('INSERT INTO skills(id,origin,pack,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(skill.id, origin, 'Imported pack', createdBy, at, at);
+          this.db.prepare('INSERT INTO skills(id,origin,pack,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(skill.id, origin, pack, createdBy, at, at);
           this.db.prepare('INSERT INTO skill_revisions(id,skill_id,revision,status,payload,payload_hash,change_note,created_by,created_at) VALUES(?,?,1,?,?,?,?,?,?)')
             .run(randomUUID(), skill.id, 'draft', JSON.stringify(skill), skillHash(skill), changeNote, createdBy, at);
           created.push(skill.id);
@@ -809,8 +844,19 @@ class SkillsEngine {
         this.appendRevision(skill, {createdBy, changeNote, at});
         revised.push(skill.id);
       }
-      this.store.event(`Imported skills: ${created.length} new, ${revised.length} new revision(s), ${unchanged.length} unchanged`);
-      return {created, revised, unchanged};
+      let approved = 0;
+      if (approve) {
+        const review = JSON.stringify({approvedBy: approve, approvedAt: now(), notes: `Approved while importing ${pack}`, pack, confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}});
+        for (const id of [...created, ...revised]) {
+          const row = this.latestRevisionRow(id);
+          if (row.status !== 'draft') continue;
+          this.db.prepare("UPDATE skill_revisions SET status='superseded' WHERE skill_id=? AND id<>? AND status='approved'").run(id, row.id);
+          this.db.prepare("UPDATE skill_revisions SET status='approved', review=? WHERE id=?").run(review, row.id);
+          approved++;
+        }
+      }
+      this.store.event(`Imported skills: ${created.length} new, ${revised.length} new revision(s), ${unchanged.length} unchanged${approve ? `; ${approved} approved by ${approve}` : ''}`);
+      return {created, revised, unchanged, approved, pack};
     });
   }
   exportPack({status = 'approved'} = {}) {
@@ -1082,6 +1128,18 @@ class SkillsEngine {
       capture: input => { try { return this.capture(input); } catch { return null; } },
     };
     return this;
+  }
+  // 0.96: what the AI gate (ai.js) uses for a request a room sent without skills: the approved skills of its job,
+  // chosen by the request's own words, and a usage record (room "program", outcome "answered") once it is answered.
+  gate() {
+    return {
+      brief: (taskKey, context) => this.promptBrief(taskKey, {context}),
+      record: ({taskKey, task, brief, applied}) => {
+        const jobId = `request:${randomUUID()}`;
+        this.recordUsage({jobId, room: 'program', taskKey, brief, outcome: 'answered'});
+        this.recordApplied(jobId, taskKey, applied);
+      },
+    };
   }
 }
 

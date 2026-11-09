@@ -181,6 +181,29 @@ test('the writer is told how a script is built, and the revision sees what the c
   assert.doesNotMatch(critiqueMessages(input, {...draft, hook: good, script: `${good} x`})[1].content, /Hook scored/);
 });
 
+// 0.96: the second writer reviews with the writer's directives (same codes) and the owner's script-review skills after them.
+test('the partner review is directed by the writer\'s skills and the script-review skills', () => {
+  const {reviewerBrief} = require('../writer');
+  const skill = (id, title) => ({id, title, when: 'a draft', do: [`apply ${title}`], checks: [`${title} holds`]});
+  const writing = {skills: [skill('script.hook', 'Open on the stakes'), skill('script.specific-over-vague', 'Specific over vague')], sourceHierarchy: ['owner']};
+  const review = {skills: [skill('script.specific-over-vague', 'Specific over vague'), skill('script.humanize-ai-tells', 'No AI tells')]};
+  assert.deepEqual(reviewerBrief(writing, review).skills.map(item => item.id), ['script.hook', 'script.specific-over-vague', 'script.humanize-ai-tells'], 'no skill twice; the writer\'s codes stay');
+  assert.equal(reviewerBrief(null, review), review);
+  assert.equal(reviewerBrief(writing, null), writing);
+  const input = {family: {format: 'long-form', locale: 'en-US'}, content: {kind: 'fiction'}, sources: [], skills: writing};
+  const draft = {title: 'Stone money', angle: 'How trade began', hook: 'You lose $40 every week.', script: 'You lose $40 every week. x', claims: [], uncertainties: []};
+  const [system, user] = critiqueMessages(input, draft, review);
+  assert.match(system.content, /\(3 directives, D1-D3\)/);
+  assert.match(system.content, /D3 · No AI tells \[script\.humanize-ai-tells\]/);
+  assert.match(system.content, /Judge the draft against these directives too/);
+  assert.ok(!user.content.includes('script.humanize-ai-tells') && !user.content.includes('"skills"'), 'no skill in the data');
+  assert.match(critiqueMessages(input, draft)[0].content, /\(2 directives, D1-D2\)/, 'without review skills, the writer\'s own');
+  // The writer's data is labelled ("UNTRUSTED CONTROL ROOM DATA:"); the revision moves its skills out of it too.
+  const revise = reviseMessages(input, draft, {verdict: 'Tighten it.', keep: [], fixes: [], hooks: [], facts: [], additions: []});
+  assert.match(revise[0].content, /D2 · Specific over vague/);
+  assert.ok(revise[1].content.startsWith('UNTRUSTED CONTROL ROOM DATA:') && !revise[1].content.includes('"skills"'), 'the label stays, the skills leave');
+});
+
 test('families store a validated writing voice and drafts carry craft advice', t => {
   const store = new Store(':memory:');
   t.after(() => store.close());

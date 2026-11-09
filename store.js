@@ -517,13 +517,15 @@ class Store {
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      // 0.96: the second writer reviews with the owner's script-review skills as directives.
+      const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
       const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
       const jobId=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,type,JSON.stringify(scope),at,at);
-      if(skillBrief)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
+      if(skillBrief)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});if(reviewBrief?.prompt)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.review',brief:reviewBrief});
       this.event(`Queued Claude ${f.primaryLocale} script candidate: ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);
     });
   }
@@ -545,10 +547,12 @@ class Store {
       // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
       const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
       requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      // 0.96: the second writer reviews with the owner's script-review skills as directives.
+      const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
+      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
-      if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});
+      if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});if(reviewBrief?.prompt)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.review',brief:reviewBrief});
       this.db.prepare("UPDATE jobs SET status='retried',updated_at=? WHERE id=?").run(at,previous.id);
       this.event(`Deliberately retried Claude ${f.primaryLocale} script candidate (attempt ${attempts}/3): ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(id);
     });
@@ -619,7 +623,7 @@ class Store {
       this.db.prepare('UPDATE jobs SET status=?,result=?,error=?,updated_at=? WHERE id=?').run(jobStatus,JSON.stringify({candidateId:id,usage,quality}),quality.passed?null:quality.issues.join(' '),at,jobId);
       // Skills Engine: the quality gate's own finding becomes a lesson candidate for human review.
       this.skillRuntime?.settleUsage?.(jobId,jobStatus);
-      this.skillRuntime?.recordApplied?.(jobId,'script.candidate',result.directives);
+      this.skillRuntime?.recordApplied?.(jobId,'script.candidate',result.directives);this.skillRuntime?.recordApplied?.(jobId,'script.review',result.reviewDirectives);
       if(!quality.passed)this.skillRuntime?.capture({familyId:f.id,skillId:'script.spoken-standard',taskKey:'script.candidate',source:'script-quality-gate',sourceRef:jobId,finding:`The script quality gate blocked a candidate: ${quality.issues.join(' ')}`,evidence:[`script candidate ${id}`,`script job ${jobId}`],proposal:{kind:'add-check',value:quality.issues[0]}});
       this.event(`${quality.passed?'Claude prepared':'Claude returned a quality-blocked'} ${f.primaryLocale} script candidate for review: ${c.title}`);return this.scriptCandidate(id);
     });

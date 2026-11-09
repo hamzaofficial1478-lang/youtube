@@ -61,7 +61,7 @@ function skillsView() {
   const tally = `<div class="production-context skill-tally"><span>${counts.total} skills</span><span>${counts.approved} approved</span><span>${counts.draft} draft</span><span>${counts.retired} retired</span><span>${counts.builtin} builtin</span><span>${counts.owner} owner</span><span>${counts.learned} learned</span><span>${counts.lessonsProposed} lesson${counts.lessonsProposed === 1 ? '' : 's'} waiting</span></div>`;
   const mine = skillsAll().filter(skill => skill.origin !== 'builtin').length;
   const tabs = [['packs', 'Built in'], ['mine', `My skills (${mine})`], ['library', 'Browse all'], ['lessons', `Lessons${counts.lessonsProposed ? ` (${counts.lessonsProposed})` : ''}`], ['usage', 'Usage'], ['state', 'Project state'], ['rules', 'Built-in numbers']];
-  const rail = `<div class="production-toolbar skill-tabs">${tabs.map(([id, label]) => `<button class="button ${skillTab === id ? 'primary' : 'secondary'}" data-skill-tab="${id}">${esc(label)}</button>`).join('')}<div class="row-end">${action('+ Add my own skill', 'skill-new', '', 'primary')}${action('Import pack', 'skill-import', '', 'secondary')}<a class="button secondary" href="/api/skills/export" target="_blank" rel="noopener">Export approved ↗</a></div></div>`;
+  const rail = `<div class="production-toolbar skill-tabs">${tabs.map(([id, label]) => `<button class="button ${skillTab === id ? 'primary' : 'secondary'}" data-skill-tab="${id}">${esc(label)}</button>`).join('')}<div class="row-end">${action('+ Add my own skill', 'skill-new', '', 'primary')}${action('Add skills (folder or .zip)', 'skill-import', '', 'secondary')}<a class="button secondary" href="/api/skills/export" target="_blank" rel="noopener">Export approved ↗</a></div></div>`;
   const body = skillTab === 'packs' ? skillPacksPanel() : skillTab === 'mine' ? skillMinePanel() : skillTab === 'lessons' ? skillLessonsPanel() : skillTab === 'usage' ? skillUsagePanel() : skillTab === 'state' ? skillProjectStatePanel() : skillTab === 'rules' ? skillRulesPanel() : skillLibraryPanel();
   return heading('Skills', 'The reusable operating knowledge of this program: what to do, what to avoid, and the exact numbers each room applies.') + hero + tally + rail + body;
 }
@@ -154,7 +154,7 @@ function skillLessonsPanel() {
 }
 
 // How the job that received the skills ended, in words (0.79: "pending" used to stay for good on most rooms' jobs).
-const SKILL_OUTCOMES = {completed: 'used: the job finished', 'completed-with-findings': 'used: finished with notes', failed: 'sent, but the job failed', interrupted: 'sent, the job stopped half-way', quality_failed: 'sent, the answer was not usable', usage_unknown: 'sent, the charge is unknown', queued: 'waiting to run', running: 'running now', stale: 'set aside: its script or settings changed', retried: 'tried again as a new job', blocked_budget: 'not sent: the budget was reached', cancelled: 'cancelled'};
+const SKILL_OUTCOMES = {completed: 'used: the job finished', answered: 'used: the AI answered (the program added these skills at the gate)', 'completed-with-findings': 'used: finished with notes', failed: 'sent, but the job failed', interrupted: 'sent, the job stopped half-way', quality_failed: 'sent, the answer was not usable', usage_unknown: 'sent, the charge is unknown', queued: 'waiting to run', running: 'running now', stale: 'set aside: its script or settings changed', retried: 'tried again as a new job', blocked_budget: 'not sent: the budget was reached', cancelled: 'cancelled'};
 function skillOutcome(item) { const status = item.outcome || item.jobStatus; return status ? SKILL_OUTCOMES[status] || status.replaceAll('_', ' ') : 'its job record is gone'; }
 function skillUsagePanel() {
   const usage = state.skills.usage || [];
@@ -313,6 +313,21 @@ const SKILL_FORMS = {
     eyebrow: 'CLOSE AN ENTRY', heading: 'Close this project state entry', submit: 'Close it', danger: true,
     fields: () => `${skillNameField('endedBy')}${skillTextarea('reason', 'Why it no longer applies', {rows: 3, required: true, min: 8, max: 1000})}`,
   },
+  // 0.96: a skills folder or .zip. The program keeps the skill text, throws out the rest (listed with the reason),
+  // assigns every skill to the jobs it is about, and hands it to the model of those jobs once approved.
+  files: {
+    eyebrow: 'ADD SKILLS', heading: 'Add skills from a folder or .zip', submit: 'Add these skills',
+    fields: () => `<p class="note full">Choose a .zip or a folder of skills (for example SKILL.md files with their references, Markdown notes or a JSON pack). The program keeps only what a model can use: the skill text. Code, pictures, fonts, licences and system files are thrown out, and you see what and why before anything is saved. Each skill is assigned to the jobs it is about (script, voice, scenes, pictures, editing, music…), and from then on the program hands it to whichever AI does that job.</p>
+      <label>A .zip file<input name="zip" type="file" accept=".zip,application/zip"></label>
+      <label>Or a folder<input name="folder" type="file" webkitdirectory multiple></label>
+      <div id="skill-import-preview" class="full"><p class="hint">Nothing chosen yet.</p></div>
+      ${skillNameField('createdBy')}
+      <label class="checkbox-label full"><input name="approveNow" type="checkbox" checked><span>Approve them now, so the models use them from the next job</span></label>
+      <label class="checkbox-label full"><input name="wordingReviewed" type="checkbox"><span>I may use this wording (my own skills, or a licence that allows it).</span></label>
+      <label class="checkbox-label full"><input name="numbersReviewed" type="checkbox"><span>The numbers, limits and checks in them are right for my videos.</span></label>
+      <label class="checkbox-label full"><input name="scopeReviewed" type="checkbox"><span>The jobs each skill is assigned to (shown above) are right.</span></label>
+      <details class="full"><summary>Or paste a JSON skill pack</summary>${skillTextarea('skills', 'Skill pack JSON', {rows: 6, max: 200000, hint: 'A JSON array of skills in the same shape as the export. Added as drafts.'})}</details>`,
+  },
   import: {
     eyebrow: 'IMPORT A PACK', heading: 'Import skills from JSON', submit: 'Import as drafts',
     fields: () => `${skillNameField('createdBy')}
@@ -357,7 +372,7 @@ function skillAction(command, id) {
   if (command === 'skill-pack-approve') { const label = (state.skills.packs || [])[Number(id)]; return skillDialog('pack', {index: id, revisionIds: skillPackDrafts(label).map(skill => skill.latest.id)}); }
   if (command === 'skill-retire') return skillDialog('retire', {revisionId: id});
   if (command === 'skill-bind') return skillDialog('bind', {skillId: id});
-  if (command === 'skill-import') return skillDialog('import');
+  if (command === 'skill-import') { skillImport = null; return skillDialog('files'); }
   if (command === 'skill-state-new') return skillDialog('state', {familyId: id});
   if (command === 'skill-state-end') return skillDialog('stateEnd', {entryId: id});
   if (command === 'skill-lesson-approve') return skillDialog('lesson', {lessonId: id, action: 'approve'});
@@ -367,6 +382,42 @@ function skillAction(command, id) {
   }
   return undefined;
 }
+// 0.96: a chosen .zip or folder, read by the program (nothing saved yet): its skills, what was kept and thrown out.
+let skillImport = null;
+const SKILL_TEXT = /\.(md|markdown|mdx|txt|text|json)$/i;
+async function skillReadFiles(input) {
+  const box = $('#skill-import-preview');
+  box.innerHTML = '<p class="hint">Reading…</p>';
+  skillImport = null;
+  let body;
+  if (input.name === 'zip') {
+    const file = input.files[0];
+    if (file.size > 40 * 1024 * 1024) throw new Error('The .zip is larger than 40 MB.');
+    const data = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1] || ''); reader.onerror = () => reject(new Error('The file could not be read.')); reader.readAsDataURL(file); });
+    body = {name: file.name, zip: data};
+  } else {
+    const all = [...input.files].slice(0, 5000), files = [], skipped = [];
+    for (const file of all) {
+      const path = file.webkitRelativePath || file.name, base = path.split('/').pop();
+      if ((SKILL_TEXT.test(base) || /^(licen[cs]e|copying)$/i.test(base)) && file.size <= 2 * 1024 * 1024) files.push({path, text: await file.text()});
+      else skipped.push({path, size: file.size});
+    }
+    if (!files.length) throw new Error('This folder has no text files a model can use (SKILL.md, Markdown, text or JSON).');
+    body = {name: (all[0]?.webkitRelativePath || 'folder').split('/')[0], files, skipped};
+  }
+  const result = await api('/api/skills/read-files', body);
+  skillImport = result;
+  const jobs = tasks => tasks.map(task => SKILL_JOB_NAMES[task] || task).join(', ');
+  const reasons = Object.entries(result.dropped.reduce((acc, item) => ({...acc, [item.why]: [...(acc[item.why] || []), item.path]}), {}));
+  box.innerHTML = `<p><strong>${result.skills.length} skill${result.skills.length === 1 ? '' : 's'}</strong> from ${result.kept.length} file${result.kept.length === 1 ? '' : 's'} of "${esc(result.name)}"${result.licence ? ` (licence: ${esc(result.licence)})` : ''}; ${result.dropped.length} file${result.dropped.length === 1 ? '' : 's'} thrown out.</p>
+    <details open><summary>The skills and the jobs they go to</summary><ul class="skill-why">${result.skills.slice(0, 200).map(skill => `<li><strong>${esc(skill.title)}</strong> → ${esc(jobs(skill.tasks))}</li>`).join('')}</ul></details>
+    <details><summary>Kept (${result.kept.length})</summary><ul>${result.kept.map(item => `<li><code>${esc(item.path)}</code> · ${esc(item.as)}${item.skills ? ` · ${item.skills} skill${item.skills === 1 ? '' : 's'}` : ''}</li>`).join('')}</ul></details>
+    ${result.dropped.length ? `<details><summary>Thrown out (${result.dropped.length})</summary><ul>${reasons.map(([why, paths]) => `<li>${paths.length} × ${esc(why)}<br><small class="muted">${paths.slice(0, 4).map(esc).join(', ')}${paths.length > 4 ? ' …' : ''}</small></li>`).join('')}</ul></details>` : ''}
+    ${result.warnings.length ? `<p class="hint">${result.warnings.slice(0, 5).map(esc).join('<br>')}</p>` : ''}`;
+}
+const SKILL_JOB_NAMES = {'script.candidate': 'script writing', 'script.hooks': 'hooks', 'script.review': 'script review', 'voice.direction': 'voice-over', 'scene.plan': 'scene planning', 'visuals.prompt': 'pictures', 'motion.template': 'motion graphics', 'editing.plan': 'editing', 'editing.review': 'edit review',
+  'captions.segment': 'captions', 'audio.mix': 'music and sound', 'qc.review': 'quality checks', 'packaging.title': 'titles', 'packaging.thumbnail': 'thumbnails', 'packaging.seo': 'SEO', 'ideas.titles': 'topic ideas', 'niche.evaluate': 'niches', 'niche.discover': 'niche suggestions',
+  'competitors.blueprint': 'competitors', 'competitors.scan': 'competitor scans', 'research.brief': 'research', 'branding.identity': 'branding', 'localization.check': 'languages', 'analytics.review': 'analytics', 'visuals.stock-query': 'stock searches'};
 async function saveFormless(run) { try { await run(); await refresh(); } catch (error) { toast(error.message, true); } }
 
 function skillsBindEvents() {
@@ -394,6 +445,23 @@ function skillsBindEvents() {
       if (mode === 'lesson') { await api(`/api/skill-lessons/${context.lessonId}/review`, {reviewedBy: form.elements.reviewedBy.value.trim(), action: context.action, reason: form.elements.reason.value.trim()}); return; }
       if (mode === 'state') { await api(`/api/families/${context.familyId}/project-state`, {createdBy: form.elements.createdBy.value.trim(), category: form.elements.category.value, item: form.elements.item.value.trim(), note: form.elements.note.value.trim()}); return; }
       if (mode === 'stateEnd') { await api(`/api/project-state/${context.entryId}/end`, {endedBy: form.elements.endedBy.value.trim(), reason: form.elements.reason.value.trim()}); return; }
+      if (mode === 'files') {
+        const by = form.elements.createdBy.value.trim(), pasted = form.elements.skills.value.trim();
+        if (!skillImport && pasted) {
+          let parsed;
+          try { parsed = JSON.parse(pasted); } catch { throw new Error('That is not valid JSON. Paste the array exactly as exported.'); }
+          const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.skills) ? parsed.skills : null;
+          if (!list) throw new Error('The pack must be a JSON array of skills, or an export object with a "skills" array.');
+          await api('/api/skills/import', {createdBy: by, changeNote: 'Pasted skill pack', skills: list});
+          return;
+        }
+        if (!skillImport) throw new Error('Choose a .zip or a folder first.');
+        const approve = form.elements.approveNow.checked ? {approvedBy: by, confirmations: {wordingReviewed: form.elements.wordingReviewed.checked, numbersReviewed: form.elements.numbersReviewed.checked, scopeReviewed: form.elements.scopeReviewed.checked}} : undefined;
+        const done = await api('/api/skills/import', {createdBy: by, changeNote: `Added from ${skillImport.name}`, pack: skillImport.name, skills: skillImport.skills, ...(approve ? {approve} : {})});
+        toast(`${done.created.length + done.revised.length} skills added${done.approved ? `, ${done.approved} approved: the models get them from the next job` : ' as drafts (approve them to hand them to the models)'}.`);
+        skillImport = null;
+        return;
+      }
       if (mode === 'import') {
         let parsed;
         try { parsed = JSON.parse(form.elements.skills.value); } catch { throw new Error('That is not valid JSON. Paste the array exactly as exported.'); }
@@ -406,6 +474,9 @@ function skillsBindEvents() {
   document.addEventListener('click', event => {
     const tab = event.target.closest('[data-skill-tab]');
     if (tab) { skillTab = tab.dataset.skillTab; render(); }
+  });
+  document.addEventListener('change', event => {
+    if (event.target.closest('#skill-form') && ['zip', 'folder'].includes(event.target.name) && event.target.files?.length) skillReadFiles(event.target).catch(error => { $('#skill-import-preview').innerHTML = `<p class="form-error">${esc(error.message)}</p>`; });
   });
   document.addEventListener('input', event => {
     if (event.target.id === 'skill-search') { skillSearch = event.target.value; render(); $('#skill-search')?.focus(); }

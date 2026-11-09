@@ -15,6 +15,10 @@ Deep reads of the editing repositories the owner added, done at the pinned revis
 
 Total: 160 skill drafts. They are **drafts**: the Skills Engine must import them as `builtin` skills in draft state for review, not as approved rules.
 
+## fifteen-repos-2026-11-09.md (2026-11-09)
+
+anthropics/skills, alirezarezvani/claude-skills and thirteen more repositories (earshot, motion-video-kit, ClaudeAnimationBase, video-talkcraft, autoclip, ffmpeg-skill, Remotion, threejs-skills, PixiJS, Synfig, OpenToonz, ghost-editor, flow-mcp), and a table of where the brain of every earlier repository lives in the program now. It became six skill packs (72 skills), review skills for the frame scan and the second writer, rotating sound takes, and two skills for Claude Code.
+
 ## voicestudio.md (2026-10-30)
 
 The analysis of debpalash/VoiceStudio (a local AI voice studio, AGPL-3.0): how its engines, model manager and local API work, its Windows requirements and the licences of its voices. The Control Room uses it as a separate program for free test narrations that can never be uploaded.
