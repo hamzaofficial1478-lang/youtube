@@ -251,3 +251,8 @@ Owner review 2026-11-04: almost every effect on the timeline was a pop; no cheer
 - **New sounds.** `cheer`, `groan`, `gasp`, `sad` and `laugh` are story sounds: optional, fetched from Freesound for the video that needs them (`neededEffects` now reads the script's words), and left out when the library has none.
 - **The music's feel.** Room 07's "Free score" asks "How should the music feel?". With a feel, the whole video keeps it in long cues (a track loops under a long cue), searched on Freesound by its own mood words (for example "calm energetic music"). The editor's `set-music` does the same.
 - The edit's own effect changes (`add-sfx`, `remove-sfx`) are described in EDITING-ROOM.md.
+
+## Sound effects that change take (0.96)
+
+earshot (MIT, research/fifteen-repos-2026-11-09.md) names the same file on every hit as one of the cheapest tells of a made-by-machine soundtrack. When the sound library holds several sounds that fit one effect slot nearly as well as the best (`M.effectTakes`: the slot's words, a length near the slot's, at most one point below the best fit), up to three of them play in turn through the video (`SoundtrackRoom.effectTurns`). The render, the live player and the Editing Room's Sound effects row take them in the same order. A slot the owner picked, and generated sounds, keep their one sound; the slot's own sound (`pickEffects`) is still the first take.
+

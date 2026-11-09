@@ -362,6 +362,13 @@ const PACK_FILES = Object.freeze([
   {file: 'skills/anidoodle-craft.json', label: 'anidoodle (Apache-2.0): the craft bar, story, realism, anatomy, styles as marks, motion grammar, camera, acting, review, narration and sound'},
   {file: 'skills/ghost-editor.json', label: 'ghost-editor (MIT): beats on the word, restraint, sound levels against the voice, style as a system, taste, named edit styles'},
   {file: 'skills/motion-clone.json', label: 'MotionClone (two repositories, ideas only): dominant motion, scenes at visual jumps, compare and keep only improvements'},
+  // 0.96 (owner request 2026-11-09): fifteen repositories, each brain given to its engine or room (docs/research/fifteen-repos-2026-11-09.md).
+  {file: 'skills/anthropic-design.json', label: 'anthropics/skills (Apache-2.0): design philosophy first, anti-defaults, plan-review-build-critique, boldness in one place, seeded variation'},
+  {file: 'skills/content-strategy.json', label: 'claude-skills (MIT): human script rhythm, specific over vague, long-form architecture, one keyword in four places, positioning and pillars'},
+  {file: 'skills/animation-craft.json', label: 'ClaudeAnimationBase (MIT), Synfig, OpenToonz, PixiJS: timing sheets, an event in every shot, acting faces, arcs, overlap, twos, joints, particles'},
+  {file: 'skills/sound-craft.json', label: 'earshot (MIT): which events get a sound, the sync window, takes, the drop on the turn, foley by material, cheap tells'},
+  {file: 'skills/film-gauntlet.json', label: 'motion-video-kit (MIT): builder never judges, fix the biggest gap, one persistent actor, cause to effect, varied compositions, frozen time'},
+  {file: 'skills/explainer-craft.json', label: 'video-talkcraft and Remotion (ideas only), autoclip, ffmpeg-skill, threejs-skills: beats by meaning, shot types, element budget, clip scores'},
   {file: 'docs/research/editing-brain/om-creative.json', label: 'Editing brain - creative decisions'},
   {file: 'docs/research/editing-brain/om-meta.json', label: 'Editing brain - orchestration and review'},
   {file: 'docs/research/editing-brain/motion.json', label: 'Editing brain - motion graphics'},
@@ -399,7 +406,7 @@ const BRIEF_BYTE_BUDGET = 1800;
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
 // 0.89 (owner request 2026-11-04: the new drawing, motion and editing skills used at every step): the planner, the
 // designed-shot worker, the pictures and the editor carry more; the designed shots and pictures are new injection points.
-const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000});
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000, 'qc.review': 4000, 'script.review': 4000});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 // ---------------------------------------------------------------- choosing skills for one request (0.74)
@@ -468,10 +475,10 @@ function rankSkills(items, taskKey, context = {}) {
 const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.plan', 'Scene planner and story director'], ['voice.direction', 'Voice direction'],
   ['audio.mix', 'Music score'], ['competitors.blueprint', 'Competitor blueprint'], ['niche.evaluate', 'Niche go/no-go'], ['niche.discover', 'Niche suggestions'],
   ['ideas.titles', 'Topic ideas'], ['research.brief', 'Research briefs'], ['packaging.title', 'Titles and package'], ['localization.check', 'Language editions'], ['editing.plan', 'Edit commands, Polish and the editing brain'],
-  ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director']]);
+  ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director'], ['script.review', 'Script review by the second writer'], ['qc.review', 'Frame scan (Room 08)']]);
 
 // The record of each job that receives a skill brief, by the job it is for (0.79).
-const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs'});
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.

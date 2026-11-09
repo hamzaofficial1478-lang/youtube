@@ -380,6 +380,18 @@ class SoundtrackRoom {
     }
     return this.generatedLibrary(familyId);
   }
+  // The sound of each effect in turn (0.96, earshot: the same file on every hit is a cheap tell). A library slot with
+  // several fitting sounds plays up to three takes in turn; an owner's pick and generated sounds play their one sound.
+  effectTurns(familyId) {
+    const settings = this.settings(familyId), library = new Map(this.library(familyId).map(item => [item.kind, item]));
+    const sounds = settings.source === 'library' && this.sounds ? this.sounds.tracks('sfx') : [], takes = new Map(), count = new Map();
+    return kind => {
+      if (!takes.has(kind)) takes.set(kind, sounds.length && !settings.sfxPicks?.[kind] ? M.effectTakes(sounds, kind).map(sound => this.soundAsset(sound.id)).filter(Boolean) : []);
+      const list = takes.get(kind), n = count.get(kind) || 0;
+      count.set(kind, n + 1);
+      return list.length ? list[n % list.length] : library.get(kind)?.asset || null;
+    };
+  }
   // The owner chooses the library sound of one effect slot (null: the program's pick again). A new settings revision.
   chooseEffect(familyId, input) {
     object(input);
@@ -520,7 +532,9 @@ class SoundtrackRoom {
       out.events = out.events.filter(event => !(M.STORY_SFX.includes(event.kind) && !event.own && !library.get(event.kind)?.asset));
       const missing = [...new Set(out.events.filter(event => !event.own).map(event => event.kind))].filter(kind => !library.get(kind)?.asset);
       requireValue(!missing.length, settings.source === 'library' ? `Your sound library has no sound for: ${missing.join(', ')}. Import effects whose names say what they are (for example "whoosh"), or choose one per slot in Room 07.` : `Generate the sound-effect library first (missing: ${missing.join(', ')}).`, 409);
-      for (const {own: found, ...event} of out.events) { const asset = found || library.get(event.kind).asset; out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, ...this.fileOf(asset)}); }
+      // 0.96: every event takes its slot's next take (so the Editing Room's rows name the same sounds); a found sound wins.
+      const turn = this.effectTurns(content.familyId);
+      for (const {own: found, ...event} of out.events) { const take = turn(event.kind), asset = found || take; out.sfx.push({...event, measuredPeakDb: asset.probe.peakDb, ...this.fileOf(asset)}); }
       out.events = out.events.map(({own: found, ...event}) => event);
     }
     return out;

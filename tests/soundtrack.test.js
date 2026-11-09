@@ -127,6 +127,11 @@ test('0.60 library tracks fit their cues by mood, energy and length; effects fil
   const picked = M.pickEffects(sfx);
   assert.deepEqual([picked.whoosh.id[0], picked.cash.id[0], picked.thunder], ['1', '3', null], 'the short file that says it, nothing for a slot without one');
   assert.equal(M.pickEffects(sfx, {whoosh: '2'.repeat(64)}).whoosh.id[0], '2', 'the owner\'s pick wins');
+  // 0.96 (earshot): up to three takes that fit nearly as well as the best rotate; a far worse fit is not a take.
+  const takes = [...sfx, {id: '4'.repeat(64), title: 'whoosh fast', tags: ['whoosh'], seconds: 0.8}, {id: '5'.repeat(64), title: 'whoosh soft', tags: ['whoosh'], seconds: 1}, {id: '6'.repeat(64), title: 'whoosh air', tags: ['whoosh'], seconds: 1.1}];
+  assert.deepEqual(M.effectTakes(takes, 'whoosh').map(item => item.id[0]), ['4', '5', '6'], 'best first, three at most');
+  assert.deepEqual(M.effectTakes(sfx, 'whoosh').map(item => item.id[0]), ['1'], 'the 20-second ambience fits too poorly to rotate in');
+  assert.equal(M.pickEffects(takes).whoosh.id[0], '4', 'the slot\'s own sound is the first take');
   // A cue keeps its track and in-point; a bad track is refused for the owner, dropped with a warning for Claude.
   const score = M.validate({cues: [{start: 0, end: 10, mood: 'calm', energy: 2, prompt: 'soft piano under the voice', entry: 'fade', exit: 'fade', track: 'a'.repeat(64), offset: 4}]}, 30);
   assert.deepEqual([score.cues[0].track[0], score.cues[0].offset], ['a', 4]);
@@ -185,7 +190,7 @@ test('0.87: story sounds follow the drawings and places, the world colours the m
   // The render leaves out a story sound the library lacks; the others are still required.
   const {SoundtrackRoom} = require('../soundtrack');
   const asset = {probe: {peakDb: -3}};
-  const fakeRoom = {settings: () => ({source: 'library'}), library: () => [{kind: 'pop', asset}, {kind: 'fire', asset: null}, {kind: 'animal', asset: null}, {kind: 'wind', asset}, {kind: 'crowd', asset: null}], fileOf: () => ({relativePath: 'sound-library/x.mp3', sha256: 'x'})};
+  const fakeRoom = {settings: () => ({source: 'library'}), library: () => [{kind: 'pop', asset}, {kind: 'fire', asset: null}, {kind: 'animal', asset: null}, {kind: 'wind', asset}, {kind: 'crowd', asset: null}], fileOf: () => ({relativePath: 'sound-library/x.mp3', sha256: 'x'}), effectTurns: SoundtrackRoom.prototype.effectTurns};
   const timeline = {fps: 30, captions: {groups: []}, clips: clips.map((clip, k) => ({id: `c${k}`, label: clip.label, start: clip.start * 30, frames: 120}))};
   const out = SoundtrackRoom.prototype.soundtrackFor.call(fakeRoom, {content: {id: 'v', familyId: 'f'}, timeline, config: {sfx: {enabled: true, density: 'accent'}}, drawings: Object.fromEntries(shots.map((item, k) => [`c${k}`, {sketch: item}]))});
   assert.deepEqual(out.skipped.sort(), ['animal', 'crowd', 'fire']);

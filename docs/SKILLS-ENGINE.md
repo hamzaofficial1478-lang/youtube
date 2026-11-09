@@ -283,3 +283,10 @@ engraving, newsprint, blueprint, deco, screenprint, noir, storybook, cartoon, be
 footage engines), and a skill written for the video's own engine, look or finish now scores higher (`rankSkills`
 `onEngine`, shown as `engine` in its reasons). The style words include the Motion Graphics finishes, film looks and
 the picture type (`scene-room.js` `skillStyle`).
+
+## Fifteen repositories and directed reviews (0.96)
+
+Owner request 2026-11-09 (research/fifteen-repos-2026-11-09.md). Six packs restated in our own words: `skills/anthropic-design.json` (anthropics/skills, Apache-2.0, 13), `skills/content-strategy.json` (claude-skills, MIT, 12), `skills/animation-craft.json` (ClaudeAnimationBase, MIT, with one idea each from Synfig, OpenToonz and PixiJS, 16), `skills/sound-craft.json` (earshot, MIT, 8), `skills/film-gauntlet.json` (motion-video-kit, MIT, 11) and `skills/explainer-craft.json` (video-talkcraft and Remotion as ideas only, autoclip, ffmpeg-skill and threejs-skills, 12): 671 built-in skills, approved with the program like the others.
+
+Two review jobs that ran without skills now receive them as directives: Claude's or ChatGPT's frame scan (`qc.review`, 4,000 bytes, chosen by the video's title, angle and niche, recorded with the scan in `frame_scans`) and the second writer's review of a script written together (`script.review`, 4,000 bytes; the writer's directives come first with the same codes, then the review skills not already among them; recorded with the script job). The codes each cites are stored in `skill_usage.applied` and shown like the others.
+

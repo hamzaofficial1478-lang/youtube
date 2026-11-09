@@ -49,3 +49,10 @@ The program records the cited skills in `skill_usage.applied` for the storyboard
 ## What it does not prove
 
 A cited code means the AI says it followed that directive. The program's own checks are what verify the result: scene continuity, detailing, the review, the craft checks and the critic. The directives make the skills the model's instructions. They do not replace those checks.
+
+## 0.96: the reviews are directed too
+
+- **Frame scan**: the owner's QC skills (`qc.review`) are directives in the scan's instructions. A frame that fails one is reported as a finding whose text starts with the code it fails ("D3: ..."), next to the usual problems.
+- **Script review**: the second writer gets the writer's directives (same codes) and then the owner's script-review skills (`script.review`), and judges the draft against all of them.
+- **Fixed**: in 0.95 the writer's review and revision tried to move the skills out of their data by reading it as plain JSON, but that data is labelled ("UNTRUSTED CONTROL ROOM DATA:"), so the skills stayed in the data and the review was never told to judge the draft against them. `directed` now reads the data with `Direct.lead`, the same reader `Ai.complete` uses.
+

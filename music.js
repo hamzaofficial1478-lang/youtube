@@ -430,19 +430,23 @@ function catalogue(tracks, {moods = [], niche = '', limit = 120} = {}) {
     .map(({track}, k) => ({ref: `T${k + 1}`, id: track.id, title: track.title.slice(0, 60), tags: [...track.tags].slice(0, 8), seconds: Math.round(track.seconds)}));
 }
 // The effect slots filled from the library: the owner's pick, else the file whose name says it best (short ones first).
+// How well one library sound fits an effect slot: its words, then a length near the slot's (0 = not this kind).
+function slotFit(sound, kind) {
+  const tags = tagsOf(sound), hits = EFFECT_WORDS[kind].filter(word => tags.has(word)).length + (tags.has(kind) ? 1 : 0);
+  return hits ? hits + (sound.seconds <= SFX[kind].seconds * 3 ? 1 : 0) - (sound.seconds > 6 ? 2 : 0) : 0;
+}
+// The library sounds of one slot, best first (ties: shorter, then by id). 0.96 (earshot: the same file on every hit
+// is a cheap tell): up to three takes that fit nearly as well as the best are rotated through a video.
+function effectTakes(sounds, kind, max = 3) {
+  const ranked = sounds.map(sound => ({sound, fit: slotFit(sound, kind)})).filter(item => item.fit > 0)
+    .sort((a, b) => b.fit - a.fit || a.sound.seconds - b.sound.seconds || (a.sound.id < b.sound.id ? -1 : a.sound.id > b.sound.id ? 1 : 0));
+  return ranked.filter(item => item.fit >= ranked[0].fit - 1).slice(0, max).map(item => item.sound);
+}
 function pickEffects(sounds, picks = {}) {
   const out = {};
   for (const kind of Object.keys(SFX)) {
     const chosen = picks[kind] && sounds.find(sound => sound.id === picks[kind]);
-    if (chosen) { out[kind] = chosen; continue; }
-    let best = null, bestFit = 0;
-    for (const sound of sounds) {
-      const tags = tagsOf(sound), hits = EFFECT_WORDS[kind].filter(word => tags.has(word)).length + (tags.has(kind) ? 1 : 0);
-      if (!hits) continue;
-      const fit = hits + (sound.seconds <= SFX[kind].seconds * 3 ? 1 : 0) - (sound.seconds > 6 ? 2 : 0);
-      if (fit > bestFit || (best && fit === bestFit && (sound.seconds < best.seconds || (sound.seconds === best.seconds && sound.id < best.id)))) { best = sound; bestFit = fit; }
-    }
-    out[kind] = best;
+    out[kind] = chosen || effectTakes(sounds, kind, 1)[0] || null;
   }
   return out;
 }
@@ -463,4 +467,4 @@ function subjectEffect(sounds, kind, subject) {
 // Where an effect's sound starts: the end of its opening quiet (FFmpeg silencedetect at 30 dB under its own peak).
 const attackArgs = (file, peakDb) => ['-hide_banner', '-nostdin', '-i', file, '-af', `silencedetect=noise=${Math.round(((Number.isFinite(peakDb) ? peakDb : -3) - 30) * 10) / 10}dB:d=0.002`, '-f', 'null', '-'];
 const attackOf = stderr => { const start = /silence_start:\s*(-?[\d.]+)/.exec(stderr), end = /silence_end:\s*([\d.]+)/.exec(stderr); return start && Number(start[1]) <= 0.001 && end ? Math.round(Number(end[1]) * 1000) / 1000 : 0; };
-module.exports = {DUCK, mixGains, applySfxEdits, MEANING_SFX, meaningsOf, meaningKinds, STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, storySubjects, subjectEffect, words, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};
+module.exports = {effectTakes, DUCK, mixGains, applySfxEdits, MEANING_SFX, meaningsOf, meaningKinds, STORY_SFX, SET_SFX, PROP_SFX, ERA_MUSIC, neededEffects, storySubjects, subjectEffect, words, MOOD_TAGS, EFFECT_WORDS, trackFit, moodFamilies, assignTracks, catalogue, pickEffects, attackArgs, attackOf, SCHEMA, MIN_CUE, MAX_CUE, ENTRIES, EXITS, DENSITIES, SFX, FLAVOUR, validate, rulesScore, messages, musicRequest, sfxRequest, elementStarts, sfxEvents, mixGraph};

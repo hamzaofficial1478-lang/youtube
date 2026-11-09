@@ -99,6 +99,8 @@ you only check the moments it, the render checks, the editor and the caption che
 - **In the review**: findings are listed as "Claude frame scan", with their frame thumbnail and a repair link (the clip, the caption or the graphic at that moment). They are notes to check, not an approval.
 - **Verdict**: once a render has a completed scan, the owner may confirm "I checked every moment Claude and the checks flagged" instead of "I watched the whole render" (owner decision, 2026-10-08). The narration listening confirmation stays mandatory for a narration finish. Blockers still cannot be accepted.
 
+- **The owner's QC skills (0.96)**: the scan receives the approved `qc.review` skills chosen for this video as numbered directives in its instructions (DIRECTION.md). A frame that fails one is a finding whose text starts with the code it fails; the codes the scan cites are recorded with the scan and shown in Skills → Usage. Each answer's reservation includes room for them.
+
 ## 5. One item per cause (0.23.1)
 
 Captions faster than about 20 characters a second share one cause, the narrator's pace: captions show exactly what is said, so they cannot be slower than the voice. Room 08 lists them as one item with every moment as a button and a link to the Voice Room (slow those lines in the voice direction and make the narration again, or keep the pace if it is the style). The fixes the editing brain already made are listed above the issues.
