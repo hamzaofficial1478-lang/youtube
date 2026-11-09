@@ -290,3 +290,9 @@ Owner request 2026-11-09 (research/fifteen-repos-2026-11-09.md). Six packs resta
 
 Two review jobs that ran without skills now receive them as directives: Claude's or ChatGPT's frame scan (`qc.review`, 4,000 bytes, chosen by the video's title, angle and niche, recorded with the scan in `frame_scans`) and the second writer's review of a script written together (`script.review`, 4,000 bytes; the writer's directives come first with the same codes, then the review skills not already among them; recorded with the script job). The codes each cites are stored in `skill_usage.applied` and shown like the others.
 
+### Skills added from a folder or .zip, and the gate (0.96)
+
+`skill-import.js` (pure; reads a .zip in memory with `zlib.inflateRawSync`, never writes or runs anything): `keepFile` decides what is kept, `fromFiles` turns SKILL.md files, their references, text notes and JSON packs into skills (one per section, at most 8 rules each, avoid-rules and checks recognised, code blocks and housekeeping sections left out), `jobsFor` assigns the jobs by their words (a section keeps to its document's jobs; a reference is judged by its own words). `SkillsEngine.readFiles` (`POST /api/skills/read-files`, 56 MB for a 40 MB .zip) returns the skills, the kept files and the thrown-out files with reasons; `importPack` takes `pack` (named "Imported: <name>") and `approve` {approvedBy, three confirmations} to approve the new revisions in the same step. Imported skill IDs are `<area>.own-<name>`, so the area follows the first job.
+
+`SkillsEngine.gate()` gives `Ai` (server.js `ai.skills`) the brief of a job for a request that arrives without skills, and records its use (room `program`, outcome `answered`, job id `request:<uuid>`).
+

@@ -10,6 +10,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const {randomUUID, createHash} = require('node:crypto');
+const Import = require('./skill-import');
 
 class SkillError extends Error {
   constructor(message, status = 400) { super(message); this.status = status; }
@@ -791,7 +792,27 @@ class SkillsEngine {
     });
   }
 
+  // 0.96: what a skills folder or .zip gives, before anything is saved: the skills (checked by validateSkill) with the
+  // jobs each is assigned to, the files kept and the files thrown out with the reason (skill-import.js).
+  readFiles(input) {
+    object(input, 'Request');
+    const name = text(input.name || 'skills', 'Folder or file name', 1, 120);
+    let files = [], dropped = [];
+    if (typeof input.zip === 'string') {
+      need(/^[A-Za-z0-9+/=]+$/.test(input.zip), 'Attach a .zip file.');
+      try { ({files, dropped} = Import.zipFiles(Buffer.from(input.zip, 'base64'))); } catch (error) { throw new SkillError(error.message); }
+    } else {
+      need(Array.isArray(input.files) && input.files.length >= 1 && input.files.length <= Import.LIMITS.entries, 'Choose a folder with at least one text file.');
+      files = input.files.map(file => ({path: text(file?.path, 'File path', 1, 500), text: typeof file?.text === 'string' ? file.text : ''}));
+      dropped = (Array.isArray(input.skipped) ? input.skipped : []).slice(0, Import.LIMITS.entries).map(file => ({path: String(file?.path || '').slice(0, 500), why: Import.keepFile(String(file?.path || ''), Number(file?.size) || 0) === true ? 'not read by the page' : Import.keepFile(String(file?.path || ''), Number(file?.size) || 0)}));
+    }
+    const result = Import.fromFiles(files, {name, dropped, validate: validateSkill});
+    need(result.skills.length, `No skills were found in "${name}". A skill is a SKILL.md (or any Markdown or text file) with rules in lists or sentences, or a JSON skill pack.`);
+    return result;
+  }
   // Import a pack of skills as drafts. A duplicate ID becomes a new revision, never an overwrite.
+  // 0.96: pack names the import (a folder or .zip name), and approve {approvedBy, confirmations} approves the new
+  // revisions by name in the same step, so the owner's skills reach the models at once.
   importPack(input) {
     object(input, 'Request');
     const createdBy = person(input.createdBy, 'Your name');
@@ -800,13 +821,20 @@ class SkillsEngine {
     need(Array.isArray(input.skills) && input.skills.length >= 1 && input.skills.length <= 500, 'An import holds 1-500 skills.');
     const skills = input.skills.map(entry => validateSkill(entry));
     need(new Set(skills.map(item => item.id)).size === skills.length, 'The import repeats a skill ID.');
+    const pack = input.pack === undefined || input.pack === null ? 'Imported pack' : `Imported: ${text(input.pack, 'Pack name', 1, 120)}`;
+    const approve = input.approve ? (() => {
+      object(input.approve, 'Approval');
+      const by = person(input.approve.approvedBy, 'Reviewer name'), confirmations = object(input.approve.confirmations, 'Review confirmations');
+      for (const [key, label] of [['wordingReviewed', 'you may use this wording'], ['numbersReviewed', 'numbers, limits and checks are right for this program'], ['scopeReviewed', 'the jobs each skill is assigned to are right']]) need(confirmations[key] === true, `Confirm that ${label}.`);
+      return by;
+    })() : null;
     return this.store.transaction(() => {
       const created = [], revised = [], unchanged = [];
       for (const skill of skills) {
         const existing = this.db.prepare('SELECT * FROM skills WHERE id=?').get(skill.id);
         const at = now();
         if (!existing) {
-          this.db.prepare('INSERT INTO skills(id,origin,pack,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(skill.id, origin, 'Imported pack', createdBy, at, at);
+          this.db.prepare('INSERT INTO skills(id,origin,pack,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(skill.id, origin, pack, createdBy, at, at);
           this.db.prepare('INSERT INTO skill_revisions(id,skill_id,revision,status,payload,payload_hash,change_note,created_by,created_at) VALUES(?,?,1,?,?,?,?,?,?)')
             .run(randomUUID(), skill.id, 'draft', JSON.stringify(skill), skillHash(skill), changeNote, createdBy, at);
           created.push(skill.id);
@@ -816,8 +844,19 @@ class SkillsEngine {
         this.appendRevision(skill, {createdBy, changeNote, at});
         revised.push(skill.id);
       }
-      this.store.event(`Imported skills: ${created.length} new, ${revised.length} new revision(s), ${unchanged.length} unchanged`);
-      return {created, revised, unchanged};
+      let approved = 0;
+      if (approve) {
+        const review = JSON.stringify({approvedBy: approve, approvedAt: now(), notes: `Approved while importing ${pack}`, pack, confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}});
+        for (const id of [...created, ...revised]) {
+          const row = this.latestRevisionRow(id);
+          if (row.status !== 'draft') continue;
+          this.db.prepare("UPDATE skill_revisions SET status='superseded' WHERE skill_id=? AND id<>? AND status='approved'").run(id, row.id);
+          this.db.prepare("UPDATE skill_revisions SET status='approved', review=? WHERE id=?").run(review, row.id);
+          approved++;
+        }
+      }
+      this.store.event(`Imported skills: ${created.length} new, ${revised.length} new revision(s), ${unchanged.length} unchanged${approve ? `; ${approved} approved by ${approve}` : ''}`);
+      return {created, revised, unchanged, approved, pack};
     });
   }
   exportPack({status = 'approved'} = {}) {
@@ -1089,6 +1128,18 @@ class SkillsEngine {
       capture: input => { try { return this.capture(input); } catch { return null; } },
     };
     return this;
+  }
+  // 0.96: what the AI gate (ai.js) uses for a request a room sent without skills: the approved skills of its job,
+  // chosen by the request's own words, and a usage record (room "program", outcome "answered") once it is answered.
+  gate() {
+    return {
+      brief: (taskKey, context) => this.promptBrief(taskKey, {context}),
+      record: ({taskKey, task, brief, applied}) => {
+        const jobId = `request:${randomUUID()}`;
+        this.recordUsage({jobId, room: 'program', taskKey, brief, outcome: 'answered'});
+        this.recordApplied(jobId, taskKey, applied);
+      },
+    };
   }
 }
 

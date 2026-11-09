@@ -67,11 +67,21 @@ function lead(messages) {
     return {...message, content: `${text.slice(0, start)}${JSON.stringify(skills.projectState ? {...rest, projectState: skills.projectState} : rest)}${text.slice(end)}`};
   });
   if (!brief) return {messages, brief: null};
-  const text = directionText(brief), system = out.findIndex(message => message?.role === 'system');
+  return {messages: withDirection(out, brief), brief};
+}
+// The messages with the brief's directives added to the instructions (a system message is made when there is none).
+function withDirection(messages, brief) {
+  const out = [...messages], text = directionText(brief), system = out.findIndex(message => message?.role === 'system');
+  if (!text) return out;
   if (system >= 0) out[system] = {...out[system], content: `${out[system].content}\n\n${text}`};
   else out.unshift({role: 'system', content: text});
-  return {messages: out, brief};
+  return out;
 }
+// Whether a room already put the owner's directives into the instructions itself (editor, pictures, designed shots).
+const directed = messages => Array.isArray(messages) && messages.some(message => message?.role === 'system' && typeof message.content === 'string' && message.content.includes("DIRECTION FROM THE OWNER'S SKILLS"));
+// The words of a request (its user messages, text parts only), for choosing skills that fit it.
+const requestText = (messages, max = 4000) => (Array.isArray(messages) ? messages : []).filter(message => message?.role === 'user')
+  .map(message => (typeof message.content === 'string' ? message.content : Array.isArray(message.content) ? message.content.filter(block => block?.type === 'text').map(block => block.text).join(' ') : '')).join(' ').slice(0, max);
 
 // The directives an answer cites, by skill id, in the brief's order.
 function cited(answer, brief) {
@@ -81,4 +91,4 @@ function cited(answer, brief) {
   return list.filter((item, k) => seen.has(String(k + 1))).map(item => item.id);
 }
 
-module.exports = {directives, directionText, lead, cited, isBrief};
+module.exports = {directives, directionText, lead, withDirection, directed, requestText, cited, isBrief};

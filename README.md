@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.96.0 - fifteen repositories read and each brain given to its engine or room: six new skill packs (671 built-in), the frame scan and the second writer directed by their own review skills, sound effects that rotate between takes, and two skills for Claude Code itself; on top of 0.95.0, where the owner's skills became numbered directives in the AI's instructions. See AGENTS.md and docs/research/fifteen-repos-2026-11-09.md.
+Version 0.96.0 - fifteen repositories read and each brain given to its engine or room: six new skill packs (671 built-in), the frame scan and the second writer directed by their own review skills, sound effects that rotate between takes, every AI request carrying its job's skills, skills added from a folder or .zip (only the useful text kept, each skill assigned to its jobs), and two skills for Claude Code itself; on top of 0.95.0, where the owner's skills became numbered directives in the AI's instructions. See AGENTS.md and docs/research/fifteen-repos-2026-11-09.md.
 
 This repository, [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube), is the program's home: `main` holds the current verified version. The laptop folder (Desktop\YT\youtube) is a working copy that pulls from `main` (`git pull origin main`). Uploading code to GitHub does not run its server.
 

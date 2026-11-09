@@ -290,3 +290,32 @@ test('Stop ends the AI app at once, a lost connection is named as one, and no in
   assert.equal(await reachable('chatgpt', {lookup: async () => { throw Object.assign(new Error('x'), {code: 'EPERM'}); }}), null);
   assert.equal(await reachable('chatgpt', {lookup: () => new Promise(() => {}), timeoutMs: 50}), false, 'a lookup that never answers is offline');
 });
+
+// 0.96 (owner 2026-11-09: "the skills are for the models; the program must hand them over, never keep them to itself"):
+// a request a room sent without skills gets its job's approved skills at the gate, chosen by its own words, and the
+// use is recorded; a room's own skills (in the data or already in the instructions) are never doubled.
+test('every request reaches the model with skills: the gate adds its job\'s skills when a room sent none', async t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const {SkillsEngine} = require('../skills');
+  const skills = new SkillsEngine(store).attach();
+  const slots = new ConnectorSlots(store, protector, async () => { throw new Error('no network'); });
+  const seen = [];
+  const ai = new Ai(slots, {claudeCode: {complete: async ({system, prompt, model}) => { seen.push({system, prompt}); return {content: '{"ok":1,"note":"D1, D2: followed"}', usage: {promptTokens: 1, completionTokens: 1, totalTokens: 2}, model}; }}});
+  ai.skills = skills.gate();
+  const slot = slots.save({name: 'My Claude', provider: 'claude-code'});
+  // A storyboard merge with no skills of its own: the gate gives it the storyboard skills.
+  const merged = await ai.complete({connectorId: slot.id, task: 'scenes', messages: [{role: 'system', content: 'Choose the better storyboard per stretch.'}, {role: 'user', content: 'UNTRUSTED DATA:\n{"blocks":[{"words":"the cave at night, a campfire"}]}'}], maxTokens: 4000});
+  assert.match(seen[0].system, /^Choose the better storyboard per stretch\.\n\nDIRECTION FROM THE OWNER'S SKILLS \(\d+ directives, D1-D\d+\)/);
+  assert.ok(merged.directives.byGate && merged.directives.given.length > 3, 'built-in skills were handed over');
+  assert.deepEqual(merged.directives.applied, merged.directives.given.slice(0, 2), 'the codes the answer cited');
+  const [usage] = skills.usage();
+  assert.deepEqual([usage.room, usage.taskKey, usage.outcome, usage.applied.length], ['program', 'scene.plan', 'answered', 2]);
+  // A room that sent its own skills keeps exactly those: nothing is added at the gate.
+  const own = {skills: [{id: 'owner.one', title: 'One rule', do: ['do it']}]};
+  await ai.complete({connectorId: slot.id, task: 'scenes', messages: [{role: 'system', content: 'Plan.'}, {role: 'user', content: JSON.stringify({script: 'x', skills: own})}], maxTokens: 4000});
+  assert.match(seen[1].system, /\(1 directives, D1-D1\)/);
+  await ai.complete({connectorId: slot.id, task: 'editing', messages: [{role: 'system', content: `Edit.\n\n${require('../direct').directionText(own)}`}, {role: 'user', content: 'x'}], maxTokens: 4000});
+  assert.equal(seen[2].system.match(/DIRECTION FROM THE OWNER'S SKILLS/g).length, 1, 'directives already in the instructions are not doubled');
+  assert.equal(skills.usage().length, 1, 'only the gate\'s own choice is recorded by the gate');
+});

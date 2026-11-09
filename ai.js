@@ -23,6 +23,10 @@ const DEFAULT_MODELS = Object.freeze({main: 'claude-opus-5-5', support: 'claude-
 // Opus 4.8 does the rest.
 const TASK_ROLE = Object.freeze({script: 'main', voice: 'main', scenes: 'main', niche: 'main', editing: 'main', review: 'main', packaging: 'main', localization: 'main', research: 'support', competitors: 'support', frames: 'main', illustrate: 'main'});
 const EFFORT = Object.freeze({main: 'high', support: 'medium'});
+// 0.96 (owner 2026-11-09: "the skills are for the models; the program must hand them over, never keep them to itself"):
+// the skill job of every kind of AI request. A request that reaches the gate without the owner's skills gets the
+// approved ones that fit its job, chosen by its own words, so no connected model works on its own.
+const GATE_SKILLS = Object.freeze({script: 'script.candidate', scenes: 'scene.plan', frames: 'motion.template', illustrate: 'visuals.prompt', editing: 'editing.plan', voice: 'voice.direction', review: 'qc.review', research: 'research.brief', niche: 'niche.evaluate', packaging: 'packaging.title', localization: 'localization.check', competitors: 'competitors.blueprint'});
 // Owner request 2026-10-22: choose the Claude model per kind of job, since stronger models use more tokens. A job group
 // without a choice uses its connection's main or support model.
 const MODEL_GROUPS = Object.freeze({writing: ['script'], planning: ['scenes', 'review', 'frames'], editing: ['editing'], pictures: ['illustrate'], voice: ['voice'], packaging: ['packaging'], languages: ['localization'], research: ['research', 'niche', 'competitors']});
@@ -493,7 +497,8 @@ class Ai {
   // onProgress (0.77): called with each streamed piece of the answer, for the job's live view.
   async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null, signal = null}) {
     // 0.95: the owner's skills leave the data message and direct the model as numbered directives (direct.js).
-    const led = Direct.lead(messages);
+    // 0.96: a request without them gets the ones that fit its job at this gate (skills: the program's skill engine).
+    const led = this.directed(task, messages);
     const {row, slot} = this.slot(connectorId), {role, model, effort} = this.model(slot, task), {system, prompt} = splitMessages(led.messages);
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 256) throw new AiError('This job leaves Claude too little room to answer. Raise its token limit.', 400);
     await this.offline(slot.provider);
@@ -501,7 +506,19 @@ class Ai {
     if (slot.provider === 'claude' && !row.secret) throw new AiError('Add the Claude API key in Connections first.', 409);
     // Claude and ChatGPT keep separate lanes, so they work side by side.
     const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, signal, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
-    return {...result, provider: slot.provider, role, ...(led.brief ? {directives: {given: Direct.directives(led.brief).map(item => item.id), applied: Direct.cited(result.content, led.brief)}} : {})};
+    const applied = led.brief ? Direct.cited(result.content, led.brief) : [];
+    if (led.gate) try { this.skills.record({...led.gate, provider: slot.provider, applied}); } catch { /* bookkeeping only */ }
+    return {...result, provider: slot.provider, role, ...(led.brief ? {directives: {given: Direct.directives(led.brief).map(item => item.id), applied, ...(led.gate ? {byGate: true} : {})}} : {})};
+  }
+  // The request as the model receives it: the room's own skills as directives, or, when a room sent none, the approved
+  // skills of the request's job chosen at the gate (recorded, so the owner sees them in Skills -> Usage).
+  directed(task, messages) {
+    const led = Direct.lead(messages);
+    if (led.brief || !this.skills || !GATE_SKILLS[task] || Direct.directed(led.messages)) return led;
+    let brief = null;
+    try { brief = this.skills.brief(GATE_SKILLS[task], {text: Direct.requestText(led.messages)}); } catch { brief = null; }
+    if (!brief || !Direct.isBrief(brief.prompt)) return led;
+    return {messages: Direct.withDirection(led.messages, brief.prompt), brief: brief.prompt, gate: {taskKey: GATE_SKILLS[task], task, brief}};
   }
   // The rooms' onStart means "this request may have cost something" (0.73): a refusal before anything was
   // generated leaves it unsaid, so the job fails plainly instead of "interrupted, usage unknown", and a sign-in
@@ -578,4 +595,4 @@ class Ai {
   }
 }
 
-module.exports = {Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, reachable, probe, networkError, cliTimeoutMs, AI_HOSTS, cliEnv, cliProblem, codexHome, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};
+module.exports = {GATE_SKILLS, Ai, AiError, ClaudeApi, ClaudeCode, CodexCli, findCodex, reachable, probe, networkError, cliTimeoutMs, AI_HOSTS, cliEnv, cliProblem, codexHome, AI_PROVIDERS, MODELS, DEFAULT_MODELS, MODEL_GROUPS, MODEL_WEIGHT, TASK_ROLE, EFFORT, NON_STREAMING_MAX_TOKENS, findClaudeCode, splitMessages, jsonText};
