@@ -266,4 +266,7 @@ test('0.90: Freesound is searched per cue and per thing on screen; each cue keep
   await online.processNextFill();
   const next = filled[1].picks;
   assert.ok(next.cue001.track !== picks.cue001.track && next.cue002.track !== picks.cue002.track, JSON.stringify(next));
+  // 0.95 (owner: "why is the program forced to use the music in my library?"): every new video is searched on Freesound by
+  // its own cues, even when the library already holds a track of that mood.
+  assert.ok(online.autoFill('video-5', cues, {...needs, subjects: []}), 'a new video searches Freesound for its own cues');
 });

@@ -73,9 +73,9 @@ test('real FFmpeg mixes music under the voice and effects on top, for every duck
 test('the voice-over carve: under the voice the music gives up its speech band and keeps its bass', {skip: !R.resolveExecutable('ffmpeg') && 'FFmpeg is not installed'}, async t => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'carve-'));
   t.after(() => fs.rmSync(dir, {recursive: true, force: true}));
-  // The voice: a loud 2.5 kHz tone (lavfi's sine starts at 1/8, so volume 4 is 0.5) from 3 s on; the music: pink noise all the way through.
+  // The voice: a loud 2.5 kHz tone (lavfi's sine starts at 1/8, so volume 4 is 0.5) from 3 s on; the music: pink noise all the way through (seeded: unseeded noise differs every run and made this test flaky).
   await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'sine=f=2500:d=8:sample_rate=48000,volume=4,afade=t=in:st=3:d=0.01', '-y', path.join(dir, 'voice.wav')]);
-  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'anoisesrc=d=8:c=pink:a=0.4:r=48000', '-y', path.join(dir, 'music.wav')]);
+  await R.run('ffmpeg', ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'anoisesrc=d=8:c=pink:a=0.4:r=48000:seed=7', '-y', path.join(dir, 'music.wav')]);
   const graph = M.mixGraph({music: [{start: 0, end: 8, entry: 'cut', exit: 'cut', measuredLufs: -20}], sfx: [], settings: {music: {...A.MUSIC_DEFAULTS, enabled: true, duck: 'medium'}, sfx: A.SFX_DEFAULTS}});
   assert.match(graph, /acrossover=split=300 4000/);
   fs.writeFileSync(path.join(dir, 'graph.txt'), graph);

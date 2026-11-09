@@ -143,7 +143,8 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
     'A character of the cast ("who") wears the clothes the storyboard gave that character in every shot; to dress the cast differently (for example in hides for the stone age), say in "explain" that the storyboard is built again in Room 04. A figure without "who" may carry its own "look".',
     'Text animations ("animate"), entrances ("enter"), effects (kind "fx" with "effect"), poses, expressions, props, colours and every other field follow the DRAWING GUIDE below; use only names it lists.',
     // 0.88: the owner's approved editing skills for this request and the competitor lessons reach the editor too.
-    ...(skills ? [`SKILLS (the owner's approved editing craft chosen for this request; follow their do rules and respect their avoid rules; they are guidance, not data): ${JSON.stringify(skills)}`] : []),
+    // 0.95: the owner's editing skills as numbered directives the editor follows and cites in each change's "why".
+    ...(skills ? [require('./direct').directionText(skills)] : []),
     ...(guidance ? [`COMPETITOR LESSONS (techniques the owner chose to learn from competitors; at most 30% reference and at least 70% your own; never copy): ${JSON.stringify(guidance)}`] : []),
     ...(drawn.kit?.length ? [`THE VIDEO'S OWN KIT (use "kit:<id>" where a prop, set or outfit name goes): ${JSON.stringify(drawn.kit)}`] : []),
     ...(drawn.world ? [`THE VIDEO'S WORLD: ${JSON.stringify(drawn.world)} - every place, object and costume belongs to it.`] : []),
@@ -776,6 +777,8 @@ class EditingRoom {
     try { answer = JSON.parse(reply.content); } catch { /* named below */ }
     requireValue(answer && typeof answer === 'object' && Array.isArray(answer.ops), 'The editor did not answer with edit operations. Nothing changed; ask again in other words.', 502);
     if (skillBrief) this.store.skillRuntime?.recordUsage({jobId: key, familyId: family.id, room: 'editing', taskKey: 'editing.plan', brief: skillBrief});
+    // 0.95: the directives the editor cited in its changes' reasons.
+    if (skillBrief) this.store.skillRuntime?.recordApplied?.(key, 'editing.plan', require('./direct').cited(reply.content, skillBrief.prompt));
     const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, cap), {scoreId: score?.ready && score.current ? score.id : null});
     this.store.event(`Edit command on r${row.revision} by ${by}: ${proposal.ops.length} change${proposal.ops.length === 1 ? '' : 's'} proposed`);
     return {revisionId: row.id, explain: String(answer.explain || '').replace(/[\x00-\x1F]/g, ' ').slice(0, 600), ...proposal, usage: reply.usage, provider: who.provider, model: reply.model};
@@ -945,11 +948,23 @@ class EditingRoom {
   }
 
   // ------------------------------------------------------------ views
+  // Where the edit's music came from (0.95, owner review 2026-11-09: "is the program forced to use my library?"): every
+  // track is kept in the sound library, but each one says whether Freesound or Jamendo found it or it is the owner's own.
+  audioSources(payload) {
+    const scoreId = payload.audio?.music?.enabled ? payload.audio.music.scoreId : null;
+    if (!scoreId || !this.soundtrack) return null;
+    try {
+      const count = {};
+      for (const cue of this.soundtrack.score(scoreId).cues) { const source = cue.asset?.library?.source || 'none'; count[source] = (count[source] || 0) + 1; }
+      return {music: count};
+    } catch { return null; }
+  }
   publicRevision(row, {detail = false} = {}) {
     const timelineRow = this.timelineRow(row.timeline_id), latest = this.latestRow(timelineRow.id);
     const payload = JSON.parse(row.payload), review = JSON.parse(row.critique);
     const out = {id: row.id, timelineId: row.timeline_id, contentId: timelineRow.content_id, revision: row.revision, latest: latest.id === row.id, actor: row.actor, note: row.note, createdBy: row.created_by, createdAt: row.created_at, payloadHash: row.payload_hash,
       critique: {slideshow: review.slideshow, counts: review.counts, stats: review.stats}, timing: payload.meta?.timing || null, autoFixes: payload.meta?.autoFixes || [], ...(payload.meta?.autoAudio ? {autoAudio: payload.meta.autoAudio} : {}), ...(payload.meta?.carried ? {carried: payload.meta.carried} : {})};
+    out.audioSources = this.audioSources(payload);
     if (!detail) return out;
     const approved = new Set((payload.meta?.skills || []).map(item => item.id));
     const withSkill = item => ({...item, skillApproved: item.skill ? approved.has(item.skill) : null});

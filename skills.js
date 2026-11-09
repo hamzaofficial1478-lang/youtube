@@ -504,6 +504,8 @@ class SkillsEngine {
       `);
       // Why each skill was chosen for a job (0.74); older databases gain the column.
       if (!this.db.prepare("SELECT 1 FROM pragma_table_info('skill_usage') WHERE name='reasons'").get()) this.db.exec('ALTER TABLE skill_usage ADD COLUMN reasons TEXT');
+      // 0.95: the skills the AI said it followed (the directive codes it cited in its answers), by id.
+      if (!this.db.prepare("SELECT 1 FROM pragma_table_info('skill_usage') WHERE name='applied'").get()) this.db.exec('ALTER TABLE skill_usage ADD COLUMN applied TEXT');
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
   }
@@ -627,7 +629,7 @@ class SkillsEngine {
   }
   usage(limit = 100) {
     return this.db.prepare('SELECT * FROM skill_usage ORDER BY created_at DESC, rowid DESC LIMIT ?').all(integer(limit, 1, 500, 'Limit'))
-      .map(row => ({...(() => { const job = this.jobOf(row.task_key, row.job_id); return {jobStatus: job?.status || null, contentId: job?.contentId || null}; })(), id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), reasons: row.reasons ? JSON.parse(row.reasons) : null, revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
+      .map(row => ({...(() => { const job = this.jobOf(row.task_key, row.job_id); return {jobStatus: job?.status || null, contentId: job?.contentId || null}; })(), id: row.id, jobId: row.job_id, familyId: row.family_id, room: row.room, taskKey: row.task_key, skillIds: JSON.parse(row.skill_ids), applied: row.applied ? JSON.parse(row.applied) : null, reasons: row.reasons ? JSON.parse(row.reasons) : null, revisionIds: JSON.parse(row.revision_ids), injectedBytes: row.injected_bytes, dropped: row.dropped, outcome: row.outcome, createdAt: row.created_at}));
   }
   lessons(status = null) {
     const rows = status
@@ -959,6 +961,15 @@ class SkillsEngine {
         JSON.stringify(brief.revisionIds), JSON.stringify(brief.skillIds), brief.injectedBytes, brief.dropped, outcome, now(), brief.reasons ? JSON.stringify(brief.reasons) : null);
     return id;
   }
+  // 0.95: the directives an answer of this job cited, added to what earlier answers of the same job cited.
+  recordApplied(jobId, taskKey, ids) {
+    if (!Array.isArray(ids) || !ids.length) return;
+    const row = this.db.prepare('SELECT applied, skill_ids FROM skill_usage WHERE job_id=? AND task_key=?').get(String(jobId), String(taskKey));
+    if (!row) return;
+    const given = new Set(JSON.parse(row.skill_ids)), before = row.applied ? JSON.parse(row.applied) : [];
+    const applied = [...new Set([...before, ...ids.filter(id => typeof id === 'string' && given.has(id))])];
+    this.db.prepare('UPDATE skill_usage SET applied=? WHERE job_id=? AND task_key=?').run(JSON.stringify(applied), String(jobId), String(taskKey));
+  }
   settleUsage(jobId, outcome) {
     this.db.prepare('UPDATE skill_usage SET outcome=? WHERE job_id=?').run(text(outcome, 'Outcome', 2, 200), text(jobId, 'Job ID', 1, 80));
   }
@@ -1061,6 +1072,8 @@ class SkillsEngine {
       // context (0.74): what this request is about, {text, format}, so the skills that fit it are chosen.
       brief: (taskKey, familyId, context) => this.promptBrief(taskKey, {familyId, context}),
       recordUsage: args => this.recordUsage(args),
+      // Bookkeeping: a malformed answer never fails the job that produced it.
+      recordApplied: (jobId, taskKey, ids) => { try { this.recordApplied(jobId, taskKey, ids); } catch { /* bookkeeping only */ } },
       // The approved skills that apply to a task, for rooms that follow skills in code rather than in a prompt.
       approved: (taskKey, familyId) => this.select(taskKey, {familyId}).map(item => ({id: item.skill.id, revisionId: item.revisionId})),
       settleUsage: (jobId, outcome) => { try { this.settleUsage(jobId, outcome); } catch { /* an outcome label is bookkeeping; it must not fail a job */ } },

@@ -164,6 +164,16 @@ class SoundOnline {
     try { return this.queueFill({requestedBy: by, connector: {id: connector.id, revision: connector.revision}, cues: cues.slice(0, 40).map((cue, k) => ({id: cue.id || `cue${String(k + 1).padStart(3, '0')}`, mood: cue.mood || '', prompt: cue.prompt || '', seconds: Math.round((cue.end - cue.start) || 30)})), subjects, recent, contentId, ...(kinds ? {kinds, effects: kinds.length > 0} : {}), ...(flavour ? {flavour} : {})}); }
     catch (error) { if (error instanceof InputError && !strict) return null; throw error; }
   }
+  // A cue this same video already got from Freesound (same words, track still in the library): not searched again.
+  pickedFor(contentId, cue) {
+    for (const row of this.db.prepare("SELECT progress FROM sound_imports WHERE folder='online:freesound' AND status='completed' AND json_extract(scope, '$.contentId')=? ORDER BY updated_at DESC").all(contentId)) {
+      let picks = null;
+      try { picks = JSON.parse(row.progress)?.picks; } catch { picks = null; }
+      const hit = Object.values(picks || {}).find(item => item?.prompt === cue.prompt && item.track);
+      if (hit) { const track = this.library.tracks('music').find(item => item.id === hit.track); if (track) return track; }
+    }
+    return null;
+  }
   // A cue the library already answers: a track tagged with every word the cue is searched by, not used by a recent video.
   cueCovered(cue, flavour, recent) {
     const {want} = cueSearch(cue, flavour), need = want.slice(0, 3);
@@ -244,7 +254,10 @@ class SoundOnline {
     const recent = Array.isArray(input.recent) ? input.recent.filter(id => typeof id === 'string' && /^[a-f0-9]{64}$/.test(id)).slice(0, 400) : [];
     requireValue(input.cues === undefined || (Array.isArray(input.cues) && input.cues.length <= 40 && input.cues.every(cue => cue && typeof cue.id === 'string' && cue.id.length <= 40 && typeof cue.mood === 'string' && cue.mood.length <= 80 && typeof cue.prompt === 'string' && cue.prompt.length <= 600)), 'Cues must be a list of at most 40 cues.');
     requireValue(input.subjects === undefined || (Array.isArray(input.subjects) && input.subjects.length <= 40 && input.subjects.every(item => item && Object.hasOwn(M.SFX, item.kind) && typeof item.subject === 'string' && /^[a-z-]{2,30}$/.test(item.subject))), 'Story sounds must be a list of kinds and things.');
-    const sfx = this.library.tracks('sfx'), cues = (input.cues || []).filter(cue => !this.cueCovered(cue, flavour, recent)).slice(0, 12).map(cue => ({id: cue.id, mood: cue.mood, prompt: cue.prompt, seconds: Number.isFinite(cue.seconds) ? Math.max(3, Math.min(900, cue.seconds)) : 30}));
+    // 0.95 (owner review 2026-11-09: "why is the program forced to use the music in my library?"): a video's own cues are
+    // always searched on Freesound by their own words; a track already in the library is reused when Freesound finds it
+    // again (no second download). Only a library-wide fill skips the moods the library already answers.
+    const sfx = this.library.tracks('sfx'), cues = (input.cues || []).filter(cue => !(contentId ? this.pickedFor(contentId, cue) : this.cueCovered(cue, flavour, recent))).slice(0, 12).map(cue => ({id: cue.id, mood: cue.mood, prompt: cue.prompt, seconds: Number.isFinite(cue.seconds) ? Math.max(3, Math.min(900, cue.seconds)) : 30}));
     const subjects = (input.subjects || []).filter(item => !M.subjectEffect(sfx, item.kind, item.subject)).slice(0, 12).map(({kind, subject}) => ({kind, subject}));
     requireValue(kinds.length || moods.length || cues.length || subjects.length, input.cues ? 'Your library already has music for every cue of this video and a sound for each of its things.' : input.music ? 'Your library already has every effect and enough music for these moods.' : 'Every effect slot already has a sound.', 409);
     return this.store.transaction(() => {
@@ -315,7 +328,7 @@ class SoundOnline {
       const taken = new Set();
       for (const cue of cues) {
         try {
-          const {queries, want} = cueSearch(cue, scope.flavour), covered = this.cueCovered(cue, scope.flavour, recent);
+          const {queries, want} = cueSearch(cue, scope.flavour), covered = scope.contentId ? this.pickedFor(scope.contentId, cue) : this.cueCovered(cue, scope.flavour, recent);
           if (covered) { progress.picks[cue.id] = {track: covered.id, prompt: cue.prompt}; progress.already++; continue; }
           let pick = null;
           for (const query of queries) {
@@ -326,7 +339,9 @@ class SoundOnline {
           requireValue(pick, 'no CC0 or CC BY music found');
           taken.add(pick.id);
           this.remember([pick]);
-          const added = await this.add({requestedBy: row.created_by, ref: `freesound:${pick.id}`, connector: scope.connector, kind: 'music', slot: want.join(' ')});
+          // Found again on Freesound and already in the library: reused, no second download.
+          const known = this.db.prepare('SELECT id FROM sounds WHERE source=? AND page_url=?').get(pick.provider, pick.page);
+          const added = known ? {id: known.id} : await this.add({requestedBy: row.created_by, ref: `freesound:${pick.id}`, connector: scope.connector, kind: 'music', slot: want.join(' ')});
           progress.picks[cue.id] = {track: added.id, prompt: cue.prompt};
           if (added.added) progress.added++; else progress.already++;
         } catch (error) { progress.failed++; if (progress.problems.length < 20) progress.problems.push(`${cue.mood || 'cue'} music: ${clean(error.message, 140)}`); }

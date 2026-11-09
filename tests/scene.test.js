@@ -1163,7 +1163,11 @@ test('0.39: approved skills travel with every scene plan and are logged; a style
   const scope = JSON.parse(room.planJobRow(queued.job.id).scope), input = scope.parts[0].promptInput;
   assert.ok(input.skills.skills.some(item => item.id === 'scene.script-cues-to-visuals'), 'the approved skill is in the planner input');
   assert.ok(scope.skillRevisionIds.length >= 1);
-  assert.match(planMessages(input)[0].content, /OWNER SKILLS \(input "skills"\)/);
+  assert.match(planMessages(input)[0].content, /OWNER SKILLS: the DIRECTION section at the end holds the owner/);
+  // 0.95: at the request the planner's skills leave the data and become its numbered directives.
+  const led = require('../direct').lead(planMessages(input)).messages;
+  assert.match(led[0].content, /D\d+ · [^\n]*\[scene\.script-cues-to-visuals\]/);
+  assert.ok(!led.at(-1).content.includes('scene.script-cues-to-visuals'), 'no longer in the data the planner is told not to obey');
   const usage = store.db.prepare("SELECT * FROM skill_usage WHERE job_id=? AND task_key='scene.plan'").get(queued.job.id);
   assert.ok(usage && JSON.parse(usage.skill_ids).includes('scene.script-cues-to-visuals'), 'the job records which skills it used');
   assert.equal(family.id, usage.family_id);
@@ -1230,7 +1234,7 @@ test('pixel atelier: the frame worker gets the grid, palette and approved craft 
   // The frame worker: the grid and palette, and the approved craft skills for designed shots, pixel ones first.
   const packet = JSON.parse(raws[0].split('\n\n')[0]);
   assert.deepEqual([packet.finish, packet.grid, packet.heldFrames, packet.pixelPalette.length], ['pixel', '320x180', 3, 16]);
-  assert.match(raws[0], /Craft skills the owner approved for designed shots[\s\S]*pixel\.cells-and-palette/);
+  assert.match(raws[0], /The owner's directives for designed shots[\s\S]*\[pixel\.cells-and-palette\]/);
   const used = task => store.db.prepare('SELECT skill_ids FROM skill_usage WHERE job_id=? AND task_key=?').get(queued.job.id, task);
   assert.ok(JSON.parse(used('motion.template').skill_ids).includes('pixel.cells-and-palette'), 'the frame worker\'s skills are recorded with the job');
   assert.ok(!JSON.parse(used('scene.plan').skill_ids).some(id => id.startsWith('collage.')), 'paper skills stay out of a pixel video');

@@ -70,7 +70,8 @@ function messages(input) {
     'ON-SCREEN WORDS ("visible"): short, readable at a glance, at most the given length; keep figures exactly; a proper name stays as it is unless the market has its own form.',
     'PACKAGE: a title of at most 100 characters that keeps the original promise (no new claims), a description, tags in this language, and the thumbnail words (very short; "accent" is one of its words).',
     ...(input.given?.length ? ['Items listed under "given" were already approved in this language and their source did not change: keep them exactly, and keep their names and terms in the new sentences.'] : []),
-    ...(input.skills ? [`APPROVED SKILLS (reviewed by the owner): ${input.skills}`] : []),
+    // 0.95: the brief was printed as "[object Object]" here; it now arrives as the owner's numbered directives.
+    ...(input.skills ? [require('./direct').directionText(input.skills.prompt || input.skills)] : []),
     'Return only one JSON object: {"sentences": [{"n": number, "text": string}], "visible": [{"id": string, "text": string}], "package": {"title": string, "description": string, "tags": [string], "thumbnail": {"text": string, "accent": string} or null}, "notes": up to 400 characters for the reviewer (names kept, units converted, anything to check)}.',
   ].join('\n');
   return [{role: 'system', content: system}, {role: 'user', content: JSON.stringify({locale: input.locale, title: input.title, sentences: input.source.sentences.filter(item => !input.keep?.sentences?.includes(item.n)).map(({n, text}) => ({n, text})), visible: input.source.visible.filter(item => !input.keep?.visible?.includes(item.id)).map(({id, where, source: words, limit}) => ({id, where, text: words, maxLength: limit})), package: input.source.package, ...(input.given?.length ? {given: input.given} : {})})}];

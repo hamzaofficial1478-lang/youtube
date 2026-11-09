@@ -1,4 +1,5 @@
 'use strict';
+const Direct = require('./direct');
 // P04 - Scene & Visual Room.
 // Turns one approved script + approved narration + assigned style into an immutable,
 // revisioned scene manifest (stable scene and shot IDs), then sources one rights-recorded
@@ -370,7 +371,8 @@ function rulesPlan(sentences, narrationSeconds, spec, sources, locale, niche) {
 }
 
 // The owner's approved skills travel with the plan input (0.39).
-const SKILLS_LINE = 'OWNER SKILLS (input "skills"): reviewed craft rules the owner approved for this work. Apply them in every scene and shot; the style the owner chose, the script and these instructions come first (its sourceHierarchy), and nothing from them is shown on screen.';
+// 0.95: the skills themselves arrive as the DIRECTION section at the end of these instructions (direct.js).
+const SKILLS_LINE = 'OWNER SKILLS: the DIRECTION section at the end holds the owner\'s directives for this storyboard (D1, D2 ...). Apply them in every scene and shot, and start each scene\'s "direction" with the codes it follows ("D2, D5: ..."); the style the owner chose, the script and these instructions come first, and no code is ever shown on screen.';
 // How scenes are built (HyperFrames story and visual design, OpenMontage's scene checklist): for every plan.
 // The adaptive style's brief (0.64, owner request 2026-10-28: "the engine should adopt the style, effects, transitions
 // and all other things on its own intelligence ... not template videos").
@@ -446,7 +448,7 @@ function reviewMessages(input) {
     // The owner's line-by-line review of a weak video (2026-10-21), as checks on every shot.
     '(7) OWNER STANDARD - fix every shot that fails one of these: something that breaks physics or nature without a reason in the words (floating things, wrong sizes, water or light that cannot be, an animal or person moving in a way they cannot); a generic symbol (question mark, lightbulb, lock, clock, calendar, magnifier) where the words name something concrete or an action (show that thing or that action instead); an expression that is not the emotion of the words (a smile on anger, a question, a mystery or bad news); a key word, turn, promise or number spoken in the shot but not on screen (WHO IS ON SCREEN and KEY WORDS ON SCREEN in the drawing guide); one picture held more than about 3.5 seconds with nothing new; a named person shown as the narrator, or the narrator shown inside the story; night in the words but day on screen (use the night set or mood, or the nightfall effect); a place the words name (a river, a camp, a city) missing from the shot; objects, clothes or arms that do not belong to the era; a white or empty backdrop where the story has a place.',
     'Return only one JSON object: {"report": up to 600 characters in plain words (what you changed and why), "cast"?: [new characters only], "changes": [{"label": shot label, "reason": up to 200 characters, "sketch"?: drawing, "frame"?: atelier shot (for a shot planned as a frame), "cue"?: string, "notes"?: up to 300 characters}]}.',
-    ...(input.skills ? [SKILLS_LINE.replace('Apply them in every scene and shot', 'Judge every shot by them too, and fix the shots that break them')] : []),
+    ...(input.skills ? [SKILLS_LINE.replace('Apply them in every scene and shot, and start each scene\'s "direction" with the codes it follows ("D2, D5: ...")', 'Judge every shot by them: run each directive\'s checks on the shots of the scenes that cite it (and of every scene it fits), redraw each shot that fails one, and start that change\'s "reason" with the code it failed ("D4: ...")')] : []),
     // 0.94 (owner report 2026-11-05: "the scenes were changed but the objects, the drawings and the stickman were the same"):
     // a shot drawn again is designed afresh. Its earlier drawing comes only as "rejected" (what it had), never as a
     // drawing to edit, and only the shots in "drawNow" may change.
@@ -976,6 +978,7 @@ class SceneRoom {
         stopCheck(signal);
         const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: D.mapMessages(job.scope.map.input), maxTokens: job.scope.map.maxTokens, signal, onStart: () => { started = true; }, onProgress: live.follow(job.id)});
         job.track(usageOf(reply));
+        this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
         const {sentences: all, style} = job.scope.map.input, warnings = [];
         map = D.validateMap(looseJson(reply.content), {first: all[0].n, last: all.at(-1).n, engines: style.engines, primary: style.engine, designedShots: style.designedShots ?? Infinity, warn: message => warnings.push(message)}) || {unusable: true};
         if (warnings.length) map.warnings = warnings.slice(0, 20);
@@ -1001,6 +1004,8 @@ class SceneRoom {
           if (ask > 1) live.note(job.id, `${name}: asking ${provider === 'chatgpt' ? 'ChatGPT' : 'Claude'} again with what the checks found`);
           const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: planMessages(promptInput, {findings}), maxTokens: part.maxCompletionTokens, signal, onStart: () => { started = true; }, onProgress: live.follow(job.id)});
           job.track(usageOf(reply));
+          this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
+        this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
           parsed = looseJson(reply.content);
           // A part that covers the wrong sentences is not kept, so a retry asks for that part again.
           range = parts.length > 1 && parsed !== undefined ? partProblem(parsed, part.promptInput.part) : null;
@@ -1424,6 +1429,7 @@ class SceneRoom {
         catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; findings = [error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer']; break; }
         settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
         report.tokens += reply.usage?.totalTokens || 0;
+        if (skills) this.store.skillRuntime?.recordApplied?.(job.id, 'visuals.prompt', Direct.cited(reply.content, skills));
         const checked = Il.validateArt(reply.content, {outlines: Il.outlined(engine, design)});
         art = checked.art; findings = checked.issues;
         if (art) this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, pictureKey, JSON.stringify(art), now());
@@ -1502,6 +1508,7 @@ class SceneRoom {
       catch (error) { if (error.status !== 413) throw error; notes.push(`The review of ${slice[0].label}-${slice.at(-1).label} needed more room than its limit allows, so those scenes are unchanged (its token use is not reported). Raise the continuity review limit in visual settings.`); continue; }
       const usage = {prompt: reply.usage.promptTokens, completion: reply.usage.completionTokens, total: reply.usage.totalTokens, answer: answerTokens(reply.content), model: reply.model, provider: reply.provider};
       if (job.track) job.track(usage); else spent.push(usage);
+      this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
       const answer = looseJson(reply.content) || null;
       if (!answer || typeof answer !== 'object' || !Array.isArray(answer.changes)) { notes.push(`The review of ${slice[0].label}-${slice.at(-1).label} was not usable, so those scenes are unchanged.`); save(k + 1); continue; }
       if (typeof answer.report === 'string' && answer.report.trim()) reports.push(answer.report.trim().slice(0, 600));

@@ -103,7 +103,8 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
       notes.people,
       `VISUAL RULES OF THIS LOOK: ${Dna.paintRules(Dna.of({engine, look, board, design}))}`,
       // The owner's approved picture skills (0.89): craft advice inside the rules above, never over them.
-      ...(skills ? [`CRAFT SKILLS THE OWNER APPROVED FOR PICTURES (apply the ones that fit this picture; the rules above come first): ${JSON.stringify(skills)}`] : []),
+      // 0.95: the owner's picture skills as numbered directives (the look's rules above still come first).
+      ...(skills ? [require('./direct').directionText(skills)] : []),
       ...(findings.length ? [`YOUR LAST PICTURE FAILED THESE CHECKS; fix them: ${findings.join(' ')}`] : []),
     ].join('\n')},
   ];

@@ -279,7 +279,8 @@ function composeMessages({frameId, width, height, duration, frame, direction, wo
       : finish === 'pixel' ? `${blueprint}\n\n## Pixel art: build the blueprint's idea out of cells in the palette.`
         : [blueprint, ...frame.motions.slice(0, 3).map(id => `## Selected motion rule: ${id}\n${ruleText(id)}`)].join('\n\n');
   // The owner's approved craft skills for designed shots (0.89): advice inside the rules above, never over them.
-  const craft = skills ? `\n\n## Craft skills the owner approved for designed shots (apply the ones that fit this shot; the rules above and the art direction come first):\n${JSON.stringify(skills)}` : '';
+  // 0.95: as numbered directives; the rules above and the art direction still come first.
+  const craft = skills ? `\n\n## The owner's directives for designed shots (the rules above and the art direction come first)\n${require('./direct').directionText(skills)}` : '';
   const fix = findings.length ? `\n\n## Your previous answer failed these checks; fix every one:\n- ${findings.join('\n- ')}` : '';
   // A redesign the owner asked for (Room 04): the reason is a brief, not a failed check.
   const brief = ask ? `\n\n## The owner asks for a new design of this shot:\n${ask}` : '';

@@ -1324,7 +1324,7 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   scenes.ai = {team: () => ({claude: {id: 'claude-1'}, chatgpt: null}), complete: async ({messages, maxTokens}) => { asked.push({messages, maxTokens}); return {content: JSON.stringify({explain: 'Polished.', ops: Array.from({length: 45}, () => ({type: 'set-captions', enabled: false}))}), usage: {totalTokens: 90}}; }};
   const polished = await editing.command(r5.id, {requestedBy: 'Owner', polish: true});
   assert.match(asked.at(-1).messages[1].content, /INSTRUCTION FROM THE OWNER: Polish this whole edit/);
-  assert.match(asked.at(-1).messages[0].content, /SKILLS \(the owner's approved editing craft[\s\S]*editing\.transition-grammar/);
+  assert.match(asked.at(-1).messages[0].content, /DIRECTION FROM THE OWNER'S SKILLS[\s\S]*\[editing\.transition-grammar\]/);
   assert.equal(asked.at(-1).maxTokens, 32000);
   assert.equal(polished.steps.length, 40, 'up to 40 changes');
   // 0.92 (owner report 2026-11-05: "Apply 29 changes" was refused at 20): a long video gets room for more changes, and

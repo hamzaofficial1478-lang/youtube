@@ -143,7 +143,7 @@ class FrameScanner {
     return {id: row.id, renderId: row.render_id, status: row.status, complete: row.status === 'completed', frames: scope.frames.length, batches: {total: scope.batches.length, done: row.batches ? JSON.parse(row.batches).length : 0},
       error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at, reserved: scope.tokenLimit, usage: usage ? {status: usage.status, total: usage.total_tokens} : null,
       geometry: sheetGeometry(scope.vertical), sheets: row.sheets ? JSON.parse(row.sheets).map(sheet => ({index: sheet.index, url: `/api/frame-scans/${row.id}/sheets/${sheet.index + 1}`, frames: sheet.frames.map(frame => frame.id)})) : [],
-      findings: result?.findings || [], model: result?.model || null};
+      findings: result?.findings || [], model: result?.model || null, provider: (() => { try { return JSON.parse(this.connectors.row(scope.connector.id).payload).provider; } catch { return null; } })()};
   }
   latestFor(renderId) { return this.publicScan(this.db.prepare('SELECT * FROM frame_scans WHERE render_id=? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(renderId)); }
   settings(familyId) {

@@ -13,6 +13,7 @@ const {spawn, execFile, execFileSync} = require('node:child_process');
 const dns = require('node:dns');
 const net = require('node:net');
 const Anthropic = require('@anthropic-ai/sdk').default;
+const Direct = require('./direct');
 
 // The AI connections every room may use (owner request 2026-10-22: Claude and/or the ChatGPT plan).
 const AI_PROVIDERS = Object.freeze(['claude', 'claude-code', 'chatgpt']);
@@ -491,14 +492,16 @@ class Ai {
   // messages: [{role, content}]; returns {content, usage, model, provider}.
   // onProgress (0.77): called with each streamed piece of the answer, for the job's live view.
   async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null, signal = null}) {
-    const {row, slot} = this.slot(connectorId), {role, model, effort} = this.model(slot, task), {system, prompt} = splitMessages(messages);
+    // 0.95: the owner's skills leave the data message and direct the model as numbered directives (direct.js).
+    const led = Direct.lead(messages);
+    const {row, slot} = this.slot(connectorId), {role, model, effort} = this.model(slot, task), {system, prompt} = splitMessages(led.messages);
     if (!Number.isSafeInteger(maxTokens) || maxTokens < 256) throw new AiError('This job leaves Claude too little room to answer. Raise its token limit.', 400);
     await this.offline(slot.provider);
     const client = slot.provider === 'claude' ? new ClaudeApi(this.connectors.key(connectorId), this.connectors.fetch) : slot.provider === 'chatgpt' ? this.codex : this.claudeCode;
     if (slot.provider === 'claude' && !row.secret) throw new AiError('Add the Claude API key in Connections first.', 409);
     // Claude and ChatGPT keep separate lanes, so they work side by side.
     const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, signal, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
-    return {...result, provider: slot.provider, role};
+    return {...result, provider: slot.provider, role, ...(led.brief ? {directives: {given: Direct.directives(led.brief).map(item => item.id), applied: Direct.cited(result.content, led.brief)}} : {})};
   }
   // The rooms' onStart means "this request may have cost something" (0.73): a refusal before anything was
   // generated leaves it unsaid, so the job fails plainly instead of "interrupted, usage unknown", and a sign-in

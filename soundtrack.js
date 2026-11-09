@@ -235,6 +235,7 @@ class SoundtrackRoom {
     try {
       const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: M.messages(job.scope.promptInput), maxTokens: job.scope.maxTokens, onStart: () => { started = true; }});
       usage = reply.usage;
+      this.store.skillRuntime?.recordApplied?.(job.id, 'audio.mix', reply.directives?.applied);
       const inputs = this.scoreInputs(job.content_id);
       if (!inputs.ready || inputs.voice.approvalId !== job.scope.voiceApprovalId) throw Object.assign(new AiError('The narration or plan changed while Claude was scoring. The score was not saved.'), {quality: true, stale: true});
       const text = String(reply.content);

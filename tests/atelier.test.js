@@ -186,7 +186,7 @@ test('paper collage and pixel art: their contracts, palettes, checks and what th
   const [paperSystem, paperUser] = ask(paper, {skills: {skills: [{id: 'collage.torn-rims', do: ['tear part of the edge']}]}});
   assert.match(paperSystem.content, /PAPER COLLAGE FINISH[\s\S]*url\(#at-torn\)[\s\S]*STOP-MOTION|PAPER COLLAGE FINISH[\s\S]*url\(#at-torn\)[\s\S]*stop-motion/i);
   assert.doesNotMatch(paperSystem.content, /MOTION DOCTRINE/);
-  assert.match(paperUser.content, /"finish":"collage"[\s\S]*"heldFrames":2[\s\S]*Craft skills the owner approved[\s\S]*collage\.torn-rims/);
+  assert.match(paperUser.content, /"finish":"collage"[\s\S]*"heldFrames":2[\s\S]*The owner's directives for designed shots[\s\S]*\[collage\.torn-rims\]/);
   const [pixelSystem, pixelUser] = ask(preset);
   assert.match(pixelSystem.content, /PIXEL ART FINISH[\s\S]*crispEdges[\s\S]*__atelier\.pixel\.text/);
   assert.match(pixelUser.content, /"heldFrames":3,"grid":"320x180","pixelPalette":\["#0B0B14"/);
@@ -264,9 +264,9 @@ test('skills reach the review, the pictures, the paintings and the art director'
   const Il = require('../illustrate'), Dna = require('../visual-dna');
   const skills = {sourceHierarchy: ['owner instruction in this request'], skills: [{id: 'era.cave-painting', title: 'Cave painting', do: ['Keep pigment strong and dense.'], avoid: ['A bison like a box on table legs.'], checks: ['The bison has a tall hump.']}]};
   const review = reviewMessages({engine: 'stickman', look: 'classic', skills, scenes: []});
-  assert.match(review[0].content, /OWNER SKILLS \(input "skills"\)[^\n]*Judge every shot by them too/);
+  assert.match(review[0].content, /OWNER SKILLS: the DIRECTION section at the end[^\n]*Judge every shot by them: run each directive's checks/);
   assert.doesNotMatch(reviewMessages({engine: 'stickman', look: 'classic', scenes: []})[0].content, /OWNER SKILLS/);
-  assert.match(Il.messages({describe: 'a bison on a cave wall', skills})[1].content, /CRAFT SKILLS THE OWNER APPROVED FOR PICTURES[\s\S]*era\.cave-painting/);
+  assert.match(Il.messages({describe: 'a bison on a cave wall', skills})[1].content, /DIRECTION FROM THE OWNER'S SKILLS[\s\S]*D1 · Cave painting \[era\.cave-painting\]/);
   assert.match(Il.paintPrompt({describe: 'a bison on a cave wall', skills}), /Craft: Keep pigment strong and dense\. Avoid: A bison like a box on table legs\./);
   assert.doesNotMatch(Il.paintPrompt({describe: 'a bison on a cave wall'}), /Craft:/);
   const check = Dna.checkMessages({rules: Dna.of({engine: 'stickman', look: 'classic'}), describe: 'a bison', image: {mediaType: 'image/png', data: 'AA=='}, skills});
