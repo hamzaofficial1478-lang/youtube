@@ -260,9 +260,10 @@ test('an approved brief reaches the Hermes script prompt, is logged, and changes
   assert.equal(scope.promptInput.skills.skills[0].id, 'hooks.universal-3-hook');
   assert.equal(scope.skillRevisionIds.length, 1);
   // The compiled brief is really in the system prompt the provider would receive.
-  const messages = scriptMessages(scope.promptInput);
-  assert.match(messages[0].content, /owner-approved skill brief/);
-  assert.match(messages[1].content, /hooks.universal-3-hook/);
+  // 0.95: the brief leaves the data and reaches the model as the owner's numbered directives in its instructions.
+  const messages = require('../direct').lead(scriptMessages(scope.promptInput)).messages;
+  assert.match(messages[0].content, /DIRECTION FROM THE OWNER'S SKILLS \(1 directives, D1-D1\)[\s\S]*D1 · [^\n]*\[hooks\.universal-3-hook\]/);
+  assert.doesNotMatch(messages[1].content, /hooks\.universal-3-hook/, 'the skills are no longer in the data the model is told not to obey');
   // Every use is recorded against the job, with the exact revision that was injected.
   const usage = skills.usage();
   assert.equal(usage.length, 1);

@@ -11,7 +11,12 @@ function edEdition(key) { const [contentId, locale] = String(key).split('|'); re
 
 function localizationRoomView(family) {
   const hero = `<section class="voice-hero"><div><span class="stage-kicker">ROOM 06 · CAPTIONS & LOCALIZATION</span><h2>Language editions</h2><p>Each of this family's other languages gets its own edition of a finished video: the narration, every word on screen and the package, adapted for that market (not translated word for word), side by side with the original. Numbers, names and facts stay; each sentence stays about as long to say, so the picture can be reused. You approve each language by name. Captions of the main video live in Room 05.</p></div></section>`;
-  if (family.locales.length < 2) return `${hero}<section class="production-card"><h3>One language</h3><p>This family makes videos in ${esc(family.primaryLocale)} only. Add languages to the family in Studio to make editions.</p></section>`;
+  // 0.95 (owner review 2026-11-09: "why is there nothing in this section?"): it is empty because this channel has one
+  // language; say what the room does, what it needs, and offer the step that fills it.
+  if (family.locales.length < 2) return `${hero}<section class="production-card"><div class="production-card-head"><div><span class="micro-label">NOTHING TO DO YET</span><h2>This channel makes videos in one language</h2></div>${badge(family.primaryLocale, 'gray')}</div>
+    <p>This room makes the same video in more languages: the narration, every word on screen, the captions, the title, description and thumbnail, each checked and approved by name. It stays empty while the channel has only ${esc(family.primaryLocale)}.</p>
+    <ol class="hint"><li>Add a language to the channel (for example es-ES or hi-IN).</li><li>Finish and approve the main video in Room 10 (the final master). An edition always starts from it.</li><li>Then this room adapts the words with the AI, the narrator reads them in that language, and the video renders again on that voice.</li></ol>
+    <div class="card-actions">${action('Add a language to this channel', 'edit-family', family.id, 'primary')}</div></section>`;
   const contents = (state.localization?.contents || []).filter(item => item.familyId === family.id);
   if (!contents.length) return `${hero}<section class="production-card"><h3>No finished video yet</h3><p>Editions start from a locked video: approve its final master in Room 10 first.</p></section>`;
   if (!contents.some(item => item.contentId === renderContentId)) renderContentId = contents[0].contentId;

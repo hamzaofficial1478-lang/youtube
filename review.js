@@ -80,7 +80,10 @@ function build({render, result = null, integrity = [], edit = null, findings: ed
       const rate = group => group.lines.join(' ').length / Math.max(0.01, group.end - group.start), top = Math.round(Math.max(...fast.map(rate)));
       items.push({severity: 'suggestion', source: 'captions', code: 'caption-too-fast', at: fast[0].start, until: fast.at(-1).end, label: `${fast.length} caption${fast.length === 1 ? '' : 's'}`,
         message: `The narrator speaks faster than a comfortable reading speed in ${fast.length} place${fast.length === 1 ? '' : 's'} (up to ${top} characters a second; about 20 reads comfortably), at ${fast.slice(0, 6).map(group => clockOf(group.start)).join(', ')}${fast.length > 6 ? ' and more' : ''}.`,
-        fix: CAPTION_FIX['caption-too-fast'], moments: fast.map(group => ({at: group.start, text: group.text})), repair: {room: 'voice', label: 'Open the Voice Room'}});
+        // 0.95 (owner review 2026-11-09: "if the program points these out there should be a Fix button"): the sentences
+        // they belong to, so Room 08 can slow exactly those lines in the voice direction.
+        fix: CAPTION_FIX['caption-too-fast'], moments: fast.map(group => ({at: group.start, text: group.text})),
+        repair: (sentences => (sentences.length ? {room: 'voice', command: 'voice-slow', id: sentences.join(','), label: `Slow ${sentences.length === 1 ? 'this line' : `these ${sentences.length} lines`} in the voice`} : {room: 'voice', label: 'Open the Voice Room'}))(cues ? [...new Set(fast.map(group => cues[Math.max(0, cues.findLastIndex(cue => cue.start <= group.start + 0.001))]?.n).filter(Number.isInteger))] : [])});
     }
   }
   // 4. Claude's frame scan of this render: review notes on what the frames show, each with its own frame.

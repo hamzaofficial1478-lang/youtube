@@ -128,6 +128,7 @@ class VoiceDirector {
     try {
       const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'voice', messages: D.messages(job.scope.promptInput), maxTokens: job.scope.maxTokens, onStart: () => { started = true; }});
       usage = reply.usage;
+      this.store.skillRuntime?.recordApplied?.(job.id, 'voice.direction', reply.directives?.applied);
       const inputs = this.inputs(job.content_id);
       if (inputs.content.revision !== job.scope.contentRevision || !inputs.ready) throw Object.assign(new AiError('The script changed while Claude was directing. The direction was not saved.'), {quality: true, stale: true});
       let raw;

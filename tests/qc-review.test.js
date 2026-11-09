@@ -111,6 +111,11 @@ test('one timecoded list: failed checks per moment, the critic with its fixes, c
   assert.equal(fast[0].moments.length, 3);
   assert.deepEqual([fast[0].label, fast[0].repair], ['3 captions', {room: 'voice', label: 'Open the Voice Room'}]);
   assert.match(fast[0].fix, /cannot be slower than the voice/);
+  // 0.95: with the narration's sentences, the item names them and Room 08 can slow exactly those lines in the voice.
+  const named = Review.build({render: render(), result: result(passing), edit: {...timeline, captions: rushed}, findings: [], cues, urls: {}}).findings.find(item => item.code === 'caption-too-fast');
+  const lines = [...new Set(rushed.groups.slice(0, 3).map(group => cues[Math.max(0, cues.findLastIndex(cue => cue.start <= group.start + 0.001))].n))];
+  assert.deepEqual([named.repair.command, named.repair.id], ['voice-slow', lines.join(',')]);
+  assert.match(named.repair.label, /^Slow (this line|these \d+ lines) in the voice$/);
   assert.deepEqual(report.counts, {critical: report.findings.filter(item => item.severity === 'critical').length, suggestion: 2, nitpick: 1});
   const timed = report.findings.filter(item => item.at !== null).map(item => item.at);
   assert.deepEqual(timed, [...timed].sort((a, b) => a - b), 'sorted by time, untimed last');

@@ -104,7 +104,7 @@ function messages(input) {
     'Mark how the narrator performs every numbered sentence, so the story rises and falls like a great storyteller: the hook grabs, facts land, a reveal surprises, a sad fact slows down, a joke plays, the close warms. Read the niche, the audience, the style and any competitor voice techniques (learn techniques only; never imitate a person).',
     'Do not flatten the script into one tone and do not overact every line: most lines are neutral, warm or curious, with peaks where the story earns them. Change emotion on purpose, not every sentence.',
     `Return only one JSON object: {"summary": up to 600 characters (the arc of the performance in plain words), "lines": [{"n": sentence number, "emotion": ${EMOTIONS.join('|')}, "energy": 1-5, "pace": ${PACES.join('|')}, "pause": ${PAUSES.join('|')} (after the sentence), "emphasis": up to 3 exact words from the sentence, "note"?: up to 160 characters}]} with one line for every sentence, in order.`,
-    ...(input.skills ? ['OWNER SKILLS (input "skills"): reviewed rules the owner approved for this work. Apply them; the style the owner chose, the script and these instructions come first (its sourceHierarchy), and nothing from them is quoted to the viewer.'] : []),
+    ...(input.skills ? ['OWNER SKILLS: the DIRECTION section at the end holds the owner\'s directives for this work (D1, D2 ...). Apply them and name the codes you follow in your notes; the style the owner chose, the script and these instructions come first, and nothing from them is quoted to the viewer.'] : []),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }

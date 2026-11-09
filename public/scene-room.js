@@ -198,6 +198,15 @@ function sceneEmptyPlan(content) {
   return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Build the storyboard with the AI you prefer (the real planner: it builds every scene and shot from the story). The rough free draft is only for testing. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
 }
 
+// 0.95: the owner's skills reach the planner as numbered directives (D1 ...), and scene directions name the codes they
+// follow; this key says which skill each code is and ticks the ones the AI cited.
+function sceneDirectives(content) {
+  const used = (state.skills?.usage || []).find(item => item.contentId === content.contentId && item.taskKey === 'scene.plan');
+  if (!used?.skillIds?.length) return '';
+  const title = id => (typeof skillsAll === 'function' ? skillsAll().find(item => item.id === id)?.title : null) || id;
+  const followed = used.applied || [];
+  return `<details class="scene-history" data-keep-open="directives-${esc(content.contentId)}"><summary>Skills that directed this storyboard · ${used.applied ? `${followed.length} of ${used.skillIds.length} cited by the AI` : `${used.skillIds.length} given`}</summary><p class="hint">The program gave the AI these as numbered directives in its instructions. A scene's direction names the codes it follows, for example "D2, D5: …".</p><ul class="intel-list">${used.skillIds.map((id, k) => `<li>${followed.includes(id) ? '✓' : '·'} <b>D${k + 1}</b> ${esc(title(id))} <code>${esc(id)}</code></li>`).join('')}</ul></details>`;
+}
 function scenePlanCard(content, manifest) {
   const statusColor = {approved: 'green', draft: 'orange', rejected: 'gray', superseded: 'gray'}[manifest.status] || 'gray';
   const history = content.manifests.map(item => `<li><b>r${item.revision}</b> ${esc(item.status)} · ${esc(item.source)} · ${esc(item.changeNote)} · ${esc(item.createdBy)} · ${esc(date(item.createdAt))}${item.review ? ` · ${esc(item.review.decision)} by ${esc(item.review.reviewer)}` : ''}</li>`).join('');
@@ -208,7 +217,7 @@ function scenePlanCard(content, manifest) {
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SCENE PLAN · REVISION ${manifest.revision}</span><h2>${esc(content.title)}</h2></div><div class="row-end">${badge(manifest.status === 'approved' ? 'Plan approved' : manifest.status, statusColor)}${badge(manifest.source === 'claude' ? 'Claude' : manifest.source === 'hermes' ? 'Earlier AI planner' : manifest.source === 'rules' ? 'Rough free draft' : manifest.source === 'merge' ? 'Merged storyboard' : manifest.source === 'choice' ? 'Earlier storyboard again' : manifest.source === 'rules-update' ? 'Updated to today\'s rules' : 'Edited')}</div></div>
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks" id="scene-problems"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${sceneLinked(item)}</li>`).join('')}</ul>${manifest.scope.current && manifest.issues.some(item => SCENE_LONG.test(item)) ? `<p class="hint">Shots that hold longer than the video's pace: fix them with "Fix with Claude" or "Fix with ChatGPT" in step 2 of ${'<button type="button" class="scene-jump" data-action="scene-goto-board" data-id="road">What happens next</button>'} at the top of this room. The program splits each long shot and the AI draws only the new shots; everything else keeps its drawing.</p>` : ''}</div>` : ''}
-    ${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
+    ${sceneDirectives(content)}${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
     ${sceneStory(manifest.plan)}${sceneUndesigned(manifest)}${sceneDirection(manifest.plan)}${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
     ${manifest.plan.design ? sceneDesignLine(manifest.plan.design) : ''}

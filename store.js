@@ -619,6 +619,7 @@ class Store {
       this.db.prepare('UPDATE jobs SET status=?,result=?,error=?,updated_at=? WHERE id=?').run(jobStatus,JSON.stringify({candidateId:id,usage,quality}),quality.passed?null:quality.issues.join(' '),at,jobId);
       // Skills Engine: the quality gate's own finding becomes a lesson candidate for human review.
       this.skillRuntime?.settleUsage?.(jobId,jobStatus);
+      this.skillRuntime?.recordApplied?.(jobId,'script.candidate',result.directives);
       if(!quality.passed)this.skillRuntime?.capture({familyId:f.id,skillId:'script.spoken-standard',taskKey:'script.candidate',source:'script-quality-gate',sourceRef:jobId,finding:`The script quality gate blocked a candidate: ${quality.issues.join(' ')}`,evidence:[`script candidate ${id}`,`script job ${jobId}`],proposal:{kind:'add-check',value:quality.issues[0]}});
       this.event(`${quality.passed?'Claude prepared':'Claude returned a quality-blocked'} ${f.primaryLocale} script candidate for review: ${c.title}`);return this.scriptCandidate(id);
     });
