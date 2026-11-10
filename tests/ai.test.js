@@ -318,4 +318,7 @@ test('every request reaches the model with skills: the gate adds its job\'s skil
   await ai.complete({connectorId: slot.id, task: 'editing', messages: [{role: 'system', content: `Edit.\n\n${require('../direct').directionText(own)}`}, {role: 'user', content: 'x'}], maxTokens: 4000});
   assert.equal(seen[2].system.match(/DIRECTION FROM THE OWNER'S SKILLS/g).length, 1, 'directives already in the instructions are not doubled');
   assert.equal(skills.usage().length, 1, 'only the gate\'s own choice is recorded by the gate');
+  // 0.98: a room that names its job (packaging) gets the gate's skills recorded on that job, so its video lists them.
+  await ai.complete({connectorId: slot.id, task: 'packaging', jobId: 'package-job-1', messages: [{role: 'system', content: 'Write titles.'}, {role: 'user', content: 'UNTRUSTED DATA:\n{"script":"Why stone age money worked"}'}], maxTokens: 4000});
+  assert.deepEqual([skills.usage()[0].jobId, skills.usage()[0].taskKey], ['package-job-1', 'packaging.title']);
 });

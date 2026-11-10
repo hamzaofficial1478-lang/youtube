@@ -526,8 +526,12 @@ function sumUsage(list) {
 const answerTokens = text => Math.round(String(text || '').length / 3.3);
 // Stop pressed between two steps (0.81): the next step does not start; nothing of it was used.
 const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
-// How long a storyboard paused by a lost connection waits for it, and how often it goes on by itself (0.84).
-const NET_WAIT_MINUTES = 30, NET_AUTO = 5;
+// How each Motion Graphics finish is made, in the words of the live view (every one is HTML the AI writes, which the
+// program then plays frame by frame in this PC's own browser).
+const FINISH_WORDS = Object.freeze({motion: 'an HTML motion-graphics animation', anime: 'an HTML render (cel anime: painted cels, drawings swapped on twos)', collage: 'an HTML paper-collage animation', pixel: 'an HTML pixel-art animation'});
+// How long a storyboard paused by a lost connection waits for it, and how often it goes on by itself (0.84; 0.98, owner
+// 2026-11-10: "keep checking the network and retry by itself, do not ask me every time": a day and twelve times).
+const NET_WAIT_MINUTES = 24 * 60, NET_AUTO = 12;
 const stopCheck = signal => { if (signal?.aborted) throw new AiError('Stopped by you. Everything finished before it is kept.', 499, {nothingUsed: true, kind: 'stopped'}); };
 // The most one AI answer of this plan may use (0.81): what a stopped answer may have used is held at most this.
 function callLimit(scope) {
@@ -691,7 +695,7 @@ class SceneRoom {
       family, ready: !blockers.length, blockers,
       voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, auditionId: voice.auditionId || null, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
       // 0.82: what the drawings will look like (looks, the drawing hand, film looks), shown in Room 04 before anything is drawn.
-      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
+      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, engine: spec ? E.primaryEngine(spec) : null, ...(spec?.atelier ? {atelier: {finish: spec.atelier.finish || 'motion', finishes: spec.atelier.finishes || null, script: spec.atelier.script || null}} : {}), ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
       spec, sources, engine: planner.engine, primarySource: planner.primarySource, scope: planner.scope || null,
     };
   }
@@ -964,8 +968,8 @@ class SceneRoom {
     const limitOf = maxTokens => (provider === 'claude' ? 600 : Math.round(cliTimeoutMs(maxTokens) / 1000));
     const single = job.scope.redesign ? 'Redesigning one shot' : job.scope.picture ? 'Making a paid picture for one shot' : job.scope.redraw ? (job.scope.redraw.purpose === 'long' ? 'Drawing the new shots (long-shot fix)' : job.scope.redraw.ask ? `Drawing ${job.scope.redraw.labels.slice(0, 4).join(', ')}${job.scope.redraw.labels.length > 4 ? ' and more' : ''} again as you asked` : 'Drawing the undesigned shots') : null;
     const steps = single ? 1 : (job.scope.map ? 1 : 0) + parts.length + (job.scope.review ? 1 : 0) + (job.scope.compose ? 1 : 0) + 1;
-    let stepNo = 0;
-    const next = (label, expected = null, maxTokens = null) => live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null});
+    let stepNo = 0, stepLabel = single || 'Planning the scenes';
+    const next = (label, expected = null, maxTokens = null) => { stepLabel = label; return live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null}); };
     live.start(job.id, {room: 'scene', label: single || 'Planning the scenes', steps, contentId: job.content_id, familyId: job.family_id, who: provider === 'chatgpt' ? 'ChatGPT' : 'Claude', stoppable: true});
     try {
       if (job.scope.redesign) return await this.redesign(job, () => { started = true; });
@@ -980,7 +984,10 @@ class SceneRoom {
         job.track(usageOf(reply));
         this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
         const {sentences: all, style} = job.scope.map.input, warnings = [];
-        map = D.validateMap(looseJson(reply.content), {first: all[0].n, last: all.at(-1).n, engines: style.engines, primary: style.engine, designedShots: style.designedShots ?? Infinity, warn: message => warnings.push(message)}) || {unusable: true};
+        // 0.98 (owner report 2026-11-10: a ChatGPT storyboard ended "interrupted, Claude scene planning failed" at the
+        // map): the map is a guide, so an answer this program cannot read leaves the plan without it, never failed.
+        try { map = D.validateMap(looseJson(reply.content), {first: all[0].n, last: all.at(-1).n, engines: style.engines, primary: style.engine, designedShots: style.designedShots ?? Infinity, warn: message => warnings.push(message)}) || {unusable: true}; }
+        catch (error) { console.error('Story map:', error); map = {unusable: true}; warnings.push(`The story map ${provider === 'chatgpt' ? 'ChatGPT' : 'Claude'} wrote could not be read (${String(error?.message || error).slice(0, 160)}), so the plan goes on without it.`); }
         if (warnings.length) map.warnings = warnings.slice(0, 20);
         this.db.prepare('UPDATE scene_plan_jobs SET map=?, updated_at=? WHERE id=?').run(JSON.stringify(map), now(), job.id);
       }
@@ -1032,7 +1039,7 @@ class SceneRoom {
         this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({plan: merged, review}), now(), job.id);
       }
       let compose = null, pictures = null;
-      if (job.scope.compose) { next('Designing the motion-graphics shots'); stopCheck(signal); ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; })); }
+      if (job.scope.compose) { next('Writing each designed shot as HTML (the Motion Graphics engine)'); stopCheck(signal); ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; })); }
       next('Drawing and painting the pictures');
       stopCheck(signal);
       ({plan: merged, pictures} = await this.illustrate(job, merged, () => { started = true; }));
@@ -1046,11 +1053,18 @@ class SceneRoom {
         this.pauseRun(job, spent, {kind: stopped ? 'owner' : error.kind, message: stopped ? 'Stopped by you.' : error.message, inFlight: !error?.nothingUsed});
         return null;
       }
-      // An unexpected failure is logged with its cause, so it can be found (the page only says it failed).
-      if (!(error instanceof AiError || error instanceof InputError)) console.error('Scene planning failed:', error);
+      // 0.98: a fault in the program itself (not the AI, not the internet) pauses the job with its real cause, the AI
+      // that was working and the step it was on, so Resume goes on from that step; the answers that arrived are counted
+      // as they are. Before 0.98 the page said "Claude scene planning failed" whichever AI it was, and the cost unknown.
+      const who = provider === 'chatgpt' ? 'ChatGPT' : 'Claude';
+      if (!(error instanceof AiError || error instanceof InputError)) {
+        console.error('Scene planning failed:', error);
+        this.pauseRun(job, spent, {kind: 'error', message: `${who} was working on "${stepLabel}" when the program hit a problem of its own: ${String(error?.message || error).replace(/\s+/g, ' ').slice(0, 300)}. This is not your internet or your AI plan. Everything finished before it is kept; Resume goes on from this step.`, inFlight: false});
+        return null;
+      }
       this.store.transaction(() => {
         const at = now();
-        this.db.prepare("UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(started ? 'interrupted' : 'failed', error instanceof AiError || error instanceof InputError ? error.message : 'Claude scene planning failed.', at, job.id);
+        this.db.prepare("UPDATE scene_plan_jobs SET status=?, error=?, updated_at=? WHERE id=? AND status='running'").run(started ? 'interrupted' : 'failed', `${who}, at "${stepLabel}": ${error.message}`, at, job.id);
         this.db.prepare('UPDATE intelligence_usage SET status=?, reserved_tokens=CASE WHEN ? THEN reserved_tokens ELSE 0 END, updated_at=? WHERE job_id=?').run(started ? 'unknown' : 'released', started ? 1 : 0, at, job.id);
       });
       return null;
@@ -1209,7 +1223,8 @@ class SceneRoom {
     try {
       for (const [k, {shot, si, hi}] of targets.entries()) {
         stopCheck(job.signal);
-        live.note(job.id, `Designing ${shot.label} (${k + 1} of ${targets.length})`);
+        // 0.98 (owner question: "is it building with HTML render?"): the note names how this shot is made.
+        live.note(job.id, `Writing ${shot.label} as ${FINISH_WORDS[At.frameFinish(direction, shot.frame)] || 'an HTML motion-graphics animation'} (${k + 1} of ${targets.length})`);
         const frameId = shot.label.toLowerCase(), duration = shot.durationSeconds, index = framed.findIndex(item => item.shot === shot);
         const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + duration - 0.01).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
         const neighbours = {before: framed[index - 1]?.shot.label, after: framed[index + 1]?.shot.label};

@@ -495,7 +495,7 @@ class Ai {
   }
   // messages: [{role, content}]; returns {content, usage, model, provider}.
   // onProgress (0.77): called with each streamed piece of the answer, for the job's live view.
-  async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null, signal = null}) {
+  async complete({connectorId, task, messages, maxTokens, onStart, onProgress = null, signal = null, jobId = null}) {
     // 0.95: the owner's skills leave the data message and direct the model as numbered directives (direct.js).
     // 0.96: a request without them gets the ones that fit its job at this gate (skills: the program's skill engine).
     const led = this.directed(task, messages);
@@ -507,7 +507,7 @@ class Ai {
     // Claude and ChatGPT keep separate lanes, so they work side by side.
     const result = await this.counted(connectorId, onStart, started => this.lane(`${slot.provider === 'chatgpt' ? 'gpt' : 'claude'}:${role}`, () => client.complete({model, system, prompt, maxTokens, effort, signal, onStart: started, onProgress: onProgress && (update => { try { onProgress(update); } catch { /* the view never stops the job */ } })})));
     const applied = led.brief ? Direct.cited(result.content, led.brief) : [];
-    if (led.gate) try { this.skills.record({...led.gate, provider: slot.provider, applied}); } catch { /* bookkeeping only */ }
+    if (led.gate) try { this.skills.record({...led.gate, provider: slot.provider, applied, jobId}); } catch { /* bookkeeping only */ }
     return {...result, provider: slot.provider, role, ...(led.brief ? {directives: {given: Direct.directives(led.brief).map(item => item.id), applied, ...(led.gate ? {byGate: true} : {})}} : {})};
   }
   // The request as the model receives it: the room's own skills as directives, or, when a room sent none, the approved

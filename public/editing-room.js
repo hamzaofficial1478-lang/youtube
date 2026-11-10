@@ -31,7 +31,7 @@ function editCard(content, engineReady) {
   // today's storyboard, narration and style, a fresh draft would give the same edit (your changes are carried into it), so
   // the button only appears when one of them changed.
   const actions = `<div class="card-actions edit-actions">${!stale && edit.revision > 1 ? action('Undo last change', 'tl-undo', edit.id, 'secondary') : ''}${stale ? action('Draft a new edit', 'tl-generate', content.contentId, 'primary') : '<span class="muted">Up to date with the storyboard, narration and style. A new draft is offered when one of them changes.</span>'}</div>`;
-  return `<section class="production-card edit-card">${head}${stale ? `<p class="inline-warning">${esc(room.staleReason || 'The inputs changed.')}</p>` : ''}${tlEditor(content, edit, stale)}${editHow(edit)}${facts}${actions}
+  return `<section class="production-card edit-card">${head}${stale ? `<p class="inline-warning">${esc(room.staleReason || 'The inputs changed.')}</p>` : ''}${tlEditor(content, edit, stale)}${editHow(edit)}${skillsUsedFold(content.contentId, ['editing.plan'], 'Skills used for this edit')}${facts}${actions}
     ${editFindings(edit, stale)}${editGraphics(tl, stale)}${editCaptions(edit, stale)}${editClips(tl, stale)}${editCraft(room)}${editHistory(room)}</section>`;
 }
 // Where the music came from (0.95): Freesound searches each video's own cues; every track found is kept in the sound
