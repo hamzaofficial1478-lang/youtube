@@ -395,13 +395,13 @@ class CodexCli {
     const env = cliEnv({CODEX_HOME: this.homeDir}); // the program's own ChatGPT sign-in, never a stray key
     const args = [...this.prefix, 'exec', '--json', '--ephemeral', '--skip-git-repo-check', '--ignore-user-config', '-s', 'read-only', '-C', dir, '-o', last, ...(model ? ['-m', model] : []), ...(effort ? ['-c', `model_reasoning_effort="${effort}"`] : []), ...files.flatMap(file => ['-i', file]), '-'];
     return new Promise((resolve, reject) => {
-      let child, stopped = false;
+      let child, stopped = false, timedOut = false;
       const onAbort = () => { stopped = true; child?.kill(); };
       signal?.addEventListener('abort', onAbort, {once: true});
       const done = (error, value) => { clearTimeout(timer); signal?.removeEventListener('abort', onAbort); fs.rmSync(dir, {recursive: true, force: true}); if (error) reject(error); else resolve(value); };
       try { onStart(); child = spawn(this.command, args, {cwd: dir, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe']}); }
       catch { return done(new AiError('The Codex app could not be started.', 503, {nothingUsed: true})); }
-      const timer = setTimeout(() => { child.kill(); }, timeoutMs);
+      const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
       let out = '', bytes = 0, err = '', line = '';
       // Each event is a sign of life for the job's live view (0.77); Codex sends its answer whole, at the end.
       const seen = chunk => { line += chunk; const lines = line.split('\n'); line = lines.pop(); for (const item of lines) { try { const event = JSON.parse(item); onProgress({thinking: event.item?.type === 'reasoning', text: event.type === 'item.completed' && event.item?.type === 'agent_message' ? String(event.item.text || '') : ''}); } catch { /* not an event line */ } } };
@@ -414,9 +414,19 @@ class CodexCli {
         if (stopped) return done(stoppedError(true));
         const events = out.split('\n').map(line => { try { return JSON.parse(line); } catch { return null; } }).filter(Boolean);
         if (guard && events.some(event => CODEX_TOOL_ITEMS.includes(event.item?.type))) return done(new AiError('ChatGPT tried to run a command, read a file or browse, so its answer was thrown away and nothing was saved. Its usage may still count.', 502));
-        const failed = events.find(event => event.type === 'turn.failed' || event.type === 'error');
+        // 0.100 (owner report 2026-11-10: a storyboard stuck three times on "Picture 2 of 2, waiting for the first words"):
+        // Codex reports its own reconnect attempts ("Reconnecting... 1/5 (stream disconnected ...)") as error events while
+        // it carries on. They are not the outcome: a failed turn is, or the last notice when Codex gave up by itself.
+        const notices = events.filter(event => event.type === 'error'), lastNotice = notices.at(-1), completed = events.some(event => event.type === 'turn.completed');
+        // Our own time limit stopped it: named as such, never as a lost internet connection (which paused the storyboard
+        // and sent it straight back to the same picture).
+        if (timedOut && !completed) {
+          const last = saidText(String(lastNotice?.message || '')) ? ` Its last notice: "${saidText(String(lastNotice.message))}"` : '';
+          return done(new AiError(`ChatGPT did not finish within ${Math.round(timeoutMs / 60000)} minutes, so the program stopped it. Its usage may still count.${last}`, 504, {kind: 'timeout'}));
+        }
+        const failed = events.find(event => event.type === 'turn.failed') || (completed ? null : notices.find(event => !/^\s*reconnecting/i.test(String(event.message || ''))) || lastNotice);
         const said = String(failed?.error?.message || failed?.message || '');
-        if (failed || !events.some(event => event.type === 'turn.completed')) {
+        if (failed || !completed) {
           // Nothing on the event stream: Codex stopped before the request (an old version, no sign-in); stderr says why.
           if (!events.length && code !== null) { const problem = cliProblem(err, 'Codex'); if (problem) return done(problem); }
           const quoted = saidText(said) ? ` Codex said: "${saidText(said)}"` : '';

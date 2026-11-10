@@ -241,3 +241,17 @@ test('the ChatGPT subscription signs in through Codex and is tested by itself; a
   assert.throws(() => slots.signIn(images.id, images.revision), /Only the Claude and ChatGPT subscriptions/);
   assert.match(require('../connectors').PROVIDERS.openai.name, /OpenAI API key/);
 });
+
+// 0.100 (owner report 2026-11-10: a storyboard stuck on "Picture 2 of 2, waiting for the first words", three times):
+// Codex's reconnect notices are not the outcome, and the program's own time limit is a timeout, never a lost connection
+// (which paused the storyboard and sent it straight back to the same picture).
+test('Codex reconnect notices are not failures, and the program\'s time limit is named as a timeout', async t => {
+  const fake = fakeCodex(t), codex = new CodexCli({command: fake.command, prefix: fake.prefix, home: fake.home});
+  fake.reply({title: 'ok'}, {notices: ['Reconnecting... 1/5 (stream disconnected before completion: idle timeout)']});
+  assert.equal((await codex.complete({model: null, system: '', prompt: 'x', maxTokens: 400, effort: 'low'})).content, '{"title":"ok"}', 'it reconnected and answered');
+  fake.reply('', {notices: ['Reconnecting... 2/5 (stream disconnected before completion: idle timeout)'], hang: true});
+  await assert.rejects(codex.run({text: 'Paint it.', timeoutMs: 1500}), error => error.kind === 'timeout' && /did not finish within 0 minutes, so the program stopped it/.test(error.message) && /Reconnecting\.\.\. 2\/5/.test(error.message));
+  // Codex gave up by itself after its reconnects: that really was the connection.
+  fake.reply('', {notices: ['Reconnecting... 5/5 (stream disconnected before completion: connection reset)'], fail: 'stream disconnected before completion: connection reset'});
+  await assert.rejects(codex.complete({model: null, system: '', prompt: 'x', maxTokens: 400, effort: 'low'}), error => error.kind === 'network');
+});

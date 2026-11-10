@@ -6,10 +6,11 @@
 // Only a failure whose own message says the connection was lost is retried (the program's words for it: "could not be
 // reached", "connection dropped", "not connected to the internet"). The retry is always the room's own deliberate
 // retry, so its limits (3 attempts, the family's budgets, a script that changed meanwhile) still hold, and it is named
-// in the program's log as done by the program. At most MAX tries per job, and only for a day after it stopped.
+// in the program's log as done by the program. At most MAX tries per job, and only for an hour after it stopped.
 // Storyboards wait for the internet in their own way (scene-room `resumeWhenOnline`).
 const NETWORK = /could not be reached|connection dropped|not connected to the internet/i;
-const MAX = 6, WINDOW_MS = 24 * 3600 * 1000;
+// 0.100 (owner 2026-11-10: "wait for 1 hour, not 1 day"; repeated retries must not keep spending): an hour, three tries.
+const MAX = 3, WINDOW_MS = 3600 * 1000;
 
 class NetRetry {
   // online(): true when this PC can reach the AI services again (the server passes the real check; tests their own).

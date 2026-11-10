@@ -530,8 +530,10 @@ const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
 // program then plays frame by frame in this PC's own browser).
 const FINISH_WORDS = Object.freeze({motion: 'an HTML motion-graphics animation', anime: 'an HTML render (cel anime: painted cels, drawings swapped on twos)', collage: 'an HTML paper-collage animation', pixel: 'an HTML pixel-art animation'});
 // How long a storyboard paused by a lost connection waits for it, and how often it goes on by itself (0.84; 0.98, owner
-// 2026-11-10: "keep checking the network and retry by itself, do not ask me every time": a day and twelve times).
-const NET_WAIT_MINUTES = 24 * 60, NET_AUTO = 12;
+// 2026-11-10: "keep checking the network and retry by itself": a day and twelve times; 0.100, the same day: "wait for 1
+// hour, not 1 day", and retries must not keep spending: an hour and three times). It goes on as soon as the AI can be
+// reached; the hour is how long it keeps watching.
+const NET_WAIT_MINUTES = 60, NET_AUTO = 3;
 const stopCheck = signal => { if (signal?.aborted) throw new AiError('Stopped by you. Everything finished before it is kept.', 499, {nothingUsed: true, kind: 'stopped'}); };
 // The most one AI answer of this plan may use (0.81): what a stopped answer may have used is held at most this.
 function callLimit(scope) {
@@ -1356,12 +1358,22 @@ class SceneRoom {
     const keptImage = key => { const row = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, key); return row ? JSON.parse(row.art).image : null; };
     const skills = this.jobSkills(job, 'visuals.prompt', inputs, content);
     const styleKeys = {cartoon: keptImage('paint:style-key'), natural: keptImage('paint:style-key:natural')};
+    // 0.100 (owner report 2026-11-10: "stuck on Picture 2 of 2, waiting for the first words, and failed three times"):
+    // one picture's trouble never stops the storyboard. It pauses only for the owner's Stop, a PC that is really offline,
+    // or (for the plan's own AI) a used-up plan; otherwise the picture gets one more try and is then drawn instead.
+    let planProvider = null; try { planProvider = JSON.parse(this.connectors.row(job.scope.connector.id).payload).provider; } catch { /* removed */ }
+    const offline = async provider => (this.ai.reach ? (await this.ai.reach(provider).catch(() => null)) === false : false);
+    const halts = async (error, provider, own) => job.signal?.aborted || error?.kind === 'stopped' || (own && error?.kind === 'limit') || (error?.kind === 'network' && await offline(provider));
+    const again = error => ['network', 'timeout'].includes(error?.kind);
+    const who = provider => (provider === 'chatgpt' ? 'ChatGPT' : 'Claude');
+    let noteHead = 'Pictures';
     const artDirector = async (sha, rules, item, label, attempt) => {
       const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
+      live.note(job.id, `${noteHead}: ${who(planProvider)} checks the painting of ${label}`, 'The art director answers in one go, so no words show while it looks (usually a minute or two).');
       if (!reserve(key, CHECK_TOKENS)) return {fits: true, problems: [], unchecked: 'the family\'s monthly token limit could not reserve the check'};
       const messages = Dna.checkMessages({rules, skills, describe: item.describe, backdrop: item.backdrop === true, image: {mediaType: file.endsWith('.png') ? 'image/png' : file.endsWith('.jpg') ? 'image/jpeg' : 'image/webp', data: fs.readFileSync(file).toString('base64')}});
       try { const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens: 4000, signal: job.signal, onStart}); settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown'); report.tokens += reply.usage?.totalTokens || 0; return Dna.readCheck(reply.content); }
-      catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; return {fits: true, problems: [], unchecked: error instanceof AiError || error instanceof InputError ? error.message : 'no answer'}; }
+      catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (await halts(error, planProvider, true)) throw error; return {fits: true, problems: [], unchecked: error instanceof AiError || error instanceof InputError ? error.message : 'no answer'}; }
     };
     const drop = ({si, hi, item}, why) => {
       const label = shotLabel(si, hi), sketch = plan.scenes[si].shots[hi].sketch;
@@ -1375,7 +1387,8 @@ class SceneRoom {
     // Dropped elements change indexes: work from the last element back.
     for (const [k, target] of [...targets].sort((a, b) => b.si - a.si || b.hi - a.hi || b.ei - a.ei).entries()) {
       stopCheck(job.signal);
-      live.note(job.id, `Picture ${k + 1} of ${targets.length}`);
+      noteHead = `Picture ${k + 1} of ${targets.length}`;
+      live.note(job.id, noteHead);
       const {si, hi, item, shot} = target, label = shotLabel(si, hi);
       const natural = isNatural(target);
       if (!keep.has(target)) { if (natural) orphans.push({target, why: `past the video's budget of ${scope.natural ?? 0} natural paintings`}); else drop(target, `past the video's budget of ${scope.budget} pictures`); continue; }
@@ -1404,6 +1417,7 @@ class SceneRoom {
           if (!reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
           const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
           fs.mkdirSync(path.dirname(incoming), {recursive: true});
+          live.note(job.id, `${noteHead}: ChatGPT paints ${label}${attempt > 1 ? ' again' : ''}`, 'A painting sends no words while it is made, so nothing shows until it is ready (usually 1-3 minutes; the program stops it after 8).');
           let settled = false;
           try {
             const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills}), outFile: incoming, references, onStart});
@@ -1425,7 +1439,14 @@ class SceneRoom {
               why = `the art director rejected it twice: ${problems.join('; ')}`;
               notes.push(`${label}: painting ${attempt} did not match the ${rules.name} look (${problems.join('; ')})${attempt < 2 ? '; it was painted again' : ''}.`);
             }
-          } catch (error) { if (!settled) settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); fs.rmSync(incoming, {force: true}); if (pausing(error)) throw error; why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer'; fs.rmSync(incoming, {force: true}); break; }
+          } catch (error) {
+            if (!settled) settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); fs.rmSync(incoming, {force: true});
+            if (await halts(error, 'chatgpt', false)) throw error; // an image allowance used up: drawn instead, the storyboard goes on
+            why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer';
+            // A painting that ran out of time or lost its connection gets one more try; anything else is drawn instead.
+            if (again(error) && attempt < 2) { notes.push(`${label}: painting ${attempt} stopped (${why}); it was painted again.`); continue; }
+            break;
+          }
         }
         if (image) { plan.scenes[si].shots[hi].sketch.elements[target.ei].image = image; report.drawn++; report.painted = (report.painted || 0) + 1; continue; }
         if (natural) { failed.add(pictureKey); orphans.push({target, why: `ChatGPT could not paint its natural scene (${why})`}); continue; }
@@ -1438,10 +1459,17 @@ class SceneRoom {
         const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
         const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', engine, board, look, design, palette, world: plan.world || null, grade: plan.grade || null, cast, aspect, findings, skills});
+        live.note(job.id, `${noteHead}: ${who(planProvider)} draws ${label}${attempt > 1 ? ' again' : ''}`);
         const maxTokens = Math.min(32000, scope.tokenLimit - messageTokenUpperBound(messages));
         let reply;
         try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
-        catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; findings = [error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer']; break; }
+        catch (error) {
+          settle(key, null, error?.nothingUsed ? 'released' : 'unknown');
+          if (await halts(error, planProvider, true)) throw error;
+          findings = [error instanceof AiError || error instanceof InputError ? error.message : `${who(planProvider)} did not answer`];
+          if (again(error) && attempt < 2) continue;
+          break;
+        }
         settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
         report.tokens += reply.usage?.totalTokens || 0;
         if (skills) this.store.skillRuntime?.recordApplied?.(job.id, 'visuals.prompt', Direct.cited(reply.content, skills));
