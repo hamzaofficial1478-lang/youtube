@@ -116,7 +116,7 @@ function messages({describe, words = '', engine = 'handdrawn', board = 'cartoon'
 // Painted pictures follow the visual rules of the shot's engine and look (visual-dna.js; owner review 2026-10-22: a
 // realistic camp behind a stick figure never resonates). reference: the video's first approved painting is attached
 // so every picture of one video shares one style. findings: what the art director found in the last attempt.
-function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic', board = 'cartoon', design = null, type = null, palette = null, world = null, backdrop = false, aspect = 1.5, vertical = false, film = null, filmName = null, reference = false, people = [], portraits = false, findings = [], skills = null}) {
+function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic', board = 'cartoon', design = null, type = null, palette = null, world = null, backdrop = false, aspect = 1.5, vertical = false, film = null, filmName = null, reference = false, people = [], portraits = false, findings = [], skills = null, lessons = []}) {
   const rules = Dna.of({engine, look, board, design, type}), photo = ['photo', 'cutout'].includes(rules.pictures), natural = rules.pictures === 'natural';
   const place = world ? ` The story happens in ${world.place || 'its place'}${world.era ? ` (${world.era} era)` : ''}: everything belongs to that time and place.` : '';
   const colours = palette && !photo && !natural ? ` Colours that sit well with this palette: background ${palette.background}, ink ${palette.ink}, accent ${palette.accent}.` : '';
@@ -126,6 +126,12 @@ function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic
   const cast = people.length ? ` People in it: ${people.map(item => `${item.name}${item.role ? ` (${item.role})` : ''}${item.look ? `: ${Object.entries(item.look).filter(([, value]) => value && value !== 'none').map(([key, value]) => `${key} ${value}`).join(', ')}` : ''}`).join('; ')}.${portraits ? ' The attached pictures of people (after the style reference, when there is one) show them as painted before: keep their faces, hair, build and clothes.' : ''}` : '';
   const match = reference ? ' The attached image is this video\'s style reference: match its medium, line weight, colours and level of detail exactly, but not its content.' : '';
   const fix = findings.length ? ` The last attempt was rejected by the art director: ${findings.join(' ')} Fix that.` : '';
+  // 0.102 (owner 2026-11-10: "it paints S17A again ... decide right the first time instead of drawing twice"): the painter
+  // is told exactly what the art director will judge (the same failures and the owner's craft checks), and what earlier
+  // paintings of this video were sent back for, so the first painting is aimed at passing.
+  const checks = Dna.craftText(skills, 'checks', 700);
+  const judged = ` Before it is used, an art director checks it and sends it back when: its medium is not the one above (no photo-real or 3D picture where an illustration is asked, no cartoon where a photo or realistic painting is asked), it has any readable text, letters, numbers, logos or a watermark, it shows something listed under Never, or it does not clearly show what was asked${checks ? `, or it fails these checks: ${checks}` : ''}. Get all of that right the first time.`;
+  const learned = lessons.length ? ` Earlier paintings of this video were sent back for: ${lessons.slice(-6).join('; ')}. Do not repeat any of that.` : '';
   // The owner's approved picture skills (0.89), as short craft lines inside the look's rules.
   const craftDo = Dna.craftText(skills, 'do', 700), craftAvoid = Dna.craftText(skills, 'avoid', 400), craft = craftDo || craftAvoid ? ` Craft: ${craftDo}${craftAvoid ? ` Avoid: ${craftAvoid}` : ''}` : '';
   const head = natural && backdrop
@@ -133,7 +139,7 @@ function paintPrompt({describe, words = '', engine = 'stickman', look = 'classic
     : backdrop
     ? `A ${vertical ? 'tall 9:16 portrait' : 'wide 16:9 landscape'} background ${kind} for an animated YouTube video: ${describe}.${said}${place} The place only: no people, no characters and no animals in front; no text, letters, numbers, signs or logos; no watermark. Keep the lower middle third simple and open, where the drawn characters will stand.`
     : `${rules.pictures === 'cutout' ? 'A photographic cut-out' : `${/^[aeiou]/.test(kind) ? 'An' : 'A'} ${kind}`} for an animated YouTube video: ${describe}.${said}${place} One clear subject, centred, on a simple plain background; no text, letters, numbers or logos, no watermark, no real person's likeness. Aspect about ${Math.round(aspect * 10) / 10}:1.`;
-  return `${head}${natural && !backdrop ? cast : ''} ${Dna.paintRules(rules, {backdrop, film, filmName})}${colours}${craft}${match}${fix} ${photo ? 'An original image, not a copy of any existing photo.' : natural ? 'Original artwork, painted, not a photograph.' : 'Original artwork.'}`;
+  return `${head}${natural && !backdrop ? cast : ''} ${Dna.paintRules(rules, {backdrop, film, filmName})}${colours}${craft}${match}${judged}${learned}${fix} ${photo ? 'An original image, not a copy of any existing photo.' : natural ? 'Original artwork, painted, not a photograph.' : 'Original artwork.'}`;
 }
 
 module.exports = {VERSION, LIMITS, LOOK_NOTES, STICK_NOTES, ENGINE_NOTES, DESIGN_NOTES, outlined, validateArt, messages, paintPrompt};

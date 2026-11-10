@@ -1734,3 +1734,33 @@ test('vector pictures are drawn by the chosen picture maker, whichever AI built 
   assert.ok(pictures.length > 0 && pictures.every(([, id]) => id === 'claude-picture-maker'), JSON.stringify(pictures.slice(0, 3)));
   assert.ok(asked.filter(([task]) => task === 'scenes').every(([, id]) => id === ids.claude.id), 'the storyboard itself stays with the AI that builds it');
 });
+
+// 0.102 (owner 2026-11-10: "it says ChatGPT paints S17A again; does it draw the same scene twice? that costs double;
+// decide right the first time"): the painter is told exactly what the art director judges, a painting sent back is
+// painted once more with the reason, and every later painting of the storyboard is told what was sent back.
+test('paintings are aimed at the art director\'s checks, and a rejection teaches every later painting', async t => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  let checks = 0;
+  const network = fakeNetwork({claudePlan: input => {
+    if (Array.isArray(input.raw)) { checks++; return checks === 1 ? {fits: false, problems: ['The faces are photo-real; this look draws flat cartoon faces']} : {fits: true, problems: []}; }
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A detailed picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `A village elder holding a clay tablet, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return {summary: 'Pictures where they serve.', scenes};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
+  narrate(40);
+  room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}});
+  const prompts = [];
+  room.ai.image = async ({prompt, outFile, onStart}) => { onStart(); prompts.push(prompt); fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(0, 60) + prompts.length)])); return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}}; };
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  assert.ok(prompts.every(prompt => /Before it is used, an art director checks it and sends it back when: its medium is not the one above/.test(prompt)), 'every painting knows what it is judged on');
+  assert.match(prompts[1], /The last attempt was rejected by the art director: The faces are photo-real/, 'the second try of that picture carries the reason');
+  assert.ok(prompts.length >= 3 && prompts.slice(2).every(prompt => /Earlier paintings of this video were sent back for: The faces are photo-real/.test(prompt)), 'every later painting is told what was sent back');
+  assert.equal(prompts.filter(prompt => /The last attempt was rejected/.test(prompt)).length, 1, 'only the rejected picture was painted twice');
+  const notes = latestManifest(room, content.id).plan.pictures.notes;
+  assert.match(notes[0], /^1 painting was made a second time/);
+});
