@@ -1676,8 +1676,11 @@ test('a painting that times out or drops is painted once more, then drawn; the s
   let chatgptOnline = true;
   room.ai.reach = async provider => (provider === 'chatgpt' ? chatgptOnline : true);
   const painted = [];
+  const seen = [];
   room.ai.image = async ({prompt, outFile, onStart}) => {
     onStart(); painted.push(prompt);
+    // 0.101: while pictures are made, the page sees every step by name, the picture count and the scenes planned so far.
+    seen.push(require('../live').list().find(item => item.room === 'scene'));
     const scene = Number(prompt.match(/scene (\d+)/)[1]), tries = painted.filter(item => new RegExp(`scene ${scene}\\b`).test(item)).length;
     if (scene === 1 && tries === 1) throw new AiError('ChatGPT did not finish within 8 minutes, so the program stopped it. Its usage may still count.', 504, {kind: 'timeout'});
     if (scene === 9) throw new AiError('The internet connection dropped while ChatGPT was answering, so that answer was lost. Its use may still count.', 503, {kind: 'network'});
@@ -1695,10 +1698,39 @@ test('a painting that times out or drops is painted once more, then drawn; the s
   assert.ok(!scenes[1].shots[0].sketch.elements.some(el => el.kind === 'picture' && el.image), 'the one that kept dropping is drawn instead');
   assert.match(notes, /painting 1 stopped \(ChatGPT did not finish within 8 minutes/);
   assert.match(notes, /ChatGPT could not paint it \(The internet connection dropped/);
+  const first = seen[0], later = seen.at(-1);
+  assert.ok(first.plan.at(-1) === 'Drawing and painting the pictures' && first.step === first.plan.length, JSON.stringify(first.plan));
+  assert.ok(first.times.length === first.plan.length - 1, 'every earlier step is marked finished');
+  assert.ok(first.board.length >= 2 && first.board.every(scene => scene.shots === 1 && scene.from), 'the scenes planned so far are there');
+  assert.deepEqual([first.sub.unit, first.sub.done, later.sub.finished.length > 0], ['pictures', 0, true]);
   // Really offline: the storyboard pauses at that picture, everything before it kept, and waits for the internet.
   chatgptOnline = false;
   const second = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
   await room.processNextPlan();
   const paused = room.publicPlanJob(room.planJobRow(second.job.id));
   assert.deepEqual([paused.status, paused.pause?.kind], ['paused', 'network']);
+});
+
+// 0.101 (owner screenshot 2026-11-10: "Picture 2 of 10: ChatGPT draws S20A"): the picture maker the owner chose draws the
+// vector pictures, not the storyboard's own AI.
+test('vector pictures are drawn by the chosen picture maker, whichever AI built the storyboard', async t => {
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    if (input.describe || input.picture) return {shapes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A detailed picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `An old clay tablet with tally marks, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return {summary: 'Pictures where they serve.', scenes};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
+  narrate(40);
+  room.ai.team = () => ({painted: false, pictures: {id: 'claude-picture-maker', provider: 'claude'}});
+  const asked = [], complete = room.ai.complete.bind(room.ai);
+  room.ai.complete = args => { asked.push([args.task, args.connectorId]); return complete({...args, connectorId: ids.claude.id}); };
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed');
+  const pictures = asked.filter(([task]) => task === 'illustrate');
+  assert.ok(pictures.length > 0 && pictures.every(([, id]) => id === 'claude-picture-maker'), JSON.stringify(pictures.slice(0, 3)));
+  assert.ok(asked.filter(([task]) => task === 'scenes').every(([, id]) => id === ids.claude.id), 'the storyboard itself stays with the AI that builds it');
 });

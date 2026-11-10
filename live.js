@@ -8,16 +8,30 @@ const PREVIEW = 1500;
 
 // wait: what a quiet stretch means for this job (a local voice reads a whole part before it answers).
 // who: the AI doing the work; stoppable: the page offers Stop (0.81); limit: the step's time limit in seconds.
-function start(id, {room, label, steps = 1, contentId = null, familyId = null, wait = null, who = null, stoppable = false}) {
+// plan (0.101, owner 2026-11-10: "a step by step progress that gets marked when each step is finished"): the names of
+// every step in order, so the page lists them all and ticks each as it finishes.
+function start(id, {room, label, steps = 1, contentId = null, familyId = null, wait = null, who = null, stoppable = false, plan = null}) {
   const at = Date.now();
-  jobs.set(id, {id, room, label, contentId, familyId, wait, who, stoppable, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, limit: null, thinking: false, preview: ''});
+  jobs.set(id, {id, room, label, contentId, familyId, wait, who, stoppable, steps, step: 1, stepLabel: label, startedAt: at, stepAt: at, at, chars: 0, total: 0, expected: null, limit: null, thinking: false, preview: '', plan: Array.isArray(plan) ? plan : null, times: [], sub: null, board: null});
 }
 // A new step starts with an empty preview; expected is the rough answer length in characters, for the bar.
 function step(id, index, stepLabel, {expected = null, steps, limit = null} = {}) {
   const job = jobs.get(id);
   if (!job) return;
-  Object.assign(job, {step: index, stepLabel, stepAt: Date.now(), at: Date.now(), chars: 0, expected, limit, thinking: false, preview: ''}, steps ? {steps} : {});
+  // How long each finished step took (a step kept from an earlier run passes in no time).
+  const at = Date.now();
+  if (index > job.step) { job.times[job.step - 1] = Math.round((at - job.stepAt) / 1000); for (let k = job.step + 1; k < index; k++) job.times[k - 1] = 0; }
+  Object.assign(job, {step: index, stepLabel, stepAt: at, at, chars: 0, expected, limit, thinking: false, preview: '', sub: null}, steps ? {steps} : {});
 }
+// How far the step is (0.101): done of total units (pictures, designed shots, review parts), the one being made now and
+// the ones finished, so each is marked as it is done.
+function progress(id, {done, total, unit = '', current = null, finished = []} = {}) {
+  const job = jobs.get(id);
+  if (job) { job.sub = {done, total, unit, current, finished: finished.slice(-60)}; job.at = Date.now(); }
+}
+// The scenes planned so far (0.101, owner: "it still shows No scene plan yet while it is drawing the scenes"): the
+// storyboard is saved whole at the end, so the page shows these meanwhile.
+function board(id, scenes) { const job = jobs.get(id); if (job) job.board = Array.isArray(scenes) ? scenes : null; }
 // Called as the answer streams in: text is the newest piece of the answer; any call is a sign of life.
 function tick(id, {text = '', thinking = false} = {}) {
   const job = jobs.get(id);
@@ -37,7 +51,8 @@ function list() {
   const at = Date.now();
   return [...jobs.values()].map(job => ({id: job.id, room: job.room, label: job.label, contentId: job.contentId, familyId: job.familyId, step: job.step, steps: job.steps, stepLabel: job.stepLabel,
     seconds: Math.round((at - job.startedAt) / 1000), stepSeconds: Math.round((at - job.stepAt) / 1000), quietSeconds: Math.round((at - job.at) / 1000),
-    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview, wait: job.wait, who: job.who, stoppable: job.stoppable, limit: job.limit}));
+    chars: job.chars, expected: job.expected, thinking: job.thinking, preview: job.preview, wait: job.wait, who: job.who, stoppable: job.stoppable, limit: job.limit,
+    plan: job.plan, times: job.times, sub: job.sub, board: job.board}));
 }
 
-module.exports = {start, step, note, tick, follow, end, list};
+module.exports = {start, step, note, progress, board, tick, follow, end, list};

@@ -195,13 +195,27 @@ const LIVE_ROOM={script:'Content Studio',scene:'Scene & Visual Room',voice:'Voic
 function liveClock(s){return s<60?`${s} s`:`${Math.floor(s/60)} min ${String(s%60).padStart(2,'0')} s`;}
 function liveFor(contentId,room){return (state.live||[]).filter(item=>(!contentId||item.contentId===contentId)&&(!room||item.room===room));}
 function liveBlock(item,{preview=true,actions=''}={}){
-  const part=item.expected?Math.min(.95,item.chars/item.expected):item.chars?.5:0,pct=Math.round((item.step-1+part)/item.steps*100);
+  const part=item.sub?.total?Math.min(1,item.sub.done/item.sub.total):item.expected?Math.min(.95,item.chars/item.expected):item.chars?.5:0,pct=Math.round((item.step-1+part)/item.steps*100);
   const status=item.thinking?'Thinking…':item.chars?(item.room==='script'?`About ${Math.round(item.chars/6).toLocaleString()} words written so far`:`${item.chars.toLocaleString()} characters of the plan received so far`):item.wait?`This step has run ${liveClock(item.stepSeconds)}. ${item.wait}`:'Waiting for the first words';
   // 0.81 (owner question 2026-11-02: "what is meant by this line?"): what a quiet stretch means, the step's real time
   // limit, and what Stop keeps.
   const who=item.who||'The AI',limit=item.limit?` This step may take up to ${liveClock(item.limit)}; after that the program stops it by itself and keeps everything already finished.`:'';
   const quiet=item.quietSeconds>=120&&!item.wait?`<p class="inline-warning">Nothing new has come from ${esc(who)} for ${liveClock(item.quietSeconds)}. That is normal while it thinks before a long answer: the words arrive when it starts writing.${limit}${item.stoppable?' You can press Stop at any time without losing finished work.':''}</p>`:'';
-  return `<div class="live-job"><div class="live-head"><span class="live-dot" aria-hidden="true"></span><strong>${esc(item.stepLabel)}</strong><span class="muted">Step ${item.step} of ${item.steps} · running ${liveClock(item.seconds)} · last sign of life ${item.quietSeconds<3?'just now':`${liveClock(item.quietSeconds)} ago`}</span></div>${intelMeter(pct,100,false)}<small class="muted">${status}</small>${quiet}${preview&&item.preview?`<pre class="live-preview" aria-label="The newest words of the answer">${esc(item.preview)}</pre>`:''}${actions}</div>`;
+  return `<div class="live-job"><div class="live-head"><span class="live-dot" aria-hidden="true"></span><strong>${esc(item.stepLabel)}</strong><span class="muted">Step ${item.step} of ${item.steps} · running ${liveClock(item.seconds)} · last sign of life ${item.quietSeconds<3?'just now':`${liveClock(item.quietSeconds)} ago`}</span></div>${intelMeter(pct,100,false)}<small class="muted">${status}</small>${liveSteps(item)}${quiet}${preview&&item.preview?`<pre class="live-preview" aria-label="The newest words of the answer">${esc(item.preview)}</pre>`:''}${actions}</div>`;
+}
+// Every step of the job by name (0.101, owner 2026-11-10: "a step by step progress that gets marked when each step is
+// finished"): done steps ticked with their time, the running one with how far it is (2 of 10 pictures, each finished
+// one marked), the rest waiting.
+function liveSteps(item){
+  if(!item.plan?.length)return '';
+  const row=(label,k)=>{
+    if(k<item.step-1){const t=item.times?.[k];return `<li class="done"><span aria-hidden="true">✓</span> ${esc(label)}<small class="muted"> · ${t?liveClock(t):'kept from before'}</small></li>`;}
+    if(k>item.step-1)return `<li class="later"><span aria-hidden="true">○</span> ${esc(label)}</li>`;
+    const sub=item.sub,count=sub?.total?` · ${sub.done} of ${sub.total} ${esc(sub.unit)} done`:'';
+    const marks=sub?.total&&(sub.finished?.length||sub.current)?`<div class="live-marks">${(sub.finished||[]).map(name=>`<span class="live-mark done">✓ ${esc(name)}</span>`).join('')}${sub.current&&sub.done<sub.total?`<span class="live-mark now">… ${esc(sub.current)}</span>`:''}</div>`:'';
+    return `<li class="now"><span aria-hidden="true">●</span> <b>${esc(label)}</b><small class="muted">${count} · ${liveClock(item.stepSeconds)} so far</small>${sub?.total?intelMeter(sub.done,sub.total,false):''}${marks}</li>`;
+  };
+  return `<ol class="live-steps">${item.plan.map(row).join('')}</ol>`;
 }
 // The strip on top of every page: everything running anywhere, with a link to its room.
 function liveStrip(){
