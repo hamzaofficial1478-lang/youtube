@@ -208,7 +208,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       // 0.78: the owner's own narration file arrives as the raw body (up to 500 MB, streamed to disk), with its fields in the query.
       const narrationFile=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/narration-file$/);
       if(narrationFile&&req.method==='POST')return json(res,200,await voiceRuntime.attach(narrationFile[1],req,Object.fromEntries(url.searchParams)));
-      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:pathname==='/api/skills/read-files'?56*1024*1024:pathname==='/api/skills/import'?8*1024*1024:262144);let result;
+      const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'?14*1024*1024:pathname==='/api/skills/read-files'?56*1024*1024:pathname==='/api/skills/import'?8*1024*1024:/^\/api\/content\/[a-f0-9-]+\/references$/.test(pathname)?1024*1024:262144);let result;
       // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
       const listAction=pathname.match(/^\/api\/manage\/([a-z-]+)\/(delete|export)$/);
       if(listAction&&req.method==='POST'){if(listAction[2]==='delete')return json(res,200,lists.delete(listAction[1],body));const file=await lists.export(listAction[1],body);res.writeHead(200,{'Content-Type':file.type,'Content-Length':file.data.length,'Content-Disposition':`attachment; filename="${file.name}"`,'Cache-Control':'no-store'});return res.end(file.data);}
@@ -433,7 +433,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(candidateApprove&&req.method==='POST')return json(res,200,store.approveCandidate(candidateApprove[1],body));
         const retry=pathname.match(/^\/api\/script-jobs\/([a-f0-9-]+)\/retry$/);
         if(retry&&req.method==='POST')return json(res,200,reasoning.retry(retry[1],body));
-        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|delete|competitors|review|storyboard|ai-script))?$/);
+        // 0.99: a draft's reference videos (link + transcript), and the polish of the owner's own script.
+        const refRemove=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/references\/([a-f0-9-]+)\/remove$/);
+        if(refRemove&&req.method==='POST')return json(res,200,store.removeScriptReference(refRemove[1],refRemove[2]));
+        const match=pathname.match(/^\/api\/(families|content)\/([a-f0-9-]+)(?:\/(archive|delete|competitors|review|storyboard|ai-script|polish|references))?$/);
         if(!match)throw new InputError('Action not found.',404);
         const [,kind,id,action]=match;
         if(kind==='families' && !action && req.method==='PUT')result=store.saveFamily(body,id);
@@ -443,7 +446,9 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         else if(kind==='content' && !action && req.method==='PUT')result=store.saveContent(body,id);
         else if(kind==='content' && action==='review' && req.method==='POST')result=store.reviewContent(id,body);
         else if(kind==='content' && action==='storyboard' && req.method==='POST')result=store.queueStoryboard(id,body);
-        else if(kind==='content' && action==='ai-script' && req.method==='POST')result=reasoning.queue(id,body);
+        else if(kind==='content' && action==='ai-script' && req.method==='POST')result=reasoning.queue(id,{...body,polish:false});
+        else if(kind==='content' && action==='polish' && req.method==='POST')result=reasoning.queue(id,{...body,polish:true});
+        else if(kind==='content' && action==='references' && req.method==='POST')result=store.addScriptReference(id,body);
         else throw new InputError('Action not found.',404);
       }
       json(res,200,result);

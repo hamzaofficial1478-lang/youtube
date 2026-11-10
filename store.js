@@ -4,7 +4,7 @@ const { randomUUID,createHash } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/youtube-metadata-validator');
-const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount}=require('./writer');
+const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount,cleanTranscript,referencePack}=require('./writer');
 // What a script request is about, for choosing the skills that fit it (0.74).
 const skillFormat=family=>['long-form','shorts'].includes(family.format)?family.format:null;
 const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
@@ -211,6 +211,7 @@ class Store {
       CREATE TABLE IF NOT EXISTS content(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), payload TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES content(id), revision INTEGER NOT NULL, type TEXT NOT NULL, status TEXT NOT NULL, input TEXT, result TEXT, error TEXT, attempts INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, UNIQUE(content_id,revision,type));
       CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, message TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS script_references(id TEXT PRIMARY KEY, content_id TEXT NOT NULL REFERENCES content(id), kind TEXT NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL, transcript TEXT NOT NULL, words INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, removed_at TEXT);
       CREATE TABLE IF NOT EXISTS connectors(id TEXT PRIMARY KEY, name_key TEXT UNIQUE NOT NULL, payload TEXT NOT NULL, secret BLOB);
       CREATE TABLE IF NOT EXISTS script_candidates(id TEXT PRIMARY KEY, job_id TEXT UNIQUE NOT NULL REFERENCES jobs(id), content_id TEXT NOT NULL REFERENCES content(id), family_id TEXT NOT NULL REFERENCES families(id), content_revision INTEGER NOT NULL, family_revision INTEGER NOT NULL, connector_id TEXT NOT NULL, connector_revision INTEGER NOT NULL, language TEXT NOT NULL, locale TEXT NOT NULL, prompt_version INTEGER NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, quality TEXT, usage TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS llm_usage(job_id TEXT PRIMARY KEY REFERENCES jobs(id), family_id TEXT NOT NULL REFERENCES families(id), kind TEXT NOT NULL, period_month TEXT NOT NULL, status TEXT NOT NULL, reserved_tokens INTEGER NOT NULL, prompt_tokens INTEGER, completion_tokens INTEGER, total_tokens INTEGER, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -502,26 +503,61 @@ class Store {
       }
     });
   }
+  // One script job's scope, for a first request and a retry alike (0.99): the planning data, the competitor guidance,
+  // the skills, the reference videos and, for a polish, the owner's own script; the token limit grows with the
+  // references and the script to polish, like it does with the skills, so neither takes room from the answer.
+  scriptJobScope(c,f,input){
+    if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
+    const polish=input.polish===true;
+    if(polish){requireValue(c.state==='draft','Return the script to draft before polishing it.',409);requireValue(String(c.script||'').trim().length>0,'Add your script first: the polish works on your own words.',409);}
+    const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+    // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
+    const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
+    // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
+    const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+    const refs=this.scriptReferenceRows(c.id);if(refs.length)basePromptInput.references=referencePack(refs);
+    if(polish)basePromptInput.ownScript={title:c.title,hook:String(c.hook||'').trim()||(String(c.script).trim().match(/^[\s\S]*?[.!?](?=\s|$)/)||[String(c.script).trim().slice(0,300)])[0],script:String(c.script).trim()};
+    // The skill brief, the references and the script to polish are added on top (0.73, 0.99).
+    const extra=(basePromptInput.skills?skillBrief.injectedBytes:0)+(basePromptInput.references?Buffer.byteLength(JSON.stringify(basePromptInput.references)):0)+(basePromptInput.ownScript?Buffer.byteLength(JSON.stringify(basePromptInput.ownScript)):0);
+    const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+extra,{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
+    requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
+    // 0.96: the second writer reviews with the owner's script-review skills as directives.
+    const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
+    const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],...(polish?{polish:true}:{}),referenceIds:refs.map(ref=>ref.id),promptInput};
+    const refKey=refs.length?`:r${createHash('sha256').update(refs.map(ref=>ref.id).join(',')).digest('hex').slice(0,12)}`:'';
+    return {scope,skillBrief,reviewBrief,guidance,refKey};
+  }
+  // Reference videos of a draft (0.99): links with the transcript the owner pasted or attached.
+  scriptReferenceRows(contentId){return this.db.prepare('SELECT * FROM script_references WHERE content_id=? AND removed_at IS NULL ORDER BY created_at,rowid').all(contentId);}
+  scriptReferenceList(){return this.db.prepare('SELECT id,content_id,kind,url,title,words,created_by,created_at,substr(transcript,1,240) AS opening FROM script_references WHERE removed_at IS NULL ORDER BY created_at,rowid').all().map(row=>({id:row.id,contentId:row.content_id,kind:row.kind,url:row.url,title:row.title,words:row.words,opening:row.opening,createdBy:row.created_by,createdAt:row.created_at}));}
+  addScriptReference(contentId,input){
+    object(input);return this.transaction(()=>{
+      const c=this.content(contentId);requireValue(!this.family(c.familyId).archived,'Restore this family first.',409);
+      requireValue(this.scriptReferenceRows(contentId).length<10,'A draft keeps at most 10 reference videos. Remove one first.',409);
+      const kind=input.kind==='competitor'?'competitor':input.kind==='reference'?'reference':null;requireValue(kind,'Choose whether this is a competitor video or a video you like.');
+      let url;try{url=new URL(String(input.url||'').trim());}catch{url=null;}
+      requireValue(url&&['http:','https:'].includes(url.protocol)&&!url.username&&!url.password&&url.toString().length<=500,'Paste the video link (it starts with https://).');
+      const transcript=cleanTranscript(input.transcript).slice(0,150000),words=wordCount(transcript);
+      requireValue(words>=50,'Paste the video\'s transcript (at least 50 words). On YouTube: open the video, press "...more" under it, then "Show transcript", select it all and copy. The program does not download videos or captions.');
+      const title=String(input.title||'').replace(/[\x00-\x1f\x7f]+/g,' ').trim().slice(0,200)||url.hostname,by=String(input.addedBy||'Owner').trim().slice(0,80)||'Owner',id=randomUUID(),at=now();
+      this.db.prepare('INSERT INTO script_references(id,content_id,kind,url,title,transcript,words,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)').run(id,contentId,kind,url.toString(),title,transcript,words,by,at);
+      this.event(`Added a ${kind==='competitor'?'competitor':'reference'} video to "${c.title}": ${title} (${words} words of transcript)`);
+      return this.scriptReferenceList().find(row=>row.id===id);
+    });
+  }
+  removeScriptReference(contentId,referenceId){
+    const done=this.db.prepare('UPDATE script_references SET removed_at=? WHERE id=? AND content_id=? AND removed_at IS NULL').run(now(),String(referenceId),contentId);
+    requireValue(done.changes===1,'Reference video not found.',404);return {removed:referenceId};
+  }
   queueScriptJob(id,input) {
     object(input);return this.transaction(()=>{
       const c=this.content(id);this.version(c,input.revision);const f=this.family(c.familyId);
       requireValue(!f.archived,'Restore this family before asking Claude to prepare a script.',409);
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Claude connection.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before generating.');
-      if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
-      // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
-      const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
-      // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
-      // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
-      const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
-      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      // 0.96: the second writer reviews with the owner's script-review skills as directives.
-      const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      const {scope,skillBrief,reviewBrief,guidance,refKey}=this.scriptJobScope(c,f,input);
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
-      const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}`;
+      const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}${scope.polish?':polish':''}${refKey}`;
       const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
       const jobId=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,type,JSON.stringify(scope),at,at);
@@ -541,15 +577,8 @@ class Store {
       requireValue(!f.archived,'Restore this family before retrying Claude.',409);
       requireValue(typeof input.connectorId==='string'&&input.connectorId.length>0,'Choose a Claude connection.');
       requireValue(Number.isSafeInteger(input.connectorRevision)&&input.connectorRevision>0,'Reload the Claude connection before retrying.');
-      if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
-      const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
-      const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
-      // The skill brief is added on top (0.73), so a fuller brief never takes room from the script itself.
-      const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+(basePromptInput.skills?skillBrief.injectedBytes:0),{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
-      requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
-      // 0.96: the second writer reviews with the owner's script-review skills as directives.
-      const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
-      const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,skillRevisionIds:skillBrief?.revisionIds||[],promptInput};
+      // A retry asks the same thing again: a polish stays a polish (0.99).
+      const {scope,skillBrief,reviewBrief}=this.scriptJobScope(c,f,{...input,polish:JSON.parse(previous.input||'{}').polish===true});
       const attempts=paidAttempt?previous.attempts+1:previous.attempts,type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2:attempt${attempts}:${randomUUID()}`,id=randomUUID(),at=now();
       this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,attempts,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?,?)").run(id,c.id,c.revision,type,JSON.stringify(scope),attempts,at,at);
       if(skillBrief)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});if(reviewBrief?.prompt)this.skillRuntime.recordUsage({jobId:id,familyId:f.id,room:'script',taskKey:'script.review',brief:reviewBrief});
@@ -747,7 +776,7 @@ class Store {
   productionInvalidations(){return this.db.prepare('SELECT * FROM production_invalidations ORDER BY created_at,rowid').all().map(row=>({id:row.id,familyId:row.family_id,contentId:row.content_id,approvalId:row.approval_id,stage:row.stage,reason:row.reason,createdAt:row.created_at}));}
   voiceHandoffs(familyId=null){return this.contents().filter(content=>(!familyId||content.familyId===familyId)&&content.state==='approved').map(content=>{const approval=this.db.prepare("SELECT id FROM voice_approvals WHERE content_id=? AND content_revision=? AND status='approved' ORDER BY approved_at DESC LIMIT 1").get(content.id,content.revision),record=approval?this.voiceApproval(approval.id):null,audition=record?this.voiceAudition(record.auditionId):null,integrity=audition?this.verifyVoiceArtifact(audition):{ok:false};return {familyId:content.familyId,contentId:content.id,contentRevision:content.revision,locale:this.family(content.familyId).primaryLocale,ready:!!(record&&audition?.scopeCurrent&&integrity.ok),blocker:!record?'Select and approve a validated narration.':!audition?.scopeCurrent?'Approved narration scope is stale.':!integrity.ok?(integrity.reason||'Approved narration artifact failed integrity verification.'):null,approvalId:record?.id||null,auditionId:audition?.id||null,direction:audition?.direction||null,artifact:audition?.artifact||null,analysis:audition?.analysis||null};});}
   voiceUsage(){return this.db.prepare('SELECT * FROM voice_usage ORDER BY created_at DESC,rowid DESC').all().map(row=>({jobId:row.job_id,familyId:row.family_id,period:row.period_month,status:row.status,reservedCharacters:row.reserved_characters,settledCharacters:row.settled_characters,estimatedCostCents:row.estimated_cost_cents,createdAt:row.created_at,updatedAt:row.updated_at}));}
-  state() {return {families:this.families(),contents:this.contents(),jobs:this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,rowid DESC LIMIT 100').all().map(job=>{let scopeCurrent=true;if(job.type.startsWith('ai_script:'))try{const scope=JSON.parse(job.input),content=this.content(job.content_id),family=this.family(content.familyId);scopeCurrent=scope.contentRevision===content.revision&&scope.promptInput?.family?.format===family.format&&scope.promptInput?.family?.locale===family.primaryLocale;}catch{scopeCurrent=false;}return {...job,input:undefined,scopeCurrent};}),scriptCandidates:this.scriptCandidates(),researchEvidence:this.researchEvidenceList(),researchJobs:this.researchJobs(),topicBriefs:this.topicBriefs(),usage:this.usageRows(),voiceProfiles:this.voiceProfiles(),voiceJobs:this.voiceJobs(),voiceAuditions:this.voiceAuditions(),voiceApprovals:this.voiceApprovals(),voiceHandoffs:this.voiceHandoffs(),voiceUsage:this.voiceUsage(),productionInvalidations:this.productionInvalidations(),events:this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 25').all()};}
+  state() {return {families:this.families(),contents:this.contents(),jobs:this.db.prepare('SELECT * FROM jobs ORDER BY created_at DESC,rowid DESC LIMIT 100').all().map(job=>{let scopeCurrent=true;if(job.type.startsWith('ai_script:'))try{const scope=JSON.parse(job.input),content=this.content(job.content_id),family=this.family(content.familyId);scopeCurrent=scope.contentRevision===content.revision&&scope.promptInput?.family?.format===family.format&&scope.promptInput?.family?.locale===family.primaryLocale;}catch{scopeCurrent=false;}return {...job,input:undefined,scopeCurrent};}),scriptCandidates:this.scriptCandidates(),scriptReferences:this.scriptReferenceList(),researchEvidence:this.researchEvidenceList(),researchJobs:this.researchJobs(),topicBriefs:this.topicBriefs(),usage:this.usageRows(),voiceProfiles:this.voiceProfiles(),voiceJobs:this.voiceJobs(),voiceAuditions:this.voiceAuditions(),voiceApprovals:this.voiceApprovals(),voiceHandoffs:this.voiceHandoffs(),voiceUsage:this.voiceUsage(),productionInvalidations:this.productionInvalidations(),events:this.db.prepare('SELECT * FROM events ORDER BY id DESC LIMIT 25').all()};}
   exportContent(id) {
     const c=this.content(id), f=this.family(c.familyId);
     const additional=f.locales.slice(1),localization=additional.length?`${additional.join(', ')} editions are awaiting localization. Source review is a creator attestation, not automatic verification.`:'This family has no additional language editions configured. Source review is a creator attestation, not automatic verification.';
