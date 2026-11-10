@@ -376,3 +376,15 @@ Owner question 2026-11-10: "it says Picture 4 of 10: ChatGPT paints S17A again. 
 - the live line says why a picture is painted again ("again (the art director sent the first back: ...)" or "the first try did not finish"), and the plan's picture notes start with how many paintings needed a second try.
 
 The second try itself stays (quality first): it is the safety net that keeps a wrong-medium picture out of the video.
+
+## Why one storyboard took all day, and what changed (0.103)
+
+Owner report 2026-11-10: a Motion Graphics · HTML render storyboard started at about 8 am was still not finished hours later; it paused with "The program was closed while it was working ... Kept: the story map, 1 of 2 parts, 19 pictures", did not go on by itself, and had stalled before.
+
+**The main bug: the last part was never saved.** Each part of a storyboard was kept as it arrived except the last one, which was kept only when a continuity check followed (the check runs only for engines that draw; Motion Graphics does not). So whenever the storyboard stopped after its last part (a restart, a lost connection, a fault), the next run planned the last part again; its shots then differed from before, so their designed shots were written again and their pictures painted again. Every resume repaid the slowest steps. Now every part, the last one too, is kept the moment it arrives, so a resume goes on exactly where it stopped. (A storyboard paused under an older version still has to plan its last part once more.)
+
+**A restart is no longer a full stop.** A storyboard the program was closed on (Update Control Room restarts the program) now goes on by itself as soon as the program runs again (`resumeWhenOnline`: `closed` pauses, within a week, at most three times), as lost connections already did.
+
+**Designed shots three at a time.** The Motion Graphics engine writes each designed shot as its own AI answer and checks it in the browser; they were written one after another, so a video with 30 designed shots waited for 30 answers in a row. Now three are written at once (`DESIGN_LANES`), each with its own AI lane (`Ai.complete` `lane`) and its own checking browser; a shot that pauses the storyboard lets the others finish theirs. Pictures stay one at a time, so every painting matches the first painting of the video.
+
+**Where the time went.** Every run records each step's time (`scene_plan_jobs.timings`) and the job row shows it ("Where the time went: 2 h 40 min over 2 runs", step by step, "kept from before" for steps a resume skipped), so a slow step can be seen and fixed.
