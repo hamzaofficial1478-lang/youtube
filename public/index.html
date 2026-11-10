@@ -65,6 +65,22 @@
       <div class="dialog-actions"><button type="button" class="button secondary" data-close="family-dialog">Cancel</button><button type="submit" class="button primary">Save family</button></div>
     </form>
   </dialog>
+  <dialog id="reference-dialog" aria-labelledby="reference-heading">
+    <form id="reference-form">
+      <div class="dialog-heading"><div><p class="eyebrow">LEARN FROM IT, NEVER COPY IT</p><h2 id="reference-heading">Add a reference video</h2></div><button class="icon-button" type="button" data-close="reference-dialog" aria-label="Close reference dialog">×</button></div>
+      <input type="hidden" name="contentId">
+      <div class="form-grid">
+        <label class="full">Video link<input name="url" type="url" required maxlength="500" placeholder="https://www.youtube.com/watch?v=…"></label>
+        <label class="full">Title (optional)<input name="title" maxlength="200" placeholder="The video's title, so you know it again"></label>
+        <label class="full">What is it?<select name="kind"><option value="competitor">A competitor's video: our script must beat it</option><option value="reference">A video I like: learn what makes it work</option></select></label>
+        <label class="full">Transcript<textarea name="transcript" required rows="8" maxlength="150000" placeholder="Paste the video's transcript here"></textarea></label>
+        <label class="full">Or read the transcript from a file<input id="reference-file" type="file" accept=".txt,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"><small id="reference-file-status" class="hint">Plain text, PDF or Word (.docx), up to 10 MB.</small></label>
+      </div>
+      <p class="note">How to copy a transcript on YouTube: open the video, press “…more” under it, then “Show transcript”, select it all and copy. Timestamps are removed by the program. The program never downloads a video or its captions (YouTube's terms), so the transcript comes from you. The writers study it for its hook, order, pacing and what it leaves weak, then write something more original; copying its wording blocks the script.</p>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="reference-dialog">Cancel</button><button type="submit" class="button primary">Add the reference</button></div>
+    </form>
+  </dialog>
   <dialog id="evidence-dialog" aria-labelledby="evidence-heading">
     <form id="evidence-form">
       <div class="dialog-heading"><div><p class="eyebrow">DATED, PERMITTED INPUT</p><h2 id="evidence-heading">Add research evidence</h2></div><button class="icon-button" type="button" data-close="evidence-dialog" aria-label="Close evidence dialog">×</button></div>

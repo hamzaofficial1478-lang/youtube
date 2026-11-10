@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.98.0 - storyboards that name the real problem (which AI, which step) and pause instead of failing when the program itself trips, the internet waited for and failed jobs tried again by the program itself once it is back, Room 04 saying how the chosen style makes each scene (Motion Graphics: every designed shot is HTML the AI writes and this PC's browser plays), and the skills each job used shown in every room. On top of 0.97.0. See AGENTS.md and docs/SCENE-ROOM.md.
+Version 0.99.0 - reference videos in Content Studio (a link with the transcript you paste; the writers study it and must beat it, never copy it), "Polish my script" (both AIs polish your own script and report what was missing, weak and changed, with the program's own checks before and after), and a copy guard against the references' wording. On top of 0.98.0. See AGENTS.md and docs/AI-TEAM.md.
 
 This repository, [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube), is the program's home: `main` holds the current verified version. The laptop folder (Desktop\YT\youtube) is a working copy that pulls from `main` (`git pull origin main`). Uploading code to GitHub does not run its server.
 
