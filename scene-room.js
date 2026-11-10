@@ -1376,6 +1376,9 @@ class SceneRoom {
     const who = provider => (provider === 'chatgpt' ? 'ChatGPT' : 'Claude');
     let noteHead = 'Pictures';
     const pictureDone = [];
+    // What the art director sent back in this storyboard, told to every later painting (0.102), and how many paintings
+    // needed a second try and why (shown with the plan's pictures).
+    const lessons = [];
     const artDirector = async (sha, rules, item, label, attempt) => {
       const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
       live.note(job.id, `${noteHead}: ${who(planProvider)} checks the painting of ${label}`, 'The art director answers in one go, so no words show while it looks (usually a minute or two).');
@@ -1428,10 +1431,10 @@ class SceneRoom {
           if (!reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
           const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
           fs.mkdirSync(path.dirname(incoming), {recursive: true});
-          live.note(job.id, `${noteHead}: ChatGPT paints ${label}${attempt > 1 ? ' again' : ''}`, 'A painting sends no words while it is made, so nothing shows until it is ready (usually 1-3 minutes; the program stops it after 8).');
+          live.note(job.id, `${noteHead}: ChatGPT paints ${label}${attempt > 1 ? ` again (${problems.length ? `the art director sent the first back: ${problems.slice(0, 2).join('; ')}` : 'the first try did not finish'})` : ''}`, 'A painting sends no words while it is made, so nothing shows until it is ready (usually 1-3 minutes; the program stops it after 8).');
           let settled = false;
           try {
-            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills}), outFile: incoming, references, onStart});
+            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills, lessons}), outFile: incoming, references, onStart});
             settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
             report.tokens += made.usage?.totalTokens || 0;
             const candidate = this.keepArt(incoming);
@@ -1447,6 +1450,8 @@ class SceneRoom {
               if (verdict.unchecked) notes.push(`${label}: its painting could not be checked by the art director (${verdict.unchecked}); look at it in Room 04.`);
             } else {
               problems = verdict.problems.length ? verdict.problems : ['it does not match the look'];
+              for (const problem of problems) if (!lessons.includes(problem)) lessons.push(problem);
+              report.repainted = (report.repainted || 0) + (attempt < 2 ? 1 : 0);
               why = `the art director rejected it twice: ${problems.join('; ')}`;
               notes.push(`${label}: painting ${attempt} did not match the ${rules.name} look (${problems.join('; ')})${attempt < 2 ? '; it was painted again' : ''}.`);
             }
@@ -1455,7 +1460,7 @@ class SceneRoom {
             if (await halts(error, 'chatgpt', false)) throw error; // an image allowance used up: drawn instead, the storyboard goes on
             why = error instanceof AiError || error instanceof InputError ? error.message : 'ChatGPT did not answer';
             // A painting that ran out of time or lost its connection gets one more try; anything else is drawn instead.
-            if (again(error) && attempt < 2) { notes.push(`${label}: painting ${attempt} stopped (${why}); it was painted again.`); continue; }
+            if (again(error) && attempt < 2) { notes.push(`${label}: painting ${attempt} stopped (${why}); it was painted again.`); problems = []; report.repainted = (report.repainted || 0) + 1; continue; }
             break;
           }
         }
@@ -1506,6 +1511,7 @@ class SceneRoom {
       if (sketch.type !== 'natural') notes.push(`${label}: drawn as a cartoon shot instead of natural.`);
     }
     notes.reverse();
+    if (report.repainted) notes.unshift(`${report.repainted} painting${report.repainted === 1 ? ' was' : 's were'} made a second time (the reasons are below); every later painting of this storyboard was told them, so the same mistake is not paid for twice.`);
     return {plan, pictures: report};
   }
   // The owner's approved skills for one step of a plan job (0.89, owner request 2026-11-04: skills at every step). The
