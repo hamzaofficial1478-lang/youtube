@@ -10,7 +10,8 @@
 // writes a reason or a note. The codes it cites are read back from its answer, so the program knows, and shows, which
 // skills really led the work. Pure: no I/O.
 
-const MAX_RULES = 6;
+// 0.97: eight rules of each kind per directive (an added skill is split into sections of at most eight).
+const MAX_RULES = 8;
 const isBrief = value => !!value && typeof value === 'object' && !Array.isArray(value) && Array.isArray(value.skills) && value.skills.every(item => item && typeof item.id === 'string');
 const listOf = (items, n = MAX_RULES) => (Array.isArray(items) ? items : []).map(item => String(item).replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, n);
 

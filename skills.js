@@ -399,7 +399,8 @@ function loadPacks(root = __dirname) {
 
 // How much of a Claude prompt one skill brief may occupy. messageTokenUpperBound counts bytes as
 // an upper bound on tokens, so this is a byte budget taken out of the family's job token limit.
-const BRIEF_BYTE_BUDGET = 1800;
+// 0.97 (owner 2026-11-10: "quality is everything, no compromise, whatever it costs"): every job gets a full brief.
+const BRIEF_BYTE_BUDGET = 6000;
 // Rooms whose Claude answers are large get a larger share for skills (0.39): the scene planner and the story director
 // read many craft rules; the rest keep the default.
 // 0.73 (owner question 2026-10-30, "will the skills be used?"): with every skill approved a script job received 3 of
@@ -407,7 +408,7 @@ const BRIEF_BYTE_BUDGET = 1800;
 // voice direction and the music score size the job from the prompt). Jobs with a fixed small limit keep the default.
 // 0.89 (owner request 2026-11-04: the new drawing, motion and editing skills used at every step): the planner, the
 // designed-shot worker, the pictures and the editor carry more; the designed shots and pictures are new injection points.
-const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 12000, 'scene.plan': 16000, 'editing.plan': 10000, 'voice.direction': 8000, 'audio.mix': 6000, 'competitors.blueprint': 4000, 'motion.template': 6000, 'visuals.prompt': 4000, 'qc.review': 4000, 'script.review': 4000});
+const TASK_BRIEF_BYTES = Object.freeze({'script.candidate': 16000, 'scene.plan': 24000, 'editing.plan': 16000, 'voice.direction': 12000, 'audio.mix': 10000, 'competitors.blueprint': 8000, 'motion.template': 10000, 'visuals.prompt': 8000, 'qc.review': 8000, 'script.review': 8000});
 const ORIGIN_RANK = Object.freeze({owner: 2, learned: 1, builtin: 0});
 
 // ---------------------------------------------------------------- choosing skills for one request (0.74)
@@ -431,12 +432,19 @@ const skillText = skill => [skill.id.replace(/[.-]/g, ' '), skill.title, skill.w
 const forShorts = skill => /^shorts\./.test(skill.id) || skill.tags.includes('shorts') || /\bshorts?\b/i.test(`${skill.title} ${skill.when}`);
 const forLong = skill => skill.tags.includes('long-form') || /\blong[- ]form\b/i.test(`${skill.title} ${skill.when}`);
 // context: {text, format, style}; returns the items in the order to fill the brief, each with why it was chosen.
+// A skill revision's words, worked out once (revisions never change), since every request now scans the library.
+const STEMS = new Map();
+function skillStems(item) {
+  if (!item.revisionId) return stemsOf(skillText(item.skill));
+  if (!STEMS.has(item.revisionId)) { if (STEMS.size > 5000) STEMS.clear(); STEMS.set(item.revisionId, stemsOf(skillText(item.skill))); }
+  return STEMS.get(item.revisionId);
+}
 function rankSkills(items, taskKey, context = {}) {
   const want = stemsOf(context.text), format = context.format || null, style = context.style ? new Set(String(context.style).toLowerCase().match(/[a-z]+/g) || []) : null;
   // The request's own words, shown in the reasons instead of their stems.
   const said = new Map();
   for (const word of String(context.text || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || []) if (!said.has(stemOf(word))) said.set(stemOf(word), word);
-  const docs = items.map(item => stemsOf(skillText(item.skill))), df = new Map();
+  const docs = items.map(item => skillStems(item)), df = new Map();
   for (const doc of docs) for (const stem of doc) df.set(stem, (df.get(stem) || 0) + 1);
   const scored = items.map((item, k) => {
     const matched = [...docs[k]].filter(stem => want.has(stem)).sort((a, b) => df.get(a) - df.get(b) || a.localeCompare(b));
@@ -453,10 +461,13 @@ function rankSkills(items, taskKey, context = {}) {
   // context.tried (0.94): {skillId: times} given to earlier attempts at this same work (a storyboard drawn again); each
   // earlier use counts 10% less, so a new attempt brings skills it has not tried yet while the job's core rules stay.
   const tried = context.tried && typeof context.tried === 'object' ? context.tried : {};
-  for (const entry of scored) entry.score = ((entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0) + (entry.onEngine ? 0.35 : 0)) * 0.8 ** (Number(tried[entry.item.skill.id]) || 0);
-  // The owner's pins and own skills keep their place in front; the rest are taken best first, with each further skill
-  // from an area already taken counting a little less (8% for each).
-  const fixed = scored.filter(entry => entry.item.pinned || entry.item.origin !== 'builtin'), open = scored.filter(entry => !fixed.includes(entry) && !entry.offFormat), picked = [...fixed], areas = {};
+  // 0.97 (owner 2026-11-10: "selected skills each time, never hardcoded"): the owner's own and imported skills compete
+  // like the rest, with a lift that grows with how well they fit this request; only pins keep a fixed place in front.
+  for (const entry of scored) entry.score = ((entry.primary ? 0.4 : 0) + 0.35 * entry.weight / top + 0.25 * entry.item.skill.priority / 100 + (entry.onFormat ? 0.15 : 0) + (entry.onEngine ? 0.35 : 0)
+    + (entry.item.origin && entry.item.origin !== 'builtin' ? 0.1 + 0.3 * entry.weight / top : 0)) * 0.8 ** (Number(tried[entry.item.skill.id]) || 0);
+  // Pins keep their place in front; the rest are taken best first, with each further skill from an area already taken
+  // counting a little less (8% for each).
+  const fixed = scored.filter(entry => entry.item.pinned), open = scored.filter(entry => !fixed.includes(entry) && !entry.offFormat), picked = [...fixed], areas = {};
   for (const entry of fixed) areas[entry.area] = (areas[entry.area] || 0) + 1;
   // Templates are alternatives (a video follows one structure): those that fit the request go in, otherwise the two best.
   let templates = 0, alternatives = 0;
@@ -469,7 +480,7 @@ function rankSkills(items, taskKey, context = {}) {
     areas[entry.area] = (areas[entry.area] || 0) + 1;
     picked.push(entry);
   }
-  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, ...(entry.onEngine ? {engine: true} : {}), ...(tried[entry.item.skill.id] ? {tried: Number(tried[entry.item.skill.id])} : {}), own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
+  return {ordered: picked.map(entry => ({...entry.item, why: {matched: entry.matched.slice(0, 5).map(stem => said.get(stem) || stem), forJob: entry.primary, format: entry.onFormat, ...(entry.item.origin && entry.item.origin !== 'builtin' ? {own: true} : {}), ...(entry.item.related ? {related: entry.item.skill.tasks[0]} : {}), ...(entry.onEngine ? {engine: true} : {}), ...(tried[entry.item.skill.id] ? {tried: Number(tried[entry.item.skill.id])} : {}), own: entry.item.origin !== 'builtin', pinned: entry.item.pinned}})), offFormat: scored.filter(entry => entry.offFormat && !fixed.includes(entry)).length, alternatives};
 }
 // The jobs whose AI request carries approved skills (0.73 Skills page: "what reaches each job"); the editing brain applies
 // its skills in code rather than in a prompt.
@@ -951,11 +962,25 @@ class SkillsEngine {
     return selected;
   }
 
+  // Approved skills of other jobs that fit this request strongly by its own words (never pin-only profiles, never a
+  // skill blocked for the job, never off the video's format or engine).
+  relatedSkills(taskKey, selected, {familyId = null, context = {}} = {}) {
+    if (!context.text) return [];
+    const have = new Set(selected.map(item => item.skill.id)), blocked = new Set(this.bindings(familyId).filter(item => item.mode === 'block' && item.taskKey === taskKey && (item.familyId === null || item.familyId === familyId)).map(item => item.skillId));
+    const pool = this.db.prepare("SELECT r.id, r.revision, r.payload, s.origin FROM skill_revisions r JOIN skills s ON s.id=r.skill_id WHERE r.status='approved'").all()
+      .map(row => ({revisionId: row.id, revision: row.revision, origin: row.origin, pinned: false, pinPosition: 0, related: true, skill: JSON.parse(row.payload)}))
+      .filter(item => !have.has(item.skill.id) && !blocked.has(item.skill.id) && !item.skill.pinOnly && !item.skill.tasks.includes(taskKey));
+    return rankSkills(pool, taskKey, context).ordered.filter(item => item.why.matched.length >= 3).slice(0, 4);
+  }
   // The compact brief that goes into a Claude system prompt. A skill that does not fit the byte
   // budget is dropped whole and counted, never trimmed mid-rule.
   brief(taskKey, {familyId = null, byteBudget = TASK_BRIEF_BYTES[taskKey] || BRIEF_BYTE_BUDGET, context = {}} = {}) {
-    integer(byteBudget, 200, 20000, 'Brief byte budget');
-    const selected = this.select(taskKey, {familyId}), {ordered, offFormat, alternatives} = rankSkills(selected, taskKey, context);
+    integer(byteBudget, 200, 40000, 'Brief byte budget');
+    const selected = this.select(taskKey, {familyId}), ranked = rankSkills(selected, taskKey, context), {offFormat, alternatives} = ranked;
+    // 0.97: skills written for other jobs that this request strongly needs (three or more of its own words) join after
+    // the job's leading skills, four at most, so the program hands a model what the moment calls for, not only its label.
+    const related = this.relatedSkills(taskKey, selected, {familyId, context});
+    const ordered = [...ranked.ordered.slice(0, 6), ...related, ...ranked.ordered.slice(6)];
     const entries = [], revisionIds = [], skillIds = [], reasons = [];
     let used = 0, dropped = 0;
     for (const item of ordered) {

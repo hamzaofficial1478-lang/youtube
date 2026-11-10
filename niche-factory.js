@@ -324,6 +324,8 @@ class NicheFactory {
   }
 
   migrate() {
+    // 0.97: TubeMind research the owner ran (one row per tool call); its data is purged after 30 days like TubeMind's own.
+    this.db.exec("CREATE TABLE IF NOT EXISTS tubemind_reads(id TEXT PRIMARY KEY, connector_id TEXT NOT NULL, tool TEXT NOT NULL, title TEXT, args TEXT NOT NULL, status TEXT NOT NULL, text TEXT, use INTEGER NOT NULL DEFAULT 1, created_by TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL)");
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS niche_settings(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS niche_ideas(id TEXT PRIMARY KEY, revision INTEGER NOT NULL, status TEXT NOT NULL, payload TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
@@ -903,12 +905,58 @@ class NicheFactory {
       const rising = (result.rising || []).map(ref => result.channels.find(channel => channel.ref === ref)).filter(Boolean);
       take('nexlev discovery', {idea: idea.title, keywords: result.keywords.map(item => ({keyword: item.keyword, topVideos: titles(item.videos, 4)})), risingChannels: rising.slice(0, 6).map(channel => ({channel: channel.title, subscribers: channel.subscribers, viewsLast90Days: channel.momentum.views, recentTitles: channel.momentum.titles.slice(0, 3).map(title => { copy.push(title); return title; })}))});
     }
+    // 0.97: TubeMind research the owner ran and kept as evidence (outliers, niche reports, channels), newest first.
+    this.purgeTubemind();
+    for (const row of this.db.prepare("SELECT * FROM tubemind_reads WHERE status='done' AND use=1 ORDER BY created_at DESC LIMIT 6").all())
+      take('tubemind research', {tool: row.title || row.tool, asked: JSON.parse(row.args), found: row.text.slice(0, 6000)});
     for (const row of this.db.prepare("SELECT result, note FROM niche_reads WHERE status='completed' ORDER BY created_at DESC LIMIT 5").all()) {
       const result = JSON.parse(row.result);
       result.videos.forEach(video => copy.push(video.title));
       take('screenshot read', {seen: result.seen.summary, niche: result.niche.title, patterns: result.patterns, whyItWorks: result.whyItWorks, ownerNote: row.note || null});
     }
     return {items, copy, youtubeExpires};
+  }
+  // ------------------------------------------------------------ TubeMind (0.97)
+  // The tested TubeMind connections and their research tools (from the connection test).
+  tubemindConnections() {
+    return this.connectors.list().filter(item => item.provider === 'tubemind' && item.hasKey && item.test?.status === 'passed')
+      .map(item => ({id: item.id, name: item.name, tools: item.tubemind?.tools || [], paused: !!item.tubemind?.paused, checkedAt: item.tubemind?.checkedAt || null}));
+  }
+  purgeTubemind() { this.db.prepare('DELETE FROM tubemind_reads WHERE expires_at <= ?').run(now()); }
+  publicTubemindRead(row) {
+    return {id: row.id, connectorId: row.connector_id, tool: row.tool, title: row.title, args: JSON.parse(row.args), status: row.status, text: row.text, use: !!row.use, createdBy: row.created_by, createdAt: row.created_at, expiresAt: row.expires_at};
+  }
+  tubemindState() {
+    this.purgeTubemind();
+    return {connections: this.tubemindConnections(), reads: this.db.prepare('SELECT * FROM tubemind_reads ORDER BY created_at DESC, rowid DESC LIMIT 40').all().map(row => this.publicTubemindRead(row))};
+  }
+  // One TubeMind tool run from the owner's click: checked against the tool's own fields, never retried by itself.
+  async runTubemind(input) {
+    requireValue(input && typeof input === 'object', 'Send the TubeMind request.');
+    const by = person(input.requestedBy), connection = this.tubemindConnections().find(item => item.id === input.connectorId);
+    requireValue(connection, 'Choose a TubeMind connection that passed its test in Connections.', 409);
+    const T = require('./tubemind'), tool = connection.tools.find(item => item.name === input.tool);
+    requireValue(tool, 'That TubeMind tool is not offered by this connection. Test the connection again to refresh its tools.', 409);
+    const args = T.checkArgs(tool, input.args);
+    const client = new T.TubeMindClient(this.connectors.key(connection.id), this.connectors.fetch);
+    await client.connect();
+    const answer = await client.call(tool.name, args);
+    const at = now(), id = randomUUID(), status = answer.paused ? 'paused' : answer.error ? 'refused' : 'done';
+    this.db.prepare('INSERT INTO tubemind_reads(id,connector_id,tool,title,args,status,text,use,created_by,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)')
+      .run(id, connection.id, tool.name, tool.title || null, JSON.stringify(args), status, answer.text.slice(0, 60000), status === 'done' ? 1 : 0, by, at, new Date(Date.now() + 30 * DAY).toISOString());
+    this.store.event(`TubeMind: ${tool.title || tool.name} ${status === 'done' ? 'returned research' : status === 'paused' ? 'is paused by TubeMind' : 'refused the request'} (by ${by})`);
+    return this.publicTubemindRead(this.db.prepare('SELECT * FROM tubemind_reads WHERE id=?').get(id));
+  }
+  // Whether a read is used as evidence for niche suggestions, or removed.
+  tubemindRead(id, input) {
+    requireValue(input && typeof input === 'object', 'Send the change.');
+    const row = this.db.prepare('SELECT * FROM tubemind_reads WHERE id=?').get(String(id));
+    requireValue(row, 'TubeMind result not found.', 404);
+    if (input.remove === true) { this.db.prepare('DELETE FROM tubemind_reads WHERE id=?').run(row.id); return {removed: true}; }
+    requireValue(typeof input.use === 'boolean', 'Say whether to use this result as evidence.');
+    requireValue(!input.use || row.status === 'done', 'Only a result with research in it can be used as evidence.', 409);
+    this.db.prepare('UPDATE tubemind_reads SET use=? WHERE id=?').run(input.use ? 1 : 0, row.id);
+    return this.publicTubemindRead(this.db.prepare('SELECT * FROM tubemind_reads WHERE id=?').get(row.id));
   }
   suggestionRow(id) { const row = this.db.prepare('SELECT * FROM niche_suggestions WHERE id=?').get(id); requireValue(row, 'Niche suggestions not found.', 404); return row; }
   publicSuggestions(row) {
@@ -1035,7 +1083,7 @@ class NicheFactory {
     const count = sql => this.db.prepare(sql).get().count, trends = this.db.prepare("SELECT payload FROM trend_settings WHERE id='global'").get();
     const scans = this.db.prepare("SELECT scope, youtube_purged_at FROM trend_scans WHERE status IN ('completed','partial')").all().map(row => ({reddit: JSON.parse(row.scope).source === 'reddit', purged: !!row.youtube_purged_at}));
     return {reddit: scans.filter(scan => scan.reddit).length, youtube: scans.filter(scan => !scan.reddit && !scan.purged).length, youtubeApproved: trends ? JSON.parse(trends.payload).youtubeDerivedUse?.approved === true : false,
-      discoveries: count("SELECT COUNT(*) AS count FROM niche_discoveries WHERE status IN ('completed','partial')"), reads: count("SELECT COUNT(*) AS count FROM niche_reads WHERE status='completed'"),
+      discoveries: count("SELECT COUNT(*) AS count FROM niche_discoveries WHERE status IN ('completed','partial')"), tubemind: count("SELECT COUNT(*) AS count FROM tubemind_reads WHERE status='done' AND use=1"), reads: count("SELECT COUNT(*) AS count FROM niche_reads WHERE status='completed'"),
       competitorScans: Object.fromEntries(this.db.prepare("SELECT family_id, COUNT(*) AS count FROM competitor_scans WHERE status IN ('completed','partial') GROUP BY family_id").all().map(row => [row.family_id, row.count]))};
   }
 
@@ -1056,7 +1104,7 @@ class NicheFactory {
       })(),
       evaluations: this.db.prepare('SELECT * FROM niche_evaluations ORDER BY created_at DESC, rowid DESC LIMIT 30').all().map(row => this.publicEvaluation(row)),
       reads: this.db.prepare('SELECT * FROM niche_reads ORDER BY created_at DESC, rowid DESC LIMIT 30').all().map(row => this.publicRead(row)),
-      suggestions: this.db.prepare('SELECT * FROM niche_suggestions ORDER BY created_at DESC, rowid DESC LIMIT 12').all().map(row => this.publicSuggestions(row)), suggestionSources: this.suggestionSources(),
+      suggestions: this.db.prepare('SELECT * FROM niche_suggestions ORDER BY created_at DESC, rowid DESC LIMIT 12').all().map(row => this.publicSuggestions(row)), suggestionSources: this.suggestionSources(), tubemind: this.tubemindState(),
       momentumDays: MOMENTUM_DAYS,
     };
   }

@@ -22,6 +22,9 @@ const PROVIDERS = {
   // Owner decision 2026-10-06: Claude replaced Hermes. Old Hermes slots stay visible so they can be deleted.
   hermes: {name: 'Hermes (removed; use Claude)', test: 'Hermes was removed from the program on 2026-10-06. Delete this slot.', ready: false, retired: true},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
+  // 0.97 (owner 2026-11-10: TubeMind instead of NexLev): tubemind.io's private connector URL (MCP over HTTP, the key is
+  // inside the URL). Its research tools are run from the Niche Factory; its results feed niche suggestions.
+  tubemind: {name: 'TubeMind (outliers, niches, channels)', test: 'Connects to your TubeMind connector, lists its research tools and asks for one list of niches; nothing is changed', ready: true, keyLabel: 'TubeMind connector URL', keyMin: 20, connectorUrl: true},
   pexels: {name: 'Pexels stock library', test: 'One photo search for "nature" (uses 1 Pexels request); nothing is downloaded', ready: true},
   pixabay: {name: 'Pixabay stock library', test: 'One photo search for "nature" (uses 1 Pixabay request); nothing is downloaded', ready: true},
   mcp: {name: 'MCP server', test: 'Adapter not implemented; setup record only', ready: false},
@@ -112,6 +115,8 @@ class ConnectorSlots {
     if(!old&&this.list().length>=60)throw new InputError('Maximum 60 connector slots.');
     let encrypted=old?.secret||null;
     if(input.clearKey)encrypted=null;
+    // A TubeMind connector URL is checked before it is kept: https on tubemind.io only, so it is never sent elsewhere.
+    if(input.key&&PROVIDERS[provider].connectorUrl)input.key=require('./tubemind').connectorUrl(input.key);
     if(input.key)encrypted=this.protector.transform('protect',Buffer.from(secret(input.key,PROVIDERS[provider].keyMin)));
     const next={name,provider,notes,revision:old?JSON.parse(old.payload).revision+1:1,test:null,updatedAt:new Date().toISOString()};
     // Y01: a Google OAuth client of type "Desktop app"; its ID is not a secret, its secret is kept like a key.
@@ -172,6 +177,15 @@ class ConnectorSlots {
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
         if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
         result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
+      }else if(slot.provider==='tubemind'){
+        const {TubeMindClient}=require('./tubemind'),client=new TubeMindClient(key,this.fetch);
+        const info=await client.connect(),tools=await client.tools();
+        if(!tools.length)throw new InputError('TubeMind answered but offered no research tools. Check the connector on tubemind.io (Connect AI -> Run test).',502);
+        // One light read (the niche list, which needs no fields) shows whether TubeMind gives research today.
+        const probe=tools.find(tool=>/niche/i.test(`${tool.name} ${tool.title}`)&&!tool.fields.some(field=>field.required))||tools.find(tool=>!tool.fields.some(field=>field.required));
+        const read=probe?await client.call(probe.name,{}):null;
+        slot.tubemind={tools,server:info.server?.name||null,paused:!!read?.paused,checkedAt:new Date().toISOString()};
+        result={access:'tubemind_research',message:`TubeMind accepted your connector and offers ${tools.length} research tool(s): ${tools.slice(0,8).map(tool=>tool.title||tool.name).join(', ')} (${client.requests} requests).${read?.paused?' Right now TubeMind answers "paused": its research data is paused while YouTube reviews TubeMind\'s API use (TubeMind\'s own notice). The connection is ready and research flows when TubeMind resumes it.':read?` The ${probe.title||probe.name} tool returned research.`:''}`};
       }else if(slot.provider==='reddit'){
         const {RedditClient}=require('./reddit');
         const found=await new RedditClient({clientId:slot.clientId,secret:key,username:slot.username},this.fetch).search('history',{days:7,limit:3});

@@ -258,6 +258,10 @@ checkout). No script was run and no code was copied; each idea is restated in ou
 - **GTAI-1/flow-mcp**, <https://github.com/GTAI-1/flow-mcp> at `1d17b7b5ecc6fa74411b3f442f45a1a3e85fbaef` (2026-11-07). Licence: no licence. Used: not integrated: it drives Google Flow's web page in its own Chrome window with the owner's Google sign-in, and its author warns that this may be against Google's terms.
 - Every repository was downloaded into a scratch folder and read as data; none was run. Details: `research/fifteen-repos-2026-11-09.md`.
 
+### TubeMind (0.97, owner request 2026-11-10)
+
+- TubeMind, <https://tubemind.io>, a hosted research service (Microserp Technologies FZC LLC). Read 2026-11-10: its home page, /docs, /docs/connect-ai (updated 2026-11-06), /docs/plans-and-limits, /youtube-api and its blog post on connecting AI apps. No code is used: `tubemind.js` is our own MCP client written from the public MCP Streamable HTTP rules. TubeMind's connector data is paused by TubeMind while YouTube reviews its API use; no live call was made from this workspace. Unrelated projects with the same name (github.com/duanecilliers/tubemind, the "tubemind-secure-mcp" npm package that runs on Google OAuth) are not used. Details: `TUBEMIND.md`.
+
 ### Stock and image APIs (Scene & Visual Room data sources, 0.9)
 
 - Pexels API (https://www.pexels.com/api/documentation/), checked 2026-10-04: `Authorization: <key>` header; `/v1/search` and `/v1/videos/search` with `query`, `orientation`, `size`, `per_page` (max 80); 200 requests/hour and 20,000/month by default; photo `src.*` renditions and video `video_files[]`. License: https://www.pexels.com/license/ (free use, attribution optional; no offensive use of identifiable people, implied endorsement, selling unaltered copies, redistribution on stock platforms or use as a trademark).
