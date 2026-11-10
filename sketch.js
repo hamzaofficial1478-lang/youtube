@@ -622,7 +622,12 @@ function countriesIn(narration) {
   }
   return found;
 }
-function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null} = {}) {
+// The program's own drawing from a shot's words: the fallback when a designed shot or an AI drawing failed. It reads the
+// video's world kit (a scene's place may be one of its sets, "kit:dojo") and repairs instead of failing (0.105, owner
+// report 2026-11-10: a finished Motion Graphics storyboard stopped on "Set must be one of" at every Resume, because the
+// fallback re-checked a kit place strictly without the kit).
+function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'explain', primary = 'stickman', cast = [], setting = null, kit = null, warn = () => {}} = {}) {
+  const rules = {primary, cast, kit, lenient: true, warn};
   const lower = ` ${String(narration).toLowerCase()} `;
   const props = [...new Set(PROP_WORDS.filter(([, pattern]) => pattern.test(lower)).map(([prop]) => prop))].slice(0, 2);
   // Nothing named: the line's own key word goes on screen instead of a stock symbol (owner review 2026-10-21: an
@@ -640,7 +645,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
     return validate({engine, set: 'none', camera: 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements: [
       {kind: 'map', areas: named.map(({name, said}) => ({countries: [name], label: said, at: said})), size: 'xl'},
       ...(engine !== 'motion' || cast.length ? [{kind: 'figure', ...(who ? {who} : {}), pose: 'point', expression: MOOD_EXPRESSION[pose] || 'neutral', x: 0.12, y: 0.86, size: 'm'}] : []),
-    ]}, {primary, cast});
+    ]}, rules);
   }
   const elements = [];
   // Many people (employees, an army, investors) are a crowd behind the speaker.
@@ -653,6 +658,8 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
   const words = clean(onScreenText, 40) || amount || year || '';
   if (words) elements.push({kind: 'text', text: words, x: 0.5, y: 0.15, size: !onScreenText && (amount || year) ? 'l' : 'm', style: onScreenText ? 'title' : amount ? 'counter' : year ? 'number' : 'title', accent: true});
   else if (keyWord) elements.push({kind: 'text', text: keyWord.toUpperCase(), x: left ? 0.3 : 0.7, y: 0.3, size: 'l', style: 'keyword', animate: 'rise', at: keyWord, accent: true});
+  // A short line with nothing named still shows its own words (0.105: on the motion engine it drew nothing and failed).
+  if (!elements.length) elements.push({kind: 'text', text: clean(narration, 40) || '...', x: 0.5, y: 0.42, size: 'l', style: 'title', accent: true});
   const lift = elements.some(el => el.kind === 'crowd') ? 0.12 : 0;
   props.forEach((prop, k) => elements.push({kind: 'prop', prop, x: left ? 0.3 + k * 0.2 : 0.6 + k * 0.2, y: (k ? 0.56 : 0.42) - lift, size: k ? 'm' : 'l', accent: k === 0}));
   const first = elements.findIndex(el => el.kind === 'prop');
@@ -661,7 +668,7 @@ function fromText(narration, {onScreenText = '', shotIndex = 0, purpose = 'expla
   if (purpose === 'hook' && marked >= 0) elements.splice(marked, 0, {kind: 'fx', effect: 'burst', on: marked + 2});
   // Every engine's drawn shots stand in a place the words name (0.37 documentary looks draw places at full strength).
   const set = setting?.set || SET_WORDS.find(([, pattern]) => pattern.test(lower))?.[0] || (engine === 'motion' ? 'abstract' : 'none');
-  return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : turn ? {mood: 'tense'} : {}), camera: purpose === 'hook' || turn ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, {primary, cast});
+  return validate({engine, set, ...(setting?.mood ? {mood: setting.mood} : turn ? {mood: 'tense'} : {}), camera: purpose === 'hook' || turn ? 'punch' : shotIndex % 2 ? 'drift' : 'push', transition: shotIndex === 0 && purpose !== 'hook' ? 'whip-left' : 'cut', elements}, rules);
 }
 
 // ---------------------------------------------------------------- Claude's guide
