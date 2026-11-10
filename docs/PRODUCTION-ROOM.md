@@ -1,5 +1,24 @@
 # Production Panel architecture
 
+**Read this first (0.104, 2026-11-10).** This page is the original architecture of the production rooms, written on 2026-10-04 before most rooms were built. Its safety rules still hold, but many details below are older than the program. What each room does today is in its own document, updated with every release:
+
+| Room | Today's document |
+|---|---|
+| Content Studio, scripts, the AI team, reference videos | [AI-TEAM.md](AI-TEAM.md), [RETENTION-WRITING.md](RETENTION-WRITING.md) |
+| Voice Room and voice direction | [VOICE-ROOM.md](VOICE-ROOM.md), [VOICE-DIRECTION.md](VOICE-DIRECTION.md) |
+| Editing Engines (styles) | [STYLE-ROOM.md](STYLE-ROOM.md), [DRAWN-SCENES.md](DRAWN-SCENES.md), [CINEMATIC-ENGINE.md](CINEMATIC-ENGINE.md) |
+| Room 04 Scene & Visual (storyboards, pictures, drawings) | [SCENE-ROOM.md](SCENE-ROOM.md) |
+| Room 05 Editing | [EDITING-ROOM.md](EDITING-ROOM.md), [CAPTIONS-AND-CRAFT.md](CAPTIONS-AND-CRAFT.md) |
+| Room 07 Audio (music and sound effects) | [AUDIO-ROOM.md](AUDIO-ROOM.md) |
+| Room 08 Review & QC | [REVIEW-QC.md](REVIEW-QC.md) |
+| Room 09 Packaging | [PACKAGING-ROOM.md](PACKAGING-ROOM.md) |
+| Room 10 Render & Recovery | [RENDER-RECOVERY.md](RENDER-RECOVERY.md) |
+| Language editions | [LOCALIZATION.md](LOCALIZATION.md) |
+| Room 11 Publishing | [PUBLISHING.md](PUBLISHING.md) |
+| Skills and how they direct the models | [SKILLS-ENGINE.md](SKILLS-ENGINE.md), [DIRECTION.md](DIRECTION.md) |
+
+The newest state of the whole program is always in AGENTS.md and the latest entry of [BUILD-PROGRESS.md](BUILD-PROGRESS.md). The program does not take its behaviour from these pages: it runs on its code, its skills and its prompts.
+
 Reviewed 2026-09-19; updated 2026-10-04 for the live Voice Room (0.6) and Style Library & Assignment Room (0.7). This expands the production section before any visual provider is enabled.
 
 ## Goal

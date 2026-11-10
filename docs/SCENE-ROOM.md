@@ -188,13 +188,15 @@ one ran; and the questions of what happens when the internet drops or the progra
   storyboards "over budget". A resumed run reserves only what is left (`planNeed`).
 - **Closed program.** A storyboard running when the program closed is `paused` (`kind: 'closed'`) at the next start,
   with the same kept work and honest usage; Resume goes on from there. Before 0.81 it was "interrupted" and its
-  retry started from the last kept part with the whole reservation held.
+  retry started from the last kept part with the whole reservation held. (Since 0.103 it also goes on by itself once
+  the program runs again; since 0.104 the pause says why the program stopped. See the last two sections.)
 - **Weak or lost internet.** `ai.js` names lost connections (`networkError`: never reached = nothing used; dropped while
   answering = may count), before any sign-in check (an offline token refresh mentions OAuth). The program passes a free
   reachability check (`reachable`: the AI server's name is looked up; only a clear "not found" counts as offline) so no
   request is sent while offline. A storyboard that loses the connection, or whose AI plan reaches its usage limit,
   pauses instead of failing, with "Check my connection" (`GET /api/net-check`: a name lookup and a timed connection,
-  information only) and Resume. Nothing retries by itself.
+  information only) and Resume. Nothing retries by itself. (Changed in 0.84: a storyboard waits for the internet and
+  goes on by itself; today's limits are in the 0.100 and 0.104 sections.)
 - **The screen.** While an AI builds, its button is off ("ChatGPT is building…") and a note says so; the other AI's
   button still works and its window warns in a coloured box and asks. The quiet message says what a quiet stretch
   means and the step's real time limit (`live` `who`, `limit`, `stoppable`). Job rows say when the storyboard was asked
@@ -272,7 +274,8 @@ keeps every finished step) now waits: `SceneRoom.resumeWhenOnline` runs every 30
 the AI's server name (`Ai.reach`, nothing is sent), and when it can be reached again the storyboard goes on by itself from
 its last finished step on the same attempt (`resumePlan` with `auto`, counted in `pause.auto`). It waits 30 minutes after
 each pause (`NET_WAIT_MINUTES`) and goes on by itself at most 5 times per storyboard (`NET_AUTO`); after that the owner
-presses Resume. The paused row says the program is waiting and until when (`pause.waitUntil`).
+presses Resume. The paused row says the program is waiting and until when (`pause.waitUntil`). (Today: an hour and at
+most three times since 0.100, and time the PC was asleep does not count since 0.104.)
 
 
 ## Revoked visuals, building again, and two storyboards (0.86)
@@ -341,7 +344,7 @@ Owner report 2026-11-10, three screenshots: a video on the Motion Graphics engin
 
 **The real error.** An error now names the AI that was working and the step: "ChatGPT, at "Planning scenes and shots, part 2 of 3": ...". Before 0.98 any fault of the program itself was written as "Claude scene planning failed", whichever AI was planning, and the job was marked interrupted with its cost unknown. Now such a fault pauses the storyboard (`pause.kind` `error`) with its real cause, the AI and the step, keeps every finished step and counts the answers that arrived as they are; Resume goes on from that step. It is not a lost connection, so the program never resumes it by itself. A story map the program cannot read is left out with a warning ("the parts were planned without its map"), never a reason to fail.
 
-**Waiting for the internet.** A storyboard paused by a lost connection now waits a day for it (was 30 minutes) and goes on by itself up to 12 times. Every other AI job that failed because the connection was lost (scripts, voice direction, music score, frame scan, language editions, packaging, niche discovery, evaluations and suggestions, competitor scans and analyses, trend scans and topic ideas) is tried again by the program once the AI's server can be reached (`net-retry.js`): checked every 30 seconds, through the room's own retry with its usual limits, at most 6 times and for a day after it stopped, and written in the program's log as done by the program. "Working now" lists what waits for the internet. A failure for any other reason (a used-up plan, a refusal, a changed script) still waits for you.
+**Waiting for the internet.** A storyboard paused by a lost connection now waits a day for it (was 30 minutes) and goes on by itself up to 12 times. Every other AI job that failed because the connection was lost (scripts, voice direction, music score, frame scan, language editions, packaging, niche discovery, evaluations and suggestions, competitor scans and analyses, trend scans and topic ideas) is tried again by the program once the AI's server can be reached (`net-retry.js`): checked every 30 seconds, through the room's own retry with its usual limits, at most 6 times and for a day after it stopped, and written in the program's log as done by the program. "Working now" lists what waits for the internet. A failure for any other reason (a used-up plan, a refusal, a changed script) still waits for you. (0.100 changed the day to an hour and the tries to three; 0.104 adds work cut off by a restart and leaves out time the PC slept.)
 
 ## A picture never stalls the storyboard; an hour of waiting (0.100)
 
@@ -388,3 +391,26 @@ Owner report 2026-11-10: a Motion Graphics · HTML render storyboard started at 
 **Designed shots three at a time.** The Motion Graphics engine writes each designed shot as its own AI answer and checks it in the browser; they were written one after another, so a video with 30 designed shots waited for 30 answers in a row. Now three are written at once (`DESIGN_LANES`), each with its own AI lane (`Ai.complete` `lane`) and its own checking browser; a shot that pauses the storyboard lets the others finish theirs. Pictures stay one at a time, so every painting matches the first painting of the video.
 
 **Where the time went.** Every run records each step's time (`scene_plan_jobs.timings`) and the job row shows it ("Where the time went: 2 h 40 min over 2 runs", step by step, "kept from before" for steps a resume skipped), so a slow step can be seen and fixed.
+
+## "The program was closed", sleep, and timing that is the video's own (0.104)
+
+Owner report 2026-11-10: the storyboard said the program was closed, but the owner had not closed it or shut the laptop down; the laptop may have gone to sleep. It also did not go on by itself, and the shots were held to "6 s as for the stickman".
+
+**Where "closed" comes from.** That pause is written only when the program starts and finds a storyboard still marked as running, so the program really had stopped and started again: Stop Control Room, Update Control Room (it stops and starts the program), Windows restarting for an update, power loss or a crash. Sleep alone never wrote it: a sleeping PC freezes the program, which carries on where it was when the PC wakes. Until 0.104 the program could not tell which of these happened, and the launcher overwrote its own logs on every start, so the cause was lost. Now:
+
+- Stop and Update leave a note (`data/last-stop.json`, also written when the program is stopped with Ctrl+C), and the running program writes a heartbeat every 30 seconds (`data/heartbeat.json`). At the next start the pause names the cause: "restarted for an update", "stopped with Stop Control Room", or "stopped unexpectedly around <time>: Windows restarted or shut down, the PC lost power, or the program crashed". (`SceneRoom` `stopped`, `stopMessage`.)
+- The launcher keeps the previous run's logs as `server.previous.log` and `server-error.previous.log`, so a crash can be read afterwards.
+- A storyboard paused this way goes on by itself as soon as the program runs again (since 0.103).
+
+**Sleep.** While a storyboard, drawing, render, narration or any AI job runs, the program asks Windows not to sleep on its own (`keep-awake.js`: Windows' `SetThreadExecutionState`, system required; the screen may still turn off) and lets it sleep again when the work is done. The helper ends by itself if the program is gone, so it never keeps the PC awake for nothing. "Working now" says when the PC is being kept awake. Closing a laptop's lid or pressing its sleep button still sleeps it: that is Windows' power setting ("When I close the lid: Do nothing" keeps it working). When the PC does sleep, the program notices the gap on waking, logs it, and does not count the time asleep against the hour it waits for the internet (`awakeFor`), so a job that lost its connection just before the lid closed still goes on by itself after waking.
+
+**Work cut off by a restart in other rooms.** Scripts, voice direction, music scores, frame scans, language editions, packaging and research jobs that were stopped by a restart ("the program stopped while ...") are now tried again by the program, like jobs that lost the internet (`net-retry.js` `RESTART`; an hour of awake time, at most three tries). An answer that was arriving when the program stopped may be counted again, so these stay within the same limits.
+
+**A painting made just before a stop.** A painting that finished but was not yet checked by the art director when the storyboard stopped is now kept (`plan_pictures` `:unchecked-N`) and checked on resume instead of being painted again; a rejection is kept too, so the resume goes straight to the second try.
+
+**Timing is the video's own.** The "6 s" in the earlier explanation came from a test's example, not from a stickman rule the AI was held to. The pace a part is checked against is the video's own: the AI's design for that video (adaptive styles, every engine) or, for a fixed style, that style's own shot length; no engine borrows another's. And a scene whose shots are longer than that pace no longer stops the storyboard: the part is asked once more, then kept as it is; the finished storyboard lists those shots and "Fix the long shots" splits them if you want. Only real rule breaks (a camera move or source the style does not allow, broken sentences) stop a part.
+
+**How this style makes the scenes** (Room 04) was brought up to date: the continuity step is listed only for engines that draw, Motion Graphics says its designed shots are written three at a time and its pictures one at a time with an art director, and every finished step is said to be saved.
+
+**Docs and the program.** The program takes its behaviour from its code, its skills and its prompts, not from these pages. Three kinds of document do reach the program: the Build page shows `docs/build-status.json` and BUILD-PROGRESS.md, the Production panel's "Architecture & safety" button opens PRODUCTION-ROOM.md, and the editing-brain skill packs are read from `docs/research/editing-brain/*.json` (data, approved like every built-in skill). Every release updates the first two; PRODUCTION-ROOM.md had not been touched since 0.10 and now opens with a map of today's document for each room. A test (`tests/docs.test.js`) now fails when the version in package.json, build-status.json, README, AGENTS, HANDOFF or BUILD-PROGRESS disagree, or a document a page opens is missing, so a release cannot be merged with its docs behind.
+

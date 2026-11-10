@@ -39,6 +39,11 @@ try {
     $dataDirectory = Join-Path $programDirectory 'data'
     New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
     $env:PORT = '3456'
+    # The last run's logs are kept (0.104): a run that stopped unexpectedly wrote its reason there, and starting again used to overwrite it.
+    foreach ($logName in @('server.log', 'server-error.log')) {
+        $logPath = Join-Path $dataDirectory $logName
+        if ((Test-Path -LiteralPath $logPath) -and (Get-Item -LiteralPath $logPath).Length -gt 0) { Copy-Item -LiteralPath $logPath -Destination ($logPath -replace '\.log$', '.previous.log') -Force }
+    }
     $appProcess = Start-Process -FilePath $nodePath -ArgumentList @('"' + $serverFile + '"') -WorkingDirectory $programDirectory -WindowStyle Hidden -RedirectStandardOutput (Join-Path $dataDirectory 'server.log') -RedirectStandardError (Join-Path $dataDirectory 'server-error.log') -PassThru
     $launchedAt = $appProcess.StartTime.ToUniversalTime().ToString('o')
     $ready = $false

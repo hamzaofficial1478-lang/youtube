@@ -16,7 +16,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Could not reach GitHub. Check the internet connection and your GitHub sign-in.' }
         if ((& $git rev-parse HEAD) -eq (& $git rev-parse origin/main)) { Write-Host 'Already up to date.' -ForegroundColor Green; exit 0 }
         # The running program is stopped first, so it never serves half-updated pages.
-        & (Join-Path $PSScriptRoot 'Stop-ControlRoom.ps1')
+        & (Join-Path $PSScriptRoot 'Stop-ControlRoom.ps1') -Reason update
         & $git merge -q --ff-only origin/main
         if ($LASTEXITCODE -ne 0) { throw 'The update could not be applied cleanly; nothing was changed.' }
         $version = (Get-Content -LiteralPath (Join-Path $program 'package.json') -Raw | ConvertFrom-Json).version

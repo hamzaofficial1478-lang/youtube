@@ -170,21 +170,25 @@ function sceneInputsCard(content) {
 // How this style makes the scenes (0.98, owner question 2026-11-10: "I chose Motion Graphics with HTML render; when
 // ChatGPT builds, is it building with HTML render or painting the scenes?"): the steps, who does each and how.
 const FINISH_SAID = {motion: 'motion graphics (kinetic type, numbers, diagrams)', anime: 'HTML render (cel anime: painted cels, drawings swapped on twos)', collage: 'paper collage', pixel: 'pixel art', mix: 'a mix of finishes, one per scene'};
+// 0.104 (owner 2026-11-10: "does the program work on old docs?"): these steps follow what the program really does today:
+// the continuity check only when it runs for this style, three designed shots at a time, pictures one at a time.
 function sceneHowMade(style, ai) {
   if (!style?.ready) return '';
   const who = ai || 'the AI you press', key = `how-made-${style.revisionId}`;
+  const check = style.review ? `<b>The continuity check</b>: ${esc(who)} checks each drawn shot against its own words and its neighbours.` : null;
   const steps = style.engine === 'atelier' ? [
-    `<b>The story map and the storyboard</b>: ${esc(who)} plans every scene and every shot from your narration. In this style every shot is a <i>designed shot</i>, not a painting.`,
-    `<b>The continuity check</b>: ${esc(who)} checks each shot against its own words and its neighbours.`,
-    `<b>Writing each shot as HTML</b>: ${esc(who)} writes one HTML animation per shot, finish: ${esc(FINISH_SAID[style.atelier?.finish] || FINISH_SAID.motion)}${style.atelier?.finish === 'mix' && style.atelier.finishes?.length ? ` (${esc(style.atelier.finishes.map(item => FINISH_SAID[item] || item).join(', '))})` : ''}. The program's safety check reads every line before it is kept (no internet, no randomness, no outside files). The live view says "Writing S03B as an HTML render (4 of 22)".`,
-    '<b>Draw the scenes</b>: this PC\'s own browser plays each HTML animation frame by frame and turns it into video. That is the HTML render; ChatGPT\'s picture painting is not used for these shots.',
+    `<b>The story map and the storyboard</b>: ${esc(who)} plans every scene and every shot from your narration. Most shots are <i>designed shots</i>; a few may be drawn shots that carry a picture.`,
+    check,
+    `<b>Writing each designed shot as HTML</b>: ${esc(who)} writes one HTML animation per designed shot, three at a time, finish: ${esc(FINISH_SAID[style.atelier?.finish] || FINISH_SAID.motion)}${style.atelier?.finish === 'mix' && style.atelier.finishes?.length ? ` (${esc(style.atelier.finishes.map(item => FINISH_SAID[item] || item).join(', '))})` : ''}. The program's safety check reads every line before it is kept (no internet, no randomness, no outside files).`,
+    '<b>Pictures</b>: the drawn shots between them get their picture from the picture maker (ChatGPT paints, or Claude draws), one at a time so every picture keeps the video\'s style; an art director checks each painting first.',
+    '<b>Draw the scenes</b>: this PC\'s own browser plays each HTML animation frame by frame and turns it into video. That is the HTML render; designed shots are never painted.',
   ] : [
     `<b>The storyboard</b>: ${esc(who)} plans every scene and shot from your narration, in the ${esc(style.drawing ? 'drawn' : 'footage')} engine of this style.`,
-    `<b>The continuity check</b>: ${esc(who)} checks each shot against its words.`,
-    `<b>Pictures</b>: shots that need a detailed picture get one from the picture maker (ChatGPT paints, or Claude draws vector art), in this look's own rules.`,
+    check,
+    '<b>Pictures</b>: shots that need a detailed picture get one from the picture maker (ChatGPT paints, or Claude draws vector art), in this look\'s own rules, one at a time so every picture keeps the video\'s style; an art director checks each painting first.',
     '<b>Draw the scenes</b>: this PC\'s browser draws every shot frame by frame into video.',
   ];
-  return `<details class="sound-fold" data-keep-open="${esc(key)}" ${keepOpen.has(key) ? 'open' : ''}><summary>How this style makes the scenes</summary><ol class="how-made">${steps.map(step => `<li>${step}</li>`).join('')}</ol><p class="hint">Every step is directed by the skills chosen for it; "Skills used" below lists them for this video.</p></details>`;
+  return `<details class="sound-fold" data-keep-open="${esc(key)}" ${keepOpen.has(key) ? 'open' : ''}><summary>How this style makes the scenes</summary><ol class="how-made">${steps.filter(Boolean).map(step => `<li>${step}</li>`).join('')}</ol><p class="hint">Every step is directed by the skills chosen for it; "Skills used" below lists them for this video. Every finished step is saved as it is done, so a stop, a restart or a lost connection never makes it start again.</p></details>`;
 }
 // What the drawings will look like (0.82, owner review 2026-11-02: "I chose classic cartoon and storybook but it made me
 // hand-drawn scenes"): the ticked looks, the drawing hand and the film looks, said before anything is drawn.
@@ -202,7 +206,7 @@ const sceneRedrawName = redraw => { const n = redraw.count, s = n === 1 ? '' : '
 // A paused storyboard (0.81): why it paused, what is kept, and the buttons that go on from there.
 function scenePaused(content, job) {
   const kept = [job.progress?.map ? 'the story map' : '', job.parts.total > 1 && job.parts.done ? `${job.parts.done} of ${job.parts.total} parts` : '', job.progress?.review === 'done' ? (job.redraw ? 'the new drawings' : 'the continuity check') : job.progress?.review && job.progress.review !== 'not yet' ? `the continuity check (${job.progress.review})` : '', job.progress?.pictures ? `${job.progress.pictures} picture${job.progress.pictures === 1 ? '' : 's'}` : '', job.progress?.frames ? `${job.progress.frames} designed shot${job.progress.frames === 1 ? '' : 's'}` : ''].filter(Boolean);
-  const why = {owner: 'You stopped it.', network: 'The internet connection was lost.', limit: 'The AI plan reached its usage limit.', closed: 'The program was closed while it was working.', error: 'A problem in the program stopped it (not your internet, not your AI plan).'}[job.pause?.kind] || 'It is paused.';
+  const why = {owner: 'You stopped it.', network: 'The internet connection was lost.', limit: 'The AI plan reached its usage limit.', closed: 'The program was not running for a while.', error: 'A problem in the program stopped it (not your internet, not your AI plan).'}[job.pause?.kind] || 'It is paused.';
   const other = sceneAis().find(ai => ai.name !== sceneAiName(job.provider)), self = sceneAis().find(ai => ai.name === sceneAiName(job.provider));
   const buttons = [self || !other ? action('Resume', 'scene-plan-resume', job.id, 'primary') : '', other && !job.picture && !job.redesign && !job.redraw ? action(`Resume with ${other.name}`, 'scene-plan-resume', `${job.id}|${other.id}`, 'secondary') : '', job.pause?.kind === 'network' ? action('Check my connection', 'scene-net-check', job.provider || 'claude-code', 'text-button') : ''].join('');
   return `<div class="paused-box"><p><strong>${why}</strong>${job.pause?.kind !== 'owner' && job.pause?.message ? ` ${esc(job.pause.message)}` : ''} ${kept.length ? `Kept: ${esc(kept.join(', '))}. Resume goes on from the next step; nothing finished is paid for again.` : 'Nothing was finished yet; Resume starts it from the beginning.'}${job.pause?.kind === 'network' ? (job.pause.waitUntil ? ` The program is waiting for the internet: it checks every 30 seconds and goes on by itself when the connection is back (until ${esc(new Date(job.pause.waitUntil).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'}))}). You can also press Resume.` : ' It waited for the connection; press Resume when your internet works again.') : job.pause?.kind === 'limit' ? ' Resume when the limit resets, or go on with the other AI.' : ''}</p><div class="card-actions">${buttons}</div></div>`;

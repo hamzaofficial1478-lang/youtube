@@ -39,3 +39,24 @@ test('jobs that lost the internet are retried through their own room once it is 
   assert.equal(retry.tries('demo', 'net'), MAX);
   assert.deepEqual(retry.waiting(at + 400000), []);
 });
+
+// 0.104 (owner 2026-11-10: "the program did not try by itself"): work a restart cut off is tried again too, and after a
+// sleep the hour counts from the wake.
+test('work cut off by a restart is tried again, and the hour counts from waking', async t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  store.db.exec('CREATE TABLE demo_jobs(id TEXT PRIMARY KEY, content_id TEXT, status TEXT, error TEXT, updated_at TEXT)');
+  const at = Date.parse('2026-11-10T18:00:00Z'), iso = ms => new Date(ms).toISOString();
+  store.db.prepare('INSERT INTO demo_jobs VALUES(?,?,?,?,?)').run('restart', 'c1', 'interrupted', 'The program stopped while Claude was running. Token use is unknown; retry deliberately.', iso(at - 60000));
+  store.db.prepare('INSERT INTO demo_jobs VALUES(?,?,?,?,?)').run('slept', 'c1', 'failed', 'ChatGPT could not be reached from this PC.', iso(at - 3 * 3600000));
+  const retried = [];
+  const retry = new NetRetry(store, {online: async () => true, everyMs: 0}).add('demo', {table: 'demo_jobs', label: 'the demo job', retry: row => { retried.push(row.id); store.db.prepare("UPDATE demo_jobs SET status='queued' WHERE id=?").run(row.id); }});
+  assert.deepEqual(retry.waiting(at).map(item => item.jobId), ['restart'], 'the restart is recent; the dropped one is three hours old');
+  // The PC slept from ten minutes after the drop until a minute ago: asleep time does not count, so it is still tried.
+  retry.sleep = {from: at - 3 * 3600000 + 600000, to: at - 60000};
+  assert.deepEqual(retry.waiting(at).map(item => item.jobId).sort(), ['restart', 'slept']);
+  assert.equal(require('../net-retry').awakeFor(at - 3 * 3600000, at, retry.sleep), 660000, 'eleven minutes awake since the drop');
+  await retry.tick(at);
+  assert.deepEqual(retried.sort(), ['restart', 'slept']);
+});
+
