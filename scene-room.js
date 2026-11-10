@@ -526,6 +526,8 @@ function sumUsage(list) {
 const answerTokens = text => Math.round(String(text || '').length / 3.3);
 // Stop pressed between two steps (0.81): the next step does not start; nothing of it was used.
 const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
+// The scenes planned so far, as the page lists them while the storyboard is still being built (0.101).
+const boardOf = scenes => (Array.isArray(scenes) ? scenes : []).slice(0, 300).map((scene, index) => ({n: index + 1, from: scene?.sentenceStart ?? null, to: scene?.sentenceEnd ?? null, purpose: String(scene?.purpose || '').slice(0, 30), direction: String(scene?.direction || '').replace(/\s+/g, ' ').trim().slice(0, 160), shots: Array.isArray(scene?.shots) ? scene.shots.length : 0}));
 // How each Motion Graphics finish is made, in the words of the live view (every one is HTML the AI writes, which the
 // program then plays frame by frame in this PC's own browser).
 const FINISH_WORDS = Object.freeze({motion: 'an HTML motion-graphics animation', anime: 'an HTML render (cel anime: painted cels, drawings swapped on twos)', collage: 'an HTML paper-collage animation', pixel: 'an HTML pixel-art animation'});
@@ -970,16 +972,19 @@ class SceneRoom {
     const limitOf = maxTokens => (provider === 'claude' ? 600 : Math.round(cliTimeoutMs(maxTokens) / 1000));
     const single = job.scope.redesign ? 'Redesigning one shot' : job.scope.picture ? 'Making a paid picture for one shot' : job.scope.redraw ? (job.scope.redraw.purpose === 'long' ? 'Drawing the new shots (long-shot fix)' : job.scope.redraw.ask ? `Drawing ${job.scope.redraw.labels.slice(0, 4).join(', ')}${job.scope.redraw.labels.length > 4 ? ' and more' : ''} again as you asked` : 'Drawing the undesigned shots') : null;
     const steps = single ? 1 : (job.scope.map ? 1 : 0) + parts.length + (job.scope.review ? 1 : 0) + (job.scope.compose ? 1 : 0) + 1;
+    // Every step by name (0.101), so the page lists them all and ticks each one as it finishes.
+    const STEP = {map: 'The story director maps the whole video', part: index => (parts.length > 1 ? `Planning scenes and shots, part ${index + 1} of ${parts.length}` : 'Planning the scenes and shots'), review: 'Checking every shot against its words and its neighbours', compose: 'Writing each designed shot as HTML (the Motion Graphics engine)', pictures: 'Drawing and painting the pictures'};
+    const plan = single ? [single] : [...(job.scope.map ? [STEP.map] : []), ...parts.map((_, index) => STEP.part(index)), ...(job.scope.review ? [STEP.review] : []), ...(job.scope.compose ? [STEP.compose] : []), STEP.pictures];
     let stepNo = 0, stepLabel = single || 'Planning the scenes';
     const next = (label, expected = null, maxTokens = null) => { stepLabel = label; return live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null}); };
-    live.start(job.id, {room: 'scene', label: single || 'Planning the scenes', steps, contentId: job.content_id, familyId: job.family_id, who: provider === 'chatgpt' ? 'ChatGPT' : 'Claude', stoppable: true});
+    live.start(job.id, {room: 'scene', label: single || 'Planning the scenes', steps, plan, contentId: job.content_id, familyId: job.family_id, who: provider === 'chatgpt' ? 'ChatGPT' : 'Claude', stoppable: true});
     try {
       if (job.scope.redesign) return await this.redesign(job, () => { started = true; });
       if (job.scope.picture) return await this.pictureShot(job, () => { started = true; });
       if (job.scope.redraw) return await this.redraw(job, spent, () => { started = true; });
       // The story director's map comes first and is kept, so a retry never pays for it twice.
       let map = job.map ? JSON.parse(job.map) : null;
-      if (job.scope.map) next('The story director maps the whole video', null, job.scope.map.maxTokens);
+      if (job.scope.map) next(STEP.map, null, job.scope.map.maxTokens);
       if (job.scope.map && !map) {
         stopCheck(signal);
         const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: D.mapMessages(job.scope.map.input), maxTokens: job.scope.map.maxTokens, signal, onStart: () => { started = true; }, onProgress: live.follow(job.id)});
@@ -995,7 +1000,8 @@ class SceneRoom {
       }
       const story = map?.beats ? map : null;
       for (const [index, part] of parts.entries()) {
-        next(parts.length > 1 ? `Planning scenes and shots, part ${index + 1} of ${parts.length}` : 'Planning the scenes and shots', part.promptInput.sentences.length * 600, part.maxCompletionTokens);
+        next(STEP.part(index), part.promptInput.sentences.length * 600, part.maxCompletionTokens);
+        live.board(job.id, boardOf([...done].sort((a, b) => a.index - b.index).flatMap(item => (Array.isArray(item.parsed?.scenes) ? item.parsed.scenes : []))));
         if (done.some(item => item.index === index)) continue;
         const castSoFar = mergeCast([{cast: story?.cast || []}, ...done.map(item => item.parsed)]);
         // Later parts keep the cast and the art direction the first parts set.
@@ -1014,7 +1020,6 @@ class SceneRoom {
           const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'scenes', messages: planMessages(promptInput, {findings}), maxTokens: part.maxCompletionTokens, signal, onStart: () => { started = true; }, onProgress: live.follow(job.id)});
           job.track(usageOf(reply));
           this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
-        this.store.skillRuntime?.recordApplied?.(job.id, 'scene.plan', reply.directives?.applied);
           parsed = looseJson(reply.content);
           // A part that covers the wrong sentences is not kept, so a retry asks for that part again.
           range = parts.length > 1 && parsed !== undefined ? partProblem(parsed, part.promptInput.part) : null;
@@ -1034,15 +1039,17 @@ class SceneRoom {
       merged = {...merged, cast: mergeCast([{cast: story?.cast || []}, merged]), kit: {...kitOf(merged.kit), ...(story?.kit || {})}, ...(story?.world ? {world: story.world} : {})};
       // The review is kept as it goes (0.81): a stop in the middle goes on from the next unread scenes on Resume.
       const kept = job.reviewed ? JSON.parse(job.reviewed) : null;
-      if (job.scope.review) next('Checking every shot against its words and its neighbours', null, job.scope.review.tokenLimit);
+      live.board(job.id, boardOf(merged.scenes));
+      if (job.scope.review) next(STEP.review, null, job.scope.review.tokenLimit);
       if (kept && !kept.partial) ({plan: merged, review} = kept);
       else if (job.scope.review) {
         ({plan: merged, review} = await this.reviewPlan(job, merged, spent, () => { started = true; }, {resume: kept?.partial ? kept : null}));
         this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({plan: merged, review}), now(), job.id);
       }
       let compose = null, pictures = null;
-      if (job.scope.compose) { next('Writing each designed shot as HTML (the Motion Graphics engine)'); stopCheck(signal); ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; })); }
-      next('Drawing and painting the pictures');
+      live.board(job.id, boardOf(merged.scenes));
+      if (job.scope.compose) { next(STEP.compose); stopCheck(signal); ({plan: merged, compose} = await this.composeFrames(job, merged, () => { started = true; })); }
+      next(STEP.pictures);
       stopCheck(signal);
       ({plan: merged, pictures} = await this.illustrate(job, merged, () => { started = true; }));
       stopCheck(signal);
@@ -1227,6 +1234,7 @@ class SceneRoom {
         stopCheck(job.signal);
         // 0.98 (owner question: "is it building with HTML render?"): the note names how this shot is made.
         live.note(job.id, `Writing ${shot.label} as ${FINISH_WORDS[At.frameFinish(direction, shot.frame)] || 'an HTML motion-graphics animation'} (${k + 1} of ${targets.length})`);
+        live.progress(job.id, {done: k, total: targets.length, unit: 'designed shots', current: shot.label, finished: targets.slice(0, k).map(item => item.shot.label)});
         const frameId = shot.label.toLowerCase(), duration = shot.durationSeconds, index = framed.findIndex(item => item.shot === shot);
         const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + duration - 0.01).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
         const neighbours = {before: framed[index - 1]?.shot.label, after: framed[index + 1]?.shot.label};
@@ -1367,6 +1375,7 @@ class SceneRoom {
     const again = error => ['network', 'timeout'].includes(error?.kind);
     const who = provider => (provider === 'chatgpt' ? 'ChatGPT' : 'Claude');
     let noteHead = 'Pictures';
+    const pictureDone = [];
     const artDirector = async (sha, rules, item, label, attempt) => {
       const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:check-${item.backdrop ? 'b' : 'p'}-${attempt}`, file = this.artFile(sha);
       live.note(job.id, `${noteHead}: ${who(planProvider)} checks the painting of ${label}`, 'The art director answers in one go, so no words show while it looks (usually a minute or two).');
@@ -1390,6 +1399,8 @@ class SceneRoom {
       noteHead = `Picture ${k + 1} of ${targets.length}`;
       live.note(job.id, noteHead);
       const {si, hi, item, shot} = target, label = shotLabel(si, hi);
+      live.progress(job.id, {done: k, total: targets.length, unit: 'pictures', current: label, finished: [...pictureDone]});
+      pictureDone.push(label); // marked finished when the next picture starts or the step ends
       const natural = isNatural(target);
       if (!keep.has(target)) { if (natural) orphans.push({target, why: `past the video's budget of ${scope.natural ?? 0} natural paintings`}); else drop(target, `past the video's budget of ${scope.budget} pictures`); continue; }
       const own = value => (value && value !== 'mix' ? value : null), engine = E.DRAW_ENGINES.includes(shot.sketch.engine) ? shot.sketch.engine : E.ENGINES[inputs.engine]?.draws ? inputs.engine : 'stickman';
@@ -1455,18 +1466,22 @@ class SceneRoom {
       }
       // A natural picture is only ever painted: without ChatGPT it waits for its scene's painting below.
       if (natural) { orphans.push({target, why: 'ChatGPT is not connected for pictures'}); continue; }
+      // 0.101 (owner screenshot 2026-11-10: "ChatGPT draws S20A" while Claude makes the pictures): the picture maker the
+      // owner chose draws the vector pictures; the storyboard's own AI draws them only when ChatGPT paints (its fallback)
+      // or no picture maker is set.
+      const drawer = !team?.painted && team?.pictures?.id ? team.pictures : null, drawId = drawer?.id || job.scope.connector.id, drawProvider = drawer?.provider || planProvider;
       for (let attempt = 1; attempt <= 2 && !art; attempt++) {
         const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:${attempt}`;
         if (!reserve(key, scope.tokenLimit)) { findings = ['the family\'s monthly token limit could not reserve it']; break; }
         const messages = Il.messages({describe: item.describe, words: words[si]?.[hi] || '', engine, board, look, design, palette, world: plan.world || null, grade: plan.grade || null, cast, aspect, findings, skills});
-        live.note(job.id, `${noteHead}: ${who(planProvider)} draws ${label}${attempt > 1 ? ' again' : ''}`);
+        live.note(job.id, `${noteHead}: ${who(drawProvider)} draws ${label}${attempt > 1 ? ' again' : ''}`, drawProvider === 'chatgpt' ? 'ChatGPT writes the whole picture in one go, so no words show until it is finished (usually a few minutes).' : undefined);
         const maxTokens = Math.min(32000, scope.tokenLimit - messageTokenUpperBound(messages));
         let reply;
-        try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'illustrate', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
+        try { reply = await this.ai.complete({connectorId: drawId, task: 'illustrate', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
         catch (error) {
           settle(key, null, error?.nothingUsed ? 'released' : 'unknown');
-          if (await halts(error, planProvider, true)) throw error;
-          findings = [error instanceof AiError || error instanceof InputError ? error.message : `${who(planProvider)} did not answer`];
+          if (await halts(error, drawProvider, drawId === job.scope.connector.id)) throw error;
+          findings = [error instanceof AiError || error instanceof InputError ? error.message : `${who(drawProvider)} did not answer`];
           if (again(error) && attempt < 2) continue;
           break;
         }
@@ -1480,6 +1495,7 @@ class SceneRoom {
       if (art) { plan.scenes[si].shots[hi].sketch.elements[target.ei].art = art; report.drawn++; }
       else drop(target, `its picture was not drawn (${findings[0] || 'no answer'})`);
     }
+    live.progress(job.id, {done: targets.length, total: targets.length, unit: 'pictures', finished: [...pictureDone]});
     // A natural scene left without its own painting shares a painting of its scene when there is one (the camera frames
     // it differently); otherwise it is drawn as a cartoon shot.
     for (const {target, why} of orphans) {
@@ -1526,6 +1542,7 @@ class SceneRoom {
     // 0.81: each finished chunk is saved with the job; 0.82.2: a redraw's too (a long-shot fix can cover many scenes).
     const save = k => { this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({partial: true, k, plan, reports, review: {changes, notes}}), now(), job.id); };
     for (let k = resume?.k || 0; k < chunks; k++) {
+      live.progress(job.id, {done: k, total: chunks, unit: 'parts of the check'});
       stopCheck(job.signal);
       const slice = scenes.slice(k * size, (k + 1) * size);
       if (!slice.length) continue;

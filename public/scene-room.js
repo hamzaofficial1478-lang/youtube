@@ -215,6 +215,11 @@ function sceneSwitch(content, job) {
   return other ? action(`Continue with ${other.name}`, 'scene-plan-claude', `${content.contentId}|${other.id}`, 'text-button') : '';
 }
 function sceneEmptyPlan(content) {
+  // 0.101 (owner 2026-11-10: "it still shows No scene plan yet while it is drawing the scenes"): the storyboard is saved
+  // whole when its last step finishes (so a half-made one is never drawn or approved); meanwhile the scenes planned so
+  // far are listed here.
+  const building = (typeof liveFor === 'function' ? liveFor(content.contentId, 'scene') : []).find(item => item.board?.length);
+  if (building) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">BEING BUILT · NOT SAVED YET</span><h2>The storyboard so far: ${building.board.length} scene${building.board.length === 1 ? '' : 's'}, ${building.board.reduce((sum, scene) => sum + scene.shots, 0)} shots</h2></div>${badge(`Step ${building.step} of ${building.steps}`, 'orange')}</div><p class="hint">${esc(building.who || 'The AI')} has planned these scenes. The storyboard is saved as a whole when the last step (${esc(building.plan?.at(-1) || 'the pictures')}) is finished, so a half-made one can never be drawn or approved; then every shot shows here with its drawing.</p><ol class="plan-preview">${building.board.map(scene => `<li><b>S${String(scene.n).padStart(2, '0')}</b> <span class="muted">${scene.from && scene.to ? `sentences ${scene.from}-${scene.to} · ` : ''}${esc(scene.purpose)}${scene.purpose ? ' · ' : ''}${scene.shots} shot${scene.shots === 1 ? '' : 's'}</span>${scene.direction ? `<br><small>${esc(scene.direction)}</small>` : ''}</li>`).join('')}</ol></section>`;
   return `<section class="production-card"><div class="production-empty compact"><h3>No scene plan yet</h3><p>${content.inputs.ready ? 'Build the storyboard with the AI you prefer (the real planner: it builds every scene and shot from the story). The rough free draft is only for testing. You can edit every scene and shot afterwards.' : esc(content.inputs.blockers.join(' '))}</p></div></section>`;
 }
 

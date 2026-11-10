@@ -198,6 +198,9 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 @media(prefers-reduced-motion:reduce){.live-dot{animation:none}}
 .live-job{display:grid;gap:6px;margin:12px 0;padding:12px;border:1px solid #d7e6dc;border-radius:10px;background:#fbfdfb}
 .live-head{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}.live-head .muted{font-size:12px}
+.live-steps{list-style:none;margin:6px 0 0;padding:0;display:grid;gap:4px;font-size:13px}.live-steps li{display:block;padding:3px 8px;border-radius:6px;line-height:1.5}.live-steps .now .meter,.live-steps .live-marks{margin-top:5px}.live-steps .done{color:#2f6b45}.live-steps .now{background:#eef6f0;border:1px solid #d7e6dc}.live-steps .later{color:#8a938d}
+.live-marks{display:flex;flex-wrap:wrap;gap:4px}.live-mark{font-size:11px;padding:1px 6px;border-radius:10px;background:#fff;border:1px solid #d7e6dc}.live-mark.done{color:#2f6b45}.live-mark.now{color:#9a6a1f;border-color:#ecd9b5}
+.plan-preview{max-height:420px;overflow:auto;margin:8px 0 0;padding-left:0;list-style:none;display:grid;gap:6px;font-size:13px}.plan-preview li{padding:6px 8px;border:1px solid #e4e9e1;border-radius:6px;background:#fbfdfb}
 .live-preview{max-height:220px;overflow:auto;margin:0;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:12px;line-height:1.5;background:#fff;border:1px solid #e4e9e1;border-radius:8px}
 .next-steps{margin:12px 0;padding:12px;border:1px solid #cfe3d6;border-radius:10px;background:#f2f8f4}.next-steps .card-actions{flex-wrap:wrap}
 /* 0.78 Voice Room: one card per script, its status top right, then two numbered steps on their own lines. */
