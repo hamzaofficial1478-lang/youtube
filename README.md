@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.99.0 - reference videos in Content Studio (a link with the transcript you paste; the writers study it and must beat it, never copy it), "Polish my script" (both AIs polish your own script and report what was missing, weak and changed, with the program's own checks before and after), and a copy guard against the references' wording. On top of 0.98.0. See AGENTS.md and docs/AI-TEAM.md.
+Version 0.100.0 - a storyboard is never stuck on a picture again: a painting that runs out of time or drops is tried once more and then drawn, Codex's reconnect notices are no longer read as a lost connection, the live line says what is being painted or checked, and jobs waiting for the internet go on as soon as it is back, watched for an hour with at most three automatic tries. On top of 0.99.0. See AGENTS.md and docs/SCENE-ROOM.md.
 
 This repository, [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube), is the program's home: `main` holds the current verified version. The laptop folder (Desktop\YT\youtube) is a working copy that pulls from `main` (`git pull origin main`). Uploading code to GitHub does not run its server.
 

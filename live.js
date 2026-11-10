@@ -27,7 +27,9 @@ function tick(id, {text = '', thinking = false} = {}) {
   if (text) { job.thinking = false; job.chars += text.length; job.total += text.length; job.preview = (job.preview + text).slice(-PREVIEW); }
 }
 // What the step is doing now (for example "picture 3 of 9"), without starting a new step.
-function note(id, text) { const job = jobs.get(id); if (job) { job.stepLabel = text; job.at = Date.now(); job.chars = 0; job.preview = ''; } }
+// wait (0.100): what this part of the step is doing while no words can arrive (a painting, a check that answers in one
+// go); a note without it goes back to the job's own.
+function note(id, text, wait) { const job = jobs.get(id); if (job) { job.stepLabel = text; job.at = Date.now(); job.chars = 0; job.preview = ''; if (!('baseWait' in job)) job.baseWait = job.wait; job.wait = wait || job.baseWait; } }
 // onProgress for ai.complete: the room passes this and the job's live entry follows the answer.
 const follow = id => update => tick(id, update || {});
 function end(id) { jobs.delete(id); }

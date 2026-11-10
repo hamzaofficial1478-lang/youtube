@@ -1323,12 +1323,12 @@ test('Stop really stops the AI, the storyboard pauses with every finished part, 
   assert.match(job.error, /not connected to the internet/);
   assert.deepEqual({...store.db.prepare('SELECT status, reserved_tokens FROM intelligence_usage WHERE job_id=?').get(`${queued.job.id}:run2`)}, {status: 'released', reserved_tokens: 0});
   // 0.84: the program waits for the internet and goes on by itself when it is back (owner request 2026-11-03).
-  assert.ok(Date.parse(job.pause.waitUntil) - Date.parse(job.pause.at) === 24 * 3600000, 'it waits a day for the connection (0.98; 30 minutes before)');
+  assert.ok(Date.parse(job.pause.waitUntil) - Date.parse(job.pause.at) === 3600000, 'it watches for the connection for an hour (0.100; a day in 0.98, 30 minutes before)');
   let online = false;
   ai.reach = async provider => { assert.equal(provider, 'claude'); return online; };
   assert.deepEqual(await room.resumeWhenOnline(), [], 'still offline: it keeps waiting and sends nothing');
   online = true;
-  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 25 * 3600000), [], 'after the wait the owner resumes it');
+  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 2 * 3600000), [], 'after the hour the owner resumes it');
   // Back online: it goes on by itself from part 2 on the same attempt; part 1 is never asked (or paid for) again.
   mode = 'go';
   assert.deepEqual(await room.resumeWhenOnline(), [queued.job.id]);
@@ -1653,4 +1653,52 @@ test('0.86: Approve visuals waits for every drawing, Clear keeps the job being d
   const back = await room.chooseStoryboard(third.job.id, {choice: 'previous', requestedBy: 'Owner', expectedRevision: thirdRow.revision});
   assert.deepEqual(back.manifest.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.id)), now3.plan.scenes.flatMap(scene => scene.shots.map(shot => shot.id)), 'the earlier storyboard comes back with its own shots');
   assert.equal(back.manifest.source, 'choice');
+});
+
+// 0.100 (owner report 2026-11-10: "it drew everything, Picture 2 of 2, waiting for the first words, and it failed three
+// times on the same spot"): one picture's trouble never stops the storyboard. A painting that runs out of time or loses
+// its connection while this PC is online is painted once more, then drawn instead; only a PC that is really offline
+// pauses the storyboard (and a Stop).
+test('a painting that times out or drops is painted once more, then drawn; the storyboard only pauses when really offline', async t => {
+  const {AiError} = require('../ai');
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const network = fakeNetwork({claudePlan: input => {
+    if (Array.isArray(input.raw)) return {fits: true, problems: []};
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A detailed picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `An old clay tablet covered in tally marks, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return {summary: 'Pictures where they serve.', scenes};
+  }});
+  const {room, content, ids, narrate} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
+  narrate(40);
+  room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}});
+  let chatgptOnline = true;
+  room.ai.reach = async provider => (provider === 'chatgpt' ? chatgptOnline : true);
+  const painted = [];
+  room.ai.image = async ({prompt, outFile, onStart}) => {
+    onStart(); painted.push(prompt);
+    const scene = Number(prompt.match(/scene (\d+)/)[1]), tries = painted.filter(item => new RegExp(`scene ${scene}\\b`).test(item)).length;
+    if (scene === 1 && tries === 1) throw new AiError('ChatGPT did not finish within 8 minutes, so the program stopped it. Its usage may still count.', 504, {kind: 'timeout'});
+    if (scene === 9) throw new AiError('The internet connection dropped while ChatGPT was answering, so that answer was lost. Its use may still count.', 503, {kind: 'network'});
+    fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(0, 80))]));
+    return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}};
+  };
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  const job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', JSON.stringify(job.error || job.pause));
+  const tries = n => painted.filter(prompt => new RegExp(`scene ${n}\\b`).test(prompt)).length;
+  assert.deepEqual([tries(1), tries(9)], [2, 2], 'each troubled painting is asked once more, never more');
+  const scenes = latestManifest(room, content.id).plan.scenes, notes = latestManifest(room, content.id).plan.pictures.notes.join(' ');
+  assert.ok(scenes[0].shots[0].sketch.elements.find(el => el.kind === 'picture')?.image, 'the timed-out painting succeeded on its second try');
+  assert.ok(!scenes[1].shots[0].sketch.elements.some(el => el.kind === 'picture' && el.image), 'the one that kept dropping is drawn instead');
+  assert.match(notes, /painting 1 stopped \(ChatGPT did not finish within 8 minutes/);
+  assert.match(notes, /ChatGPT could not paint it \(The internet connection dropped/);
+  // Really offline: the storyboard pauses at that picture, everything before it kept, and waits for the internet.
+  chatgptOnline = false;
+  const second = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  const paused = room.publicPlanJob(room.planJobRow(second.job.id));
+  assert.deepEqual([paused.status, paused.pause?.kind], ['paused', 'network']);
 });
