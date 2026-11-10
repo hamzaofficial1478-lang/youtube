@@ -1817,3 +1817,56 @@ test('every part is kept, a restart pause goes on by itself, and the time of eve
   assert.deepEqual(asked, Array.from({length: total}, (_, k) => k + 1), 'no part was planned twice');
   assert.equal(job.timings.length, 2, 'both runs are recorded');
 });
+
+// 0.104 (owner 2026-11-10, four checks): a shot-length note never fails a storyboard (the pace is this video's own or its
+// style's, never another engine's), a painting made before a stop is checked instead of painted again, and the pause says
+// honestly why the program was not running.
+test('a long-shot note keeps its part, a painting made before a stop is not painted again, and the stop is named', async t => {
+  const {AiError} = require('../ai');
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const asked = [], checks = [], usage = {promptTokens: 9000, completionTokens: 4000, totalTokens: 13000};
+  let online = true;
+  const ai = {team: () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}}), complete: ({messages, onStart}) => {
+    onStart();
+    let input = null; try { input = JSON.parse(messages[1].content); } catch { input = null; }
+    if (!input?.part) { checks.push(online); if (!online) return Promise.reject(new AiError('ChatGPT could not be reached from this PC.', 503, {kind: 'network', nothingUsed: true})); return Promise.resolve({content: JSON.stringify({fits: true, problems: []}), usage, model: 'm'}); }
+    asked.push(input.part.index);
+    // Twelve sentences (about 8 s) in one shot: longer than this style's own pace (4.5 s), every time it is asked.
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start += 12) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 11), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show it.', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `A clay tablet, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return Promise.resolve({content: JSON.stringify({summary: 'Plan', scenes}), usage, model: 'm'});
+  }};
+  ai.reach = async () => online;
+  const painted = [];
+  ai.image = async ({prompt, outFile, onStart}) => { onStart(); painted.push(prompt.match(/scene \d+/)[0]); online = painted.length === 1 ? false : online; fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(String(painted.length))])); return {usage: {promptTokens: 100, completionTokens: 10, totalTokens: 110}}; };
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
+  const {store, content, ids, family, narrate} = base;
+  narrate(40);
+  const room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  room.saveSettings(family.id, {...room.settings(family.id), continuityReview: false, revision: room.settings(family.id).revision});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  // The long shots did not fail the storyboard: it went on to the pictures. The first painting was made, then the
+  // connection dropped during its check: it pauses with that painting kept.
+  assert.ok(asked.length >= 2 && [...new Set(asked)].every(index => asked.filter(item => item === index).length === 2), `each part was asked once more about its long shots, then kept (${asked})`);
+  assert.deepEqual([job.status, job.pause?.kind], ['paused', 'network'], job.error);
+  assert.equal(painted.length, 1);
+  assert.equal(job.progress.pictures, 0, 'a painting not yet checked is not counted as a finished picture');
+  online = true;
+  room.resumePlan(queued.job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.equal(painted.filter(item => item === painted[0]).length, 1, 'the painting made before the stop was checked, not painted again');
+  assert.ok(latestManifest(room, content.id).plan.pictures.notes.some(item => /was made before the program stopped; it was checked now instead of painted again/.test(item)));
+  // The program was not running: the pause says why, from the Stop or Update note or the heartbeat.
+  const second = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  store.db.prepare("UPDATE scene_plan_jobs SET status='running' WHERE id=?").run(second.job.id);
+  let again = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai, stopped: {reason: 'update', at: '2026-11-10T12:00:00Z'}});
+  assert.match(again.publicPlanJob(again.planJobRow(second.job.id)).pause.message, /^The program restarted for an update \(Update Control Room\) around .* goes on by itself/);
+  store.db.prepare("UPDATE scene_plan_jobs SET status='running' WHERE id=?").run(second.job.id);
+  again = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai, stopped: {reason: 'unexpected', at: '2026-11-10T12:00:00Z'}});
+  assert.match(again.publicPlanJob(again.planJobRow(second.job.id)).pause.message, /^The program stopped unexpectedly around .*: it was not closed with Stop or Update, so Windows restarted or shut down, the PC lost power, or the program crashed/);
+});

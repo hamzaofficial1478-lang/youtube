@@ -1,3 +1,6 @@
+# Reason: stop (this script) or update (Update Control Room). The program reads it at its next start, so a
+# storyboard it was working on says honestly why it paused (0.104).
+param([string]$Reason = 'stop')
 $ErrorActionPreference = 'Stop'
 try {
     $programDirectory = Split-Path -Parent $PSScriptRoot
@@ -15,6 +18,8 @@ try {
     if ($appProcess.ProcessName -ne 'node' -or $appProcess.StartTime.ToUniversalTime().ToString('o') -ne $record.startedAt -or -not $processInfo.CommandLine.Contains('"' + $serverFile + '"')) {
         throw 'Process identity did not match the launcher record. Nothing was stopped.'
     }
+    $stopRecord = Join-Path $programDirectory 'data/last-stop.json'
+    @{ reason = $(if ($Reason -eq 'update') { 'update' } else { 'stop' }); at = (Get-Date).ToUniversalTime().ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath $stopRecord -Encoding UTF8
     Stop-Process -Id $appProcess.Id
     Write-Host 'Control Room stopped. Your saved workspace remains in the data folder.'
 } catch { Write-Host $_.Exception.Message -ForegroundColor Red; exit 1 }

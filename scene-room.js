@@ -11,6 +11,7 @@ const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const {AiError, messageTokenUpperBound, wordCount} = require('./writer');
 const live = require('./live');
+const {awakeFor} = require('./net-retry');
 const Sk = require('./sketch');
 const Il = require('./illustrate');
 const Dna = require('./visual-dna');
@@ -526,6 +527,18 @@ function sumUsage(list) {
 const answerTokens = text => Math.round(String(text || '').length / 3.3);
 // Stop pressed between two steps (0.81): the next step does not start; nothing of it was used.
 const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
+// Why a storyboard was paused when the program started again (0.104, owner 2026-11-10: "I never closed the program; is this
+// message fake?"). The Stop and Update scripts leave a note; without one the program ended without being closed (Windows
+// restarted or shut down, the PC lost power, or the program crashed), and its heartbeat says when it was last alive.
+function stopMessage(stopped) {
+  const when = stopped?.at && Number.isFinite(Date.parse(stopped.at)) ? ` around ${new Date(stopped.at).toLocaleString('en-GB', {day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'})}` : '';
+  if (stopped?.reason === 'update') return `The program restarted for an update (Update Control Room)${when} while this storyboard was being built.`;
+  if (stopped?.reason === 'stop') return `The program was stopped with Stop Control Room${when} while this storyboard was being built.`;
+  if (stopped?.reason === 'unexpected') return `The program stopped unexpectedly${when} while this storyboard was being built: it was not closed with Stop or Update, so Windows restarted or shut down, the PC lost power, or the program crashed (data/server-error.previous.log keeps what it last wrote).`;
+  return 'The program was not running for a while (it was restarted or stopped) while this storyboard was being built.';
+}
+// A part check that is only about shot length (0.104): the pace of this video (its AI design) or its style, never another's.
+const PACE_NOTE = /^Scene \d+ lasts about [\d.]+ s with \d+ shots?, so each holds about/;
 // How many designed shots are written at once (0.103): each has its own AI lane and checking browser.
 const DESIGN_LANES = 3;
 // The scenes planned so far, as the page lists them while the storyboard is still being built (0.101).
@@ -561,8 +574,12 @@ function planNeed(row, scope) {
 const tokenSplit = ({prompt, completion, answer}) => (Number.isSafeInteger(prompt) && Number.isSafeInteger(completion) && Number.isSafeInteger(answer) ? {read: prompt, answer: Math.min(answer, completion), thinking: Math.max(0, completion - answer)} : null);
 
 class SceneRoom {
-  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null, ai = new Ai(connectors), browser = findBrowser()} = {}) {
+  constructor(store, connectors, quota, styles, {dataRoot, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', competitorIntel = null, ai = new Ai(connectors), browser = findBrowser(), stopped = null} = {}) {
     this.ai = ai;
+    // Why the program's last run ended (0.104): the Stop or Update script, or nothing (an unexpected stop), with its time.
+    this.stopped = stopped;
+    // The PC's last sleep {from, to} (0.104): time asleep does not count against a wait for the internet.
+    this.sleep = null;
     // The live AbortController of each running storyboard (0.81): Stop aborts it.
     this.planRuns = new Map();
     this.browser = browser;
@@ -625,7 +642,7 @@ class SceneRoom {
       // 0.81: a storyboard the program closed on is paused, not lost: everything finished is kept and Resume goes on from
       // there. What its run used is kept from the answers that arrived, plus at most one answer that may have been in flight.
       for (const row of this.db.prepare("SELECT * FROM scene_plan_jobs WHERE status='running'").all()) {
-        const scope = JSON.parse(row.scope), message = 'The program was closed while this storyboard was being built. Everything finished is kept, and it goes on by itself from the step it was on as soon as the program runs again (or press Resume).';
+        const scope = JSON.parse(row.scope), message = `${stopMessage(this.stopped)} Everything finished is kept, and it goes on by itself from the step it was on now that the program runs again (or press Resume).`;
         this.db.prepare("UPDATE scene_plan_jobs SET status='paused', pause=?, error=?, updated_at=? WHERE id=?").run(JSON.stringify({kind: 'closed', at, message}), message, at, row.id);
         this.endRun(row, scope, row.spent ? JSON.parse(row.spent) : [], true, row.runs || 1);
         // A picture or a designed frame that was being drawn has its own reservation; its use is unknown too.
@@ -703,7 +720,7 @@ class SceneRoom {
       family, ready: !blockers.length, blockers,
       voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, auditionId: voice.auditionId || null, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
       // 0.82: what the drawings will look like (looks, the drawing hand, film looks), shown in Room 04 before anything is drawn.
-      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, engine: spec ? E.primaryEngine(spec) : null, ...(spec?.atelier ? {atelier: {finish: spec.atelier.finish || 'motion', finishes: spec.atelier.finishes || null, script: spec.atelier.script || null}} : {}), ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
+      style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, engine: spec ? E.primaryEngine(spec) : null, review: !!(spec && this.settings(family.id).continuityReview && E.ENGINES[E.primaryEngine(spec)]?.draws), ...(spec?.atelier ? {atelier: {finish: spec.atelier.finish || 'motion', finishes: spec.atelier.finishes || null, script: spec.atelier.script || null}} : {}), ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
       spec, sources, engine: planner.engine, primarySource: planner.primarySource, scope: planner.scope || null,
     };
   }
@@ -914,7 +931,7 @@ class SceneRoom {
     let provider = null; try { provider = JSON.parse(this.connectors.row(scope.connector.id).payload).provider; } catch { /* connection removed */ }
     // How far it got (0.81), so a paused or failed job says what Resume or a retry keeps.
     const reviewed = row.reviewed ? JSON.parse(row.reviewed) : null, pause = row.pause ? JSON.parse(row.pause) : null;
-    const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%'").get(row.id).n};
+    const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%' AND key NOT LIKE '%:unchecked-%'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%'").get(row.id).n};
     let timings = null; try { timings = row.timings ? JSON.parse(row.timings) : null; } catch { timings = null; }
     return {id: row.id, provider, ...(timings?.length ? {timings} : {}), ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       usage: usage ? {status: usage.status, reserved: usage.reserved_tokens, total: usage.total_tokens, prompt: usage.prompt_tokens, completion: usage.completion_tokens} : null};
@@ -1042,7 +1059,10 @@ class SceneRoom {
           if (!findings.length) break;
         }
         if (parsed === undefined || range) return this.completePlan(job.id, undefined, sumUsage(spent), range || (parts.length > 1 ? `Claude did not return the required JSON plan for part ${index + 1} of ${parts.length}.` : null));
-        if (findings.length) return this.completePlan(job.id, undefined, sumUsage(spent), `${name} broke the style's rules twice: ${findings[0]}${done.length ? ' Everything before it is kept, so a retry asks only this part again.' : ''}`);
+        // 0.104 (owner 2026-11-10: "do not bind the AI's visuals to one style's timing"): shots held longer than the video's
+        // pace are a timing note, never a reason to lose the storyboard. After the one extra ask the part is kept; the
+        // finished plan lists those shots and "Fix the long shots" splits them. Only real rule breaks stop a part.
+        if (findings.length && !findings.every(item => PACE_NOTE.test(item))) return this.completePlan(job.id, undefined, sumUsage(spent), `${name} broke the style's rules twice: ${findings[0]}${done.length ? ' Everything before it is kept, so a retry asks only this part again.' : ''}`);
         done.push({index, parsed});
         // Every part is kept as it arrives, the last one too (0.103, owner report 2026-11-10: a Motion Graphics storyboard
         // kept "1 of 2 parts" after reaching its pictures; without a continuity check the last part was never saved, so
@@ -1179,8 +1199,9 @@ class SceneRoom {
       // 0.103 (owner report 2026-11-10: "it did not retry by itself; after 2 hours it was still stopped"): a storyboard the
       // program was closed on goes on by itself once the program runs again (within a week); a lost connection is watched
       // for NET_WAIT_MINUTES.
-      const restarted = pause?.kind === 'closed';
-      if (!(pause?.kind === 'network' || restarted) || (pause.auto || 0) >= NET_AUTO || at - Date.parse(pause.at) > (restarted ? 7 * 24 * 60 : NET_WAIT_MINUTES) * 60000) continue;
+      // 0.104: time asleep does not count, so a laptop asleep for hours still gets its full hour after waking.
+      const restarted = pause?.kind === 'closed', waited = awakeFor(Date.parse(pause?.at) || 0, at, this.sleep);
+      if (!(pause?.kind === 'network' || restarted) || (pause.auto || 0) >= NET_AUTO || waited > (restarted ? 7 * 24 * 60 : NET_WAIT_MINUTES) * 60000) continue;
       let provider;
       try { provider = JSON.parse(this.connectors.row(JSON.parse(row.scope).connector.id).payload).provider; } catch { continue; }
       if (await reach(provider) !== true) continue;
@@ -1467,16 +1488,29 @@ class SceneRoom {
         const references = [...(styleKey ? [styleKey] : []), ...portraits].slice(0, 3).map(sha => this.artFile(sha));
         for (let attempt = 1; attempt <= 2 && !image; attempt++) {
           const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}${attempt > 1 ? `-${attempt}` : ''}`;
-          if (!reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
+          // A painting finished before a stop but not yet checked is kept (0.104): Resume has it checked instead of
+          // painting it again.
+          const pendingKey = `${paintKey}:unchecked-${attempt}`;
+          const kept = (() => { const row = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, pendingKey); return row ? JSON.parse(row.art) : null; })();
+          // One the art director already sent back: its reasons go to the next painting, nothing is asked again.
+          if (kept?.rejected) { problems = kept.rejected; why = `the art director rejected it: ${problems.join('; ')}`; continue; }
+          let pending = kept?.image || null;
+          if (pending) { try { this.artFile(pending); } catch { pending = null; } }
+          if (!pending && !reserve(key, PAINT_TOKENS)) { why = 'the family\'s monthly token limit could not reserve it'; break; }
           const incoming = path.join(this.dataRoot, 'generated-art', `.incoming-${randomUUID()}.png`);
           fs.mkdirSync(path.dirname(incoming), {recursive: true});
           live.note(job.id, `${noteHead}: ChatGPT paints ${label}${attempt > 1 ? ` again (${problems.length ? `the art director sent the first back: ${problems.slice(0, 2).join('; ')}` : 'the first try did not finish'})` : ''}`, 'A painting sends no words while it is made, so nothing shows until it is ready (usually 1-3 minutes; the program stops it after 8).');
-          let settled = false;
+          let settled = !!pending;
           try {
+            let candidate = pending;
+            if (pending) notes.push(`${label}: its painting was made before the program stopped; it was checked now instead of painted again.`);
+            else {
             const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills, lessons}), outFile: incoming, references, onStart});
             settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
             report.tokens += made.usage?.totalTokens || 0;
-            const candidate = this.keepArt(incoming);
+            candidate = this.keepArt(incoming);
+            this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, pendingKey, JSON.stringify({image: candidate}), now());
+            }
             // The art director (the plan's own AI) looks at it before it is used; a picture in the wrong medium is painted
             // once more with what was wrong, and a second miss leaves the shot to the drawing.
             const verdict = await artDirector(candidate, rules, item, label, attempt);
@@ -1489,6 +1523,7 @@ class SceneRoom {
               if (verdict.unchecked) notes.push(`${label}: its painting could not be checked by the art director (${verdict.unchecked}); look at it in Room 04.`);
             } else {
               problems = verdict.problems.length ? verdict.problems : ['it does not match the look'];
+              this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, pendingKey, JSON.stringify({image: candidate, rejected: problems}), now());
               for (const problem of problems) if (!lessons.includes(problem)) lessons.push(problem);
               report.repainted = (report.repainted || 0) + (attempt < 2 ? 1 : 0);
               why = `the art director rejected it twice: ${problems.join('; ')}`;

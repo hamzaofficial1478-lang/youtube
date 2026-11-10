@@ -9,8 +9,15 @@
 // in the program's log as done by the program. At most MAX tries per job, and only for an hour after it stopped.
 // Storyboards wait for the internet in their own way (scene-room `resumeWhenOnline`).
 const NETWORK = /could not be reached|connection dropped|not connected to the internet/i;
+// 0.104 (owner 2026-11-10: "the program did not try by itself"): work a restart or an unexpected stop cut off (each room
+// marks it with these words when the program starts again) is tried again the same way.
+const RESTART = /program stopped (while|during)|stopped during an unknown (research )?request/i;
 // 0.100 (owner 2026-11-10: "wait for 1 hour, not 1 day"; repeated retries must not keep spending): an hour, three tries.
 const MAX = 3, WINDOW_MS = 3600 * 1000;
+
+// How long the PC has been awake since t (0.104): a sleep in between does not count, so a laptop that slept for hours
+// still gets its full hour after waking.
+const awakeFor = (t, at, sleep) => at - t - (sleep ? Math.max(0, Math.min(at, sleep.to) - Math.max(t, sleep.from)) : 0);
 
 class NetRetry {
   // online(): true when this PC can reach the AI services again (the server passes the real check; tests their own).
@@ -23,6 +30,8 @@ class NetRetry {
     this.db = store.db;
     this.online = online;
     this.kinds = [];
+    // The PC's last sleep {from, to} (0.104): time asleep does not count against the hour.
+    this.sleep = null;
     this.db.exec('CREATE TABLE IF NOT EXISTS net_retries(kind TEXT NOT NULL, job_id TEXT NOT NULL, tries INTEGER NOT NULL, last_at TEXT NOT NULL, last_error TEXT, PRIMARY KEY(kind, job_id))');
   }
   // kind: a name; table: its jobs (status, error, updated_at); label: what the job is, in words; retry(row): the room's
@@ -42,10 +51,10 @@ class NetRetry {
     return out;
   }
   rows(item, at) {
-    const since = new Date(at - WINDOW_MS).toISOString(), marks = item.statuses.map(() => '?').join(',');
+    const since = new Date(at - 7 * 24 * 3600 * 1000).toISOString(), marks = item.statuses.map(() => '?').join(',');
     const hasContent = this.db.prepare('SELECT 1 FROM pragma_table_info(?) WHERE name=?').get(item.table, 'content_id');
     return this.db.prepare(`SELECT id, status, error, updated_at${hasContent ? ', content_id' : ''} FROM ${item.table} WHERE status IN (${marks}) AND error IS NOT NULL AND updated_at >= ?${item.where ? ` AND ${item.where}` : ''} ORDER BY updated_at`).all(...item.statuses, since)
-      .filter(row => NETWORK.test(row.error) && this.tries(item.kind, row.id) < MAX);
+      .filter(row => (NETWORK.test(row.error) || RESTART.test(row.error)) && awakeFor(Date.parse(row.updated_at), at, this.sleep) <= WINDOW_MS && this.tries(item.kind, row.id) < MAX);
   }
   tries(kind, id) { return this.db.prepare('SELECT tries FROM net_retries WHERE kind=? AND job_id=?').get(kind, id)?.tries || 0; }
   // One check: when the connection is back, every job that stopped for it is tried again once.
@@ -74,4 +83,4 @@ class NetRetry {
   }
 }
 
-module.exports = {NetRetry, NETWORK, MAX};
+module.exports = {NetRetry, NETWORK, RESTART, MAX, awakeFor};
