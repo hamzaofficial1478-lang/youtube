@@ -490,7 +490,7 @@ const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.pla
   ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director'], ['script.review', 'Script review by the second writer'], ['qc.review', 'Frame scan (Room 08)']]);
 
 // The record of each job that receives a skill brief, by the job it is for (0.79).
-const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs'});
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs', 'packaging.title': 'package_jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.
@@ -1159,8 +1159,9 @@ class SkillsEngine {
   gate() {
     return {
       brief: (taskKey, context) => this.promptBrief(taskKey, {context}),
-      record: ({taskKey, task, brief, applied}) => {
-        const jobId = `request:${randomUUID()}`;
+      // jobId: the room's job when it names one (0.98), so the video's own rooms can list the skills of their jobs.
+      record: ({taskKey, task, brief, applied, jobId: given = null}) => {
+        const jobId = given || `request:${randomUUID()}`;
         this.recordUsage({jobId, room: 'program', taskKey, brief, outcome: 'answered'});
         this.recordApplied(jobId, taskKey, applied);
       },

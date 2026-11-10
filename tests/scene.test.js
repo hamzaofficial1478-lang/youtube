@@ -1323,12 +1323,12 @@ test('Stop really stops the AI, the storyboard pauses with every finished part, 
   assert.match(job.error, /not connected to the internet/);
   assert.deepEqual({...store.db.prepare('SELECT status, reserved_tokens FROM intelligence_usage WHERE job_id=?').get(`${queued.job.id}:run2`)}, {status: 'released', reserved_tokens: 0});
   // 0.84: the program waits for the internet and goes on by itself when it is back (owner request 2026-11-03).
-  assert.ok(Date.parse(job.pause.waitUntil) - Date.parse(job.pause.at) === 30 * 60000, 'it waits 30 minutes for the connection');
+  assert.ok(Date.parse(job.pause.waitUntil) - Date.parse(job.pause.at) === 24 * 3600000, 'it waits a day for the connection (0.98; 30 minutes before)');
   let online = false;
   ai.reach = async provider => { assert.equal(provider, 'claude'); return online; };
   assert.deepEqual(await room.resumeWhenOnline(), [], 'still offline: it keeps waiting and sends nothing');
   online = true;
-  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 31 * 60000), [], 'after the wait the owner resumes it');
+  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 25 * 3600000), [], 'after the wait the owner resumes it');
   // Back online: it goes on by itself from part 2 on the same attempt; part 1 is never asked (or paid for) again.
   mode = 'go';
   assert.deepEqual(await room.resumeWhenOnline(), [queued.job.id]);
@@ -1346,6 +1346,43 @@ test('Stop really stops the AI, the storyboard pauses with every finished part, 
   assert.ok(done.plan.scenes.every(scene => scene.shots.every(shot => shot.motion !== 'push-in')), 'every camera move is the style\'s');
   assert.ok(done.warnings.some(item => /camera move "push-in" is not in the style/.test(item)), 'the change is named');
   assert.equal(store.usageSummary(family.id).settledTokens, 2 * 13000, 'the last run settles the two parts it made');
+});
+
+// 0.98 (owner report 2026-11-10 with a screenshot: a ChatGPT storyboard ended "Interrupted · cost unknown ... Claude scene
+// planning failed"): a story map the program cannot read leaves the plan without it, and a fault of the program itself
+// pauses the storyboard with its real cause, the AI that was working and the step, so Resume goes on from that step.
+test('an unreadable story map is left out, and a fault of the program pauses the storyboard with its real cause', async t => {
+  const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
+  const asked = [], usage = {promptTokens: 9000, completionTokens: 4000, totalTokens: 13000};
+  let broken = true;
+  const ai = {team: () => ({}), complete: ({messages, onStart}) => {
+    let input = null;
+    try { input = JSON.parse(messages[1].content); } catch { input = null; }
+    onStart();
+    if (!input?.part) { asked.push('map'); return Promise.resolve({content: 'Here is the map: ```{"chapters": [', usage, model: 'gpt'}); }
+    asked.push(input.part.index);
+    if (input.part.index === 2 && broken) return Promise.reject(new TypeError("Cannot read properties of undefined (reading 'scenes')"));
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start += 2) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 1), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show the records.', onScreenText: '', shots: [{source: 'stock-video', query: 'clay records', prompt: '', motion: 'static', notes: ''}]});
+    return Promise.resolve({content: JSON.stringify({summary: `Part ${input.part.index}`, scenes}), usage, model: 'gpt'});
+  }};
+  const base = setup(t, fakeNetwork(), {scriptText: longScript, targetMinutes: 14});
+  const {store, content, ids} = base, room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.deepEqual([job.status, job.pause?.kind], ['paused', 'error'], job.error);
+  assert.match(job.error, /^Claude was working on ".+" when the program hit a problem of its own: Cannot read properties of undefined \(reading 'scenes'\)\. This is not your internet or your AI plan\./);
+  assert.deepEqual(job.parts, {total: 3, done: 1}, 'part 1 is kept');
+  assert.deepEqual(await room.resumeWhenOnline(), [], 'a program fault is not a lost connection: it waits for the owner');
+  broken = false;
+  room.resumePlan(queued.job.id, {});
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.deepEqual(asked, ['map', 1, 2, 2, 3], 'neither the map nor part 1 is asked again');
+  assert.deepEqual(JSON.parse(store.db.prepare('SELECT map FROM scene_plan_jobs WHERE id=?').get(queued.job.id).map), {unusable: true});
+  assert.ok(latestManifest(room, content.id).warnings.some(item => /story director's answer was not usable/.test(item)), 'the plan says it went on without the map');
 });
 
 test('a part that breaks the style\'s rules is asked again alone with what failed, numbered as the video\'s scenes', async t => {

@@ -38,7 +38,7 @@ function stScoreCard(family, content) {
     ${cues}
     ${failedJob ? `<p class="inline-warning">${esc(job.error || job.status)}</p>${action('Retry the score', 'audio-score-retry', job.id, 'text-button')}` : ''}${failedMusic.map(entry => `<p class="inline-warning">${esc(entry.error || entry.status)}</p>${action('Retry this cue', 'audio-job-retry', entry.id, 'text-button')}`).join('')}
     <div class="card-actions">${busy ? '' : action(score ? 'Score again with Claude' : 'Score with Claude', 'audio-score-claude', content.contentId, 'primary')}${busy ? '' : action('Free score', 'audio-score-rules', content.contentId, 'secondary')}${score?.current && fromLibrary && intelConnectors('freesound').length && !sndFilling() ? action('Find sounds for this video', 'audio-music-fill', content.contentId, 'secondary') : ''}${score && score.current && !score.ready && !generating && !fromLibrary ? action('Generate the music', 'audio-score-generate', score.id, 'secondary') : ''}</div>
-    <p class="hint">Music follows the story's parts. ${!fromLibrary ? 'ElevenLabs generates each cue.' : intelConnectors('freesound').length ? '"Find sounds" searches Freesound for each part and each sound on screen.' : 'Connect Freesound to fetch music and sounds for each video.'}</p></section>`;
+    ${skillsUsedFold(content.contentId, ['audio.mix'], 'Skills used for the music score')}<p class="hint">Music follows the story's parts. ${!fromLibrary ? 'ElevenLabs generates each cue.' : intelConnectors('freesound').length ? '"Find sounds" searches Freesound for each part and each sound on screen.' : 'Connect Freesound to fetch music and sounds for each video.'}</p></section>`;
 }
 function stLibraryCard(family) {
   const st = stFamily(family.id);

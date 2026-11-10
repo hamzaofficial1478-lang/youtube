@@ -205,7 +205,7 @@ class PackagingRoom {
     let started = false, usage = null;
     const settle = (status, at) => this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?').run(status, usage?.promptTokens ?? null, usage?.completionTokens ?? null, usage?.totalTokens ?? null, at, job.id);
     try {
-      const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'packaging', messages: P.packageMessages(job.scope.promptInput), maxTokens: ANSWER_TOKENS, onStart: () => { started = true; }});
+      const reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'packaging', jobId: job.id, messages: P.packageMessages(job.scope.promptInput), maxTokens: ANSWER_TOKENS, onStart: () => { started = true; }});
       usage = reply.usage;
       const inputs = this.inputs(job.content_id);
       if (inputs.content.revision !== job.scope.contentRevision || !inputs.ready) throw Object.assign(new AiError('The script or board changed while Claude was drafting. The draft was not saved.'), {quality: true, stale: true});
