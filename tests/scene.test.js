@@ -1870,3 +1870,47 @@ test('a long-shot note keeps its part, a painting made before a stop is not pain
   again = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai, stopped: {reason: 'unexpected', at: '2026-11-10T12:00:00Z'}});
   assert.match(again.publicPlanJob(again.planJobRow(second.job.id)).pause.message, /^The program stopped unexpectedly around .*: it was not closed with Stop or Update, so Windows restarted or shut down, the PC lost power, or the program crashed/);
 });
+
+// 0.105 (owner report 2026-11-10 with a screenshot: a Motion Graphics storyboard stopped at its very last step on "Set
+// must be one of: none, room, ..." and every Resume stopped the same way): a designed shot that failed its checks is
+// drawn from its words in its scene's own place, even a place of the video's world kit; the storyboard is saved; and a
+// design that failed twice is remembered, so a Resume never pays for it again.
+test('a failed design is drawn in its kit place, the storyboard is saved, and a Resume never asks for a failed design again', {skip: skip || (findBrowser() ? false : 'No Edge or Chrome on this machine')}, async t => {
+  const good = id => `<template><div id="root" data-composition-id="${id}" data-width="1920" data-height="1080" data-duration="3"><div id="${id}-bg" class="clip" data-start="0" data-duration="30"></div><div id="${id}-hero">45</div><style>#${id}-bg{position:absolute;inset:0;background:#2A3350}#${id}-hero{position:absolute;left:0;right:0;top:30%;text-align:center;font:900 200px Bahnschrift;color:#F7F4EE}</style><script>const tl = gsap.timeline({paused: true}); tl.fromTo('#${id}-hero', {opacity: 0, y: 40}, {opacity: 1, y: 0, duration: 0.5, ease: 'power3.out'}, 0.1); window.__timelines["${id}"] = tl;</script></div></template>`;
+  const frame = n => ({blueprint: 'dataviz-countup', posture: 'adapt', focal: 'the ninja', roles: 'ninja = foreground subject', beats: [{show: 'the ninja trains'}], motions: ['counting-dynamic-scale'], type: 'evidence', persuasion: 'worked example', beat: `discipline ${n}`});
+  const asked = [];
+  const network = fakeNetwork({claudePlan: input => {
+    if (input.raw) { const packet = JSON.parse(input.raw.split('\n\n')[0]); asked.push(packet.frameId); return packet.frameId === 's02a' ? 'Here is my idea in words, not a composition.' : good(packet.frameId); }
+    if (!input.sentences) return {report: 'All shots match their words.', changes: []};
+    const all = input.sentences, half = Math.ceil(all.length / 2);
+    const scenes = [[all[0].n, all[half - 1].n], [all[half].n, all.at(-1).n]].map(([start, end], k) => ({sentenceStart: start, sentenceEnd: end, purpose: k ? 'explain' : 'hook', direction: 'Train in silence.', onScreenText: '',
+      ...(k ? {setting: {set: 'kit:dojo', mood: 'normal'}} : {}), shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'zoom', notes: '', frame: frame(k + 1)}]}));
+    return {summary: 'A ninja trains.', kit: [{id: 'dojo', kind: 'set', name: 'training hall', shapes: [{path: 'M0 72.5 L160 72.5 L160 90 L0 90 Z', fill: '#8a7a66'}]}], scenes,
+      direction: {read: 'A quiet ninja story where every move is earned.', dials: {variance: 4, motion: 5, density: 3}, palette: {canvas: '#10131A', ink: '#F7F4EE', accent: '#E0753E', support: '#3A6EA5'}, fonts: {display: 'Bahnschrift', body: 'Segoe UI'}, motion: 'power3 settles', signature: 'one ink stroke', avoid: ['purple gradients']}};
+  }});
+  const {room, content, ids, store, narrate} = setup(t, network, {styleKey: 'atelier', withVoice: false, storyMap: false});
+  narrate(40);
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  const manifest = latestManifest(room, content.id), byLabel = Object.fromEntries(shots(manifest).map(shot => [shot.label, shot]));
+  assert.ok(byLabel.S01A.frame.html, 'the first design passed');
+  assert.equal(byLabel.S02A.sketch.set, 'kit:dojo', 'the failed design is drawn from its words in its own kit place');
+  assert.ok(byLabel.S02A.sketch.kit?.dojo, 'and carries the place it draws');
+  assert.deepEqual(asked.filter(id => id === 's02a').length, 2, 'the failed design was asked twice');
+  assert.equal(job.progress.frames, shots(manifest).filter(shot => shot.frame?.html).length, 'a remembered failure is not counted as a kept design');
+  // Paused by a fault and resumed: nothing designed or failed before is asked again.
+  const before = asked.length;
+  store.db.prepare("UPDATE scene_plan_jobs SET status='paused', pause=? WHERE id=?").run(JSON.stringify({kind: 'error', at: new Date().toISOString(), message: 'fixture'}), queued.job.id);
+  store.db.prepare("UPDATE intelligence_usage SET job_id=? WHERE job_id=?").run(`${queued.job.id}:run1`, queued.job.id); // as a real pause does (endRun)
+  // A fault of an older version of the program (no version recorded) goes on by itself once after the update.
+  assert.deepEqual(await room.resumeWhenOnline(), [queued.job.id]);
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.equal(asked.length, before, `no design was asked again (${asked.slice(before)})`);
+  assert.ok(latestManifest(room, content.id).plan.compose.notes.some(item => /^S02A: .*decided before the stop; not asked again/.test(item)));
+  // The fallback never fails: a short line on the motion engine (the designed engines' fallback) shows its own words.
+  assert.deepEqual(require('../sketch').fromText('Yes, he did it.', {primary: 'motion'}).elements.map(item => [item.kind, item.text]), [['text', 'Yes, he did it.']]);
+});
