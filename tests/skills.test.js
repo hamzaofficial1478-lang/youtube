@@ -526,9 +526,9 @@ test('0.39: a whole pack is approved in one named review of the exact drafts sho
   assert.equal(approved.length, 14);
   assert.ok(approved.every(item => item.approved.review.approvedBy === review.approvedBy && item.approved.review.pack === pack), 'each revision carries its own named approval');
   const brief = skills.brief('scene.plan');
-  assert.equal(brief.byteBudget, 16000);
-  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 16000);
-  assert.equal(skills.brief('script.candidate').byteBudget, 12000, 'script writing carries a full brief (0.73)');
+  assert.equal(brief.byteBudget, 24000, 'quality first (0.97): the storyboard carries the fullest brief');
+  assert.ok(brief.skillIds.includes('scene.script-cues-to-visuals') && brief.injectedBytes <= 24000);
+  assert.equal(skills.brief('script.candidate').byteBudget, 16000, 'script writing carries a full brief (0.73, larger in 0.97)');
   assert.equal(skills.brief('research.brief').byteBudget, BRIEF_BYTE_BUDGET, 'jobs with a small fixed limit keep the default share');
   assert.ok(!skills.brief('scene.plan').skillIds.some(id => id.startsWith('profile.')), 'channel profiles reach a family only where pinned');
 });
@@ -627,7 +627,7 @@ test('0.74: each request gets the skills that fit it, never a fixed list, and th
   assert.ok(mystery.alternatives > 0);
   assert.notDeepEqual(mystery.skillIds, list.skillIds, 'two different videos get different skills');
   // Format: a long video never gets a Shorts-only skill, and a Short never gets a long-form-only one.
-  const skills = new Map(engine.select('script.candidate').map(item => [item.skill.id, item.skill]));
+  const skills = new Map(engine.skills().map(item => [item.id, (item.approved || item.latest).skill]));
   const shortsOnly = id => /^shorts\./.test(id) || skills.get(id).tags.includes('shorts');
   assert.ok(mystery.offFormat > 0 && !mystery.skillIds.some(shortsOnly));
   // Engine: a Stickman plan never carries the anime, whiteboard or footage rules; a documentary plan may.
@@ -674,4 +674,30 @@ test('each skill use shows how its job really ended and which video it was for',
   assert.deepEqual([byJob['job-voice'].jobStatus, byJob['job-voice'].contentId], ['completed', content.id]);
   assert.deepEqual([byJob.gone.jobStatus, byJob.gone.contentId], [null, null]);
   assert.ok(store.state() && app.store, 'the page state still builds');
+});
+
+// 0.97 (owner 2026-11-10: "selected skills each time for all videos, channels and engines, never hardcoded; the program
+// scans the skills and the need"): the owner's own and imported skills compete on fit (a lift that grows with fit), only
+// pins keep a fixed place, and a skill written for another job joins a request that strongly asks for it.
+test('0.97: skills are chosen by fit and need for every request; only pins are fixed', t => {
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const engine = new SkillsEngine(store, {root}).attach();
+  const own = (id, title, words) => ({id, title, rooms: ['script'], tasks: ['script.candidate'], kind: 'principle', when: `When ${words}.`, summary: `Owner rule about ${words}.`, do: [`Apply ${words}.`], source: 'Owner notes', priority: 60});
+  engine.importPack({createdBy: 'Hasnain', changeNote: 'My skills for scripts', pack: 'mine.zip', skills: [own('script.own-thumbnail-fonts', 'Thumbnail fonts', 'bold thumbnail fonts and colours'), own('script.own-mystery-pacing', 'Mystery pacing', 'unsolved mystery case file pacing with a clue every minute')],
+    approve: {approvedBy: 'Hasnain', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}}});
+  const mystery = engine.brief('script.candidate', {context: {text: 'The unsolved mystery of the Mary Celeste: a true case file', format: 'long-form'}});
+  const at = id => mystery.skillIds.indexOf(id);
+  assert.ok(at('script.own-mystery-pacing') >= 0 && at('script.own-mystery-pacing') < 3, 'a fitting owner skill comes near the front');
+  assert.ok(at('script.own-thumbnail-fonts') === -1 || at('script.own-thumbnail-fonts') > at('story.case-file-mystery'), 'an owner skill that does not fit this video is not forced in front');
+  assert.equal(mystery.reasons.find(why => why.id === 'script.own-mystery-pacing').own, true);
+  // A pin still leads, whatever the request.
+  engine.bind({createdBy: 'Hasnain', note: 'Every script should think about the thumbnail', skillId: 'script.own-thumbnail-fonts', mode: 'pin', taskKey: 'script.candidate', familyId: null, position: 1});
+  assert.equal(engine.brief('script.candidate', {context: {text: 'The unsolved mystery of the Mary Celeste'}}).skillIds[0], 'script.own-thumbnail-fonts');
+  // By need: a script that is all about maps and routes also gets the map skills written for the storyboard.
+  const maps = engine.brief('script.candidate', {context: {text: 'A map of the trade route: the route across the map from city to city, country borders and geography on the map', format: 'long-form'}});
+  const crossed = maps.reasons.filter(why => why.related);
+  assert.ok(crossed.length >= 1 && crossed.length <= 4, JSON.stringify(crossed.map(why => why.id)));
+  assert.ok(crossed.every(why => why.related !== 'script.candidate' && why.matched.length >= 3));
+  assert.ok(!engine.brief('script.candidate', {context: {}}).reasons.some(why => why.related), 'no words, nothing crosses over');
 });

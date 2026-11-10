@@ -172,3 +172,8 @@ which ages and how likely its videos are to spread. Evaluations are `promptVersi
 strength low/medium/high, why), `countryTiers` (1-3 groups: tier 1 high ad rates, 2, 3; countries; why), `ages`
 (core range, another range, why) and `viral` (chance low/medium/high, why, what makes it spread, what holds it back).
 They are Claude's estimates from the supplied data and are shown as estimates on the result.
+
+## TubeMind research (0.97)
+
+A "TubeMind research" card runs the tools of the owner's TubeMind connection (one button per tool, a window built from the tool's own fields, one request per click, never retried). Results are kept 30 days; those with research in them are evidence for "Niches the program suggests" while ticked. TubeMind says its connector data is paused while YouTube reviews its API use; a run then shows "Paused by TubeMind". Details: TUBEMIND.md.
+

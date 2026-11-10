@@ -335,6 +335,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         // 0.96: a skills folder or .zip is read first (kept, thrown out, assigned jobs), then imported and approved by name.
         if(pathname==='/api/skills/read-files'&&req.method==='POST')return json(res,200,skills.readFiles(body));
         if(pathname==='/api/skills/import'&&req.method==='POST')return json(res,200,skills.importPack(body));
+        // 0.97: TubeMind research from the owner's click (one tool call), and keeping or removing a result.
+        if(pathname==='/api/tubemind/run'&&req.method==='POST')return json(res,200,await nicheFactory.runTubemind(body));
+        const tubemindRead=pathname.match(/^\/api\/tubemind\/reads\/([a-f0-9-]+)$/);
+        if(tubemindRead&&req.method==='POST')return json(res,200,nicheFactory.tubemindRead(tubemindRead[1],body));
         if(pathname==='/api/skills/packs/approve'&&req.method==='POST')return json(res,200,skills.approvePack(body));
         if(pathname==='/api/skill-bindings'&&req.method==='POST')return json(res,200,skills.bind(body));
         const skillRevision=pathname.match(/^\/api\/skills\/([a-z][a-z0-9]*\.[a-z0-9][a-z0-9-]*)\/revisions$/);

@@ -61,3 +61,8 @@ Free sound effects (Freesound, API key) and music (Jamendo, 8-character client I
 needs the owner's confirmation that the platform allows their use, kept with the slot (`termsConfirmed`). The test runs
 one search and downloads nothing. The Freesound key travels in the Authorization header only. The Jamendo client ID is
 a request parameter, as its API requires.
+
+## TubeMind (0.97)
+
+Provider `tubemind`: paste the connector URL from tubemind.io → Connect AI → "Create connector URL" (https on tubemind.io only; kept encrypted like a key, never shown again). The test opens an MCP session, lists TubeMind's research tools and asks for one niche list; it passes when TubeMind answers and says when TubeMind reports its data as paused. See TUBEMIND.md.
+

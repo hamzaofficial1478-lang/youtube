@@ -248,7 +248,7 @@ function readsCard(niches) {
 // Niche suggestions (0.70): sub-niches of a channel or new niches on the rise, from what the scans already hold.
 function suggestionsCard(niches) {
   const src = niches.suggestionSources, level = value => badge(value, value === 'high' ? 'green' : value === 'medium' ? 'orange' : 'gray');
-  const have = [`${src.reddit} Reddit scan${src.reddit === 1 ? '' : 's'}`, `${src.youtube} YouTube trend scan${src.youtube === 1 ? '' : 's'}${src.youtube && !src.youtubeApproved ? ' (not used until YouTube derived use is recorded)' : ''}`, `${src.discoveries} NexLev discover${src.discoveries === 1 ? 'y' : 'ies'}`, `${src.reads} screenshot read${src.reads === 1 ? '' : 's'}`, `competitor scans of ${Object.keys(src.competitorScans).length} channel${Object.keys(src.competitorScans).length === 1 ? '' : 's'}`];
+  const have = [`${src.reddit} Reddit scan${src.reddit === 1 ? '' : 's'}`, `${src.youtube} YouTube trend scan${src.youtube === 1 ? '' : 's'}${src.youtube && !src.youtubeApproved ? ' (not used until YouTube derived use is recorded)' : ''}`, `${src.discoveries} NexLev discover${src.discoveries === 1 ? 'y' : 'ies'}`, `${src.tubemind || 0} TubeMind result${src.tubemind === 1 ? '' : 's'}`, `${src.reads} screenshot read${src.reads === 1 ? '' : 's'}`, `competitor scans of ${Object.keys(src.competitorScans).length} channel${Object.keys(src.competitorScans).length === 1 ? '' : 's'}`];
   const rows = niches.suggestions.map(job => {
     const family = state.families.find(item => item.id === job.familyId), result = job.result;
     const retry = ['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'usage_unknown', 'stale'].includes(job.status) && job.attempts < 3 ? action('Retry deliberately', 'niche-suggest-retry', job.id, 'text-button') : '';
@@ -258,6 +258,26 @@ function suggestionsCard(niches) {
   }).join('');
   return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">SUGGESTIONS</span><h2>Niches the program suggests</h2></div>${action('Suggest niches', 'niche-suggest', '', 'primary')}</div>
     <p>Sub-niches of one of your channels, found in its competitors, or new niches on the rise. Claude learns from what your scans hold now: ${esc(have.join(', '))}.</p><p class="hint">More scans, better suggestions: YouTube and Reddit scans in <a href="#trends">Trending topics</a>, discovery on a niche idea (NexLev), a screenshot read, or a channel's <a href="#competitors">competitor reading</a>.</p>${listTools('niche-suggestions', niches.suggestions.map(job => job.id))}${rows || '<p class="muted">No suggestions yet.</p>'}</section>`;
+}
+// TubeMind (0.97): the owner's TubeMind connector (tubemind.io) and the research its tools return. Each run is one click;
+// results stay 30 days and, while ticked, are evidence for niche suggestions.
+const TM_STATUS = {done: ['Research', 'green'], paused: ['Paused by TubeMind', 'orange'], refused: ['Refused', 'gray']};
+function tubemindCard(niches) {
+  const tm = niches.tubemind || {connections: [], reads: []};
+  if (!tm.connections.length) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">TUBEMIND</span><h2>TubeMind research</h2></div></div>
+    <p>Outlier videos, niche reports with an Enter now · Wait · Avoid verdict, channel research, similar and new channels from your TubeMind account.</p>
+    <p class="hint">Connect it once in Connections: choose "TubeMind", paste the connector URL from tubemind.io → Connect AI → "Create connector URL" (it is shown once and holds your key), save and test.</p></section>`;
+  const tools = tm.connections.map(connection => `<div class="bp-section"><p><strong>${esc(connection.name)}</strong> ${connection.paused ? badge('Paused by TubeMind', 'orange') : badge('Ready', 'green')}</p>
+      ${connection.paused ? '<p class="hint">TubeMind says its research data is paused while YouTube reviews its API use. You can still run a tool: it answers "paused" until TubeMind resumes. Test the connection again in Connections to check.</p>' : ''}
+      <div class="card-actions">${connection.tools.map(tool => action(tool.title || tool.name, 'niche-tubemind-run', `${connection.id}|${tool.name}`, 'secondary')).join('')}</div></div>`).join('');
+  const reads = tm.reads.map(read => {
+    const [label, tone] = TM_STATUS[read.status] || [read.status, 'gray'], asked = Object.entries(read.args).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`).join(' · ');
+    return `<div class="suggest-job"><div>${badge(label, tone)} <strong>${esc(read.title || read.tool)}</strong> <small class="muted">${esc(date(read.createdAt))}${asked ? ` · ${esc(asked)}` : ''}</small></div>
+      <details><summary>What TubeMind returned</summary><pre class="tm-text">${esc(read.text || '(nothing)')}</pre></details>
+      <div class="card-actions">${read.status === 'done' ? action(read.use ? 'Used as evidence (stop)' : 'Use as evidence', 'niche-tubemind-use', read.id, 'text-button') : ''}${action('Remove', 'niche-tubemind-remove', read.id, 'text-button danger')}</div></div>`;
+  }).join('');
+  return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">TUBEMIND</span><h2>TubeMind research</h2></div></div>
+    <p>Run one of TubeMind's tools with your own words (a niche, a channel, a topic). Results stay 30 days; the ones marked as evidence go into "Niches the program suggests".</p><div class="bp-grid">${tools}</div>${reads || '<p class="muted">No TubeMind results yet.</p>'}</section>`;
 }
 const GO_LABEL = {strong: ['Go', 'green'], promising: ['Go with a small test', 'orange'], weak: ['No-go for now', 'gray'], do_not_produce: ['Do not produce', 'gray']};
 function risingTable(disc) {
@@ -297,7 +317,7 @@ function nichesView() {
   const used = niches.tokens;
   return heading('Niche Factory', 'Your niche ideas, from your own words, pasted links or screenshots. Discovery finds the competitors that grew in the last 3 months; Claude judges go or no-go, studies the viewers and finds what competitors miss. You decide what becomes a family.', action('Suggest niches', 'niche-suggest', '', 'secondary') + action('Read a screenshot', 'niche-read', '', 'secondary') + action('+ New niche idea', 'niche-new', '', 'primary'))
     + `<div class="production-kpis"><div><span>Active ideas</span><strong>${active.length}</strong><small>${ideas.length - active.length} archived</small></div><div><span>NexLev this month</span><strong>${intelNumber(niches.quota.nexlev.used)}</strong><small>of ${intelNumber(niches.quota.nexlev.cap)} requests</small></div><div><span>Niche tokens ${esc(used.period)}</span><strong>${intelNumber(used.settled + used.reserved)}</strong><small>of ${intelNumber(used.limit)}</small></div><div><span>Shortlisted / approved</span><strong>${niches.evaluations.filter(item => ['shortlisted', 'approved'].includes(item.review?.decision)).length}</strong><small>${niches.evaluations.filter(item => item.review?.familyId).length} became families</small></div></div>`
-    + `<div class="intel-grid"><div>${idea ? nicheDetail(idea, niches) : `<section class="production-card">${empty('Add your first niche idea.', 'Describe the idea, add 1-5 keywords and optional seed channels. Discovery uses NexLev; evaluation uses Claude.', action('+ New niche idea', 'niche-new', '', 'primary'))}</section>`}${suggestionsCard(niches)}</div>
+    + `<div class="intel-grid"><div>${idea ? nicheDetail(idea, niches) : `<section class="production-card">${empty('Add your first niche idea.', 'Describe the idea, add 1-5 keywords and optional seed channels. Discovery uses NexLev; evaluation uses Claude.', action('+ New niche idea', 'niche-new', '', 'primary'))}</section>`}${suggestionsCard(niches)}${tubemindCard(niches)}</div>
       <div><section class="production-card"><div class="production-card-head"><div><span class="micro-label">YOUR IDEAS</span><h2>Niche ideas</h2></div>${action('Settings', 'niche-settings', '', 'secondary')}</div>${listTools('niche-ideas', ideas.map(item => item.id))}<div class="niche-list">${cards || '<p class="muted">No ideas yet.</p>'}</div></section>${readsCard(niches)}${dataCapsCard()}</div></div>`;
 }
 
@@ -677,6 +697,23 @@ function intelAction(command, id, button) {
     return api(`/api/niche-reads/${id}/retry`, {confirmInterrupted: unknown}).then(refresh).then(() => toast('Deliberately requeued.')).catch(error => toast(error.message, true)).finally(() => { button.disabled = false; });
   }
   if (command === 'niche-open') { selectedIdea = id; render(); document.querySelector('.intel-grid')?.scrollIntoView({block: 'start'}); return; }
+  if (command === 'niche-tubemind-run') {
+    const [connectorId, name] = id.split('|'), connection = (state.intelligence.niches.tubemind?.connections || []).find(item => item.id === connectorId), tool = connection?.tools.find(item => item.name === name);
+    if (!tool) return toast('Test the TubeMind connection again in Connections to refresh its tools.', true);
+    const field = item => {
+      const label = `${esc(item.name)}${item.required ? '' : ' <span class="hint">(optional)</span>'}${item.description ? ` <span class="hint">${esc(item.description)}</span>` : ''}`;
+      if (item.enum) return `<label>${label}<select name="tm_${esc(item.name)}">${item.required ? '' : '<option value="">-</option>'}${item.enum.map(value => `<option ${String(item.default) === value ? 'selected' : ''}>${esc(value)}</option>`).join('')}</select></label>`;
+      if (item.type === 'boolean') return `<label class="checkbox-label"><input type="checkbox" name="tm_${esc(item.name)}" ${item.default === true ? 'checked' : ''}><span>${label}</span></label>`;
+      return `<label>${label}<input name="tm_${esc(item.name)}" ${item.type === 'number' || item.type === 'integer' ? `type="number" ${item.type === 'integer' ? 'step="1"' : 'step="any"'}` : ''} ${item.required ? 'required' : ''} value="${item.default !== undefined ? esc(String(item.default)) : ''}"></label>`;
+    };
+    return intelDialog('tubemind', tool.title || tool.name, 'TUBEMIND · ONE CLICK, ONE REQUEST', `<p>${esc(tool.description || 'A TubeMind research tool.')}</p><div class="form-grid">${tool.fields.map(field).join('')}${nameField()}</div>
+      <p class="note">One request to your TubeMind account (it counts toward your TubeMind plan's daily limits). Nothing is retried by itself; the result is kept 30 days.</p>`, 'Run', {connectorId, tool: tool.name, fields: tool.fields.map(item => ({name: item.name, type: item.type}))});
+  }
+  if (command === 'niche-tubemind-use' || command === 'niche-tubemind-remove') {
+    const read = (state.intelligence.niches.tubemind?.reads || []).find(item => item.id === id);
+    button.disabled = true;
+    return api(`/api/tubemind/reads/${id}`, command === 'niche-tubemind-remove' ? {remove: true} : {use: !read?.use}).then(refresh).catch(error => toast(error.message, true)).finally(() => { button.disabled = false; });
+  }
   if (command === 'niche-archive') {
     const idea = state.intelligence.niches.ideas.find(item => item.id === id);
     button.disabled = true;
@@ -752,6 +789,13 @@ document.getElementById('intel-form').addEventListener('submit', event => {
       selectedIdea = idea.id; return idea;
     }
     if (kind === 'niche-settings') return api('/api/niche-settings', {revision: data.revision, monthlyTokenLimit: number('monthlyTokenLimit'), evaluationTokenLimit: number('evaluationTokenLimit'), similarLevel: number('similarLevel'), keywordResults: number('keywordResults'), analyticsTopChannels: number('analyticsTopChannels'), momentumChannels: number('momentumChannels'), readTokenLimit: number('readTokenLimit'), suggestTokenLimit: number('suggestTokenLimit')});
+    if (kind === 'tubemind') {
+      const args = {};
+      for (const item of data.fields) { const input = form.elements[`tm_${item.name}`]; if (!input) continue; const raw = input.type === 'checkbox' ? input.checked : input.value; if (raw !== '' && raw !== false) args[item.name] = raw; }
+      const read = await api('/api/tubemind/run', {connectorId: data.connectorId, tool: data.tool, args, requestedBy: value('person')});
+      message = read.status === 'done' ? 'TubeMind returned research. It is kept 30 days and used as evidence for niche suggestions.' : read.status === 'paused' ? 'TubeMind answered "paused": its research data is paused while YouTube reviews its API use. Nothing else was used.' : 'TubeMind refused the request; its answer is shown in the card.';
+      return read;
+    }
     if (kind === 'niche-suggest') return api('/api/niche-suggestions', {mode: value('mode'), familyId: value('mode') === 'sub' ? value('familyId') : '', count: number('count'), note: value('note'), connector: connectorPayload(form, 'claude'), requestedBy: value('person')});
     if (kind === 'discover') return api(`/api/niche-ideas/${data.ideaId}/discoveries`, {ideaRevision: data.ideaRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube')});
     if (kind === 'evaluate') return api(`/api/niche-ideas/${data.ideaId}/evaluations`, {ideaRevision: data.ideaRevision, discoveryId: data.discoveryId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')});

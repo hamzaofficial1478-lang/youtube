@@ -296,3 +296,7 @@ Two review jobs that ran without skills now receive them as directives: Claude's
 
 `SkillsEngine.gate()` gives `Ai` (server.js `ai.skills`) the brief of a job for a request that arrives without skills, and records its use (room `program`, outcome `answered`, job id `request:<uuid>`).
 
+## Fit and need (0.97)
+
+`rankSkills` keeps only pinned skills in a fixed place. Owner and learned skills join the open ranking with a lift of `0.1 + 0.3 × fit` (fit = the request's weighted word match against the best match), so a fitting one rises and an unfitting one does not crowd the brief. `relatedSkills(taskKey, selected, {familyId, context})` ranks the approved skills of other jobs (never pin-only, never blocked for this job, never off format or engine) against the request and keeps those with three or more matched words, four at most; `brief` places them after the job's six leading skills, and their reason names the job they were written for (`why.related`). Skill words are cached per revision (`skillStems`), since every request scans the library (about 40 ms). Budgets: `BRIEF_BYTE_BUDGET` 6,000; `TASK_BRIEF_BYTES` script 16,000, scene 24,000, editing 16,000, voice 12,000, audio 10,000, motion 10,000, competitors 8,000, pictures 8,000, QC 8,000, script review 8,000 (owner decision 2026-11-10: quality first).
+

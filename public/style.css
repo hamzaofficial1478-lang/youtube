@@ -297,3 +297,6 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 details.more-text{margin:0 0 1em}details.more-text>summary{cursor:pointer;list-style:none;line-height:1.65}details.more-text>summary::-webkit-details-marker{display:none}
 details.more-text .more-label,details.more-text .less-label{color:inherit;font-weight:600;font-size:11px;white-space:nowrap;text-decoration:underline;text-underline-offset:2px}details.more-text .less-label,details.more-text[open] .more-label,details.more-text[open] .more-lead{display:none}details.more-text[open] .less-label{display:inline}details.more-text>p{margin:4px 0 0}
 .production-notice{margin-top:18px;font-size:12px;color:#5f6f66}.production-notice>summary{cursor:pointer}.production-notice>p{margin:6px 0 0}
+
+/* 0.97: what TubeMind returned, as plain text that wraps and scrolls. */
+.tm-text{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto;font-size:.85rem;background:#f7f9f5;border:1px solid #e3e8df;padding:10px 12px;border-radius:8px}
