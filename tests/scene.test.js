@@ -1042,7 +1042,9 @@ test('atelier shots: Claude plans an art direction and frames, a frame worker de
   const system = network.calls.find(call => call.path === '/v1/messages').body.system;
   assert.match(system, /SCENE CRAFT[\s\S]*ATELIER SHOTS[\s\S]*dataviz-countup/, 'the planner reads the scene craft and the atelier catalog');
   // One frame worker answer per atelier shot; a failed check is asked again once with its findings.
-  assert.deepEqual(asked.slice(0, 5), ['s01a', 's01b', 's01b:retry', 's02a', 's02a:retry']);
+  assert.deepEqual([...asked.slice(0, 5)].sort(), ['s01a', 's01b', 's01b:retry', 's02a', 's02a:retry']);
+  // 0.103: designed shots are written side by side (three at a time), so S02A is asked before S01B's retry.
+  assert.ok(asked.indexOf('s02a') < asked.indexOf('s01b:retry'), asked.join(' '));
   const manifest = latestManifest(room, content.id), byLabel = Object.fromEntries(shots(manifest).map(shot => [shot.label, shot]));
   assert.equal(manifest.plan.direction.fonts.body, 'Segoe UI', 'a font that is not installed falls back, with a named warning');
   assert.ok(manifest.warnings.some(item => /Comic Neue/.test(item)) && manifest.warnings.some(item => /not-a-rule/.test(item)));
@@ -1763,4 +1765,55 @@ test('paintings are aimed at the art director\'s checks, and a rejection teaches
   assert.equal(prompts.filter(prompt => /The last attempt was rejected/.test(prompt)).length, 1, 'only the rejected picture was painted twice');
   const notes = latestManifest(room, content.id).plan.pictures.notes;
   assert.match(notes[0], /^1 painting was made a second time/);
+});
+
+// 0.103 (owner report 2026-11-10: a Motion Graphics storyboard kept "1 of 2 parts" after reaching its pictures, was
+// paused when the program was closed and still stopped two hours later): every part is kept as it arrives (the last one
+// too, with no continuity check), a storyboard paused by a restart goes on by itself, and each run records where its
+// time went.
+test('every part is kept, a restart pause goes on by itself, and the time of every step is recorded', async t => {
+  const {AiError} = require('../ai');
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const longScript = Array.from({length: 15}, (_, p) => (p === 0 ? [hook] : []).concat(Array.from({length: p === 0 ? 11 : 12}, (_, i) => sentence(p * 12 + i + 1))).join(' ')).join('\n\n');
+  const asked = [], usage = {promptTokens: 9000, completionTokens: 4000, totalTokens: 13000};
+  const ai = {team: () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}}), complete: ({messages, onStart}) => {
+    onStart();
+    let input = null; try { input = JSON.parse(messages[1].content); } catch { input = null; }
+    if (!input?.part) return Promise.resolve({content: JSON.stringify({fits: true, problems: []}), usage, model: 'm'});
+    asked.push(input.part.index);
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start++) scenes.push({sentenceStart: start, sentenceEnd: start, purpose: start === 1 ? 'hook' : 'explain', direction: 'Show it.', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `A clay tablet, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return Promise.resolve({content: JSON.stringify({summary: `Part ${input.part.index}`, scenes}), usage, model: 'm'});
+  }};
+  let online = false;
+  ai.reach = async provider => (provider === 'chatgpt' ? online : true);
+  ai.image = async ({outFile, onStart}) => {
+    onStart();
+    if (!online) throw new AiError('ChatGPT could not be reached from this PC.', 503, {kind: 'network', nothingUsed: true});
+    fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(String(Math.random()))]));
+    return {usage: {promptTokens: 100, completionTokens: 10, totalTokens: 110}};
+  };
+  const base = setup(t, fakeNetwork(), {scriptText: longScript, targetMinutes: 14, storyMap: false, styleKey: 'stickman-sketch-explainer'});
+  const {store, content, ids, family} = base;
+  const room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  room.saveSettings(family.id, {...room.settings(family.id), continuityReview: false, revision: room.settings(family.id).revision});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.deepEqual([job.status, job.pause?.kind], ['paused', 'network'], 'the pictures could not be painted: the PC is offline');
+  const total = job.parts.total;
+  assert.ok(total >= 2 && JSON.parse(room.planJobRow(queued.job.id).parts).length === total, 'every part is kept, the last one too');
+  assert.ok(job.timings[0].steps.length >= 3 && job.timings[0].steps.every(step => Number.isInteger(step.seconds)), 'the run recorded its steps');
+  // The program is closed on it: a new start pauses it as "closed", and it goes on by itself, even hours later.
+  store.db.prepare("UPDATE scene_plan_jobs SET status='running' WHERE id=?").run(queued.job.id);
+  const restarted = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  assert.equal(restarted.publicPlanJob(restarted.planJobRow(queued.job.id)).pause.kind, 'closed');
+  online = true;
+  assert.deepEqual(await restarted.resumeWhenOnline(Date.now() + 3 * 3600000), [queued.job.id], 'a restart pause goes on by itself');
+  await restarted.processNextPlan();
+  job = restarted.publicPlanJob(restarted.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.deepEqual(asked, Array.from({length: total}, (_, k) => k + 1), 'no part was planned twice');
+  assert.equal(job.timings.length, 2, 'both runs are recorded');
 });

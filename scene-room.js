@@ -526,6 +526,8 @@ function sumUsage(list) {
 const answerTokens = text => Math.round(String(text || '').length / 3.3);
 // Stop pressed between two steps (0.81): the next step does not start; nothing of it was used.
 const pausing = error => ['stopped', 'network', 'limit'].includes(error?.kind);
+// How many designed shots are written at once (0.103): each has its own AI lane and checking browser.
+const DESIGN_LANES = 3;
 // The scenes planned so far, as the page lists them while the storyboard is still being built (0.101).
 const boardOf = scenes => (Array.isArray(scenes) ? scenes : []).slice(0, 300).map((scene, index) => ({n: index + 1, from: scene?.sentenceStart ?? null, to: scene?.sentenceEnd ?? null, purpose: String(scene?.purpose || '').slice(0, 30), direction: String(scene?.direction || '').replace(/\s+/g, ' ').trim().slice(0, 160), shots: Array.isArray(scene?.shots) ? scene.shots.length : 0}));
 // How each Motion Graphics finish is made, in the words of the live view (every one is HTML the AI writes, which the
@@ -612,6 +614,8 @@ class SceneRoom {
     if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'cleared_at')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN cleared_at TEXT');
     if (!this.db.prepare('PRAGMA table_info(visual_approvals)').all().some(column => column.name === 'cleared_at')) this.db.exec('ALTER TABLE visual_approvals ADD COLUMN cleared_at TEXT');
     if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'choice')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN choice TEXT');
+    // Where each run's time went, step by step (0.103), kept across restarts.
+    if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(column => column.name === 'timings')) this.db.exec('ALTER TABLE scene_plan_jobs ADD COLUMN timings TEXT');
     // 0.81 (owner review 2026-11-02: Stop, Resume, and a retry that starts again from part 1): the answers a run used
     // (spent), why a job is paused (pause) and how many runs it had (runs).
     for (const [column, type] of [['spent', 'TEXT'], ['pause', 'TEXT'], ['runs', 'INTEGER NOT NULL DEFAULT 0']]) if (!this.db.prepare('PRAGMA table_info(scene_plan_jobs)').all().some(item => item.name === column)) this.db.exec(`ALTER TABLE scene_plan_jobs ADD COLUMN ${column} ${type}`);
@@ -621,7 +625,7 @@ class SceneRoom {
       // 0.81: a storyboard the program closed on is paused, not lost: everything finished is kept and Resume goes on from
       // there. What its run used is kept from the answers that arrived, plus at most one answer that may have been in flight.
       for (const row of this.db.prepare("SELECT * FROM scene_plan_jobs WHERE status='running'").all()) {
-        const scope = JSON.parse(row.scope), message = 'The program was closed while this storyboard was being built. Everything finished is kept: Resume goes on from the step it was on.';
+        const scope = JSON.parse(row.scope), message = 'The program was closed while this storyboard was being built. Everything finished is kept, and it goes on by itself from the step it was on as soon as the program runs again (or press Resume).';
         this.db.prepare("UPDATE scene_plan_jobs SET status='paused', pause=?, error=?, updated_at=? WHERE id=?").run(JSON.stringify({kind: 'closed', at, message}), message, at, row.id);
         this.endRun(row, scope, row.spent ? JSON.parse(row.spent) : [], true, row.runs || 1);
         // A picture or a designed frame that was being drawn has its own reservation; its use is unknown too.
@@ -911,7 +915,8 @@ class SceneRoom {
     // How far it got (0.81), so a paused or failed job says what Resume or a retry keeps.
     const reviewed = row.reviewed ? JSON.parse(row.reviewed) : null, pause = row.pause ? JSON.parse(row.pause) : null;
     const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%'").get(row.id).n};
-    return {id: row.id, provider, ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    let timings = null; try { timings = row.timings ? JSON.parse(row.timings) : null; } catch { timings = null; }
+    return {id: row.id, provider, ...(timings?.length ? {timings} : {}), ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       usage: usage ? {status: usage.status, reserved: usage.reserved_tokens, total: usage.total_tokens, prompt: usage.prompt_tokens, completion: usage.completion_tokens} : null};
   }
   retryPlan(id, input) {
@@ -976,7 +981,16 @@ class SceneRoom {
     const STEP = {map: 'The story director maps the whole video', part: index => (parts.length > 1 ? `Planning scenes and shots, part ${index + 1} of ${parts.length}` : 'Planning the scenes and shots'), review: 'Checking every shot against its words and its neighbours', compose: 'Writing each designed shot as HTML (the Motion Graphics engine)', pictures: 'Drawing and painting the pictures'};
     const plan = single ? [single] : [...(job.scope.map ? [STEP.map] : []), ...parts.map((_, index) => STEP.part(index)), ...(job.scope.review ? [STEP.review] : []), ...(job.scope.compose ? [STEP.compose] : []), STEP.pictures];
     let stepNo = 0, stepLabel = single || 'Planning the scenes';
-    const next = (label, expected = null, maxTokens = null) => { stepLabel = label; return live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null}); };
+    // Where the time goes (0.103): every step of this run with its seconds, saved with the job as it goes.
+    const priorTimes = (() => { try { return JSON.parse(job.timings || '[]'); } catch { return []; } })(), runTimes = [], runNo = priorTimes.length + 1;
+    let stepStarted = Date.now();
+    const clock = () => {
+      const at = Date.now();
+      if (stepNo) runTimes.push({step: stepLabel, seconds: Math.round((at - stepStarted) / 1000)});
+      stepStarted = at;
+      try { this.db.prepare('UPDATE scene_plan_jobs SET timings=? WHERE id=?').run(JSON.stringify([...priorTimes, {run: runNo, steps: runTimes}].slice(-12)), job.id); } catch { /* bookkeeping only */ }
+    };
+    const next = (label, expected = null, maxTokens = null) => { clock(); stepLabel = label; return live.step(job.id, ++stepNo, label, {expected, limit: maxTokens ? limitOf(maxTokens) : null}); };
     live.start(job.id, {room: 'scene', label: single || 'Planning the scenes', steps, plan, contentId: job.content_id, familyId: job.family_id, who: provider === 'chatgpt' ? 'ChatGPT' : 'Claude', stoppable: true});
     try {
       if (job.scope.redesign) return await this.redesign(job, () => { started = true; });
@@ -1030,7 +1044,10 @@ class SceneRoom {
         if (parsed === undefined || range) return this.completePlan(job.id, undefined, sumUsage(spent), range || (parts.length > 1 ? `Claude did not return the required JSON plan for part ${index + 1} of ${parts.length}.` : null));
         if (findings.length) return this.completePlan(job.id, undefined, sumUsage(spent), `${name} broke the style's rules twice: ${findings[0]}${done.length ? ' Everything before it is kept, so a retry asks only this part again.' : ''}`);
         done.push({index, parsed});
-        if (index < parts.length - 1 || job.scope.review) this.db.prepare('UPDATE scene_plan_jobs SET parts=?, updated_at=? WHERE id=?').run(JSON.stringify(done), now(), job.id);
+        // Every part is kept as it arrives, the last one too (0.103, owner report 2026-11-10: a Motion Graphics storyboard
+        // kept "1 of 2 parts" after reaching its pictures; without a continuity check the last part was never saved, so
+        // every stop or restart planned it again and then designed and painted its shots again).
+        this.db.prepare('UPDATE scene_plan_jobs SET parts=?, updated_at=? WHERE id=?').run(JSON.stringify(done), now(), job.id);
       }
       done.sort((a, b) => a.index - b.index);
       let merged = parts.length === 1 ? done[0].parsed : mergeParts(done.map(item => item.parsed)), review = null;
@@ -1078,6 +1095,7 @@ class SceneRoom {
       });
       return null;
     } finally {
+      clock();
       this.planRuns.delete(job.id);
       live.end(job.id);
       this.planBusy = false;
@@ -1158,7 +1176,11 @@ class SceneRoom {
     const resumed = [];
     for (const row of this.db.prepare("SELECT id, scope, pause FROM scene_plan_jobs WHERE status='paused' ORDER BY updated_at").all()) {
       const pause = row.pause ? JSON.parse(row.pause) : null;
-      if (pause?.kind !== 'network' || (pause.auto || 0) >= NET_AUTO || at - Date.parse(pause.at) > NET_WAIT_MINUTES * 60000) continue;
+      // 0.103 (owner report 2026-11-10: "it did not retry by itself; after 2 hours it was still stopped"): a storyboard the
+      // program was closed on goes on by itself once the program runs again (within a week); a lost connection is watched
+      // for NET_WAIT_MINUTES.
+      const restarted = pause?.kind === 'closed';
+      if (!(pause?.kind === 'network' || restarted) || (pause.auto || 0) >= NET_AUTO || at - Date.parse(pause.at) > (restarted ? 7 * 24 * 60 : NET_WAIT_MINUTES) * 60000) continue;
       let provider;
       try { provider = JSON.parse(this.connectors.row(JSON.parse(row.scope).connector.id).payload).provider; } catch { continue; }
       if (await reach(provider) !== true) continue;
@@ -1219,8 +1241,6 @@ class SceneRoom {
     const skillBrief = this.store.skillRuntime?.brief('motion.template', family.id, {text: [content.title, content.angle, family.niche, ...used, ...targets.slice(0, 12).map(item => item.shot.frame.focal || '')].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null,
       style: ['engine', 'atelier', 'motion', ...used, used.includes('anime') ? 'anime' : '', used.includes('pixel') ? 'pixel' : '', used.includes('collage') ? 'collage paper' : ''].filter(Boolean).join(' ')}) || null;
     if (skillBrief) this.store.skillRuntime.recordUsage({jobId: job.id, familyId: family.id, room: 'scene', taskKey: 'motion.template', brief: skillBrief});
-    const renderer = this.browser ? new MotionRenderer({browser: this.browser, timeoutMs: 20000}) : null;
-    let rendererReady = false;
     const reserve = (key, limit) => this.store.transaction(() => {
       const summary = this.store.usageSummary(family.id);
       if (summary.settledTokens + summary.reservedTokens + limit > family.tokenBudget.monthlyLimit) return false;
@@ -1229,55 +1249,74 @@ class SceneRoom {
       return true;
     });
     const settle = (key, usage, status) => this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, reserved_tokens=CASE WHEN ?=\'released\' THEN 0 ELSE reserved_tokens END, updated_at=? WHERE job_id=?').run(status, usage?.promptTokens ?? null, usage?.completionTokens ?? null, usage?.totalTokens ?? null, status, now(), key);
-    try {
-      for (const [k, {shot, si, hi}] of targets.entries()) {
-        stopCheck(job.signal);
-        // 0.98 (owner question: "is it building with HTML render?"): the note names how this shot is made.
-        live.note(job.id, `Writing ${shot.label} as ${FINISH_WORDS[At.frameFinish(direction, shot.frame)] || 'an HTML motion-graphics animation'} (${k + 1} of ${targets.length})`);
-        live.progress(job.id, {done: k, total: targets.length, unit: 'designed shots', current: shot.label, finished: targets.slice(0, k).map(item => item.shot.label)});
-        const frameId = shot.label.toLowerCase(), duration = shot.durationSeconds, index = framed.findIndex(item => item.shot === shot);
-        const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + duration - 0.01).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
-        const neighbours = {before: framed[index - 1]?.shot.label, after: framed[index + 1]?.shot.label};
-        // A design finished before a stop is kept with the job (0.82.2), so a resume goes on with the next shot.
-        const keptKey = `frame:${hash({label: shot.label, frame: shot.frame, ask: ask || null})}`, keptFrame = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, keptKey);
-        let findings = [], html = keptFrame ? JSON.parse(keptFrame.art).html : null;
-        for (let attempt = 1; attempt <= 2 && !html; attempt++) {
-          const key = `${job.id}:frame:${shot.label}:${job.tag ?? job.attempts}:${attempt}`, limit = job.scope.compose.tokenLimit;
-          if (!reserve(key, limit)) { notes.push(`${shot.label}: the family's monthly token limit could not reserve this shot; it is drawn from its words.`); break; }
-          const messages = At.composeMessages({frameId, ...canvas, duration, frame: shot.frame, direction, words: spoken, neighbours, notes: shot.notes, findings, ask, fps: inputs.spec.canvas.frameRate, skills: skillBrief?.prompt || null});
-          const maxTokens = Math.min(32000, limit - messageTokenUpperBound(messages));
-          let reply;
-          try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'frames', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id)}); }
-          catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; notes.push(`${shot.label}: ${error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer.'} It is drawn from its words.`); break; }
-          settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
-          report.tokens += reply.usage?.totalTokens || 0;
-          const own = At.frameFinish(direction, shot.frame), checked = At.validateComposition(reply.content, {frameId, ...canvas, duration, script: own === 'anime' ? direction.script : null, finish: own, pixel: own === 'pixel' ? direction.pixel : null});
-          findings = [...checked.issues];
-          if (!findings.length && renderer) {
-            try {
-              if (!rendererReady) { await renderer.start(); rendererReady = true; }
-              const status = await renderer.loadComposition({html: checked.html, frameId, ...canvas, scale: 0.25, canvas: direction?.palette.canvas, duration});
-              if (!status.ready) findings.push(`The timeline did not register${status.errors[0] ? `: ${status.errors[0]}` : ''}.`);
-              else {
-                findings.push(...(await renderer.auditComposition([0.3, duration * 0.5, Math.max(0.3, duration - 0.15)].map(t => round(t, 2)))).filter(item => /runs off the frame/.test(item)));
-                // A near-black stretch of 0.1 s fails the render's black-frame check (live 0.25 run: two dark
-                // openings); found here it costs this shot's one retry instead of a failed render.
-                const step = Math.max(0.1, duration / 60), dark = await renderer.blackMoments(Array.from({length: Math.floor((duration - 0.05) / step) + 1}, (_, k) => round(k * step, 2)));
-                const run = dark.findIndex((t, k) => k && t - dark[k - 1] <= step + 0.001);
-                if (run > 0) findings.push(`The picture is almost all near-black from ${dark[run - 1]} s (the render's black-frame check fails): put the shot's stage on screen from the first frame.`);
+    // 0.103 (owner report 2026-11-10: "started at 8 am and still not finished"): up to DESIGN_LANES designed shots are
+    // written at once, each worker with its own checking browser and its own AI lane; a shot that pauses the storyboard
+    // lets the others finish the shot they are on and stops the rest (everything finished is kept for Resume).
+    const lanes = Math.min(DESIGN_LANES, targets.length), active = new Set(), finished = [];
+    let nextIndex = 0, halted = null;
+    const show = () => {
+      const busy = [...active], how = busy.length === 1 ? ` as ${FINISH_WORDS[At.frameFinish(direction, targets.find(item => item.shot.label === busy[0])?.shot.frame)] || 'an HTML motion-graphics animation'}` : ` (${lanes} at a time)`;
+      if (busy.length) live.note(job.id, `Writing ${busy.join(', ')}${how}, ${finished.length} of ${targets.length} done`);
+      live.progress(job.id, {done: finished.length, total: targets.length, unit: 'designed shots', current: busy.join(', ') || null, finished});
+    };
+    const worker = async lane => {
+      const renderer = this.browser ? new MotionRenderer({browser: this.browser, timeoutMs: 20000}) : null;
+      let rendererReady = false;
+      try {
+        while (!halted && nextIndex < targets.length) {
+          const {shot, si, hi} = targets[nextIndex++];
+          active.add(shot.label); show();
+          try {
+            stopCheck(job.signal);
+            const frameId = shot.label.toLowerCase(), duration = shot.durationSeconds, index = framed.findIndex(item => item.shot === shot);
+            const spoken = words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + duration - 0.01).map(word => ({text: word.text, start: round(word.start - shot.startSeconds)}));
+            const neighbours = {before: framed[index - 1]?.shot.label, after: framed[index + 1]?.shot.label};
+            // A design finished before a stop is kept with the job (0.82.2), so a resume goes on with the next shot.
+            const keptKey = `frame:${hash({label: shot.label, frame: shot.frame, ask: ask || null})}`, keptFrame = this.db.prepare('SELECT art FROM plan_pictures WHERE job_id=? AND key=?').get(job.id, keptKey);
+            let findings = [], html = keptFrame ? JSON.parse(keptFrame.art).html : null;
+            for (let attempt = 1; attempt <= 2 && !html; attempt++) {
+              const key = `${job.id}:frame:${shot.label}:${job.tag ?? job.attempts}:${attempt}`, limit = job.scope.compose.tokenLimit;
+              if (!reserve(key, limit)) { notes.push(`${shot.label}: the family's monthly token limit could not reserve this shot; it is drawn from its words.`); break; }
+              const messages = At.composeMessages({frameId, ...canvas, duration, frame: shot.frame, direction, words: spoken, neighbours, notes: shot.notes, findings, ask, fps: inputs.spec.canvas.frameRate, skills: skillBrief?.prompt || null});
+              const maxTokens = Math.min(32000, limit - messageTokenUpperBound(messages));
+              let reply;
+              try { reply = await this.ai.complete({connectorId: job.scope.connector.id, task: 'frames', messages, maxTokens, signal: job.signal, onStart, onProgress: live.follow(job.id), lane}); }
+              catch (error) { settle(key, null, error?.nothingUsed ? 'released' : 'unknown'); if (pausing(error)) throw error; notes.push(`${shot.label}: ${error instanceof AiError || error instanceof InputError ? error.message : 'Claude did not answer.'} It is drawn from its words.`); break; }
+              settle(key, reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
+              report.tokens += reply.usage?.totalTokens || 0;
+              const own = At.frameFinish(direction, shot.frame), checked = At.validateComposition(reply.content, {frameId, ...canvas, duration, script: own === 'anime' ? direction.script : null, finish: own, pixel: own === 'pixel' ? direction.pixel : null});
+              findings = [...checked.issues];
+              if (!findings.length && renderer) {
+                try {
+                  if (!rendererReady) { await renderer.start(); rendererReady = true; }
+                  const status = await renderer.loadComposition({html: checked.html, frameId, ...canvas, scale: 0.25, canvas: direction?.palette.canvas, duration});
+                  if (!status.ready) findings.push(`The timeline did not register${status.errors[0] ? `: ${status.errors[0]}` : ''}.`);
+                  else {
+                    findings.push(...(await renderer.auditComposition([0.3, duration * 0.5, Math.max(0.3, duration - 0.15)].map(t => round(t, 2)))).filter(item => /runs off the frame/.test(item)));
+                    // A near-black stretch of 0.1 s fails the render's black-frame check (live 0.25 run: two dark
+                    // openings); found here it costs this shot's one retry instead of a failed render.
+                    const step = Math.max(0.1, duration / 60), dark = await renderer.blackMoments(Array.from({length: Math.floor((duration - 0.05) / step) + 1}, (_, k) => round(k * step, 2)));
+                    const run = dark.findIndex((t, k) => k && t - dark[k - 1] <= step + 0.001);
+                    if (run > 0) findings.push(`The picture is almost all near-black from ${dark[run - 1]} s (the render's black-frame check fails): put the shot's stage on screen from the first frame.`);
+                  }
+                } catch (error) {
+                  findings.push(`The composition could not be loaded: ${String(error.message).slice(0, 160)}`);
+                  await renderer.close(); rendererReady = false;
+                }
               }
-            } catch (error) {
-              findings.push(`The composition could not be loaded: ${String(error.message).slice(0, 160)}`);
-              await renderer.close(); rendererReady = false;
+              if (!findings.length) { html = checked.html; this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, keptKey, JSON.stringify({html}), now()); }
             }
-          }
-          if (!findings.length) { html = checked.html; this.db.prepare('INSERT OR REPLACE INTO plan_pictures(job_id,key,art,created_at) VALUES(?,?,?,?)').run(job.id, keptKey, JSON.stringify({html}), now()); }
+            const target = plan.scenes[si].shots[hi];
+            if (html) { target.frame = {...target.frame, html, frameId, composedSeconds: round(duration, 3), words: spoken, version: At.VERSION}; report.designed++; }
+            else if (findings.length && !notes.some(item => item.startsWith(`${shot.label}:`))) notes.push(`${shot.label}: the composition did not pass its checks (${findings[0]}); it is drawn from its words.`);
+
+          } finally { active.delete(shot.label); }
+          finished.push(shot.label); show();
         }
-        const target = plan.scenes[si].shots[hi];
-        if (html) { target.frame = {...target.frame, html, frameId, composedSeconds: round(duration, 3), words: spoken, version: At.VERSION}; report.designed++; }
-        else if (findings.length && !notes.some(item => item.startsWith(`${shot.label}:`))) notes.push(`${shot.label}: the composition did not pass its checks (${findings[0]}); it is drawn from its words.`);
-      }
-    } finally { if (rendererReady) await renderer.close(); }
+      } catch (error) { halted = halted || error; } finally { if (rendererReady) await renderer.close(); }
+    };
+    await Promise.all(Array.from({length: lanes}, (_, lane) => worker(lane)));
+    if (halted) throw halted;
     return {plan, compose: report};
   }
   // The illustrator (0.33): one Claude answer per picture element, each reserved against the family's monthly

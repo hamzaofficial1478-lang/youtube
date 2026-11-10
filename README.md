@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.102.0 - fewer paintings made twice: every painting is told exactly what the art director will judge it on, whatever was sent back is told to every later painting of the storyboard, and the screen says why a picture is painted again. On top of 0.101.0. See AGENTS.md and docs/SCENE-ROOM.md.
+Version 0.103.0 - storyboards no longer redo their slowest work: every part is kept as it arrives (the last part was lost on every stop, so its designed shots and pictures were made again), a storyboard goes on by itself after the program restarts, Motion Graphics designed shots are written three at a time, and every run shows where its time went. On top of 0.102.0. See AGENTS.md and docs/SCENE-ROOM.md.
 
 This repository, [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube), is the program's home: `main` holds the current verified version. The laptop folder (Desktop\YT\youtube) is a working copy that pulls from `main` (`git pull origin main`). Uploading code to GitHub does not run its server.
 
