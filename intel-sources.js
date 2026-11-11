@@ -350,7 +350,7 @@ class YouTubePublicClient {
 
 // ---------------------------------------------------------------- quota ledger
 // YouTube's videos.insert calls have their own daily bucket (100 a day by default), apart from the 10,000 shared units.
-const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, youtubeDailyUploadCap: 100, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000, wikimediaHourlyRequestCap: 480, redditHourlyRequestCap: 300, freesoundHourlyRequestCap: 60, jamendoHourlyRequestCap: 60};
+const QUOTA_DEFAULTS = {nexlevMonthlyRequestCap: 150, youtubeDailyUnitCap: 2000, youtubeDailyUploadCap: 100, pexelsHourlyRequestCap: 150, pixabayHourlyRequestCap: 1000, wikimediaHourlyRequestCap: 480, redditHourlyRequestCap: 300, freesoundHourlyRequestCap: 60, jamendoHourlyRequestCap: 60, geminiHourlyRequestCap: 20};
 // Stock libraries publish per-hour (Pexels 200/hour) and per-minute (Pixabay 100/60 s) limits; caps are counted per UTC hour.
 function hourPeriod(at = new Date()) { return at.toISOString().slice(0, 13); }
 function nexlevPeriod(at = new Date()) { return at.toISOString().slice(0, 7); }
@@ -381,10 +381,11 @@ class QuotaLedger {
     requireValue(Number.isSafeInteger(youtube) && youtube >= 0 && youtube <= 10000, 'YouTube daily unit cap must be a whole number from 0 to 10,000.');
     requireValue(Number.isSafeInteger(pexels) && pexels >= 0 && pexels <= 200, 'Pexels hourly request cap must be a whole number from 0 to 200 (the Pexels default limit).');
     requireValue(Number.isSafeInteger(pixabay) && pixabay >= 0 && pixabay <= 6000, 'Pixabay hourly request cap must be a whole number from 0 to 6,000.');
+    requireValue(input.geminiHourlyRequestCap === undefined || (Number.isSafeInteger(input.geminiHourlyRequestCap) && input.geminiHourlyRequestCap >= 0 && input.geminiHourlyRequestCap <= 1000), 'Gemini videos an hour must be a whole number from 0 to 1,000.');
     return this.store.transaction(() => {
       const current = this.settings();
       requireValue(input.revision === current.revision, 'Quota settings changed in another tab. Reload before saving.', 409);
-      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube, pexelsHourlyRequestCap: pexels, pixabayHourlyRequestCap: pixabay, wikimediaHourlyRequestCap: stored.wikimediaHourlyRequestCap, redditHourlyRequestCap: stored.redditHourlyRequestCap, freesoundHourlyRequestCap: stored.freesoundHourlyRequestCap, jamendoHourlyRequestCap: stored.jamendoHourlyRequestCap};
+      const payload = {nexlevMonthlyRequestCap: nexlev, youtubeDailyUnitCap: youtube, pexelsHourlyRequestCap: pexels, pixabayHourlyRequestCap: pixabay, wikimediaHourlyRequestCap: stored.wikimediaHourlyRequestCap, redditHourlyRequestCap: stored.redditHourlyRequestCap, freesoundHourlyRequestCap: stored.freesoundHourlyRequestCap, jamendoHourlyRequestCap: stored.jamendoHourlyRequestCap, geminiHourlyRequestCap: input.geminiHourlyRequestCap ?? stored.geminiHourlyRequestCap};
       this.db.prepare("INSERT INTO quota_settings(id,revision,payload,updated_at) VALUES('global',?,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload,updated_at=excluded.updated_at").run(current.revision + 1, JSON.stringify(payload), now());
       this.store.event(`Updated data caps: NexLev ${nexlev} requests/month, YouTube ${youtube} units/day, Pexels ${pexels} and Pixabay ${pixabay} requests/hour`);
       return this.settings();
@@ -392,7 +393,7 @@ class QuotaLedger {
   }
   periodFor(provider) { return provider === 'nexlev' ? nexlevPeriod() : provider.startsWith('youtube') ? youtubePeriod() : hourPeriod(); }
   capFor(provider) {
-    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', 'youtube-upload': 'youtubeDailyUploadCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap', wikimedia: 'wikimediaHourlyRequestCap', reddit: 'redditHourlyRequestCap', freesound: 'freesoundHourlyRequestCap', jamendo: 'jamendoHourlyRequestCap'}[provider];
+    const settings = this.settings(), key = {nexlev: 'nexlevMonthlyRequestCap', youtube: 'youtubeDailyUnitCap', 'youtube-upload': 'youtubeDailyUploadCap', pexels: 'pexelsHourlyRequestCap', pixabay: 'pixabayHourlyRequestCap', wikimedia: 'wikimediaHourlyRequestCap', reddit: 'redditHourlyRequestCap', gemini: 'geminiHourlyRequestCap', freesound: 'freesoundHourlyRequestCap', jamendo: 'jamendoHourlyRequestCap'}[provider];
     requireValue(key, `Unknown data provider ${provider}.`, 500);
     return settings[key];
   }
@@ -431,6 +432,7 @@ class QuotaLedger {
       reddit: {period: hour, used: this.committed('reddit', hour), cap: settings.redditHourlyRequestCap, unit: 'requests this hour (UTC)'},
       freesound: {period: hour, used: this.committed('freesound', hour), cap: settings.freesoundHourlyRequestCap, unit: 'requests this hour (UTC)'},
       jamendo: {period: hour, used: this.committed('jamendo', hour), cap: settings.jamendoHourlyRequestCap, unit: 'requests this hour (UTC)'},
+      gemini: {period: hour, used: this.committed('gemini', hour), cap: settings.geminiHourlyRequestCap, unit: 'videos watched this hour (UTC)'},
       nexlev: {period: nexlev, used: this.committed('nexlev', nexlev), cap: settings.nexlevMonthlyRequestCap, unit: 'requests this month (UTC)'},
       youtube: {period: youtube, used: this.committed('youtube', youtube), cap: settings.youtubeDailyUnitCap, unit: 'units today (Pacific time)'},
       youtubeUploads: {period: youtube, used: this.committed('youtube-upload', youtube), cap: settings.youtubeDailyUploadCap, unit: 'uploads today (Pacific time)'},

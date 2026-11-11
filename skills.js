@@ -490,7 +490,7 @@ const REACH = Object.freeze([['script.candidate', 'Script writing'], ['scene.pla
   ['motion.template', 'Designed (Motion Graphics) shots'], ['visuals.prompt', 'Pictures, paintings and their art director'], ['script.review', 'Script review by the second writer'], ['qc.review', 'Frame scan (Room 08)']]);
 
 // The record of each job that receives a skill brief, by the job it is for (0.79).
-const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': 'competitor_analyses', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs', 'packaging.title': 'package_jobs'});
+const USAGE_JOBS = Object.freeze({'script.candidate': 'jobs', 'research.brief': 'research_jobs', 'competitors.blueprint': ['competitor_analyses', 'competitor_roadmaps'], 'competitors.scan': 'competitor_video_watches', 'scene.plan': 'scene_plan_jobs', 'audio.mix': 'score_jobs', 'voice.direction': 'voice_direction_jobs', 'niche.discover': 'niche_suggestions', 'localization.check': 'edition_jobs', 'motion.template': 'scene_plan_jobs', 'visuals.prompt': 'scene_plan_jobs', 'qc.review': 'frame_scans', 'script.review': 'jobs', 'packaging.title': 'package_jobs'});
 class SkillsEngine {
   // builtinApproved (owner decision 2026-10-30): the built-in skills come approved with the program on every PC. Tests of
   // the review steps themselves turn it off.
@@ -635,10 +635,13 @@ class SkillsEngine {
   // other record said "pending" forever; the job's own record is read instead.
   jobOf(taskKey, jobId) {
     if (taskKey === 'editing.plan') { const row = this.tableHas('edit_revisions') && this.tableHas('edit_timelines') ? this.db.prepare('SELECT t.content_id FROM edit_revisions r JOIN edit_timelines t ON t.id=r.timeline_id WHERE r.id=?').get(jobId) : null; return row ? {status: 'completed', contentId: row.content_id} : null; }
-    const table = USAGE_JOBS[taskKey];
-    if (!table || !this.tableHas(table)) return null;
-    const row = this.db.prepare(`SELECT status${this.tableHas(table, 'content_id') ? ', content_id' : ''} FROM ${table} WHERE id=?`).get(jobId);
-    return row ? {status: row.status, contentId: row.content_id || null} : null;
+    // 0.107: a job of the competitor blueprint is an analysis or a roadmap.
+    for (const table of [].concat(USAGE_JOBS[taskKey] || [])) {
+      if (!this.tableHas(table)) continue;
+      const row = this.db.prepare(`SELECT status${this.tableHas(table, 'content_id') ? ', content_id' : ''} FROM ${table} WHERE id=?`).get(jobId);
+      if (row) return {status: row.status, contentId: row.content_id || null};
+    }
+    return null;
   }
   tableHas(table, column = null) {
     this.columnsCache ||= new Map();

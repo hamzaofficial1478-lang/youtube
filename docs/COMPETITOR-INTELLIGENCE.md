@@ -134,3 +134,43 @@ scan (the normal competitor analysis, its own token reservation, a blueprint the
   a trend scan (the scan itself still waits for the owner's click: it spends 100 YouTube units per keyword).
 - The owner's notes about what they like in each channel stay where they were: each competitor's observations and the
   blend picks ("Keep from this channel").
+
+## Watching competitor videos (0.107)
+
+Owner request 2026-11-11, after bradautomates/claude-video (research/claude-video.md): the program watches the
+competitors' videos, sees their visuals, writes a document per video on each process the owner ticked for that
+channel, and turns them into a roadmap that leads the models. The owner chose Gemini plus their own files.
+
+- **Never a download from YouTube.** The program is a YouTube API client; Google's policies forbid such clients
+  downloading YouTube content. Gemini watches a video from its link (picture and sound). A file the owner saved
+  themselves is either uploaded to Gemini's Files API and deleted after the answer, or read by Claude or ChatGPT
+  from frames FFmpeg picks on this PC plus the owner's transcript (SRT, WebVTT, timed lines or plain text).
+- **The Gemini connection** (`gemini`): a free key from aistudio.google.com/apikey, kept encrypted, sent only in the
+  `x-goog-api-key` header to generativelanguage.googleapis.com; the test lists the models (nothing watched). The
+  model is a scan setting (`geminiModel`, default `gemini-3.7-flash`). Each watched video counts against Data caps'
+  "Gemini videos watched per hour" (default 20), not the channel's AI token limit; Gemini's tokens are shown.
+- **Which videos.** Step 3 on the Competitors page lists each channel's videos from the newest scan, best first (NexLev
+  outliers, then views, long videos first for a long-form channel), and ticks "Videos to watch per channel" of them
+  (scan setting `watchPerChannel`, 1-10, default 3). The owner can tick others or paste links. A title from YouTube's
+  own data is sent only with the recorded derived-use approval; otherwise the video goes as "Video <id>" and takes
+  the title Gemini reports.
+- **Each video** (`video-watch.js`, rules in `watch.js`): one at a time, once per click, inside its reservation,
+  never retried by itself except after a lost connection or a restart (NetRetry). It is studied by the subjects
+  ticked for its channel (all 14 when none are), each with a professional's watch-guide (`WATCH_GUIDE`), plus two the
+  program always adds: retention (where attention is grabbed again, where viewers would leave) and where to beat
+  it. The study keeps a timecoded timeline (seen, heard, craft), per subject a verdict, ordered steps, timed
+  observations and numbers, and what could not be seen or heard. Measured numbers from a file are facts. It is read
+  leniently (`readBreakdown`) and fails only with no summary, under three moments or fewer than half the subjects.
+  Each study opens on the page and downloads as Word.
+- **The roadmap** (step 4): Claude or ChatGPT reads every watched video of the channel family and writes, per process
+  (script, voice, storyboard, editing, sound, title and thumbnail), the goal, ordered steps with numbers, do, avoid,
+  checks, how we beat every watched video and our own contributions (the 30/70 rule), with "V1 MM:SS" evidence; every
+  ticked process is required, others only when the videos show they decide success ("added"), and "missed" lists the
+  points the owner had not ticked. Instructions sharing eight words with a transcript or a quoted line are left out
+  (copy guard). Reserved from the family's token limit, one answer, never retried by itself.
+- **Leading the models.** Approved by name (read, techniques only and 70% own, should lead the jobs), each process
+  becomes a pin-only skill (`roadmap.f<family>-<process>`, priority 95) approved and pinned to this family's jobs of
+  that process (`script.candidate`, `scene.plan`, `editing.plan`, `audio.mix`, `packaging.title` and the rest), so its
+  steps reach the models as the first numbered directives. A later roadmap makes new revisions of the same skills and
+  unpins a process it no longer has; nothing reaches another family. The watcher itself is led by the
+  `competitors.scan` skills, the roadmap by `competitors.blueprint`.
