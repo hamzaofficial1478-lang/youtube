@@ -4,12 +4,17 @@
 // saveForm, date, localeName, heading, empty, familyDialog) are only used inside functions.
 
 let competitorFamily = '', selectedAnalysis = '', selectedIdea = '', pendingPicks = {}, removingCompetitor = '';
+// 0.107: the videos ticked to watch (per family, set from the program's picks until the owner changes them), pasted
+// links per channel, and the full studies opened on the page.
+const watchTicks = {}, watchLinks = {}, watchDocs = {};
+let openWatch = '';
 
 const INTEL_STATUS = {
   queued: ['Queued', 'orange'], running: ['Running', 'orange'], completed: ['Completed', 'green'], partial: ['Partial data', 'orange'], failed: ['Failed', 'gray'],
   interrupted: ['Interrupted · usage unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Blocked by data cap', 'orange'], blocked_budget: ['Blocked by token limit', 'orange'],
   quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange'],
   studied: ['Ready to review', 'orange'], approved: ['Approved', 'green'], rejected: ['Rejected', 'gray'],
+  watched: ['Watched', 'green'], ready: ['Ready to review', 'orange'], superseded: ['Replaced by a newer one', 'gray'],
 };
 function intelStatus(status) { const [label, color] = INTEL_STATUS[status] || [status, 'gray']; return badge(label, color); }
 // provider 'ai' means either Claude connection; the subscription one has no stored key.
@@ -25,6 +30,7 @@ function intelBusy() {
   const intel = state?.intelligence;
   if (!intel) return false;
   const active = item => ['queued', 'running'].includes(item.status);
+  if (Object.values(state.videoWatch?.families || {}).some(family => family.watches.some(active) || family.roadmaps.some(active))) return true;
   return Object.values(intel.competitors.families).some(family => family.scans.some(active) || family.analyses.some(active)) || intel.niches.discoveries.some(active) || intel.niches.evaluations.some(active) || intel.trends.scans.some(active) || intel.trends.topics.some(active) || intel.niches.reads.some(active);
 }
 function competitorLabel(item) { return item.kind === 'username' ? `/user/${item.value}` : item.value; }
@@ -135,7 +141,8 @@ function competitorsView() {
         ${rows || '<p class="muted">No competitors listed for this family yet.</p>'}
         ${family.competitors.length ? `<h3 class="intel-subhead">Your blend ${data.picks.revision ? `<small class="muted">saved r${data.picks.revision} by ${esc(data.picks.createdBy)}</small>` : ''}</h3>${blendRecipe(family, names)}<p class="hint">Open "Learn from this channel" on each link and tick what you like; several per link are fine. Each subject learns only from the channels you ticked for it, keeps at most 30% reference, and the rest stays 100% your own. Saving new picks makes an approved blueprint outdated until you analyse again. Your own observations are the strongest evidence: no API watches the videos for you.</p>` : ''}</section>
       <section class="production-card" id="intel-step-2"><div class="production-card-head"><div><span class="micro-label">STEP 2 · COLLECT DATA</span><h2>Competitor scans</h2></div>${action('Read competitors', 'intel-scan', family.id, 'primary')}</div><div class="history-list">${scanRows}</div>${latestScan ? scanDetail(latestScan) : ''}</section>
-      <section class="production-card" id="intel-step-3"><div class="production-card-head"><div><span class="micro-label">STEP 3 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
+      ${watchCard(family)}${roadmapCard(family)}
+      <section class="production-card" id="intel-step-3"><div class="production-card-head"><div><span class="micro-label">STEP 5 · CLAUDE BLUEPRINT</span><h2>Learn, then differentiate</h2></div>${action('Analyze latest scan', 'intel-analyze', family.id, 'primary')}</div>
         ${analyses.length ? `<div class="chip-row analysis-tabs">${analyses.map(item => `<button type="button" class="button ${item.id === selectedAnalysis ? 'primary' : 'secondary'}" data-select-analysis="${esc(item.id)}">${esc(date(item.createdAt))} · ${esc((INTEL_STATUS[item.status] || [item.status])[0])}${item.review ? ` · ${esc(item.review.decision)}` : ''}</button>`).join('')}</div>` : '<p class="muted">Run a scan, then ask Claude for a blueprint. It must pass the 30/70 rule and the copy guard before you can review it.</p>'}
         ${analysis ? blueprintView(analysis, family, data) : ''}</section>
       ${studiesCard(family)}
@@ -143,11 +150,77 @@ function competitorsView() {
 }
 // Where this family is on the road: channels listed, read, blueprint made, blueprint approved.
 function intelSteps(family, data, latestScan) {
-  const n = family.competitors.length, current = data.current;
-  const steps = [['Add 3-10 channels', n >= 3, `${n} listed`], ['Read them', Boolean(latestScan), latestScan ? `read ${date(latestScan.createdAt)}` : 'not yet'], ['Claude\'s blueprint', data.analyses.some(item => item.status === 'completed'), data.analyses.length ? `${data.analyses.length} made` : 'not yet'], ['You approve', Boolean(current && !current.outdated), current ? (current.outdated ? 'outdated' : 'approved') : 'not yet']];
+  const n = family.competitors.length, current = data.current, vision = state.videoWatch?.families?.[family.id];
+  const watched = (vision?.watches || []).filter(item => item.status === 'watched').length, led = (vision?.roadmaps || []).find(item => item.status === 'approved');
+  const steps = [['Add 3-10 channels', n >= 3, `${n} listed`, 'intel-step-1'], ['Read them', Boolean(latestScan), latestScan ? `read ${date(latestScan.createdAt)}` : 'not yet', 'intel-step-2'], ['Watch their videos', watched > 0, watched ? `${watched} watched` : 'not yet', 'intel-step-watch'], ['Roadmap leads the AI', Boolean(led), led ? `r${led.revision} approved` : 'not yet', 'intel-step-roadmap'], ['Claude\'s blueprint', data.analyses.some(item => item.status === 'completed'), data.analyses.length ? `${data.analyses.length} made` : 'not yet', 'intel-step-3'], ['You approve', Boolean(current && !current.outdated), current ? (current.outdated ? 'out of date' : 'approved') : 'not yet', 'intel-step-3']];
   const next = steps.findIndex(([, done]) => !done);
   // Each step jumps to its card (the approval is in the blueprint card). Owner review 2026-10-29: steps must be clickable.
-  return `<ol class="intel-steps">${steps.map(([label, done, note], k) => `<li class="${done ? 'done' : k === next ? 'next' : ''}"><button type="button" data-intel-step="intel-step-${Math.min(3, k + 1)}"><span>${done ? '✓' : k + 1}</span><div><strong>${label}</strong><small>${esc(note)}</small></div></button></li>`).join('')}</ol>`;
+  return `<ol class="intel-steps">${steps.map(([label, done, note, target], k) => `<li class="${done ? 'done' : k === next ? 'next' : ''}"><button type="button" data-intel-step="${target}"><span>${done ? '✓' : k + 1}</span><div><strong>${label}</strong><small>${esc(note)}</small></div></button></li>`).join('')}</ol>`;
+}
+
+// 0.107 - The vision brain (owner request 2026-11-11): the program watches competitor videos and studies them by the
+// subjects ticked for each channel; the roadmap from every watched video leads the AI in this channel's jobs.
+const watchClock = seconds => { if (!Number.isFinite(seconds)) return '--:--'; const s = Math.round(seconds), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`; };
+const subjectLabel = key => ({retention: 'Retention', beat: 'Where we beat it'})[key] || state.intelligence.competitors.traits[key]?.label || key;
+function watchTicked(familyId, vision) {
+  if (!watchTicks[familyId]) watchTicks[familyId] = new Set(vision.candidates.flatMap(channel => channel.videos.filter(video => video.preTicked).map(video => video.videoId)));
+  return watchTicks[familyId];
+}
+function watchCard(family) {
+  const vision = state.videoWatch?.families?.[family.id];
+  if (!vision) return '';
+  const ticked = watchTicked(family.id, vision), gemini = intelConnectors('gemini'), links = watchLinks[family.id] || {};
+  const chosen = ticked.size + Object.values(links).filter(value => String(value || '').trim()).length;
+  const channels = vision.candidates.map(channel => `<details class="watch-channel" data-keep-open="watch-${esc(family.id)}-${esc(channel.competitorKey)}" ${keepOpen.has(`watch-${family.id}-${channel.competitorKey}`) ? 'open' : ''}><summary><strong>${esc(channel.ref || '')} ${esc(channel.name)}</strong> <small class="muted">· learning ${channel.subjects.length === 14 ? 'every subject (nothing ticked for this channel)' : esc(channel.subjects.map(subjectLabel).join(', '))} · ${channel.videos.filter(video => ticked.has(video.videoId)).length} ticked</small></summary>
+      ${channel.videos.length ? `<div class="watch-videos">${channel.videos.slice(0, 12).map(video => `<label class="watch-pick"><input type="checkbox" data-watch-pick="${esc(video.videoId)}" data-watch-family="${esc(family.id)}" ${ticked.has(video.videoId) ? 'checked' : ''}><span>${esc(video.title || video.videoId)}${video.watched ? ` ${badge('watched', 'green')}` : ''}</span><small>${[video.outlierScore ? `${video.outlierScore}× outlier` : '', video.views !== null ? `${intelNumber(video.views)} views` : '', video.durationSeconds ? intelDuration(video.durationSeconds) : '', video.source === 'youtube' ? 'YouTube list' : 'NexLev'].filter(Boolean).join(' · ')}</small></label>`).join('')}</div>` : '<p class="muted">No videos from a scan yet. Read the competitors first, or paste links below.</p>'}
+      <label class="watch-link">Or paste video links of this channel <span class="hint">separated by spaces</span><input data-watch-link="${esc(channel.competitorKey)}" data-watch-family="${esc(family.id)}" maxlength="1200" value="${esc(links[channel.competitorKey] || '')}" placeholder="https://www.youtube.com/watch?v=…"></label>
+    </details>`).join('');
+  const rows = vision.watches.map(item => {
+    const open = openWatch === item.id && watchDocs[item.id];
+    return `<div class="history-row watch-row ${item.status === 'watched' ? 'active' : ''}"><span class="job-dot ${['queued', 'running'].includes(item.status) ? 'queued' : item.status === 'watched' ? 'completed' : ''}"></span><div>
+      <strong>${intelStatus(item.status)} ${esc(item.title)}</strong>
+      <small>${[item.channel, item.source === 'file' ? `your file ${item.file}` : 'from its YouTube link', `watched by ${item.engineLabel}${item.model ? ` (${item.model})` : ''}`, date(item.createdAt), item.summary ? `${item.summary.moments} moments, ${item.summary.subjects.length} subject(s)` : '', item.usage?.gemini ? `${intelNumber(item.usage.gemini)} Gemini tokens` : item.usage?.tokens ? `${intelNumber(item.usage.tokens)} tokens` : ''].filter(Boolean).map(esc).join(' · ')}</small>
+      ${item.summary ? `<p>${esc(item.summary.text)}</p>` : ''}${item.error ? `<p class="inline-warning">${esc(item.error)}</p>` : ''}
+      <div class="row-end">${item.status === 'watched' ? `${action(open ? 'Close the study' : 'Open the study', open ? 'intel-watch-close' : 'intel-watch-open', item.id, 'text-button')}<a class="button text-button" href="/api/video-watches/${esc(item.id)}/docx" download>Word</a>` : ''}${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'blocked_quota', 'stale'].includes(item.status) ? action('Retry', 'intel-watch-retry', item.id, 'text-button') : ''}${['queued', 'running'].includes(item.status) ? '' : action('Remove', 'intel-watch-remove', item.id, 'text-button danger')}</div>
+      ${open ? watchStudyView(watchDocs[item.id]) : ''}</div></div>`;
+  }).join('');
+  return `<section class="production-card" id="intel-step-watch"><div class="production-card-head"><div><span class="micro-label">STEP 3 · THE PROGRAM WATCHES THEIR VIDEOS</span><h2>Watch competitor videos</h2></div><div class="row-end">${action(`Watch ${chosen || ''} with Gemini`.replace('  ', ' '), 'intel-watch-go', family.id, 'primary')}${action('Add a video file', 'intel-watch-file', family.id)}</div></div>
+    <p class="hint">Gemini watches each video from its YouTube link, picture and sound; nothing is downloaded. A video you saved yourself can be read by Claude or ChatGPT from its frames and your transcript. Each video becomes a document for every subject you ticked for its channel, plus retention and where we can beat it. ${vision.settings.watchPerChannel} video(s) per channel are ticked for you (Scan settings).</p>
+    ${gemini.length ? '' : '<p class="inline-warning">Add a Gemini connection in Connections first: a free API key from aistudio.google.com/apikey.</p>'}
+    ${channels || '<p class="muted">Add competitor channels in step 1.</p>'}
+    ${rows ? `<h3 class="intel-subhead">Watched videos</h3><div class="history-list">${rows}</div>` : ''}</section>`;
+}
+function watchStudyView(item) {
+  const b = item.result || {}, line = (at, text) => `<li><b>${watchClock(at)}</b> ${esc(text)}</li>`;
+  const measured = item.measured && Object.keys(item.measured).length ? `<p class="hint">Measured on this PC: ${esc(Object.entries(item.measured).map(([key, value]) => `${key} ${Array.isArray(value) ? value.join(' ') : value}`).join(' · '))}</p>` : '';
+  return `<div class="watch-study">${measured}
+    <details data-keep-open="study-${esc(item.id)}-timeline"><summary>Timeline · ${b.timeline.length} moments</summary><ul class="intel-list">${b.timeline.map(entry => line(entry.from, `[${entry.part}] ${[entry.seen && `Seen: ${entry.seen}`, entry.heard && `Heard: ${entry.heard}`, entry.technique && `Craft: ${entry.technique}`].filter(Boolean).join(' · ')}`)).join('')}</ul></details>
+    ${Object.entries(b.subjects).map(([key, entry]) => `<details data-keep-open="study-${esc(item.id)}-${esc(key)}"><summary><strong>${esc(subjectLabel(key))}</strong> · ${esc(entry.verdict)}</summary>${entry.steps.length ? `<ol class="intel-list">${entry.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol>` : ''}${entry.observations.length ? `<ul class="intel-list">${entry.observations.map(obs => line(obs.at, `${obs.what}${obs.why ? ` (${obs.why})` : ''}`)).join('')}</ul>` : ''}${Object.keys(entry.numbers).length ? `<p class="hint">${esc(Object.entries(entry.numbers).map(([name, value]) => `${name}: ${value}`).join(' · '))}</p>` : ''}</details>`).join('')}
+    ${b.retention.length ? `<details data-keep-open="study-${esc(item.id)}-retention"><summary><strong>Retention</strong> · added by the program</summary><ul class="intel-list">${b.retention.map(entry => line(entry.at, `${entry.kind === 'drop' ? 'Viewers may leave' : 'Grabs attention'}: ${entry.what}${entry.why ? ` (${entry.why})` : ''}`)).join('')}</ul></details>` : ''}
+    ${b.beat.length ? `<details data-keep-open="study-${esc(item.id)}-beat"><summary><strong>Where we beat it</strong> · added by the program</summary><ul class="intel-list">${b.beat.map(entry => line(entry.at, `${entry.weakness} → ${entry.howWeBeatIt}`)).join('')}</ul></details>` : ''}
+    ${b.unavailable.length ? `<p class="hint">Not seen or heard: ${esc(b.unavailable.join(' · '))}</p>` : ''}${item.warnings.length ? `<p class="hint">Notes: ${esc(item.warnings.join(' · '))}</p>` : ''}</div>`;
+}
+function roadmapCard(family) {
+  const vision = state.videoWatch?.families?.[family.id];
+  if (!vision) return '';
+  const watched = vision.watches.filter(item => item.status === 'watched').length, latest = vision.roadmaps[0], ais = sceneAis();
+  const busy = vision.roadmaps.some(item => ['queued', 'running'].includes(item.status));
+  const buttons = watched && !busy ? ais.map(ai => action(`Make the roadmap with ${ai.name}`, 'intel-roadmap', `${family.id}|${ai.id}`, 'primary')).join('') : '';
+  return `<section class="production-card" id="intel-step-roadmap"><div class="production-card-head"><div><span class="micro-label">STEP 4 · THE ROADMAP LEADS THE AI</span><h2>Roadmap from the watched videos</h2></div><div class="row-end">${buttons}</div></div>
+    <p class="hint">The AI reads every watched video and writes, for each process (script, voice, storyboard, editing, sound, title and thumbnail), the steps that make our video as good as the best of them or better: their techniques with numbers, at least 70% of our own, and the points you had not ticked. Approved by name, each process becomes a skill pinned to ${esc(family.name)} only, so it directs every job of that process.</p>
+    ${!watched ? '<p class="muted">Watch at least one competitor video first.</p>' : ''}${!ais.length && watched ? '<p class="inline-warning">Connect Claude or ChatGPT in Connections to make the roadmap.</p>' : ''}
+    ${latest ? roadmapView(latest) : ''}
+    ${vision.roadmaps.length > 1 ? `<details data-keep-open="roadmaps-${esc(family.id)}"><summary>Earlier roadmaps (${vision.roadmaps.length - 1})</summary>${vision.roadmaps.slice(1).map(item => `<p>${intelStatus(item.status)} r${item.revision} · ${esc(date(item.createdAt))}${item.review?.reviewer ? ` · ${esc(item.review.reviewer)}` : ''}</p>`).join('')}</details>` : ''}</section>`;
+}
+function roadmapView(item) {
+  const r = item.result, list = (name, items) => items?.length ? `<p class="micro-label">${name}</p><ol class="intel-list">${items.map(line => `<li>${esc(line)}</li>`).join('')}</ol>` : '';
+  return `<div class="roadmap"><p>${intelStatus(item.status)} <strong>Roadmap r${item.revision}</strong> <small class="muted">from ${item.videos} watched video(s) · ${esc(date(item.createdAt))}${item.usage?.total ? ` · ${intelNumber(item.usage.total)} tokens` : ''}</small></p>
+    ${item.error ? `<p class="inline-warning">${esc(item.error)}</p>` : ''}${r ? `<p>${esc(r.summary)}</p>
+    ${r.processes.map(entry => `<details data-keep-open="roadmap-${esc(item.id)}-${esc(entry.process)}"><summary><strong>${esc(entry.label)}</strong>${entry.added ? ' · added by the program' : ''} · ${esc(entry.goal)}</summary>${entry.why ? `<p class="hint">${esc(entry.why)}</p>` : ''}${list('Steps', entry.steps)}${list('Do', entry.do)}${list('Avoid', entry.avoid)}${list('Checks before a job is finished', entry.checks)}${list('Better than every watched video', entry.beat)}${list('Our own (at least 70%)', entry.own)}${Object.keys(entry.numbers).length ? `<p class="hint">${esc(Object.entries(entry.numbers).map(([name, value]) => `${name}: ${value}`).join(' · '))}</p>` : ''}${entry.evidence.length ? `<p class="hint">Evidence: ${esc(entry.evidence.join(', '))}</p>` : ''}</details>`).join('')}
+    ${r.missed?.length ? `<details data-keep-open="roadmap-${esc(item.id)}-missed" open><summary><strong>Points you had not ticked</strong> (${r.missed.length})</summary><ul class="intel-list">${r.missed.map(entry => `<li><b>${esc(entry.subject)}</b>: ${esc(entry.why)}</li>`).join('')}</ul></details>` : ''}` : ''}
+    ${item.warnings.length ? `<p class="hint">Checks: ${esc(item.warnings.join(' · '))}</p>` : ''}
+    ${item.status === 'approved' && item.applied ? `<p class="note">Leading ${esc(String(item.applied.skills.length))} process(es) of this channel's jobs as pinned skills (${esc(item.applied.pins.length)} job pin(s)), approved by ${esc(item.review.reviewer)}.</p>` : ''}
+    <div class="row-end">${item.status === 'ready' ? action('Review and approve', 'intel-roadmap-review', item.id, 'primary') : ''}${['failed', 'interrupted', 'quality_failed', 'blocked_budget', 'stale'].includes(item.status) ? action('Retry', 'intel-roadmap-retry', item.id, 'text-button') : ''}${r ? `<a class="button text-button" href="/api/competitor-roadmaps/${esc(item.id)}/docx" download>Word</a>` : ''}</div></div>`;
 }
 
 // R05c: the program learns a look from a reference (a video file or screenshots on this PC).
@@ -479,6 +552,44 @@ function intelAction(command, id, button) {
   const family = state.families.find(item => item.id === id);
   const familyData = family && state.intelligence.competitors.families[family.id];
   if (command === 'intel-picks-discard') { delete pendingPicks[id]; render(); return; }
+  if (command === 'intel-watch-go') {
+    const vision = state.videoWatch.families[id], ticked = watchTicked(id, vision), links = watchLinks[id] || {};
+    const videos = vision.candidates.flatMap(channel => channel.videos.filter(video => ticked.has(video.videoId)).map(video => ({videoId: video.videoId, competitorKey: channel.competitorKey})));
+    for (const [key, text] of Object.entries(links)) for (const url of String(text || '').split(/\s+/).filter(Boolean)) videos.push({url, competitorKey: key});
+    if (!videos.length) return toast('Tick videos under a channel, or paste their links, first.', true);
+    if (!intelConnectors('gemini').length) return toast('Add and test a Gemini connection in Connections first (a free key from aistudio.google.com/apikey).', true);
+    return intelDialog('watch', `Watch ${videos.length} video${videos.length === 1 ? '' : 's'} · ${family.name}`, 'GEMINI WATCHES FROM THE LINK · NOTHING IS DOWNLOADED', `<div class="form-grid">${connectorSelect('gemini', 'gemini', 'Gemini connection')}${nameField()}</div>
+      <label class="checkbox-label"><input type="checkbox" name="again">Watch again a video that was already watched</label>
+      <p class="note">One video at a time, each watched once by ${esc(vision.settings.geminiModel)}. Each counts against the Gemini allowance in Data caps, not this channel's AI token limit. A video Gemini refuses (private, age-restricted) is named with the reason.</p>`, 'Watch them', {familyId: id, videos});
+  }
+  if (command === 'intel-watch-file') return intelDialog('watch-file', `Add a video file · ${family.name}`, 'A VIDEO YOU SAVED ON THIS PC', `<div class="form-grid">
+      <label class="full">Path on this PC<input name="path" required maxlength="400" placeholder="C:\\Users\\you\\Videos\\competitor.mp4"><span class="hint">In File Explorer, Shift + right-click the file and choose "Copy as path".</span></label>
+      <label>Title<input name="title" required minlength="2" maxlength="200"></label>
+      <label>Channel<select name="competitorKey"><option value="">Not one of the listed channels (every subject)</option>${family.competitors.map(item => `<option value="${esc(competitorKeyOf(item))}">${esc(competitorLabel(item))}</option>`).join('')}</select></label>
+      <label class="full">Watched by<select name="engine"><option value="gemini">Gemini: picture and sound (uploaded to Google, deleted after the answer)</option><option value="frames">Claude or ChatGPT: frames and your transcript (only the frames leave this PC)</option></select></label>
+      ${connectorSelect('gemini', 'gemini', 'Gemini connection', true)}${connectorSelect('claude', 'ai', 'Claude or ChatGPT', true)}
+      <label class="full">Transcript <span class="hint">SRT, WebVTT, timed lines or plain text. Needed for frames, helpful for Gemini.</span><textarea name="transcript" rows="4" maxlength="400000"></textarea></label>
+      <label class="full">Or attach the transcript<input type="file" name="transcriptFile" accept=".srt,.vtt,.txt"></label>
+      <label class="full">Link <span class="hint">optional, for your record only</span><input name="url" maxlength="300"></label>
+      ${nameField()}</div>`, 'Watch it', {familyId: family.id});
+  if (command === 'intel-watch-open') return api(`/api/video-watches/${id}`, null, 'GET').then(item => { watchDocs[id] = item; openWatch = id; render(); }).catch(error => toast(error.message, true));
+  if (command === 'intel-watch-close') { openWatch = ''; render(); return; }
+  if (command === 'intel-watch-retry' || command === 'intel-roadmap-retry') {
+    const roadmap = command === 'intel-roadmap-retry', list = Object.values(state.videoWatch.families).flatMap(item => roadmap ? item.roadmaps : item.watches), item = list.find(entry => entry.id === id);
+    if (item?.status !== 'interrupted') return api(`/api/${roadmap ? 'competitor-roadmaps' : 'video-watches'}/${id}/retry`, {}).then(async () => { await refresh(); toast('Queued again.'); }).catch(error => toast(error.message, true));
+    return intelDialog(roadmap ? 'roadmap-retry' : 'watch-retry', 'Try again', 'THE LAST ATTEMPT WAS INTERRUPTED', '<p class="hint">The program stopped while this was running, so what it used is unknown.</p><label class="checkbox-label"><input type="checkbox" name="confirmInterrupted" required>Try again on purpose</label>', 'Try again', {id});
+  }
+  if (command === 'intel-watch-remove') return intelDialog('watch-remove', 'Remove this watched video', 'ITS STUDY LEAVES THE LIST', '<p class="hint">Its study is no longer offered to a new roadmap. What it used stays counted.</p>' + nameField(), 'Remove', {id});
+  if (command === 'intel-roadmap') {
+    const [familyId, aiId] = id.split('|'), ai = state.connectors.find(item => item.id === aiId), owner = state.families.find(item => item.id === familyId);
+    const vision = state.videoWatch.families[familyId], watched = vision.watches.filter(item => item.status === 'watched').length;
+    return intelDialog('roadmap', `Roadmap · ${owner.name}`, `${sceneAiName(ai.provider).toUpperCase()} READS ${watched} WATCHED VIDEO${watched === 1 ? '' : 'S'}`, `<p class="hint">One answer, reserved from ${esc(owner.name)}'s monthly AI token limit first, never retried by itself. It changes nothing until you approve it.</p><div class="form-grid">${nameField()}</div>`, 'Make the roadmap', {familyId, connector: {id: ai.id, revision: ai.revision}});
+  }
+  if (command === 'intel-roadmap-review') return intelDialog('roadmap-review', 'Review the roadmap', 'HUMAN APPROVAL GATE', `<div class="form-grid"><label>Decision<select name="decision"><option value="approve">Approve: it leads this channel's jobs</option><option value="reject">Reject</option></select></label>${nameField('Reviewer name')}</div>
+      <label class="checkbox-label"><input type="checkbox" name="read">I read the steps of every process.</label>
+      <label class="checkbox-label"><input type="checkbox" name="ownWork">It learns techniques only and keeps at least 70% our own; nothing is copied.</label>
+      <label class="checkbox-label"><input type="checkbox" name="leads">These steps should lead the AI in this channel's script, voice, storyboard, editing, sound and packaging jobs.</label>
+      <label class="full">Reason <span class="hint">needed to reject</span><input name="reason" maxlength="600"></label>`, 'Record decision', {id});
   if (command === 'intel-remove-ask') { removingCompetitor = id; render(); return; }
   if (command === 'intel-remove-cancel') { removingCompetitor = ''; render(); return; }
   if (command === 'intel-remove') {
@@ -491,7 +602,7 @@ function intelAction(command, id, button) {
   }
   if (command === 'intel-caps') {
     const quota = state.intelligence.competitors.quota.settings;
-    return intelDialog('caps', 'Research data caps', 'SPEND LIMITS FOR OUTSIDE DATA', `<div class="form-grid"><label>NexLev requests per month<input name="nexlev" type="number" min="0" max="100000" step="1" required value="${quota.nexlevMonthlyRequestCap}"><span class="hint">Your NexLev plan has its own monthly allowance; keep this at or below it.</span></label><label>YouTube units per day<input name="youtube" type="number" min="0" max="10000" step="1" required value="${quota.youtubeDailyUnitCap}"><span class="hint">Google's default project quota is 10,000 units/day.</span></label></div>`, 'Save caps', {revision: quota.revision});
+    return intelDialog('caps', 'Research data caps', 'SPEND LIMITS FOR OUTSIDE DATA', `<div class="form-grid"><label>Gemini videos watched per hour<input name="gemini" type="number" min="0" max="1000" step="1" required value="${quota.geminiHourlyRequestCap ?? 20}"><span class="hint">Each competitor video Gemini watches is one request.</span></label><label>NexLev requests per month<input name="nexlev" type="number" min="0" max="100000" step="1" required value="${quota.nexlevMonthlyRequestCap}"><span class="hint">Your NexLev plan has its own monthly allowance; keep this at or below it.</span></label><label>YouTube units per day<input name="youtube" type="number" min="0" max="10000" step="1" required value="${quota.youtubeDailyUnitCap}"><span class="hint">Google's default project quota is 10,000 units/day.</span></label></div>`, 'Save caps', {revision: quota.revision});
   }
   if (command === 'intel-settings') {
     const settings = familyData.settings, derived = settings.youtubeDerivedUse || {};
@@ -500,6 +611,8 @@ function intelAction(command, id, button) {
       <label>Transcripts per channel<input name="transcriptsPerChannel" type="number" min="0" max="5" required value="${settings.transcriptsPerChannel}"><span class="hint">Read through NexLev to learn structure and pacing. Never reused as wording.</span></label>
       <label>Analysis token limit<input name="analysisTokenLimit" type="number" min="8000" max="120000" step="1000" required value="${settings.analysisTokenLimit}"><span class="hint">Reserved from the family's monthly token limit for each analysis.</span></label>
       <label class="checkbox-label"><input type="checkbox" name="useOutliers" ${settings.useOutliers ? 'checked' : ''}>Find outlier videos (1 extra NexLev request per channel)</label>
+      <label>Videos to watch per channel<input name="watchPerChannel" type="number" min="1" max="10" required value="${settings.watchPerChannel ?? 3}"><span class="hint">How many of each competitor's best videos the program ticks for watching (step 3). You can tick more or fewer each time.</span></label>
+      <label>Gemini model<input name="geminiModel" required pattern="[a-z0-9][a-z0-9.\-]{2,60}" maxlength="61" value="${esc(settings.geminiModel || 'gemini-3.7-flash')}"><span class="hint">The model that watches the videos. A newer Gemini model name works without an update.</span></label>
       <fieldset class="editor-section full"><legend>YouTube derived-data approval</legend><p class="hint">By default YouTube API data about other channels is shown but never scored or sent to Claude. Only tick this if YouTube has approved your project for derived metrics.</p>
         <label class="checkbox-label"><input type="checkbox" name="derivedApproved" ${derived.approved ? 'checked' : ''}>YouTube approved this project for derived metrics</label>
         <div class="form-grid"><label>Approval date<input name="derivedOn" type="date" value="${esc(derived.approvedOn || '')}"></label><label>Approval reference<input name="derivedReference" maxlength="300" value="${esc(derived.reference || '')}"></label>${nameField('Confirmed by', 'derivedBy')}</div></fieldset>
@@ -770,13 +883,20 @@ document.getElementById('intel-form').addEventListener('submit', event => {
   let message = null;
   saveForm(form, async () => {
     if (kind === 'picks') { const result = await api(`/api/families/${data.familyId}/competitor-picks`, {expectedRevision: data.expectedRevision, createdBy: value('person'), picks: pendingPicks[data.familyId] || {}}); delete pendingPicks[data.familyId]; return result; }
-    if (kind === 'caps') return api('/api/quota-settings', {revision: data.revision, nexlevMonthlyRequestCap: number('nexlev'), youtubeDailyUnitCap: number('youtube')});
-    if (kind === 'settings') return api(`/api/families/${data.familyId}/competitor-settings`, {revision: data.revision, recentVideos: number('recentVideos'), transcriptsPerChannel: number('transcriptsPerChannel'), analysisTokenLimit: number('analysisTokenLimit'), useOutliers: checked('useOutliers'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
+    if (kind === 'caps') return api('/api/quota-settings', {revision: data.revision, nexlevMonthlyRequestCap: number('nexlev'), youtubeDailyUnitCap: number('youtube'), ...(form.elements.gemini ? {geminiHourlyRequestCap: number('gemini')} : {})});
+    if (kind === 'settings') return api(`/api/families/${data.familyId}/competitor-settings`, {revision: data.revision, recentVideos: number('recentVideos'), transcriptsPerChannel: number('transcriptsPerChannel'), analysisTokenLimit: number('analysisTokenLimit'), useOutliers: checked('useOutliers'), watchPerChannel: number('watchPerChannel'), geminiModel: value('geminiModel'), youtubeDerivedUse: checked('derivedApproved') ? {approved: true, approvedOn: value('derivedOn'), reference: value('derivedReference'), confirmedBy: value('derivedBy')} : {approved: false}});
     if (kind === 'note') return api(`/api/families/${data.familyId}/competitor-notes`, {competitorKey: data.competitorKey, expectedRevision: data.expectedRevision, createdBy: value('person'), editingStyle: value('editingStyle'), voice: value('voice'), visuals: value('visuals'), thumbnails: value('thumbnails'), script: value('script'), strengths: value('strengths'), weaknesses: value('weaknesses')});
     if (kind === 'scan') return api(`/api/families/${data.familyId}/competitor-scans`, {familyRevision: data.familyRevision, requestedBy: value('person'), nexlevConnector: connectorPayload(form, 'nexlev'), youtubeConnector: connectorPayload(form, 'youtube'), claudeConnector: connectorPayload(form, 'claude')});
     if (kind === 'analyze') { const analysis = await api(`/api/families/${data.familyId}/competitor-analyses`, {familyRevision: data.familyRevision, scanId: data.scanId, connector: connectorPayload(form, 'claude'), requestedBy: value('person')}); selectedAnalysis = analysis.id; return analysis; }
     if (kind === 'review') return api(`/api/competitor-analyses/${data.id}/review`, data.revoke ? {decision: 'reject', reviewer: value('person'), notes: value('notes')} : {decision: value('decision'), reviewer: value('person'), notes: value('notes'), confirmations: {techniquesNotCopied: checked('techniquesNotCopied'), balanceAccepted: checked('balanceAccepted'), recommendationsReviewed: checked('recommendationsReviewed')}});
     if (kind === 'study') return api(`/api/families/${data.familyId}/style-studies`, {path: value('path'), title: value('title'), channel: value('channel') || undefined, link: value('link') || undefined, notes: value('notes') || undefined, connector: connectorPayload(form, 'claude'), createdBy: value('person')});
+    if (kind === 'watch') { const result = await api(`/api/families/${data.familyId}/video-watches`, {requestedBy: value('person'), connector: connectorPayload(form, 'gemini'), videos: data.videos, again: checked('again')}); delete watchTicks[data.familyId]; delete watchLinks[data.familyId]; message = `${result.queued} video(s) queued for Gemini${result.skipped ? `; ${result.skipped} already watched, left out` : ''}.`; return result; }
+    if (kind === 'watch-file') { const file = form.elements.transcriptFile?.files?.[0], transcript = file ? await file.text() : value('transcript'), engine = value('engine'); return api(`/api/families/${data.familyId}/video-watch-file`, {requestedBy: value('person'), path: value('path'), title: value('title'), competitorKey: value('competitorKey') || undefined, engine, connector: connectorPayload(form, engine === 'gemini' ? 'gemini' : 'claude'), transcript: transcript || undefined, url: value('url') || undefined}); }
+    if (kind === 'watch-retry') return api(`/api/video-watches/${data.id}/retry`, {confirmInterrupted: checked('confirmInterrupted')});
+    if (kind === 'watch-remove') { const result = await api(`/api/video-watches/${data.id}/remove`, {removedBy: value('person')}); delete watchDocs[data.id]; return result; }
+    if (kind === 'roadmap') return api(`/api/families/${data.familyId}/competitor-roadmaps`, {requestedBy: value('person'), connector: data.connector});
+    if (kind === 'roadmap-retry') return api(`/api/competitor-roadmaps/${data.id}/retry`, {confirmInterrupted: checked('confirmInterrupted')});
+    if (kind === 'roadmap-review') { const result = await api(`/api/competitor-roadmaps/${data.id}/review`, {decision: value('decision'), reviewer: value('person'), reason: value('reason') || undefined, confirmations: {read: checked('read'), ownWork: checked('ownWork'), leads: checked('leads')}}); message = result.status === 'approved' ? `Approved: ${result.applied.skills.length} process(es) now lead this channel's jobs as pinned skills.` : 'Roadmap rejected.'; return result; }
     if (kind === 'study-retry') return api(`/api/style-studies/${data.id}/retry`, {confirmInterrupted: checked('confirmInterrupted')});
     if (kind === 'study-review') return api(`/api/style-studies/${data.id}/review`, {decision: value('decision'), reviewer: value('person'), techniquesOnly: checked('techniquesOnly'), balance: checked('balance'), reviewed: checked('reviewed'), ...(value('reason') ? {reason: value('reason')} : {})});
     if (kind === 'study-draft') { const result = await api(`/api/style-studies/${data.id}/style-draft`, {createdBy: value('person')}); message = `Style draft "${result.revision.spec.name}" created in the Style Library.${result.skipped.length ? ` ${result.skipped.length} change(s) skipped.` : ''}`; return result; }
@@ -819,6 +939,10 @@ document.getElementById('intel-form').addEventListener('submit', event => {
 });
 document.addEventListener('change', event => {
   if (event.target.id === 'competitor-family') { competitorFamily = event.target.value; selectedAnalysis = ''; render(); }
+  const pick = event.target.dataset?.watchPick;
+  if (pick) { const set = watchTicks[event.target.dataset.watchFamily] || new Set(); if (event.target.checked) set.add(pick); else set.delete(pick); watchTicks[event.target.dataset.watchFamily] = set; render(); }
+  const link = event.target.dataset?.watchLink;
+  if (link) { (watchLinks[event.target.dataset.watchFamily] ||= {})[link] = event.target.value; render(); }
   const filter = {'trend-keyword': 'keyword', 'trend-maxsubs': 'maxSubs', 'trend-format': 'format', 'trend-look': 'look'}[event.target.id];
   if (filter) { trendFilter[filter] = event.target.value; render(); }
 });

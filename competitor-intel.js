@@ -18,7 +18,9 @@ const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputEr
 const now = () => new Date().toISOString();
 const DAY = 86400000;
 const YOUTUBE_RETENTION_DAYS = 30;
-const SETTINGS_DEFAULTS = {recentVideos: 30, transcriptsPerChannel: 2, useOutliers: true, analysisTokenLimit: 40000, youtubeDerivedUse: {approved: false}};
+// 0.107: watchPerChannel - how many videos of each competitor the program watches (owner request 2026-11-11);
+// geminiModel - the Gemini model that watches them (free-form, so a newer model works without an update).
+const SETTINGS_DEFAULTS = {recentVideos: 30, transcriptsPerChannel: 2, useOutliers: true, analysisTokenLimit: 40000, watchPerChannel: 3, geminiModel: 'gemini-3.7-flash', youtubeDerivedUse: {approved: false}};
 const AREAS = ['script', 'voice', 'editing', 'visuals', 'packaging'];
 // Owner picks per competitor link: what to learn from that channel. Each trait feeds one blueprint area and one room.
 // 0.65 (owner request 2026-10-28: "for each competitor the desired subject will be chosen, what the user liked from each
@@ -285,6 +287,8 @@ class CompetitorIntelligence {
       transcriptsPerChannel: integer(input.transcriptsPerChannel, 0, 5, 'Transcripts per channel'),
       useOutliers: (value => { requireValue(typeof value === 'boolean', 'Outlier analysis must be on or off.'); return value; })(input.useOutliers),
       analysisTokenLimit: integer(input.analysisTokenLimit, 8000, 120000, 'Analysis token limit'),
+      watchPerChannel: integer(input.watchPerChannel ?? this.settings(familyId).watchPerChannel, 1, 10, 'Videos to watch per channel'),
+      geminiModel: (value => { requireValue(typeof value === 'string' && /^[a-z0-9][a-z0-9.-]{2,60}$/.test(value), 'The Gemini model must look like gemini-3.7-flash.'); return value; })(input.geminiModel ?? this.settings(familyId).geminiModel),
       youtubeDerivedUse: (() => {
         const value = object(input.youtubeDerivedUse, 'YouTube derived-use setting');
         if (value.approved !== true) return {approved: false};
@@ -975,4 +979,4 @@ class CompetitorIntelligence {
   }
 }
 
-module.exports = {CompetitorIntelligence, hitKeywords, musicLessons, validateBlueprint, analysisMessages, ADJUSTABLE, VOICE_PACE, YOUTUBE_RETENTION_DAYS, TRAITS};
+module.exports = {competitorKey, CompetitorIntelligence, hitKeywords, musicLessons, validateBlueprint, analysisMessages, ADJUSTABLE, VOICE_PACE, YOUTUBE_RETENTION_DAYS, TRAITS};

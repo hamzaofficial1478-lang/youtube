@@ -21,6 +21,9 @@ const PROVIDERS = {
   chatgpt: {name: 'ChatGPT subscription (sign in with ChatGPT, through the Codex app)', test: 'Asks Codex one tiny question on your ChatGPT plan', ready: true, keyless: true, ai: true, gpt: true},
   // Owner decision 2026-10-06: Claude replaced Hermes. Old Hermes slots stay visible so they can be deleted.
   hermes: {name: 'Hermes (removed; use Claude)', test: 'Hermes was removed from the program on 2026-10-06. Delete this slot.', ready: false, retired: true},
+  // 0.107 (owner request 2026-11-11): Gemini watches competitor videos from their YouTube link (picture and sound,
+  // nothing downloaded); the free key comes from aistudio.google.com/apikey.
+  gemini: {name: 'Gemini (watches competitor videos)', test: 'Lists the Gemini models your key can use; nothing is watched or generated', ready: true, keyLabel: 'Gemini API key'},
   nexlev: {name: 'NexLev research API', test: 'Reads one channel profile (uses 1 NexLev API request); no other data', ready: true},
   // 0.97 (owner 2026-11-10: TubeMind instead of NexLev): tubemind.io's private connector URL (MCP over HTTP, the key is
   // inside the URL). Its research tools are run from the Niche Factory; its results feed niche suggestions.
@@ -177,6 +180,9 @@ class ConnectorSlots {
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
         if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
         result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
+      }else if(slot.provider==='gemini'){
+        const {GeminiClient}=require('./gemini'),models=await new GeminiClient(key,this.fetch).test();
+        result={access:'video_watching',message:`Gemini accepted the key and lists ${models.length} model(s)${models.length?` (${models.filter(name=>/gemini/i.test(name)).slice(0,5).join(', ')})`:''} (1 request). Nothing was watched; the model used is set in the Competitors page's scan settings.`};
       }else if(slot.provider==='tubemind'){
         const {TubeMindClient}=require('./tubemind'),client=new TubeMindClient(key,this.fetch);
         const info=await client.connect(),tools=await client.tools();
