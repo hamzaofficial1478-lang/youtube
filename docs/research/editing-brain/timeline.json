@@ -103,7 +103,7 @@
     "do": [
       "Clamp fades so fadeIn + fadeOut <= durationFrames.",
       "Drop keyframes outside [0,duration) after any duration change; rescale keyframes proportionally on speed change.",
-      "Omit default-valued fields in agent-facing reads to save tokens (speed 1, gain 0, opacity 1, identity transform).",
+      "Omit default-valued fields in agent-facing reads so the values that matter stand out (speed 1, gain 0, opacity 1, identity transform).",
       "Decode tolerantly (missing optional fields -> defaults) but validate strictly on mutation input."
     ],
     "avoid": [
@@ -140,7 +140,7 @@
     "kind": "ruleset",
     "when": "When defining the clip table/JSON or validating any mutation result.",
     "summary": "A clip is a placement of an asset (or nested timeline) with timing, retime, static visual/audio properties, optional per-property keyframe tracks, an effect stack and group memberships; defaults are omitted on output.",
-    "source": "palmier-pro Models/Timeline.swift, Models/Effect.swift, Models/BlendMode.swift (GPLv3, idea restated)"
+    "source": "palmier-pro Models/Timeline.swift, Models/Effect.swift, Models/BlendMode.swift (GPLv3, idea restated) Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality."
   },
   {
     "steps": [

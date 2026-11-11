@@ -26,13 +26,13 @@
     "tasks": ["qc.review", "editing.review", "competitors.scan"],
     "kind": "formula",
     "when": "When choosing how many frames to look at for a video review.",
-    "summary": "Image cost grows with frame count, so budget frames by duration: short videos stay dense, long ones capped. Scene changes are the first choice; a clip with fewer than eight changes is effectively static and gets even sampling. A focused stretch gets a denser budget because the reviewer is zooming in. Long videos reviewed whole are sparse: review them section by section.",
+    "summary": "Too few frames miss the moments that matter and too many bury them, so spend frames by duration: short videos stay dense, long ones are read section by section so no part is thin. Scene changes are the first choice; a clip with fewer than eight changes is effectively static and gets even sampling. A focused stretch gets denser frames because the reviewer is zooming in.",
     "numbers": {"full_video_targets": {"up_to_30s": "12-30 frames (about one a second)", "up_to_60s": 40, "up_to_3min": 60, "up_to_10min": 80, "longer": 100}, "focused_targets": {"up_to_5s": "6 a second, at least 10", "up_to_15s": "4 a second, at least 30", "up_to_30s": 60, "up_to_60s": 80, "longer": 100}, "max_uniform_fps": 2, "static_below_scene_changes": 8, "scene_threshold_for_sampling": 0.2, "near_duplicate_mean_rgb_difference": 2.0, "near_duplicate_thumbnail_px": 16},
     "do": ["Keep the first and last candidate when thinning frames to the budget."],
     "avoid": ["Reviewing a video over ten minutes in one pass at a 100-frame cap and calling it complete."],
     "checks": ["The review states how many frames it saw and from which range."],
     "tags": ["review", "frames", "budget"],
-    "source": "bradautomates/claude-video skills/watch/scripts/frames.py auto_fps and auto_fps_focus (MIT, 03ceb42), restated",
+    "source": "bradautomates/claude-video skills/watch/scripts/frames.py auto_fps and auto_fps_focus (MIT, 03ceb42), restated Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality.",
     "priority": 30
   },
   {

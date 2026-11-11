@@ -55,7 +55,7 @@ function editRoad(content, engineReady) {
   const steps = [
     // 0.106 (owner 2026-11-10: "three options of editing: by Claude, by GPT or by the program"): the owner chooses who edits.
     {title: 'Draft the edit', done: live, text: !edit ? 'Choose who edits. Claude or ChatGPT edit the whole video, directed by the editing skills: transitions, camera, effects, word animations, music and sound (uses tokens). The program cuts it on the narration\'s pauses for free, without AI.' : stale ? 'The storyboard, narration or style changed after this edit: choose who edits the new one.' : `Edit r${edit.revision}, ${edit.actor === 'brain' ? 'made by the editing brain' : `changed by ${esc(edit.createdBy)}`}: ${edit.timeline.clips.length} clips. ${link('Who made it, and how ↓', 'edit-how')}`,
-      buttons: live ? '' : [['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => state.ai?.team?.[key]).map(([key, name]) => action(`Edit with ${name}`, 'tl-edit-with', key, 'primary')).join('') + action('Edit with the program (free)', 'tl-generate', content.contentId, 'secondary')},
+      buttons: live ? '' : held([['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => state.ai?.team?.[key]).map(([key, name]) => action(`Edit with ${name}`, 'tl-edit-with', key, 'primary')).join('') + action('Edit with the program (free)', 'tl-generate', content.contentId, 'secondary'), editHold(room)) + (editHold(room).busy ? `<p class="hint">${editHold(room).note}</p>` : '')},
     // 0.92 (owner question 2026-11-05: "while a video renders, should the buttons stop me?"): no. A render works on the
     // revision it started from, so editing goes on: changes make a new revision and the render carries on.
     {title: 'Watch it and change it', done: !!rendered, text: live ? `${running && running.scope?.edit?.revisionId && running.scope.edit.revisionId !== edit.id ? `<b>r${running.scope.edit.revision} is rendering; you are changing r${edit.revision}.</b> ` : running?.status === 'running' ? `<b>r${edit.revision} is rendering. You can keep changing it:</b> your changes make a new revision and this render carries on. Render the new one when you are done; unchanged shots are copied, not drawn again. ` : running ? `<b>A render of r${edit.revision} is waiting to start.</b> A change now makes it out of date; render again after your changes. ` : ''}Press Play to watch the edit as it is now, before any render. Click a clip on the timeline to change it, or tell Claude what to change.` : 'After the edit is drafted.', buttons: live ? action('▶ Play the edit', 'tl-goto-player', '', 'primary') : ''},
@@ -151,9 +151,35 @@ function editClips(tl, stale) {
   return `<details class="scene-history edit-decisions"><summary>Every cut and its reason (${tl.clips.length} clips)</summary><div class="edit-table"><table class="data-table"><thead><tr><th>Clip</th><th>At</th><th>Hold</th><th>Move</th><th>Why</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>${sceneButtons}</details>`;
 }
 
+// 0.108 (owner review 2026-11-11: "the revisions are not clickable, so I cannot see what I asked and what the response
+// was"): each revision opens to the request, the editor's answer and every change it made.
+const EDIT_KIND = {ask: 'You asked', polish: 'You asked for a polish of the whole edit', 'edit-with': 'You asked it to edit the whole video'};
+function editStory(item) {
+  const story = item.story || {}, who = story.provider === 'chatgpt' ? 'ChatGPT' : 'Claude', list = (title, lines) => (lines?.length ? `<p class="micro-label">${title} (${lines.length})</p><ol class="intel-list">${lines.map(line => `<li>${line}</li>`).join('')}</ol>` : '');
+  if (!story.kind) return `<div class="rev-story">${item.actor === 'brain' ? `<p>${esc(item.note)}</p>${item.autoFixes?.length ? list('Fixed by the editing brain', item.autoFixes.map(fix => esc(fix.summary || fix.reason || fix))) : ''}` : `<p>${esc(item.note)}</p>`}${list('Changes', (story.changes || []).map(esc))}</div>`;
+  return `<div class="rev-story"><p><b>${EDIT_KIND[story.kind]}:</b> ${esc(story.ask)}</p><p><b>${who} answered:</b> ${esc(story.explain || '(no explanation)')}</p>
+    ${list('Changes made', story.changes.map(esc))}${list('Left out (did not pass the checks)', story.refused.map(step => `${esc(step.summary)}${step.error ? ` <small class="muted">${esc(step.error)}</small>` : ''}`))}
+    ${story.redraw ? `<p class="note">Sent to Room 04 to be drawn again: ${esc(story.redraw.labels.join(', '))}. There you choose who draws them.</p>` : ''}${story.left?.length ? `<p class="hint">${esc(story.left.join(' '))}</p>` : ''}</div>`;
+}
 function editHistory(room) {
   if (!room.history || room.history.length < 2) return '';
-  return `<details class="scene-history"><summary>${room.history.length} revisions</summary><div class="history-list">${room.history.map(item => `<div class="history-row"><span class="job-dot ${item.latest ? 'completed' : ''}"></span><div><strong>r${item.revision} · ${item.actor === 'brain' ? 'editing brain' : esc(item.createdBy)} · ${esc(date(item.createdAt))}</strong><small>${esc(item.note)} · slideshow risk ${item.critique.slideshow.score} · ${item.critique.counts.critical} critical, ${item.critique.counts.suggestion} suggestions</small></div></div>`).join('')}</div></details>`;
+  return `<details class="scene-history" data-keep-open="edit-history"><summary>${room.history.length} revisions · click one to see what was asked and done</summary><div class="history-list">${room.history.map(item => `<details class="history-row rev-row" data-keep-open="edit-rev-${esc(item.id)}"><summary><span class="job-dot ${item.latest ? 'completed' : ''}"></span><div><strong>r${item.revision} · ${item.actor === 'brain' ? 'editing brain' : esc(item.createdBy)} · ${esc(date(item.createdAt))}</strong><small>${esc(item.note)} · slideshow risk ${item.critique.slideshow.score} · ${item.critique.counts.critical} critical, ${item.critique.counts.suggestion} suggestions</small></div></summary>${editStory(item)}</details>`).join('')}</div></details>`;
+}
+// 0.108 (owner review 2026-11-11): one editing task at a time. A request still being answered, or a proposal waiting
+// to be applied or discarded, holds the Ask, Polish and Edit-with buttons (the server refuses a second one too).
+function editHold(room) {
+  const command = room?.command, who = command?.provider === 'chatgpt' ? 'ChatGPT' : command ? 'Claude' : null;
+  if (TL.busy) return {busy: true, note: 'The editor is answering your request. One editing task runs at a time; the buttons come back when it is done.'};
+  if (command?.status === 'running') return {busy: true, note: `${who} is working on ${command.kind === 'ask' ? 'the change you asked for' : command.kind === 'polish' ? 'the polish of the whole edit' : 'the edit of the whole video'} (asked ${esc(date(command.createdAt))}). One editing task runs at a time; the buttons come back when it is done.`};
+  if (command?.status === 'proposed') return {busy: true, note: `${who}'s proposal is waiting under the timeline: apply it or discard it first, so the next task works on the edit as it will be.`};
+  return {busy: false, note: ''};
+}
+const held = (html, hold) => (hold.busy ? html.replace(/<button /g, '<button disabled title="One editing task runs at a time" ') : html);
+// The shots the editor asked to draw again wait in Room 04 for the owner's choice of AI.
+function editRedrawNote(contentId) {
+  const waiting = (state.scenes?.contents.find(item => item.contentId === contentId)?.redrawRequests || []).flatMap(request => request.shots.filter(shot => shot.state === 'waiting'));
+  if (!waiting.length) return '';
+  return `<div class="tl-elsewhere"><p><b>Waiting in Room 04:</b> ${waiting.length} shot${waiting.length === 1 ? '' : 's'} the editor asked to draw again (${esc(waiting.slice(0, 12).map(shot => shot.label).join(', '))}${waiting.length > 12 ? ', …' : ''}). Choose there who draws them: ChatGPT paints, Claude draws vector pictures.</p>${action('Go to Room 04 →', 'tl-go-scene', contentId, 'secondary')}</div>`;
 }
 
 // ------------------------------------------------------------ actions and forms
@@ -178,7 +204,7 @@ async function editSend(edit, ops, note) {
   const person = renderPerson() || 'Owner';
   return api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
 }
-const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
+const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-go-scene', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
 function editAction(command, id, button) {
   if (TL_COMMANDS.has(command)) return tlAction(command, id, button);
   const {content, edit} = editContext();
@@ -255,7 +281,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
   saveForm(form, async () => {
     if (kind === 'generate' && data.ai) {
       const edit = await api(`/api/content/${data.contentId}/edits`, {requestedBy: person, visualApprovalId: data.visualApprovalId, ai: data.ai}), done = edit.aiEdit || {}, name = data.ai === 'chatgpt' ? 'ChatGPT' : 'Claude';
-      message = `${name} edited the video (r${edit.revision}): ${done.applied || 0} change${done.applied === 1 ? '' : 's'}${done.refused?.length ? `, ${done.refused.length} left out because they did not pass the checks` : ''}.${done.redraws?.length ? ` It would draw ${done.redraws.length} shot${done.redraws.length === 1 ? '' : 's'} again: ask for that in the timeline if you agree.` : ''}${done.left?.length ? ` ${done.left.join(' ')}` : ''}`;
+      message = `${name} edited the video (r${edit.revision}): ${done.applied || 0} change${done.applied === 1 ? '' : 's'}${done.refused?.length ? `, ${done.refused.length} left out because they did not pass the checks` : ''}.${done.redraws?.length ? ` ${done.redraws.length} shot${done.redraws.length === 1 ? '' : 's'} it wants drawn again wait in Room 04, where you choose ChatGPT or Claude to draw them.` : ''}${done.left?.length ? ` ${done.left.join(' ')}` : ''}`;
       return;
     }
     if (kind === 'generate') { const edit = await api(`/api/content/${data.contentId}/edits`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = `Edit r${edit.revision} drafted: ${edit.critique.counts.critical} critical, ${edit.critique.counts.suggestion} suggestions.`; return; }
@@ -380,16 +406,20 @@ function tlEditor(content, edit, stale) {
   if (!stale) playLoad(edit);
   // 0.85: one button per connected AI (owner question 2026-11-04: "why there is no button of ask gpt?").
   const tl = edit.timeline, clip = tlClipAt(tl, TL.at), team = state.ai?.team || {}, ais = [['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => team[key]), who = ais.map(([, name]) => name).join(' or ') || null;
-  const askButtons = ais.map(([key, name], k) => action(TL.busy === key ? `${name} is reading the edit…` : `Ask ${name}`, 'tl-ask', key, k ? 'secondary' : 'primary')).join('');
+  // 0.108: a proposal the editor made is kept by the program, so it shows again after a reload and is applied by its id.
+  const room = editFor(content.contentId), command = room?.command, hold = editHold(room);
+  if (!TL.proposal && command?.status === 'proposed' && command.baseRevisionId === edit.id) TL.proposal = {commandId: command.id, provider: command.provider, explain: command.explain, ops: command.ops, steps: command.steps, usage: command.usage};
+  if (TL.proposal?.commandId && command?.id !== TL.proposal.commandId) TL.proposal = null;
+  const askButtons = held(ais.map(([key, name], k) => action(TL.busy === key ? `${name} is reading the edit…` : `Ask ${name}`, 'tl-ask', key, k ? 'secondary' : 'primary')).join(''), hold);
   // 0.88: the whole edit polished by the AI in one request, with the approved editing skills and the competitor lessons.
-  const polishRow = ais.length ? `<div class="tl-polish"><strong>Make the whole edit richer</strong><div class="card-actions">${ais.map(([key, name], k) => action(TL.busy === `polish:${key}` ? `${name} is polishing the edit…` : `Polish with ${name}`, 'tl-polish', key, k ? 'secondary' : 'primary')).join('')}</div><p class="hint">One request reads the whole edit and proposes the changes it needs (more for a longer video): transitions for each scene change, camera life, word animations and colours, effects where a line lands, and drawings that match their words and the story's world. It uses your approved editing skills and the competitor lessons, and tokens from the channel's limit. Anything typed in the box above is added to the request. You see every change before applying it.</p></div>` : '';
+  const polishRow = ais.length ? `<div class="tl-polish"><strong>Make the whole edit richer</strong><div class="card-actions">${held(ais.map(([key, name], k) => action(TL.busy === `polish:${key}` ? `${name} is polishing the edit…` : `Polish with ${name}`, 'tl-polish', key, k ? 'secondary' : 'primary')).join(''), hold)}</div><p class="hint">One request reads the whole edit and proposes the changes it needs (more for a longer video): transitions for each scene change, camera life, word animations and colours, effects where a line lands, and drawings that match their words and the story's world. It uses your approved editing skills and the competitor lessons, and tokens from the channel's limit. Anything typed in the box above is added to the request. You see every change before applying it.</p></div>` : '';
   // 0.83: a viewer on top with Play, Pause and Stop, the inspector beside it, the timeline below, as in an editing program.
   const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><small class="muted">Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>`;
   const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span></div>';
   const viewer = stale ? '<div class="tl-viewer"><p class="inline-warning">This edit is out of date, so it cannot play. Draft a new edit.</p></div>' : playViewer(edit, content);
   const commandBox = stale ? '' : `<div class="tl-command"><h4>Tell the editor what to change</h4><textarea data-tl="command" rows="3" maxlength="2000" placeholder="For example: make the title in ${esc(clip.label)} slam in gold, add a sparkle when he says &quot;gold&quot;, and use a whip pan after it.">${esc(TL.command)}</textarea>
     <div class="tl-command-row"><label><input type="radio" name="tl-scope" value="clip" data-tl="scope" ${TL.scope === 'clip' ? 'checked' : ''}> The selected clip (${esc((TL.sel?.clipId && tl.clips.find(item => item.id === TL.sel.clipId)?.label) || clip.label)})</label><label><input type="radio" name="tl-scope" value="edit" data-tl="scope" ${TL.scope === 'edit' ? 'checked' : ''}> The whole edit</label>${who ? askButtons : '<span class="muted">Connect Claude or ChatGPT first (Connections).</span>'}</div>
-    ${polishRow}<p class="hint">${who ? `Name the shots (for example S18C). Ask for drawings, words, timing, transitions, captions, music, sound effects, or a shot drawn again. Nothing changes until you apply.` : ''}</p>${tlProposal()}</div>`;
+    ${polishRow}${hold.busy ? `<p class="inline-warning">${hold.note}</p>` : ''}<p class="hint">${who ? `Name the shots (for example S18C). Ask for drawings, words, timing, transitions, captions, music, sound effects, or a shot drawn again. Nothing changes until you apply.` : ''}</p>${tlProposal()}${editRedrawNote(content.contentId)}</div>`;
   return `<div class="tl-editor" data-tl-root id="tl-player"><div class="tl-panels">${viewer}<div class="tl-inspector">${tlInspector(edit, stale)}</div></div>${toolbar}${tlTracks(tl, stale)}${legend}${commandBox}</div>`;
 }
 function tlProposal() {
@@ -476,7 +506,8 @@ function tlAction(command, id, button) {
   if (command === 'tl-el-add') { const kind = document.querySelector('[data-tl="add-kind"]')?.value || 'text'; return restructure(draft => { draft.elements.push(structuredClone(TL_ADD[kind])); TL.sel = {kind: 'element', id: clipId, clipId, index: draft.elements.length - 1}; }); }
   if (command === 'tl-json') { try { TL.drafts[clipId] = JSON.parse(document.querySelector('[data-tl-whole]').value); render(); } catch { toast('That JSON is not valid.', true); } return; }
   if (command === 'tl-discard-drawing') { delete TL.drafts[id]; return render(); }
-  if (command === 'tl-discard') { TL.proposal = null; return render(); }
+  if (command === 'tl-discard') { const p = TL.proposal; TL.proposal = null; if (!p?.commandId) return render(); return api(`/api/edit-commands/${p.commandId}/discard`, {}).then(refresh).catch(error => toast(error.message, true)); }
+  if (command === 'tl-go-scene') { if (typeof sceneContentId !== 'undefined') sceneContentId = id; productionRoom = 'scene'; return render(); }
   const busy = run => { if (button) button.disabled = true; return run().catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); };
   if (command === 'tl-save-drawing' || command === 'tl-reset-drawing') return busy(async () => { await editSend(edit, [{type: 'set-drawing', clipId: id, sketch: command === 'tl-save-drawing' ? TL.drafts[id] : null}]); delete TL.drafts[id]; await refresh(); toast(command === 'tl-save-drawing' ? 'Drawing saved as a new revision.' : 'Back to the board’s drawing.'); });
   if (command === 'tl-polish') {
@@ -493,10 +524,11 @@ function tlAction(command, id, button) {
     TL.busy = ['claude', 'chatgpt'].includes(id) ? id : 'claude'; render();
     return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ai: TL.busy, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
   }
-  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { const saved = await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh();
+  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { const saved = p.commandId ? await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: renderPerson() || 'Owner', ops: p.ops, commandId: p.commandId}) : await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh();
     // 0.91: shots drawn again go to Room 04; the owner is told what happens next.
     const redraw = saved?.redraw, changed = p.ops.filter(op => op.type !== 'redraw-shot').length;
-    toast(redraw ? `${changed ? `${changed} change${changed === 1 ? '' : 's'} applied. ` : ''}Room 04 is drawing ${redraw.labels.join(', ')} again.${redraw.waiting?.length ? ` ${redraw.waiting.join(', ')} (designed shots) wait: ask for them again when this is done, as one storyboard job runs at a time.` : ''} When it is done: draw them, approve the visuals, then press Fresh draft here (your changes come along).` : `${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
+    // 0.108: nothing is drawn by itself; the owner chooses in Room 04 who draws them.
+    toast(redraw ? `${changed ? `${changed} change${changed === 1 ? '' : 's'} applied here. ` : ''}${redraw.labels.length} shot${redraw.labels.length === 1 ? '' : 's'} to draw again (${redraw.labels.slice(0, 8).join(', ')}${redraw.labels.length > 8 ? ', …' : ''}) now wait in Room 04: choose Redraw with ChatGPT (painted) or with Claude (vector) there. Then draw them, approve the visuals and press Fresh draft here (your changes come along).` : `${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
   return toast('Unknown action.', true);
 }
 // ------------------------------------------------------------ the live player (0.83, owner request 2026-11-03)

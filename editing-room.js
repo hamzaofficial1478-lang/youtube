@@ -21,6 +21,9 @@ const E = require('./engines');
 const {designedSpec} = require('./style');
 const {MotionRenderer} = require('./motion');
 const {messageTokenUpperBound} = require('./writer');
+const live = require('./live');
+// 0.108: what each kind of editor request is called on the page and in a revision's note.
+const COMMAND_KIND = Object.freeze({ask: 'the change you asked for', polish: 'the polish of the whole edit', 'edit-with': 'the edit of the whole video'});
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
 const now = () => new Date().toISOString();
@@ -133,7 +136,7 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
     // 0.91 (owner report 2026-11-04: asked to add effects, the editor switched them all off; asked to fix scenes, it did nothing).
     `- {"type":"add-sfx","seconds","kind"} lays one sound effect at a moment (the second the narrator says its word: WORDS of the clip give the times, a clip's "at" is its start); {"type":"remove-sfx","seconds"?,"kind"?} takes out the effect nearest a moment (of that kind when named) or, without seconds, every effect of a kind. AUDIO.effects lists the effects now in the edit as [second, kind, why]. Kinds: ${Object.keys(M.SFX).join(', ')} (cheer for joy and wins, sad for a loss, groan, gasp for a surprise, laugh, ding for a new idea or a plan, boom for the truth landing, riser for a mystery). When the owner asks to add or change effects, add and remove exactly those; never switch the effects off or remove them all unless the owner says so.`,
     '- {"type":"set-music","feel"}: a new music score for the whole video in the owner\'s words (for example "calm but a bit energetic"); its tracks come from the sound library and Freesound. Use it when the owner describes the music they want.',
-    '- {"type":"redraw-shot","clipId","ask"}: the AI that drew the storyboard draws this shot again in Room 04 as asked (a painted picture is painted again); a designed clip (kind "designed": an HTML composition the AI wrote) is designed again, one new composition per shot. Use it for what the drawing operations cannot do: a change inside a painted picture or backdrop, a new composition, or an object the drawing guide has no name for. After it, the owner draws the changed shots, approves the visuals and drafts the edit again; the edit\'s own changes come along.',
+    '- {"type":"redraw-shot","clipId","ask"}: this shot waits in Room 04 to be drawn again as asked, until the owner chooses who draws it (ChatGPT paints it, Claude draws vector pictures); say so in "explain" (a painted picture is painted again); a designed clip (kind "designed": an HTML composition the AI wrote) is designed again, one new composition per shot. Use it for what the drawing operations cannot do: a change inside a painted picture or backdrop, a new composition, or an object the drawing guide has no name for. After it, the owner draws the changed shots, approves the visuals and drafts the edit again; the edit\'s own changes come along.',
     '- You cannot see the pictures. Never guess that a shot is black, missing or broken: if the owner says so, change only what the owner names and say in "explain" what you could not check.',
     'Do every point of the instruction: each one becomes operations, or a sentence in "explain" saying why it cannot be done. Never answer with no operations when something can be done.',
     'DRAWN SHOTS (clips of kind "drawn"; you may change only the drawings listed under DRAWINGS):',
@@ -205,6 +208,52 @@ class EditingRoom {
     this.migrate();
     // A typed instruction is answered within its request; one still reserved after a restart was cut off by the stop.
     try { this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE kind='edit_command' AND status='reserved'").run(now()); } catch { /* the usage table is created by the store */ }
+    this.db.prepare("UPDATE edit_commands SET status='interrupted', error='The program stopped while the editor was answering. Ask again.', updated_at=? WHERE status='running'").run(now());
+  }
+
+  // ------------------------------------------------------------ the editor's requests, one at a time (0.108)
+  // Owner review 2026-11-11: "when one button is pressed and the task is in progress the other buttons cannot load other
+  // tasks": an ask, a polish or an edit with an AI each change the whole edit, so a second one would work on an edit
+  // that is about to change. A request still running, or a proposal waiting to be applied or discarded, holds the video.
+  commandRow(id) { const row = this.db.prepare('SELECT * FROM edit_commands WHERE id=?').get(id); requireValue(row, 'That editor request was not found.', 404); return row; }
+  commandNow(contentId) {
+    const rows = this.db.prepare("SELECT * FROM edit_commands WHERE content_id=? AND status IN ('running','proposed') ORDER BY created_at DESC, rowid DESC").all(contentId);
+    const current = row => { try { const base = this.revisionRow(row.base_revision_id); return this.latestRow(base.timeline_id).id === base.id; } catch { return false; } };
+    for (const row of rows) if (row.status === 'proposed' && !current(row)) this.db.prepare("UPDATE edit_commands SET status='stale', updated_at=? WHERE id=?").run(now(), row.id);
+    return rows.find(row => row.status === 'running') || rows.find(row => row.status === 'proposed' && current(row)) || null;
+  }
+  assertIdle(contentId) {
+    const row = this.commandNow(contentId);
+    if (!row) return;
+    const who = row.provider === 'chatgpt' ? 'ChatGPT' : row.provider ? 'Claude' : 'The editor', what = COMMAND_KIND[row.kind] || 'a change', ago = Math.max(0, Math.round((Date.now() - Date.parse(row.created_at)) / 60000));
+    requireValue(false, row.status === 'running'
+      ? `${who} is still working on ${what} you asked for ${ago ? `${ago} min ago` : 'just now'}. One editing task runs at a time; the buttons come back when it is done.`
+      : `${who}'s proposal (${what}) is waiting under the timeline. Apply it or discard it first, so the next task works on the edit as it will be.`, 409);
+  }
+  discardCommand(id, input = {}) {
+    object(input);
+    const row = this.commandRow(id);
+    requireValue(row.status === 'proposed', row.status === 'running' ? 'The editor is still answering; it can be discarded once it has.' : 'This proposal was already applied or discarded.', 409);
+    this.db.prepare("UPDATE edit_commands SET status='discarded', updated_at=? WHERE id=?").run(now(), id);
+    return {discarded: id};
+  }
+  publicCommand(row) {
+    if (!row) return null;
+    const json = value => (value ? JSON.parse(value) : null);
+    return {id: row.id, contentId: row.content_id, baseRevisionId: row.base_revision_id, kind: row.kind, provider: row.provider, ask: row.ask, clipId: row.clip_id, status: row.status, explain: row.explain,
+      ops: json(row.ops) || [], steps: json(row.steps) || [], usage: json(row.usage), error: row.error, appliedRevisionId: row.applied_revision_id, result: json(row.result), createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at};
+  }
+  // What one revision of the edit was: the request and the editor's answer when an AI made it, else its own changes.
+  revisionStory(row, command) {
+    if (command) {
+      const steps = JSON.parse(command.steps || '[]'), result = command.result ? JSON.parse(command.result) : {};
+      return {kind: command.kind, provider: command.provider, ask: command.ask, explain: command.explain || '', changes: steps.filter(step => step.ok).map(step => step.summary).slice(0, 400),
+        refused: steps.filter(step => !step.ok).map(step => ({summary: step.summary, error: step.error || null})).slice(0, 200), ...(result.redraw ? {redraw: result.redraw} : {}), ...(result.left?.length ? {left: result.left} : {})};
+    }
+    let ops = [], timeline = null;
+    try { ops = JSON.parse(row.ops); timeline = JSON.parse(row.payload); } catch { /* an unreadable record shows its note only */ }
+    const changes = ops.slice(0, 400).map(op => { try { return describeOp(op, timeline, {clips: {}}); } catch { return String(op?.type || 'a change'); } });
+    return {changes};
   }
 
   migrate() {
@@ -216,6 +265,10 @@ class EditingRoom {
       CREATE TRIGGER IF NOT EXISTS edit_revisions_keep BEFORE DELETE ON edit_revisions BEGIN SELECT RAISE(ABORT, 'Edit revisions are kept for history and cannot be deleted.'); END;
       CREATE TABLE IF NOT EXISTS edit_analyses(id TEXT PRIMARY KEY, narration_sha256 TEXT NOT NULL, version TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, UNIQUE(narration_sha256, version));
       CREATE TABLE IF NOT EXISTS media_analyses(sha256 TEXT NOT NULL, version TEXT NOT NULL, payload TEXT NOT NULL, created_at TEXT NOT NULL, PRIMARY KEY(sha256, version));
+      -- 0.108: every request to the editor (ask, polish, edit with an AI) with what was asked, the answer and what came of it.
+      CREATE TABLE IF NOT EXISTS edit_commands(id TEXT PRIMARY KEY, content_id TEXT NOT NULL, family_id TEXT, base_revision_id TEXT NOT NULL, kind TEXT NOT NULL, provider TEXT, ask TEXT NOT NULL, clip_id TEXT, status TEXT NOT NULL,
+        explain TEXT, ops TEXT, steps TEXT, usage TEXT, error TEXT, applied_revision_id TEXT, result TEXT, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS edit_commands_content ON edit_commands(content_id, status);
     `);
   }
 
@@ -337,6 +390,7 @@ class EditingRoom {
     object(input);
     const by = person(input.requestedBy);
     requireValue(!this.busy.has(contentId), 'An edit for this script is already being prepared.', 409);
+    this.assertIdle(contentId);
     const content = this.store.content(contentId), inputs = this.inputs(content);
     requireValue(inputs.ready, inputs.blockers[0], 409);
     requireValue(input.visualApprovalId === inputs.visual.approvalId, 'The visual approval changed. Reload before editing.', 409);
@@ -487,6 +541,9 @@ class EditingRoom {
     // 0.92: every change the editor proposed can be applied at once (1,000 is only a sanity bound).
     requireValue(Array.isArray(input.ops) && input.ops.length >= 1 && input.ops.length <= 1000, 'Send 1-1,000 edit operations.');
     input.ops.forEach(op => object(op, 'Edit operation'));
+    // 0.108: a proposal of the editor is applied once, on the revision it was made for.
+    const command = input.commandId ? this.commandRow(String(input.commandId)) : null;
+    if (command) requireValue(command.status === 'proposed' && command.base_revision_id === revisionId, command.status === 'proposed' ? 'This proposal was made for an earlier revision of the edit. Ask again.' : 'This proposal was already applied or discarded.', 409);
     const redraws = input.ops.filter(op => op.type === 'redraw-shot'), musics = input.ops.filter(op => op.type === 'set-music');
     // A new score in the owner's words is made first (free, from the sound library); the edit's music then plays it.
     let ops = input.ops.filter(op => op.type !== 'redraw-shot' && op.type !== 'set-music');
@@ -498,26 +555,22 @@ class EditingRoom {
       requireValue(score.ready, 'The new score has no tracks yet: the sound library has no music. Connect Freesound or import music, then ask again.', 409);
       ops = [...ops, {type: 'set-audio', settings: {...audio, music: {...audio.music, enabled: true, scoreId: score.id}}}];
     }
-    const redrawn = redraws.length ? this.redrawShots(revisionId, redraws, by) : null;
-    if (!ops.length) return {...this.publicRevision(this.revisionRow(revisionId), {detail: true}), redraw: redrawn};
-    const saved = this.saveOps(revisionId, {...input, ops}, by);
+    // 0.108 (owner review 2026-11-11): the shots the editor asks to draw again wait in Room 04, where the owner chooses who
+    // draws them (ChatGPT paints, Claude draws vector pictures); nothing is drawn by itself.
+    const redrawn = redraws.length ? this.requestRedraws(revisionId, redraws, by, command?.id || null) : null;
+    const note = command && !input.note ? `${command.provider === 'chatgpt' ? 'ChatGPT' : 'Claude'} · ${COMMAND_KIND[command.kind]}: ${command.ask}`.slice(0, 300) : input.note;
+    const saved = ops.length ? this.saveOps(revisionId, {...input, ops, ...(note ? {note} : {})}, by) : null;
+    if (command) this.db.prepare("UPDATE edit_commands SET status='applied', applied_revision_id=?, result=?, updated_at=? WHERE id=?").run(saved?.id || null, JSON.stringify({applied: ops.length, ...(redrawn ? {redraw: redrawn} : {})}), now(), command.id);
+    if (!saved) return {...this.publicRevision(this.revisionRow(revisionId), {detail: true}), redraw: redrawn};
     return redrawn ? {...saved, redraw: redrawn} : saved;
   }
-  // 0.91: the shots the editor asked to draw again go to Room 04 as one "change with words" job.
-  redrawShots(revisionId, ops, by) {
-    requireValue(this.scenes?.changeShots, 'Room 04 cannot draw shots again in this program.', 409);
-    const {state, payload} = this.editState(revisionId), team = this.scenes.ai?.team?.(), who = team?.claude || team?.chatgpt;
-    requireValue(who, 'Connect Claude or ChatGPT and test the connection first (Connections).', 409);
-    const all = ops.map(op => { const clip = payload.clips.find(item => item.id === op.clipId); requireValue(clip, 'That clip is not in this edit.', 404); return {label: clip.label, shotId: clip.shotId, ask: String(op.ask || '').slice(0, 300), designed: !!state.inputs.assets[clip.shotId]?.composition}; });
-    const changes = all.filter(item => !item.designed), designs = all.filter(item => item.designed), manifestId = state.inputs.scope.manifestId, connector = {id: who.id, revision: who.revision};
-    // One storyboard job runs per script, so drawn shots and designed shots in one request go one after the other.
-    let jobId = null, waiting = [];
-    if (changes.length) jobId = this.scenes.changeShots(manifestId, {requestedBy: by, changes: changes.map(({label, ask}) => ({label, ask})), connector})?.id || null;
-    if (designs.length && !changes.length) {
-      const manifest = this.scenes.manifestRow(manifestId);
-      jobId = this.scenes.redesignFrame(manifestId, {requestedBy: by, connector, expectedRevision: manifest.revision, shots: designs.map(item => ({shotId: item.shotId, reason: item.ask}))})?.job?.id || null;
-    } else if (designs.length) waiting = designs.map(item => item.label);
-    return {jobId, labels: (changes.length ? changes : designs).map(item => item.label), provider: who.provider, ...(waiting.length ? {waiting} : {})};
+  // The shots the editor asked to draw again, as one waiting request in Room 04 (drawn shots and designed shots alike).
+  requestRedraws(revisionId, ops, by, commandId = null) {
+    requireValue(this.scenes?.requestRedraw, 'Room 04 cannot draw shots again in this program.', 409);
+    const {state, payload} = this.editState(revisionId);
+    const shots = ops.map(op => { const clip = payload.clips.find(item => item.id === op.clipId); requireValue(clip, 'That clip is not in this edit.', 404); return {label: clip.label, shotId: clip.shotId, ask: String(op.ask || '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 300) || 'Draw it again so it fits its words better.', designed: !!state.inputs.assets[clip.shotId]?.composition}; });
+    const request = this.scenes.requestRedraw(state.inputs.scope.manifestId, {requestedBy: by, shots, commandId});
+    return {requestId: request.id, labels: shots.map(item => item.label), room: 'Room 04'};
   }
   saveOps(revisionId, input, by) {
     return this.store.transaction(() => {
@@ -561,7 +614,10 @@ class EditingRoom {
   // operations, the program checks every one, and nothing changes until the owner applies them.
   drawingRules(state) {
     const spec = state.inputs.spec, scope = E.engineScope(spec), payload = state.inputs.payload;
-    return {primary: payload.engine || E.primaryEngine(spec), cast: payload.cast || [], kit: payload.kit || null, engines: scope.drawn, films: scope.films, looks: scope.looks, boards: scope.boards, designs: scope.designs, types: scope.types || ['cartoon']};
+    // 0.108: a storyboard made all painted or mixed has painted (natural) shots though its style has no picture type,
+    // so the board's own shots decide; otherwise every change to a painted shot would be refused as another style's.
+    const painted = (payload.scenes || []).some(scene => (scene.shots || []).some(shot => shot.sketch?.type === 'natural'));
+    return {primary: payload.engine || E.primaryEngine(spec), cast: payload.cast || [], kit: payload.kit || null, engines: scope.drawn, films: scope.films, looks: scope.looks, boards: scope.boards, designs: scope.designs, types: scope.types || (painted ? ['cartoon', 'natural'] : ['cartoon'])};
   }
   // The strict check of a changed drawing (owner edits); Claude's proposals are checked leniently with named repairs.
   checkDrawingFor(state, {lenient = false, warn = () => {}} = {}) {
@@ -757,29 +813,34 @@ class EditingRoom {
     object(input);
     const by = person(input.requestedBy), pick = input.ai;
     requireValue(['claude', 'chatgpt'].includes(pick), 'Choose Claude or ChatGPT to edit the video.');
+    this.assertIdle(contentId);
     const draft = await this.generate(contentId, {requestedBy: by, visualApprovalId: input.visualApprovalId});
-    const proposal = await this.command(draft.id, {requestedBy: by, ai: pick, polish: true});
+    const proposal = await this.command(draft.id, {requestedBy: by, ai: pick, polish: true, via: 'edit-with'});
     const who = pick === 'chatgpt' ? 'ChatGPT' : 'Claude', signed = `${who} for ${by}`.slice(0, 80);
     const redraws = proposal.ops.filter(op => op.type === 'redraw-shot');
-    let ops = proposal.ops.filter(op => op.type !== 'redraw-shot'), edited = draft, left = [];
+    let ops = [...proposal.ops], edited = draft, left = [];
     if (ops.length) {
-      try { edited = this.applyOps(draft.id, {editedBy: signed, ops}); }
+      try { edited = this.applyOps(draft.id, {editedBy: signed, ops, commandId: proposal.commandId}); }
       catch (error) {
         // A new score needs music in the sound library; the rest of the edit still applies without it.
-        if (!ops.some(op => op.type === 'set-music')) throw error;
+        if (!ops.some(op => op.type === 'set-music')) { this.db.prepare("UPDATE edit_commands SET status='failed', error=?, updated_at=? WHERE id=? AND status='proposed'").run(String(error.message).slice(0, 1200), now(), proposal.commandId); throw error; }
         left = [`The new music was left out: ${error.message}`];
         ops = ops.filter(op => op.type !== 'set-music');
-        if (ops.length) edited = this.applyOps(draft.id, {editedBy: signed, ops});
+        if (ops.length) edited = this.applyOps(draft.id, {editedBy: signed, ops, commandId: proposal.commandId});
       }
     }
-    const aiEdit = {provider: proposal.provider, explain: proposal.explain, applied: ops.length, refused: proposal.steps.filter(step => !step.ok).map(step => step.summary).slice(0, 20), left, redraws: redraws.map(op => ({clipId: op.clipId, ask: op.ask})), usage: proposal.usage};
-    this.store.event(`${who} edited "${this.store.content(contentId).title}" for ${by}: ${ops.length} change${ops.length === 1 ? '' : 's'} on the editing brain's cut`);
+    if (!ops.length) this.db.prepare("UPDATE edit_commands SET status='applied', result=?, updated_at=? WHERE id=? AND status='proposed'").run(JSON.stringify({applied: 0}), now(), proposal.commandId);
+    if (left.length) { const row = this.commandRow(proposal.commandId), result = row.result ? JSON.parse(row.result) : {}; this.db.prepare('UPDATE edit_commands SET result=? WHERE id=?').run(JSON.stringify({...result, left}), row.id); }
+    const changed = ops.filter(op => op.type !== 'redraw-shot').length;
+    const aiEdit = {provider: proposal.provider, explain: proposal.explain, applied: changed, refused: proposal.steps.filter(step => !step.ok).map(step => step.summary).slice(0, 20), left, redraws: redraws.map(op => ({clipId: op.clipId, ask: op.ask})), redraw: edited.redraw || null, usage: proposal.usage};
+    this.store.event(`${who} edited "${this.store.content(contentId).title}" for ${by}: ${changed} change${changed === 1 ? '' : 's'} on the editing brain's cut`);
     return {...edited, aiEdit};
   }
   async command(revisionId, input) {
     object(input);
-    const by = person(input.requestedBy), polish = input.polish === true;
+    const by = person(input.requestedBy), polish = input.polish === true, kind = input.via === 'edit-with' ? 'edit-with' : polish ? 'polish' : 'ask';
     const ask = polish ? `${POLISH_ASK}${input.text ? ` The owner adds: ${text(input.text, 'Your instruction', 0, 2000)}` : ''}` : text(input.text, 'Your instruction', 3, 2000);
+    const asked = kind === 'ask' ? ask : kind === 'edit-with' ? 'Edit the whole video.' : `Polish the whole edit.${input.text ? ` ${String(input.text).trim()}` : ''}`;
     const {row, timeline, state, payload} = this.editState(revisionId);
     requireValue(this.latestRow(timeline.id).id === row.id, 'A newer revision of this edit exists. Reload and ask again.', 409);
     // 0.85: the owner asks Claude or ChatGPT (one button each); without a choice, Claude first.
@@ -798,27 +859,39 @@ class EditingRoom {
     let guidance = null;
     try { guidance = this.scenes.visualGuidance?.(family.id) || null; } catch { guidance = null; }
     const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap});
-    const maxTokens = answerTokens(cap, polish), reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`;
+    const maxTokens = answerTokens(cap, polish), reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`, commandId = randomUUID();
     this.store.transaction(() => {
+      // 0.108: one editing task at a time for a video (the request is recorded before anything is sent).
+      this.assertIdle(timeline.content_id);
       const summary = this.store.usageSummary(family.id);
       requireValue(summary.settledTokens + summary.reservedTokens + reserve <= family.tokenBudget.monthlyLimit, 'The family\'s monthly token limit cannot reserve this request. Raise the limit or wait for next month.', 409);
       const at = now();
       this.db.prepare("INSERT INTO intelligence_usage(job_id,family_id,kind,period_month,status,reserved_tokens,created_at,updated_at) VALUES(?,?,'edit_command',?,'reserved',?,?,?)").run(key, family.id, this.store.tokenPeriod(family), reserve, at, at);
+      this.db.prepare("INSERT INTO edit_commands(id,content_id,family_id,base_revision_id,kind,provider,ask,clip_id,status,created_by,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,'running',?,?,?)")
+        .run(commandId, timeline.content_id, family.id, row.id, kind, who.provider || null, asked.slice(0, 2400), focus?.id || null, by, at, at);
     });
     const settle = (usage, status) => this.db.prepare('UPDATE intelligence_usage SET status=?, prompt_tokens=?, completion_tokens=?, total_tokens=?, updated_at=? WHERE job_id=?').run(status, usage?.promptTokens ?? null, usage?.completionTokens ?? null, usage?.totalTokens ?? null, now(), key);
+    const failed = error => { this.db.prepare("UPDATE edit_commands SET status='failed', error=?, updated_at=? WHERE id=? AND status='running'").run(String(error?.message || error).slice(0, 1200), now(), commandId); };
+    const aiName = who.provider === 'chatgpt' ? 'ChatGPT' : 'Claude';
+    live.start(commandId, {room: 'editing', label: `${aiName} ${kind === 'ask' ? 'is answering your request' : 'is editing the whole video'}`, contentId: timeline.content_id, familyId: family.id, who: aiName});
     let reply;
-    try { reply = await ai.complete({connectorId: who.id, task: 'editing', messages, maxTokens}); }
-    catch (error) { settle(null, 'unknown'); throw error; }
+    try { reply = await ai.complete({connectorId: who.id, task: 'editing', messages, maxTokens, onProgress: live.follow(commandId)}); }
+    catch (error) { settle(null, 'unknown'); failed(error); throw error; }
+    finally { live.end(commandId); }
     settle(reply.usage, Number.isSafeInteger(reply.usage?.totalTokens) ? 'settled' : 'unknown');
     let answer = null;
     try { answer = JSON.parse(reply.content); } catch { /* named below */ }
-    requireValue(answer && typeof answer === 'object' && Array.isArray(answer.ops), 'The editor did not answer with edit operations. Nothing changed; ask again in other words.', 502);
+    if (!(answer && typeof answer === 'object' && Array.isArray(answer.ops))) { failed('The editor did not answer with edit operations.'); requireValue(false, 'The editor did not answer with edit operations. Nothing changed; ask again in other words.', 502); }
     if (skillBrief) this.store.skillRuntime?.recordUsage({jobId: key, familyId: family.id, room: 'editing', taskKey: 'editing.plan', brief: skillBrief});
     // 0.95: the directives the editor cited in its changes' reasons.
     if (skillBrief) this.store.skillRuntime?.recordApplied?.(key, 'editing.plan', require('./direct').cited(reply.content, skillBrief.prompt));
-    const proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, cap), {scoreId: score?.ready && score.current ? score.id : null});
+    let proposal;
+    try { proposal = this.dryRun(state, payload, drawn, answer.ops.slice(0, cap), {scoreId: score?.ready && score.current ? score.id : null}); }
+    catch (error) { failed(error); throw error; }
+    const explain = String(answer.explain || '').replace(/[\x00-\x1F]/g, ' ').slice(0, 600);
+    this.db.prepare("UPDATE edit_commands SET status='proposed', explain=?, ops=?, steps=?, usage=?, updated_at=? WHERE id=?").run(explain, JSON.stringify(proposal.ops), JSON.stringify(proposal.steps), JSON.stringify(reply.usage || null), now(), commandId);
     this.store.event(`Edit command on r${row.revision} by ${by}: ${proposal.ops.length} change${proposal.ops.length === 1 ? '' : 's'} proposed`);
-    return {revisionId: row.id, explain: String(answer.explain || '').replace(/[\x00-\x1F]/g, ' ').slice(0, 600), ...proposal, usage: reply.usage, provider: who.provider, model: reply.model};
+    return {revisionId: row.id, commandId, explain, ...proposal, usage: reply.usage, provider: who.provider, model: reply.model};
   }
   // Each proposed operation applied in order to a copy: drawing operations become the whole checked drawing of the
   // clip (set-drawing); anything that fails its checks is listed with the reason and left out.
@@ -1020,7 +1093,12 @@ class EditingRoom {
         const latest = this.latestRow(timeline.id), status = this.currentFor(timeline);
         return {contentId: content.id, familyId: content.familyId, title: content.title, current: status.current, staleReason: status.current ? null : status.reason,
           edit: this.publicRevision(latest, {detail: true}), craft: status.current ? this.craft(status.inputs) : null,
-          history: this.db.prepare('SELECT * FROM edit_revisions WHERE timeline_id=? ORDER BY revision DESC LIMIT 30').all(timeline.id).map(row => this.publicRevision(row))};
+          command: this.publicCommand(this.commandNow(content.id)),
+          history: (() => {
+            const rows = this.db.prepare('SELECT * FROM edit_revisions WHERE timeline_id=? ORDER BY revision DESC LIMIT 30').all(timeline.id);
+            const commands = new Map(this.db.prepare(`SELECT * FROM edit_commands WHERE applied_revision_id IN (${rows.map(() => '?').join(',') || "''"})`).all(...rows.map(row => row.id)).map(item => [item.applied_revision_id, item]));
+            return rows.map(row => ({...this.publicRevision(row), story: this.revisionStory(row, commands.get(row.id))}));
+          })()};
       }),
     };
   }

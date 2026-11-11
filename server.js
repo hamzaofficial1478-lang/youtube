@@ -320,6 +320,10 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(editTool&&editTool[2]==='player-clip'&&req.method==='POST')return json(res,200,editingRoom.playerClip(editTool[1],body));
         if(editTool&&editTool[2]==='frame'&&req.method==='POST')return json(res,200,await editingRoom.frame(editTool[1],body));
         if(editTool&&editTool[2]==='command'&&req.method==='POST')return json(res,200,await editingRoom.command(editTool[1],body));
+        const redrawRequest=pathname.match(/^\/api\/redraw-requests\/([a-f0-9-]+)\/(run|dismiss)$/);
+        if(redrawRequest&&req.method==='POST')return json(res,200,redrawRequest[2]==='run'?sceneRoom.runRedrawRequest(redrawRequest[1],body):sceneRoom.dismissRedrawRequest(redrawRequest[1],body));
+        const commandDiscard=pathname.match(/^\/api\/edit-commands\/([a-f0-9-]+)\/discard$/);
+        if(commandDiscard&&req.method==='POST')return json(res,200,editingRoom.discardCommand(commandDiscard[1],body));
         const editAction=pathname.match(/^\/api\/edit-revisions\/([a-f0-9-]+)\/(ops|undo)$/);
         if(editAction&&req.method==='POST')return json(res,200,editAction[2]==='ops'?editingRoom.applyOps(editAction[1],body):editingRoom.undo(editAction[1],body));
         const renderQueue=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/renders$/);

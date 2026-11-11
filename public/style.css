@@ -311,3 +311,13 @@ details.more-text .more-label,details.more-text .less-label{color:inherit;font-w
 .watch-study,.roadmap{margin-top:8px;font-size:13px}.watch-study details,.roadmap details{border-top:1px solid #eef1ec;padding:6px 0}.watch-study summary,.roadmap summary{cursor:pointer;overflow-wrap:anywhere}
 .watch-row p{margin:4px 0;font-size:12px}
 .watch-study summary>strong,.roadmap summary>strong{display:inline}
+
+/* 0.108: revisions that open, the editor's one-task note, waiting redraws and the scene mode choice. */
+.rev-row{display:block}.rev-row>summary{display:grid;grid-template-columns:10px minmax(0,1fr);gap:10px;cursor:pointer;list-style:none}.rev-row>summary::-webkit-details-marker{display:none}
+.rev-story{margin:8px 0 4px 20px;font-size:13px}.rev-story p{margin:4px 0}
+.tl-elsewhere{margin-top:12px;padding:10px 12px;border:1px solid #e3dccb;border-radius:8px;background:#fbf8f1;font-size:13px}.tl-elsewhere p{margin:0 0 8px}
+.scene-redraw-card{border-color:#e0b25b}.scene-redraw-list ul{margin:6px 0}
+.paint-modes{border:1px solid #e3e8df;border-radius:8px;padding:10px 12px;margin:10px 0}.paint-modes legend{font-weight:600;font-size:13px;padding:0 4px}.paint-choice{display:block;margin:6px 0;font-size:13px}.paint-modes .hint{display:block;margin-top:6px}
+button[disabled]{opacity:.55;cursor:not-allowed}
+.paint-modes .paint-choice{display:flex;flex-direction:row;gap:10px;align-items:flex-start;font-weight:400}.paint-modes .paint-choice input{flex:0 0 auto;width:auto;margin:3px 0 0}.paint-modes .paint-choice span{flex:1 1 auto;min-width:0}
+.scene-redraw-card .card-actions,.tl-elsewhere{flex-wrap:wrap}.scene-redraw-card .card-actions .button{flex:1 1 140px}

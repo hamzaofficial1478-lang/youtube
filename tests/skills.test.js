@@ -701,3 +701,19 @@ test('0.97: skills are chosen by fit and need for every request; only pins are f
   assert.ok(crossed.every(why => why.related !== 'script.candidate' && why.matched.length >= 3));
   assert.ok(!engine.brief('script.candidate', {context: {}}).reasons.some(why => why.related), 'no words, nothing crosses over');
 });
+
+test('0.108: no skill that lowers quality reaches a model: none among the built-in packs, and an owner skill that asks for it is held back and flagged', t => {
+  const {qualityRisk, skillQuality} = require('../skills');
+  // The owner's standing decision (2026-11-10): quality first, every job led by skills; a skill must never lower the result.
+  const flagged = loadPacks(root).map(({skill}) => [skill.id, qualityRisk(skill)]).filter(([, why]) => why);
+  assert.deepEqual(flagged, [], 'no built-in skill asks for a cheap, basic or cost-saving result');
+  assert.match(qualityRisk({when: 'Always.', summary: 'Keep it short.', do: ['Draw props and backgrounds as basic shapes to save tokens.']}), /saves cost|basic drawings/);
+  assert.equal(qualityRisk({when: 'Always.', summary: 'Empty space reads as cheap.', do: ['Fill the frame.'], avoid: ['A cheap video.']}), null, 'naming a cheap result as something to avoid is fine');
+  const {skills} = setup(t, {seed: false});
+  const risky = {id: 'scene.cheap-scenes', title: 'Cheap scenes', rooms: ['scene'], tasks: ['scene.plan'], kind: 'principle', when: 'Every storyboard of this channel.', summary: 'Pictures cost money, so most shots are plain drawings.', do: ['Use fewer pictures and keep the backgrounds simple to save money.'], source: 'Owner note.'};
+  const good = {id: 'scene.rich-places', title: 'Rich places', rooms: ['scene'], tasks: ['scene.plan'], kind: 'principle', when: 'Every storyboard of this channel.', summary: 'A place shown with depth tells the story before a word is said.', do: ['Give every place a foreground, the setting and a landmark.'], source: 'Owner note.'};
+  skills.importPack({createdBy: 'Owner', changeNote: 'Two rules of my own for scenes.', skills: [risky, good], approve: {approvedBy: 'Owner', confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}}});
+  const ids = skills.brief('scene.plan').skillIds;
+  assert.ok(ids.includes('scene.rich-places') && !ids.includes('scene.cheap-scenes'), 'the risky skill is held back from the brief');
+  assert.ok(skillQuality(validateSkill(risky)).some(note => /Held back from every job because it saves cost/.test(note)), 'and the owner is told why');
+});

@@ -1346,18 +1346,43 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   scenes.ai = {team: () => ({claude: {id: 'claude-1', provider: 'claude-code', revision: 1}, chatgpt: null}), complete: async ({messages}) => { asked.push({messages}); return {content: JSON.stringify({explain: 'A cheer on the win, no more pops, two winners drawn again.', ops: [
     {type: 'add-sfx', seconds: 1, kind: 'cheer'}, {type: 'remove-sfx', kind: 'pop'}, {type: 'add-sfx', seconds: 1, kind: 'kazoo'},
     {type: 'redraw-shot', clipId: drawnClip.id, ask: 'Two winners, not one'}, {type: 'set-music', feel: 'calm but a bit energetic'}]}), usage: {totalTokens: 70}}; }};
+  // 0.108 (owner review 2026-11-11): one editing task at a time; a waiting proposal holds the video until applied or discarded.
+  await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', text: 'Something else'}), /proposal \(the polish of the whole edit\) is waiting/);
+  await assert.rejects(editing.generate(r5.contentId || editing.timelineRow(editing.revisionRow(r5.id).timeline_id).content_id, {requestedBy: 'Owner'}), /waiting under the timeline/);
+  assert.equal(editing.state().contents.find(item => item.edit?.id === r5.id).command.id, polished.commandId, 'the waiting proposal is in the state, so the page shows it after a reload');
+  editing.discardCommand(polished.commandId);
+  assert.throws(() => editing.discardCommand(polished.commandId), /already applied or discarded/);
+  // A request still being answered holds the video too (the second click is refused before anything is sent).
+  const answer = scenes.ai.complete;
+  let release;
+  scenes.ai.complete = request => new Promise(resolve => { release = () => resolve(answer(request)); });
+  const slow = editing.command(r5.id, {requestedBy: 'Owner', text: 'First request'});
+  await assert.rejects(editing.command(r5.id, {requestedBy: 'Owner', polish: true}), /still working on the change you asked for/);
+  release();
+  editing.discardCommand((await slow).commandId);
+  scenes.ai.complete = answer;
   const fixes = await editing.command(r5.id, {requestedBy: 'Owner', text: `In ${drawnClip.label} add a cheer, remove the pops and draw two winners`});
   assert.match(asked.at(-1).messages[0].content, /"type":"add-sfx"[\s\S]*"type":"redraw-shot"/);
   assert.match(asked.at(-1).messages[1].content, /"effects":\[/, 'the editor sees the effects in the edit');
   assert.deepEqual(fixes.steps.map(step => step.ok), [true, true, false, true, false]);
   assert.match(fixes.steps[2].error, /Sound effects are:/);
   assert.match(fixes.steps[4].error, /Music is not available/, 'a new score needs the Audio Room');
+  // 0.108: the shots to draw again wait in Room 04 for the owner's choice of AI; nothing is drawn by itself.
   const redrawCalls = [];
-  scenes.changeShots = (manifestId, input) => { redrawCalls.push({manifestId, input}); return {job: {id: 'job-1'}}; };
-  const r6 = editing.applyOps(r5.id, {editedBy: 'Owner', ops: fixes.ops});
+  scenes.requestRedraw = (manifestId, input) => { redrawCalls.push({manifestId, input}); return {id: 'req-1'}; };
+  scenes.changeShots = () => { throw new Error('nothing is drawn again by itself'); };
+  const r6 = editing.applyOps(r5.id, {editedBy: 'Owner', ops: fixes.ops, commandId: fixes.commandId});
   assert.deepEqual(r6.timeline.sfxEdits, [{op: 'add', seconds: 1, kind: 'cheer'}, {op: 'remove', kind: 'pop'}]);
-  assert.deepEqual(r6.redraw.labels, [drawnClip.label]);
-  assert.deepEqual(redrawCalls[0].input.changes, [{label: drawnClip.label, ask: 'Two winners, not one'}]);
+  assert.deepEqual([r6.redraw.labels, r6.redraw.requestId, r6.redraw.room], [[drawnClip.label], 'req-1', 'Room 04']);
+  assert.deepEqual(redrawCalls[0].input.shots.map(shot => [shot.label, shot.ask]), [[drawnClip.label, 'Two winners, not one']]);
+  assert.equal(redrawCalls[0].input.commandId, fixes.commandId);
+  // The revision says what was asked, what the editor answered and every change it made.
+  const story = editing.state().contents.find(item => item.edit?.id === r6.id).history.find(item => item.id === r6.id).story;
+  assert.match(story.ask, /add a cheer, remove the pops/);
+  assert.match(story.explain, /cheer/);
+  assert.ok(story.changes.some(line => /add cheer/.test(line)) && story.refused.length === 2 && story.redraw.labels[0] === drawnClip.label);
+  assert.match(editing.revisionRow(r6.id).note, /the change you asked for: In /);
+  assert.throws(() => editing.applyOps(r6.id, {editedBy: 'Owner', ops: fixes.ops, commandId: fixes.commandId}), /already applied or discarded/);
   assert.ok(!editing.revisionRow(r6.id).ops.includes('redraw-shot'), 'the edit keeps only its own changes');
   // A redraw on its own changes nothing in the edit.
   const alone = editing.applyOps(r6.id, {editedBy: 'Owner', ops: [{type: 'redraw-shot', clipId: drawnClip.id, ask: 'Pebbles on the table'}]});
@@ -1673,4 +1698,17 @@ test('0.106: the live player gets its saved videos, and Claude or ChatGPT edit t
   assert.deepEqual(edited.timeline.sfxEdits, [{op: 'add', seconds: 1, kind: 'cheer'}]);
   assert.deepEqual([edited.aiEdit.applied, edited.aiEdit.refused.length, edited.aiEdit.redraws.length], [1, 1, 0], 'what passed its checks is applied, the rest is named');
   assert.equal(editing.revisionRow(edited.id).revision, 2, 'the brain\'s cut is revision 1, the AI\'s edit revision 2 (undo goes back to the cut)');
+});
+
+// 0.108: a storyboard made all painted has painted (natural) shots while its style has no picture type; the Editing
+// Room must still accept changes to them (they were refused as "not this style's picture type").
+test('0.108: edits of an all-painted storyboard keep its painted shots', () => {
+  const spec = {renderer: {adapter: 'stick-figure'}, drawing: {}};
+  const painted = {type: 'natural', set: 'none', elements: [{kind: 'picture', backdrop: true, describe: 'A misty mountain village at dawn, a ninja waits on a rooftop'}]};
+  const rules = shots => EditingRoom.prototype.drawingRules.call(null, {inputs: {spec, payload: {engine: 'stickman', scenes: [{shots}]}}});
+  assert.deepEqual(rules([{sketch: painted}]).types, ['cartoon', 'natural']);
+  assert.equal(Sk.validate(painted, rules([{sketch: painted}])).type, 'natural');
+  // A board without painted shots stays on its style's types.
+  assert.deepEqual(rules([{sketch: {set: 'none', elements: []}}]).types, ['cartoon']);
+  assert.throws(() => Sk.validate(painted, rules([{sketch: {set: 'none', elements: []}}])), /not this style's/);
 });

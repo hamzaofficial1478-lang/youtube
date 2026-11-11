@@ -172,7 +172,8 @@ const skillHash = skill => createHash('sha256').update(JSON.stringify(skill)).di
 // How a skill could be better (0.41, after anthropics/skills skill-creator: skills that give reasons generalise, rigid
 // capitals do not, lean skills leave room in the brief). Advice for the owner's review, never a gate.
 function skillQuality(skill) {
-  const notes = [], size = Buffer.byteLength(JSON.stringify(skill));
+  const notes = [], size = Buffer.byteLength(JSON.stringify(skill)), risk = qualityRisk(skill);
+  if (risk) notes.push(`Held back from every job because it ${risk} (quality first). Rewrite it to ask for the full result.`);
   // A bare instruction (one sentence, no reason, no contrast) is flagged; an explanation in any form is not.
   const reasoned = /\b(because|so that|so |since|otherwise|which|means|makes|keeps|shows|reads|without|when|not |instead|than|why)\b/i.test(skill.summary) || (skill.summary.match(/[.!?](\s|$)/g) || []).length >= 2;
   if (!reasoned) notes.push('Say why it matters: a rule with its reason is applied well beyond the cases it names.');
@@ -182,6 +183,25 @@ function skillQuality(skill) {
   if (skill.when.length < 25) notes.push('Say more exactly when it applies, so it is used in the right moments.');
   if (!skill.do.length && !skill.steps.length && !skill.checks.length) notes.push('Add what to do, not only what to avoid.');
   return notes;
+}
+// 0.108 (owner review 2026-11-11: "no skill that degrades the output quality; strictly prohibited"): a skill whose own
+// directions tell a model to save cost or effort at the expense of the result (a cheap video, minimal props, a simple
+// background, fewer pictures, saving tokens) never reaches a brief, whoever wrote it. Only what a skill asks a model to do
+// is read (when, summary, steps, do, numbers); an "avoid" or a check that names a cheap result is the opposite.
+const QUALITY_RISKS = Object.freeze([
+  [/\b(?:save|saving|cut|cutting|reduce|reducing|lower|minimi[sz]e)\s+(?:the\s+)?(?:tokens?|costs?|money|spend(?:ing)?|budget)\b/i, 'saves cost'],
+  [/\bto save (?:time|tokens|money|cost)\b/i, 'saves cost'],
+  [/\bcheap(?:er|est)?\s+(?:video|version|pictures?|images?|drawings?|scenes?|option|shots?)\b/i, 'asks for a cheap result'],
+  [/\b(?:keep|make|draw)\s+(?:it|them|the\s+scenes?|the\s+drawings?|pictures?|backgrounds?|props?)\s+(?:simple|minimal|basic|plain)\b/i, 'asks for basic drawings'],
+  [/\bminimal props\b|\bsimple backgrounds?\b|\bbasic shapes\b|\bno facial features\b/i, 'asks for basic drawings'],
+  [/\b(?:use|draw|make|paint)\s+fewer\s+(?:pictures|paintings|images|details|props)\b/i, 'asks for fewer pictures'],
+  [/\bskip\s+(?:the\s+)?(?:pictures?|paintings?|review|check|art director)\b/i, 'skips a quality step'],
+  [/\b(?:good enough|lower quality|draft quality|quick and dirty)\b/i, 'accepts lower quality'],
+]);
+function qualityRisk(skill) {
+  const said = [skill?.when, skill?.summary, ...(skill?.steps || []), ...(skill?.do || []), JSON.stringify(skill?.numbers || {})].filter(Boolean).join(' \n ');
+  for (const [pattern, why] of QUALITY_RISKS) { const match = said.match(pattern); if (match) return `${why}: "${match[0]}"`; }
+  return null;
 }
 const person = (value, label) => text(value, label, 2, 80);
 const reason = (value, label = 'Reason') => text(value, label, 8, 1000);
@@ -950,6 +970,8 @@ class SkillsEngine {
     for (const row of rows) {
       if (blocked.has(row.skill_id)) continue;
       const skill = JSON.parse(row.payload);
+      // 0.108: a skill that would lower the result is held back from every job (shown in Skills with the reason).
+      if (qualityRisk(skill)) continue;
       const pinned = pins.has(row.skill_id);
       if (!pinned && (skill.pinOnly || !skill.tasks.includes(taskKey))) continue;
       selected.push({revisionId: row.id, revision: row.revision, origin: row.origin, pinned, pinPosition: pinned ? pins.get(row.skill_id) : 0, skill});
@@ -1173,7 +1195,7 @@ class SkillsEngine {
 }
 
 module.exports = {
-  SkillsEngine, SkillError, rankSkills, validateSkill, skillHash, skillQuality, loadPacks, PACK_FILES,
+  SkillsEngine, SkillError, rankSkills, validateSkill, skillHash, skillQuality, qualityRisk, loadPacks, PACK_FILES,
   TASK_KEYS, ROOMS, ROOM_TASKS, KINDS, ORIGINS, STATUSES, PROJECT_STATE_CATEGORIES,
   SOURCE_HIERARCHY, BRIEF_BYTE_BUDGET, TASK_BRIEF_BYTES, RULES,
 };

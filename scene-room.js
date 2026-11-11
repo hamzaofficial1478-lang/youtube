@@ -24,6 +24,20 @@ const STOCK_NAMES = {pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia
 // The visual rules a plan follows: the style's look, every look of the engine for a mix, the footage look of a
 // documentary beside its designed shots.
 // The looks the owner ticked for a mix (0.62), passed to the planner beside the style's look.
+// 0.108 (owner review 2026-11-11: "draw the scenes totally paid, mix 60/40, or totally by the program"): how the scenes
+// of one video are made, chosen when its storyboard is built. all: every shot is a natural scene painted by ChatGPT
+// with the motion layer over it (no free drawing, no designed HTML frame, no vector picture); mix: about 60% painted
+// scenes, 40% the engine's own work; free: no painting at all. It sets the picture type the storyboard plans with.
+const PAINT_MODES = Object.freeze(['all', 'mix', 'free']);
+const PAINT_NATURAL_PER_MINUTE = {all: 30, mix: 18};
+function paintSpec(spec, paint) {
+  if (!spec || !PAINT_MODES.includes(paint)) return spec;
+  const drawing = {...(spec.drawing || {})};
+  if (paint === 'all') drawing.pictureType = 'natural';
+  else if (paint === 'mix') drawing.pictureType = 'mix';
+  else delete drawing.pictureType;
+  return {...spec, drawing};
+}
 const ticks = drawing => Object.fromEntries(['looks', 'boards', 'designs', 'films'].filter(key => drawing?.[key]?.length).map(key => [key, drawing[key]]));
 function dnaKeys(style) {
   const keys = lookKeys(style), types = E.PICTURE_TYPES[style.pictureType] || ['cartoon'];
@@ -405,7 +419,7 @@ function planMessages(input, {findings = []} = {}) {
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
     SCENE_CRAFT,
-    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType, atelier: input.style.atelier})] : []),
+    ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType, atelier: input.style.atelier, paint: input.style.paint})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
     ...(input.style.designedShots && !input.part ? [`At most ${input.style.designedShots} atelier shots in this video.`] : []),
     ...(input.style.adaptive ? [input.design ? 'DESIGN THIS VIDEO: the video already has its design (input "design": colours, fonts, pace, energy, captions); plan this part by it and do not return a new one.' : DESIGN_LINE] : []),
@@ -432,6 +446,19 @@ function looseJson(text) {
 }
 // What a shot drawn again had (0.94): enough for the AI not to repeat it, never a drawing to edit. Pictures keep only
 // their describe, so a new painting is made from the new drawing's words.
+// A neighbouring shot sent only as context (0.108): its drawing without the pictures' path data or the kit's shapes,
+// which can be tens of kilobytes each and are never changed by a redraw of other shots.
+// The parts of a check, each split in halves until it fits (a single scene always stays, and is named if still too long).
+function splitSlices(planned, fits) {
+  const out = [], fit = slice => { if (slice.length === 1 || fits(slice)) { out.push(slice); return; } const half = Math.ceil(slice.length / 2); fit(slice.slice(0, half)); fit(slice.slice(half)); };
+  planned.forEach(slice => { if (slice.length) fit(slice); });
+  return out;
+}
+function leanSketch(sketch) {
+  if (!sketch || !Array.isArray(sketch.elements)) return sketch;
+  const {kit, ...rest} = sketch;
+  return {...rest, elements: sketch.elements.map(item => (item?.kind === 'picture' && item.art ? (({art, ...keep}) => ({...keep, drawn: true}))(item) : item))};
+}
 function rejectedOf(sketch) {
   const said = el => String(el.text || el.describe || el.label || '').slice(0, 60);
   return {set: sketch.set || 'none', camera: sketch.camera || 'still', mood: sketch.mood || 'normal', ...(sketch.type ? {type: sketch.type} : {}),
@@ -454,7 +481,7 @@ function reviewMessages(input) {
     // a shot drawn again is designed afresh. Its earlier drawing comes only as "rejected" (what it had), never as a
     // drawing to edit, and only the shots in "drawNow" may change.
     ...(input.drawNow ? ['DRAW AGAIN: the shots in "drawNow" are drawn again now, and only they may change; return a full new drawing ("sketch") for every one of them. Design each afresh from its words, the owner\'s request and its neighbours: a new composition, staging, camera, framing and set dressing, new poses and expressions. "rejected" lists what the earlier drawing of that shot had; the owner did not accept it, so never return it again with things moved around: change what the request names, and show more of the words (every thing they name, the place, faces and poses that act the feeling, 2-4 details of the story\'s world, something alive). A painted picture is painted again from your new "describe". Keep the cast ids and looks, and the scene\'s place unless the request or the words move it. A shot planned as a designed (atelier) shot gets a drawing in the engine that suits its words. Say in each shot\'s "notes" what is new.'] : []),
-    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film, looks: input.looks, boards: input.boards, designs: input.designs, films: input.films, pictureType: input.pictureType}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix' && (input.looks || true), boards: input.board === 'mix' && (input.boards || true), designs: input.design === 'mix' && (input.designs || true), types: E.PICTURE_TYPES[input.pictureType] || null}),
+    E.promptGuide(input.engine, {mix: input.mix, look: input.look, board: input.board, design: input.design, brief: input.brief, film: input.film, looks: input.looks, boards: input.boards, designs: input.designs, films: input.films, pictureType: input.pictureType, paint: input.paint}), Sk.promptGuide(input.engine, {pictures: input.pictures === true, looks: input.look === 'mix' && (input.looks || true), boards: input.board === 'mix' && (input.boards || true), designs: input.design === 'mix' && (input.designs || true), types: E.PICTURE_TYPES[input.pictureType] || null}),
   ].join('\n');
   return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
 }
@@ -605,6 +632,10 @@ class SceneRoom {
   migrate() {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS visual_settings(family_id TEXT PRIMARY KEY REFERENCES families(id), revision INTEGER NOT NULL, payload TEXT NOT NULL, updated_at TEXT NOT NULL);
+      -- 0.108: shots the editor (Editing Room) asked to draw again, waiting here until the owner chooses who draws them.
+      CREATE TABLE IF NOT EXISTS scene_paint(content_id TEXT PRIMARY KEY, paint TEXT NOT NULL, set_by TEXT NOT NULL, updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS redraw_requests(id TEXT PRIMARY KEY, content_id TEXT NOT NULL, family_id TEXT, manifest_id TEXT NOT NULL, source TEXT NOT NULL, command_id TEXT, shots TEXT NOT NULL, status TEXT NOT NULL,
+        created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS scene_plan_jobs(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL REFERENCES content(id), status TEXT NOT NULL, scope TEXT NOT NULL, quality TEXT, manifest_id TEXT, error TEXT, attempts INTEGER NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS scene_manifests(id TEXT PRIMARY KEY, family_id TEXT NOT NULL REFERENCES families(id), content_id TEXT NOT NULL REFERENCES content(id), revision INTEGER NOT NULL, content_revision INTEGER NOT NULL, voice_approval_id TEXT NOT NULL, style_revision_id TEXT NOT NULL, style_spec_hash TEXT NOT NULL, source TEXT NOT NULL, parent_id TEXT, change_note TEXT NOT NULL, payload TEXT NOT NULL, payload_hash TEXT NOT NULL, checks TEXT NOT NULL, created_by TEXT NOT NULL, created_at TEXT NOT NULL, review TEXT, UNIQUE(content_id, revision));
       CREATE TRIGGER IF NOT EXISTS scene_manifests_immutable BEFORE UPDATE OF family_id, content_id, revision, content_revision, voice_approval_id, style_revision_id, style_spec_hash, source, parent_id, change_note, payload, payload_hash, checks, created_by, created_at ON scene_manifests BEGIN SELECT RAISE(ABORT, 'Scene manifest revisions are immutable.'); END;
@@ -717,13 +748,21 @@ class SceneRoom {
     const planner = spec ? E.plannerSources(spec, VS.executableSources(spec.visuals.sources)) : {engine: null, sources: [], primarySource: null, dropped: []};
     const sources = planner.sources;
     if (spec && !sources.length) blockers.push(`${spec.name} has no visual source this milestone can execute.`);
-    return {
+    const out = {
       family, ready: !blockers.length, blockers,
       voice: voice ? {ready: voice.ready, approvalId: voice.approvalId, auditionId: voice.auditionId || null, durationSeconds: voice.analysis?.durationSeconds ?? null, blocker: voice.blocker} : {ready: false, approvalId: null, durationSeconds: null, blocker: 'No narration handoff.'},
       // 0.82: what the drawings will look like (looks, the drawing hand, film looks), shown in Room 04 before anything is drawn.
       style: style ? {ready: style.ready, revisionId: style.revisionId, specHash: style.specHash, name: spec?.name || null, revision: revision?.revision || null, blocker: style.blocker, engine: spec ? E.primaryEngine(spec) : null, review: !!(spec && this.settings(family.id).continuityReview && E.ENGINES[E.primaryEngine(spec)]?.draws), ...(spec?.atelier ? {atelier: {finish: spec.atelier.finish || 'motion', finishes: spec.atelier.finishes || null, script: spec.atelier.script || null}} : {}), ...(spec?.drawing ? {drawing: {look: spec.drawing.look || null, looks: spec.drawing.looks || null, board: spec.drawing.board || null, boards: spec.drawing.boards || null, design: spec.drawing.design || null, designs: spec.drawing.designs || null, hand: !!spec.drawing.hand, film: spec.drawing.film || null, films: spec.drawing.films || null, pictureType: spec.drawing.pictureType || 'cartoon'}} : {})} : {ready: false, revisionId: null, specHash: null, name: null, blocker: 'No style handoff.'},
       spec, sources, engine: planner.engine, primarySource: planner.primarySource, scope: planner.scope || null,
     };
+    return this.withPaint(out, this.paintMode(content.id));
+  }
+  // 0.108: the video's paint mode (the newest storyboard's choice) applied to the style it plans and draws with.
+  paintMode(contentId) { if (!contentId) return null; const row = this.db.prepare('SELECT paint FROM scene_paint WHERE content_id=?').get(contentId); return PAINT_MODES.includes(row?.paint) ? row.paint : null; }
+  withPaint(inputs, paint) {
+    if (!inputs.spec || !PAINT_MODES.includes(paint)) return inputs;
+    const spec = paintSpec(inputs.spec, paint), planner = E.plannerSources(spec, VS.executableSources(spec.visuals.sources));
+    return {...inputs, spec, scope: planner.scope || null, style: inputs.style ? {...inputs.style, paint} : inputs.style};
   }
   competitorTerms(family) {
     const terms = new Set(family.competitors.map(item => item.value.replace(/^@/, '').toLowerCase()).filter(item => item.length >= 4));
@@ -799,7 +838,9 @@ class SceneRoom {
     const createdBy = person(input.requestedBy);
     const mode = input.mode;
     requireValue(['rules', 'claude'].includes(mode), 'Choose the free narration split or the Claude scene director.');
-    const content = this.store.content(contentId), inputs = this.inputs(content);
+    requireValue(input.paint === undefined || input.paint === null || PAINT_MODES.includes(input.paint), 'Choose how the scenes are made: all painted (paid), a mix, or drawn by the program (free).');
+    const paint = PAINT_MODES.includes(input.paint) ? input.paint : null;
+    const content = this.store.content(contentId), inputs = paint ? this.withPaint(this.inputs(content), paint) : this.inputs(content);
     requireValue(inputs.ready, inputs.blockers[0], 409);
     requireValue(input.contentRevision === content.revision, 'The script changed in another tab. Reload before planning.', 409);
     const sentences = splitSentences(content.script, inputs.family.primaryLocale);
@@ -820,15 +861,18 @@ class SceneRoom {
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     const settings = this.settings(inputs.family.id), timed = timeSentences(sentences, inputs.voice.durationSeconds), spec = inputs.spec;
     // A style on one engine uses only that engine (0.37): no atelier frames, no other drawing engine.
-    const perMinute = settings.designedPerMinute ?? SETTINGS_DEFAULTS.designedPerMinute, frames = settings.composeFrames !== false && perMinute > 0 && inputs.scope?.frames !== false;
+    // 0.108: "all painted" has no designed (HTML) frames: every shot is a painted scene.
+    const paintNow = paint || this.paintMode(content.id);
+    const perMinute = settings.designedPerMinute ?? SETTINGS_DEFAULTS.designedPerMinute, frames = settings.composeFrames !== false && perMinute > 0 && inputs.scope?.frames !== false && paintNow !== 'all';
     // The budget holds when atelier is a guest engine; an atelier video designs every shot (no budget).
     const engines = D.availableEngines({sources, frames}).filter(name => !E.ENGINES[name]?.draws || !inputs.scope || inputs.scope.drawn.includes(name)), designedShots = !frames ? 0 : inputs.engine === 'atelier' ? null : D.designedBudget(inputs.voice.durationSeconds, perMinute);
     // Pictures (0.33): only where the program draws; at least one when they are on.
-    const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = pictureRate > 0 && sources.includes('generated-graphics') ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
+    // 0.108: with a paint mode chosen, the engine's own shots carry no extra pictures (paid = painted scenes, free = none).
+    const pictureRate = settings.picturesPerMinute ?? SETTINGS_DEFAULTS.picturesPerMinute, pictures = !paintNow && pictureRate > 0 && sources.includes('generated-graphics') ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * pictureRate)) : 0;
     // Natural or mixed picture type (0.63): ChatGPT paints the natural scenes, so the plan needs it and a painting budget.
-    const pictureType = E.PICTURE_TYPES[spec.drawing?.pictureType] && sources.includes('generated-graphics') ? spec.drawing.pictureType : null, naturalRate = settings.naturalPerMinute ?? SETTINGS_DEFAULTS.naturalPerMinute;
+    const pictureType = E.PICTURE_TYPES[spec.drawing?.pictureType] && sources.includes('generated-graphics') ? spec.drawing.pictureType : null, naturalRate = PAINT_NATURAL_PER_MINUTE[paintNow] ?? settings.naturalPerMinute ?? SETTINGS_DEFAULTS.naturalPerMinute;
     if (pictureType) {
-      requireValue(this.ai?.team?.().painted, `This style's picture type is ${pictureType === 'mix' ? 'Mix' : 'Natural'}: its natural scenes are painted by ChatGPT. Connect ChatGPT in Connections and give it the pictures in the AI team, or set the style's picture type to Cartoon.`, 409);
+      requireValue(this.ai?.team?.().painted, paintNow && paintNow !== 'free' ? `${paintNow === 'all' ? 'All painted' : 'Mix'}: the painted scenes are made by ChatGPT. Connect ChatGPT in Connections and choose it as the picture maker, or choose Free.` : `This style's picture type is ${pictureType === 'mix' ? 'Mix' : 'Natural'}: its natural scenes are painted by ChatGPT. Connect ChatGPT in Connections and give it the pictures in the AI team, or set the style's picture type to Cartoon.`, 409);
       requireValue(naturalRate > 0, 'Natural paintings per minute is 0 in visual settings, so no natural scene could be painted. Raise it, or set the style\'s picture type to Cartoon.', 409);
     }
     const naturalPaintings = pictureType ? Math.max(1, Math.round(inputs.voice.durationSeconds / 60 * naturalRate)) : 0;
@@ -841,7 +885,7 @@ class SceneRoom {
     const rejected = this.db.prepare("SELECT end_reason FROM visual_approvals WHERE content_id=? AND status='revoked' ORDER BY ended_at DESC LIMIT 5").all(content.id).map(row => String(row.end_reason || '').replace(/\s*Revoked by [^.]*\.\s*$/, '').trim().slice(0, 300)).filter(Boolean);
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
-      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
+      style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), ...(paintNow ? {paint: paintNow} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
         sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: spec.adaptive ? {min: 0.8, max: 10} : {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen,
         // An adaptive style (0.64): Claude designs this video's look; the style's own values are only its starting point.
         ...(spec.adaptive ? {adaptive: true, startingPoint: {palette: spec.palette, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont}, pace: {shotMinSeconds: spec.pacing.shotMinSeconds, shotMaxSeconds: spec.pacing.shotMaxSeconds, hookShotMaxSeconds: spec.pacing.hookShotMaxSeconds}, energy: spec.motion.intensity, captions: {theme: spec.captions.theme || 'clean', animation: spec.captions.animation || 'fade', highlight: spec.captions.activeWordHighlight}}, fonts: Fonts.choices().map(item => `${item.name} (${item.group}${item.installed ? '' : ', drawn as ' + item.instead})`)} : {})},
@@ -902,7 +946,8 @@ class SceneRoom {
         this.db.prepare('INSERT INTO production_invalidations(id,family_id,content_id,approval_id,stage,reason,created_at) VALUES(?,?,?,?,?,?,?)').run(randomUUID(), item.family_id, item.content_id, item.id, 'visuals', reason, at);
       }
       const keep = rebuilt && !revoke ? {manifestId: before.id, revision: before.revision} : null;
-      const scope = {...(keep ? {keep} : {}), contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(illustrate ? {illustrate} : {}), ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences), skillRevisionIds: skillBrief?.revisionIds || []};
+      if (paint) this.db.prepare('INSERT INTO scene_paint(content_id,paint,set_by,updated_at) VALUES(?,?,?,?) ON CONFLICT(content_id) DO UPDATE SET paint=excluded.paint, set_by=excluded.set_by, updated_at=excluded.updated_at').run(content.id, paint, createdBy, at);
+      const scope = {...(paintNow ? {paint: paintNow} : {}), ...(keep ? {keep} : {}), contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: settings.plannerTokenLimit * (parts.length + (map ? 1 : 0)) + (review ? review.tokenLimit * parts.length : 0), parts, review, compose, ...(illustrate ? {illustrate} : {}), ...(map ? {map} : {}), sentenceCount: sentences.length, sentencesHash: hash(sentences), skillRevisionIds: skillBrief?.revisionIds || []};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(scope), createdBy, at, at);
       if (skillBrief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'scene', taskKey: 'scene.plan', brief: skillBrief});
       this.store.event(`Queued Claude scene plan for "${content.title}"${parts.length > 1 ? ` in ${parts.length} parts` : ''}`);
@@ -911,6 +956,81 @@ class SceneRoom {
   }
   // "Clear them" for the finished storyboard jobs of one script (0.80, owner request 2026-11-02): they leave the
   // list; nothing is deleted, usage records stay, and waiting or running jobs are never touched.
+  // 0.108: who makes the pictures of a job. A redraw started with "Redraw with ChatGPT" or "with Claude" has that AI make
+  // its pictures too (ChatGPT paints them, Claude draws vector pictures); every other job follows the AI team.
+  teamFor(job) {
+    const team = this.ai.team?.(), pick = job?.scope?.pictures;
+    if (!team || !['chatgpt', 'claude'].includes(pick) || !team[pick]) return team;
+    // A video made all painted or mixed keeps ChatGPT painting its scenes: Claude cannot paint, it plans the shots again.
+    if (pick === 'claude' && team.painted && ['all', 'mix'].includes(this.paintMode(job.content_id))) return team;
+    return {...team, pictures: team[pick], painted: pick === 'chatgpt'};
+  }
+  // ------------------------------------------------------------ the editor's redraws (0.108)
+  // Owner review 2026-11-11: "asking the models for changes is one thing, drawing the scenes is another": the shots the
+  // editor asks to draw again wait here with what it asked, until the owner presses Redraw with ChatGPT or with Claude.
+  // Only those shots are drawn again; nothing starts by itself.
+  publicRedrawRequest(row) {
+    const shots = JSON.parse(row.shots);
+    return {id: row.id, contentId: row.content_id, manifestId: row.manifest_id, source: row.source, commandId: row.command_id, status: row.status, shots, waiting: shots.filter(shot => shot.state === 'waiting').length, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at};
+  }
+  redrawRequestRow(id) { const row = this.db.prepare('SELECT * FROM redraw_requests WHERE id=?').get(id); requireValue(row, 'That redraw request was not found.', 404); return row; }
+  requestRedraw(manifestId, input) {
+    object(input);
+    const createdBy = person(input.requestedBy), manifest = this.manifestRow(manifestId);
+    requireValue(Array.isArray(input.shots) && input.shots.length >= 1 && input.shots.length <= 200, 'Name 1-200 shots to draw again.');
+    const asked = input.shots.map(shot => ({label: text(shot?.label, 'Shot', 2, 12), shotId: shot?.shotId ? String(shot.shotId).slice(0, 80) : null, ask: text(shot?.ask || 'Draw it again so it fits its words better.', 'What to change', 3, 300), designed: shot?.designed === true, state: 'waiting'}));
+    return this.store.transaction(() => {
+      // One open request per video: a newer ask for the same shot replaces the older one.
+      const open = this.db.prepare("SELECT * FROM redraw_requests WHERE content_id=? AND status='waiting' ORDER BY created_at DESC LIMIT 1").get(manifest.content_id), at = now();
+      if (open) {
+        const shots = JSON.parse(open.shots).filter(shot => !(shot.state === 'waiting' && asked.some(item => item.label === shot.label)));
+        this.db.prepare('UPDATE redraw_requests SET shots=?, manifest_id=?, command_id=COALESCE(?, command_id), updated_at=? WHERE id=?').run(JSON.stringify([...shots, ...asked]), manifest.id, input.commandId || null, at, open.id);
+        return this.publicRedrawRequest(this.redrawRequestRow(open.id));
+      }
+      const id = randomUUID();
+      this.db.prepare("INSERT INTO redraw_requests(id,content_id,family_id,manifest_id,source,command_id,shots,status,created_by,created_at,updated_at) VALUES(?,?,?,?,'editor',?,?,'waiting',?,?,?)").run(id, manifest.content_id, manifest.family_id, manifest.id, input.commandId || null, JSON.stringify(asked), createdBy, at, at);
+      this.store.event(`The editor asked to draw ${asked.length} shot${asked.length === 1 ? '' : 's'} of "${this.store.content(manifest.content_id).title}" again; waiting in Room 04 for the owner's choice of AI`);
+      return this.publicRedrawRequest(this.redrawRequestRow(id));
+    });
+  }
+  // The owner's choice: ChatGPT (it plans the shots and paints their pictures) or Claude (it plans them and draws vector
+  // pictures). Drawn shots go first as one "change with words" job (up to 20); designed (HTML) shots are designed again
+  // after them, as one storyboard job runs at a time. Each press sends what can go now; the rest keeps waiting.
+  runRedrawRequest(id, input) {
+    object(input);
+    const requestedBy = person(input.requestedBy), row = this.redrawRequestRow(id);
+    requireValue(row.status === 'waiting', 'These shots were already sent or set aside.', 409);
+    requireValue(['chatgpt', 'claude'].includes(input.ai), 'Choose ChatGPT or Claude.');
+    const team = this.ai.team?.(), who = team?.[input.ai];
+    requireValue(who, `${input.ai === 'chatgpt' ? 'ChatGPT' : 'Claude'} is not connected. Connect it and test it in Connections first.`, 409);
+    const shots = JSON.parse(row.shots), waiting = shots.filter(shot => shot.state === 'waiting');
+    requireValue(waiting.length, 'Nothing is waiting to be drawn again.', 409);
+    const connector = {id: who.id, revision: who.revision}, latest = this.latestManifestRow(row.content_id);
+    const drawnShots = waiting.filter(shot => !shot.designed), designs = waiting.filter(shot => shot.designed);
+    let sent = [], job = null;
+    if (drawnShots.length) {
+      sent = drawnShots.slice(0, 20);
+      job = this.changeShots(latest.id, {requestedBy, connector, pictures: input.ai, changes: sent.map(shot => ({label: shot.label, ask: shot.ask}))}).job;
+    } else {
+      const payload = JSON.parse(latest.payload), byLabel = new Map(payload.scenes.flatMap(scene => scene.shots).map(shot => [shot.label, shot]));
+      sent = designs.filter(shot => byLabel.get(shot.label)?.frame);
+      requireValue(sent.length, 'The designed shots asked for are no longer designed shots in the newest storyboard. Set them aside.', 409);
+      job = this.redesignFrame(latest.id, {requestedBy, connector, expectedRevision: latest.revision, shots: sent.map(shot => ({shotId: byLabel.get(shot.label).id, reason: shot.ask}))}).job;
+    }
+    const labels = new Set(sent.map(shot => shot.label)), at = now();
+    const next = shots.map(shot => (shot.state === 'waiting' && labels.has(shot.label) ? {...shot, state: 'sent', ai: input.ai, jobId: job?.id || null, sentAt: at} : shot));
+    this.db.prepare('UPDATE redraw_requests SET shots=?, status=?, updated_at=? WHERE id=?').run(JSON.stringify(next), next.some(shot => shot.state === 'waiting') ? 'waiting' : 'sent', at, id);
+    this.store.event(`${requestedBy} sent ${labels.size} shot${labels.size === 1 ? '' : 's'} of "${this.store.content(row.content_id).title}" to ${input.ai === 'chatgpt' ? 'ChatGPT' : 'Claude'} to draw again`);
+    return {request: this.publicRedrawRequest(this.redrawRequestRow(id)), job};
+  }
+  dismissRedrawRequest(id, input = {}) {
+    object(input);
+    const by = person(input.dismissedBy || input.requestedBy || 'Owner'), row = this.redrawRequestRow(id);
+    requireValue(row.status === 'waiting', 'These shots were already sent or set aside.', 409);
+    this.db.prepare("UPDATE redraw_requests SET status='dismissed', updated_at=? WHERE id=?").run(now(), id);
+    this.store.event(`${by} set aside the editor's request to draw shots again`);
+    return this.publicRedrawRequest(this.redrawRequestRow(id));
+  }
   clearPlanJobs(contentId) {
     this.store.content(contentId);
     // A paused job is not finished (0.81): it keeps its Resume, so it is never cleared. Neither is the job whose plan is
@@ -937,7 +1057,7 @@ class SceneRoom {
     const reviewed = row.reviewed ? JSON.parse(row.reviewed) : null, pause = row.pause ? JSON.parse(row.pause) : null;
     const progress = {map: scope.map ? !!row.map : null, review: scope.review ? (reviewed && !reviewed.partial ? 'done' : reviewed?.partial ? `${reviewed.k} of ${scope.review.chunks}` : 'not yet') : null, pictures: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key NOT LIKE 'frame:%' AND key NOT LIKE 'paint:style-key%' AND key NOT LIKE 'paint:cast:%' AND key NOT LIKE '%:unchecked-%' AND key NOT LIKE '%:failed'").get(row.id).n, frames: this.db.prepare("SELECT COUNT(*) AS n FROM plan_pictures WHERE job_id=? AND key LIKE 'frame:%' AND key NOT LIKE '%:failed'").get(row.id).n};
     let timings = null; try { timings = row.timings ? JSON.parse(row.timings) : null; } catch { timings = null; }
-    return {id: row.id, provider, ...(board.length ? {board} : {}), ...(timings?.length ? {timings} : {}), ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
+    return {id: row.id, provider, ...(scope.paint ? {paint: scope.paint} : {}), ...(board.length ? {board} : {}), ...(timings?.length ? {timings} : {}), ...(redesign ? {redesign} : {}), ...(redraw ? {redraw} : {}), ...(picture ? {picture} : {}), familyId: row.family_id, contentId: row.content_id, status: row.status, manifestId: row.manifest_id, parts: {total: scope.parts?.length || 1, done}, progress, ...(pause ? {pause: {...pause, ...(row.status === 'paused' && pause.kind === 'network' && (pause.auto || 0) < NET_AUTO && Date.now() - Date.parse(pause.at) < NET_WAIT_MINUTES * 60000 ? {waitUntil: new Date(Date.parse(pause.at) + NET_WAIT_MINUTES * 60000).toISOString()} : {})}} : {}), updatedAt: row.updated_at, quality: row.quality ? JSON.parse(row.quality) : null, error: row.error, attempts: row.attempts, createdBy: row.created_by, createdAt: row.created_at, updatedAt: row.updated_at,
       usage: usage ? {status: usage.status, reserved: usage.reserved_tokens, total: usage.total_tokens, prompt: usage.prompt_tokens, completion: usage.completion_tokens} : null};
   }
   retryPlan(id, input) {
@@ -1423,7 +1543,7 @@ class SceneRoom {
       return list.filter(item => kept.has(key(item)));
     };
     const keep = new Set([...spread(targets.filter(target => !isNatural(target)), scope.budget), ...spread(targets.filter(isNatural), scope.natural ?? 0, share)]);
-    const orphans = [], failed = new Set();
+    const orphans = [], failed = new Set(), allPainted = this.paintMode(job.content_id) === 'all';
     const report = {pictures: targets.length, drawn: 0, tokens: 0, notes};
     const shotLabel = (si, hi) => `S${String(si + 1).padStart(2, '0')}${String.fromCharCode(65 + hi)}`;
     const words = (() => { try { const built = buildPayload({scenes: aiScenes(merged, false).scenes, sentences: splitSentences(content.script, family.primaryLocale).map(({n, text: value, words: count}) => ({n, text: value, words: count})), narrationSeconds: inputs.voice.durationSeconds, spec, terms: [], primary: inputs.engine}); return built.payload.scenes.map(scene => scene.shots.map(shot => built.payload.sentences.filter(item => item.n >= scene.sentenceStart && item.n <= scene.sentenceEnd).map(item => item.text).join(' '))); } catch { return []; } })();
@@ -1489,7 +1609,7 @@ class SceneRoom {
       if (stored) notes.push(`${label}: its picture was kept from an earlier attempt of this plan (no new tokens).`);
       // ChatGPT paints it when the AI team gives it the pictures (owner request 2026-10-22): a real image instead of a
       // line drawing, kept like the drawings so a retry never pays twice. If it cannot, Claude draws it as before.
-      const team = this.ai.team?.();
+      const team = this.teamFor(job);
       // A shared natural painting that already failed for another shot of its scene is not asked for again.
       if (natural && failed.has(pictureKey)) { orphans.push({target, why: 'ChatGPT could not paint its natural scene for an earlier shot of this place'}); continue; }
       if (team?.painted) {
@@ -1606,6 +1726,13 @@ class SceneRoom {
       const {si, hi, item} = target, label = shotLabel(si, hi), sketch = plan.scenes[si].shots[hi].sketch;
       const donor = item.backdrop && plan.scenes[si].shots.map((other, k) => ({k, el: other.sketch?.type === 'natural' && other.sketch.elements.find(el => el.kind === 'picture' && el.backdrop && el.image)})).find(({el}) => el);
       if (donor) { item.image = donor.el.image; notes.push(`${label}: ${why}, so it shares the painting of ${shotLabel(si, donor.k)}.`); continue; }
+      // 0.108: "all painted" never falls back to a free drawing: the shot holds the nearest painting of the video
+      // (earlier shots first) and is listed under "pictures not painted as planned", where it can be painted again.
+      if (allPainted && item.backdrop) {
+        const near = plan.scenes.flatMap((scene, sj) => (scene.shots || []).map((other, k) => ({sj, k, el: other.sketch?.type === 'natural' && other.sketch.elements?.find(el => el.kind === 'picture' && el.backdrop && el.image)})))
+          .filter(entry => entry.el).sort((a, b) => (Math.abs(a.sj - si) * 100 + Math.abs(a.k - hi) + (a.sj > si ? 50 : 0)) - (Math.abs(b.sj - si) * 100 + Math.abs(b.k - hi) + (b.sj > si ? 50 : 0)))[0];
+        if (near) { item.image = near.el.image; notes.push(`${label}: ${why}; all painted, so it holds the painting of ${shotLabel(near.sj, near.k)} instead of a free drawing. Paint it again from "Pictures not painted as planned".`); continue; }
+      }
       drop(target, why);
       if (sketch.type !== 'natural') notes.push(`${label}: drawn as a cartoon shot instead of natural.`);
     }
@@ -1646,11 +1773,10 @@ class SceneRoom {
     const chunks = Math.min(job.scope.review.chunks, scenes.length), size = Math.ceil(scenes.length / chunks), reports = resume ? [...(resume.reports || [])] : [];
     // 0.81: each finished chunk is saved with the job; 0.82.2: a redraw's too (a long-shot fix can cover many scenes).
     const save = k => { this.db.prepare('UPDATE scene_plan_jobs SET reviewed=?, updated_at=? WHERE id=?').run(JSON.stringify({partial: true, k, plan, reports, review: {changes, notes}}), now(), job.id); };
-    for (let k = resume?.k || 0; k < chunks; k++) {
-      live.progress(job.id, {done: k, total: chunks, unit: 'parts of the check'});
-      stopCheck(job.signal);
-      const slice = scenes.slice(k * size, (k + 1) * size);
-      if (!slice.length) continue;
+    // 0.108 (owner report 2026-11-11: a redraw of 17 shots stopped on "Scenes S02-S21 were too long to review in one
+    // answer"): one part of the check as messages; a part too big for its answer is split in halves, and the shots only
+    // there as context go without their pictures' path data.
+    const inputFor = slice => {
       const shotWords = shot => words.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds - 0.01).map(word => word.text).join(' ');
       const listed = slice.flatMap(scene => scene.shots.map(shot => ({label: shot.label, sceneId: scene.id, sketch: shot.sketch, words: shotWords(shot), notes: shot.notes})));
       const flagged = [...Sk.continuity(listed, built.payload.cast || []), ...Sk.worldNotes(listed, merged.world)];
@@ -1660,11 +1786,19 @@ class SceneRoom {
       // A change, redo or long-shot fix of shots already drawn: they are designed afresh (the long-shot fix's new shots
       // have no drawing of their own to reject).
       const fresh = !!(only && job.scope.redraw && job.scope.redraw.purpose !== 'long');
-      const input = {engine: inputs.engine, ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {}), ...ticks(inputs.spec.drawing), ...(E.PICTURE_TYPES[inputs.spec.drawing.pictureType] ? {pictureType: inputs.spec.drawing.pictureType} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}), ...(detail.length ? {detailNotes: detail.slice(0, 40)} : {}),
+      const input = {engine: inputs.engine, ...(inputs.style?.paint ? {paint: inputs.style.paint} : {}), ...(job.scope.illustrate ? {pictures: true} : {}), ...(E.isMix(inputs.spec) ? {mix: true} : {}), ...(inputs.spec.drawing ? {look: inputs.spec.drawing.look, ...(inputs.spec.drawing.board ? {board: inputs.spec.drawing.board} : {}), ...(inputs.spec.drawing.design ? {design: inputs.spec.drawing.design} : {}), ...(inputs.spec.drawing.film && inputs.spec.drawing.film !== 'none' ? {film: inputs.spec.drawing.film} : {}), ...ticks(inputs.spec.drawing), ...(E.PICTURE_TYPES[inputs.spec.drawing.pictureType] ? {pictureType: inputs.spec.drawing.pictureType} : {})} : {}), ...(inputs.spec.brief ? {brief: inputs.spec.brief} : {}), ...(merged.world ? {world: merged.world} : {}), ...(Object.keys(kitNow).length ? {kit: Kit.summary(kitNow)} : {}), style: {name: inputs.spec.name, summary: inputs.spec.summary}, family: {niche: inputs.family.niche, audience: inputs.family.audience}, cast: built.payload.cast || [], ...(flagged.length ? {continuityNotes: flagged} : {}), ...(detail.length ? {detailNotes: detail.slice(0, 40)} : {}),
         ...(only ? {drawNow: slice.flatMap(scene => scene.shots.filter(shot => only.includes(shot.label)).map(shot => shot.label))} : {}), ...(ask ? {ownerAsks: ask} : {}), ...(skills ? {skills} : {}),
         scenes: slice.map(scene => ({label: scene.label, purpose: scene.purpose, direction: scene.direction, ...(scene.setting ? {setting: scene.setting} : {}),
-          shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(fresh && only.includes(shot.label) && shot.sketch ? {rejected: rejectedOf(shot.sketch)} : shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: shot.sketch} : {})}))}))};
+          shots: scene.shots.map(shot => ({label: shot.label, cue: shot.cue || null, seconds: shot.durationSeconds, words: shotWords(shot), source: shot.source, notes: shot.notes, ...(fresh && only.includes(shot.label) && shot.sketch ? {rejected: rejectedOf(shot.sketch)} : shot.frame ? {frame: (({html, words: planned, ...rest}) => rest)(shot.frame)} : shot.sketch ? {sketch: only && !only.includes(shot.label) ? leanSketch(shot.sketch) : shot.sketch} : {})}))}))};
       const messages = reviewMessages(input), maxTokens = Math.min(32000, job.scope.review.tokenLimit - messageTokenUpperBound(messages));
+      return {messages, maxTokens};
+    };
+    const room = slice => (only ? Math.min(32000, Math.max(8000, 3000 * slice.reduce((n, scene) => n + scene.shots.filter(shot => only.includes(shot.label)).length, 0))) : 2000);
+    const slices = splitSlices(Array.from({length: chunks}, (_, k) => scenes.slice(k * size, (k + 1) * size)), slice => inputFor(slice).maxTokens >= room(slice));
+    for (let k = resume?.k || 0; k < slices.length; k++) {
+      live.progress(job.id, {done: k, total: slices.length, unit: 'parts of the check'});
+      stopCheck(job.signal);
+      const slice = slices[k], {messages, maxTokens} = inputFor(slice);
       if (maxTokens < 2000) { notes.push(`Scenes ${slice[0].label}-${slice.at(-1).label} were too long to review in one answer.`); continue; }
       let reply;
       // An answer that needs more room than the review allows is reported and the plan is kept; other failures
@@ -1943,7 +2077,7 @@ class SceneRoom {
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM scene_plan_jobs WHERE content_id=? AND status IN ('queued','running')").get(content.id), 'A scene plan is already being prepared for this script.', 409);
       const id = randomUUID(), at = now();
-      const jobScope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: review.tokenLimit * chunks, parts: [], review, ...(illustrate ? {illustrate} : {}), redraw: {manifestId: row.id, revision: row.revision, labels, ...(purpose ? {purpose} : {}), ...(ask ? {ask} : {})}};
+      const jobScope = {contentRevision: content.revision, voiceApprovalId: inputs.voice.approvalId, styleRevisionId: inputs.style.revisionId, styleSpecHash: inputs.style.specHash, connector, tokenLimit: review.tokenLimit * chunks, parts: [], review, ...(illustrate ? {illustrate} : {}), ...(['chatgpt', 'claude'].includes(input.pictures) ? {pictures: input.pictures} : {}), redraw: {manifestId: row.id, revision: row.revision, labels, ...(purpose ? {purpose} : {}), ...(ask ? {ask} : {})}};
       this.db.prepare("INSERT INTO scene_plan_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, content.id, JSON.stringify(jobScope), createdBy, at, at);
       this.store.event(ask ? `Queued a change to ${labels[0]} of "${content.title}": ${ask.slice(0, 120)}` : `Queued drawings for ${labels.length} undesigned shot${labels.length === 1 ? '' : 's'} of "${content.title}"`);
       return {job: this.publicPlanJob(this.planJobRow(id))};
@@ -2955,6 +3089,7 @@ class SceneRoom {
           jobs: this.db.prepare('SELECT * FROM visual_jobs WHERE content_id=? ORDER BY created_at DESC, rowid DESC LIMIT 80').all(content.id).map(row => this.publicJob(row)),
           planJobs: this.db.prepare('SELECT * FROM scene_plan_jobs WHERE content_id=? AND cleared_at IS NULL ORDER BY created_at DESC LIMIT 12').all(content.id).map(row => this.publicPlanJob(row)),
           approvals, handoff: this.handoff(content.id), compare: this.compareFor(content.id),
+          redrawRequests: this.db.prepare("SELECT * FROM redraw_requests WHERE content_id=? AND status='waiting' ORDER BY created_at DESC").all(content.id).map(row => this.publicRedrawRequest(row)),
         };
       }),
       families,
@@ -3023,4 +3158,4 @@ function mergePlans(fresh, earlier, picks) {
   return {scenes, cast, kit: {...(earlier.kit || {}), ...(fresh.kit || {})}, renamed: Object.keys(remap).length, fromEarlier: blocks.filter(item => use.get(item.block) === 'previous').length, blocks: blocks.length};
 }
 
-module.exports = {reviewMessages, skillStyle, planScenes, mergeBlocks, mergeMessages, readPicks, mergePlans, SKILLS_LINE, SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};
+module.exports = {splitSlices, leanSketch, paintSpec, PAINT_MODES, reviewMessages, skillStyle, planScenes, mergeBlocks, mergeMessages, readPicks, mergePlans, SKILLS_LINE, SceneRoom, splitSentences, timeSentences, keywords, rulesPlan, buildPayload, structural, aiScenes, planMessages, mergeParts, PURPOSES, SETTINGS_DEFAULTS};
