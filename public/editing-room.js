@@ -20,7 +20,7 @@ function editCard(content, engineReady) {
   const inputs = content.inputs, room = editFor(content.contentId), edit = room?.edit;
   const intro = '<p class="hint">The editing brain cuts on the measured pauses in the narration, varies shot lengths in a breathing pattern, gives every still a purposeful camera move, keeps transitions for structural moments, and proposes motion graphics where the narration says a number, a date or a quote. Every decision carries its reason, and the critic flags anything boring, lazy or amateur.</p>';
   if (!inputs.ready) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('Waiting for inputs', 'gray')}</div>${intro}<p class="muted">The edit starts when the approved board, narration and style above are ready.</p></section>`;
-  if (!edit) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('No edit yet', 'gray')}</div>${intro}<p class="hint">Press "Draft the edit" in step 1 above. Local and free: it measures the narration with FFmpeg and plans the edit on this computer.</p></section>`;
+  if (!edit) return `<section class="production-card"><div class="production-card-head"><div><span class="micro-label">EDITING BRAIN</span><h2>Edit decisions</h2></div>${badge('No edit yet', 'gray')}</div>${intro}<p class="hint">Choose who edits in step 1 above: Claude, ChatGPT, or the program (local and free).</p></section>`;
   const tl = edit.timeline, critique = edit.critique, stats = critique.stats, fps = tl.fps;
   const stale = room.current === false;
   const active = content.renders.some(job => ['queued', 'running'].includes(job.status));
@@ -53,8 +53,9 @@ function editRoad(content, engineReady) {
   const link = (label, id) => `<button type="button" class="road-link" data-action="tl-goto" data-id="${id}">${label}</button>`;
   const room07 = '<button type="button" class="button secondary" data-production-room="audio">Audio Room →</button><button type="button" class="button primary" data-production-room="qc">Review & QC →</button>';
   const steps = [
-    {title: 'Draft the edit', done: live, text: !edit ? 'The editing brain cuts the video from your approved storyboard and narration: a program on this PC, free, no AI.' : stale ? 'The storyboard, narration or style changed after this edit: draft a new one.' : `Edit r${edit.revision}, ${edit.actor === 'brain' ? 'made by the editing brain' : `changed by ${esc(edit.createdBy)}`}: ${edit.timeline.clips.length} clips. ${link('Who made it, and how ↓', 'edit-how')}`,
-      buttons: live ? '' : action(stale ? 'Draft a new edit' : 'Draft the edit', 'tl-generate', content.contentId, 'primary')},
+    // 0.106 (owner 2026-11-10: "three options of editing: by Claude, by GPT or by the program"): the owner chooses who edits.
+    {title: 'Draft the edit', done: live, text: !edit ? 'Choose who edits. Claude or ChatGPT edit the whole video, directed by the editing skills: transitions, camera, effects, word animations, music and sound (uses tokens). The program cuts it on the narration\'s pauses for free, without AI.' : stale ? 'The storyboard, narration or style changed after this edit: choose who edits the new one.' : `Edit r${edit.revision}, ${edit.actor === 'brain' ? 'made by the editing brain' : `changed by ${esc(edit.createdBy)}`}: ${edit.timeline.clips.length} clips. ${link('Who made it, and how ↓', 'edit-how')}`,
+      buttons: live ? '' : [['claude', 'Claude'], ['chatgpt', 'ChatGPT']].filter(([key]) => state.ai?.team?.[key]).map(([key, name]) => action(`Edit with ${name}`, 'tl-edit-with', key, 'primary')).join('') + action('Edit with the program (free)', 'tl-generate', content.contentId, 'secondary')},
     // 0.92 (owner question 2026-11-05: "while a video renders, should the buttons stop me?"): no. A render works on the
     // revision it started from, so editing goes on: changes make a new revision and the render carries on.
     {title: 'Watch it and change it', done: !!rendered, text: live ? `${running && running.scope?.edit?.revisionId && running.scope.edit.revisionId !== edit.id ? `<b>r${running.scope.edit.revision} is rendering; you are changing r${edit.revision}.</b> ` : running?.status === 'running' ? `<b>r${edit.revision} is rendering. You can keep changing it:</b> your changes make a new revision and this render carries on. Render the new one when you are done; unchanged shots are copied, not drawn again. ` : running ? `<b>A render of r${edit.revision} is waiting to start.</b> A change now makes it out of date; render again after your changes. ` : ''}Press Play to watch the edit as it is now, before any render. Click a clip on the timeline to change it, or tell Claude what to change.` : 'After the edit is drafted.', buttons: live ? action('▶ Play the edit', 'tl-goto-player', '', 'primary') : ''},
@@ -181,6 +182,10 @@ const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-st
 function editAction(command, id, button) {
   if (TL_COMMANDS.has(command)) return tlAction(command, id, button);
   const {content, edit} = editContext();
+  if (command === 'tl-edit-with') {
+    const name = id === 'chatgpt' ? 'ChatGPT' : 'Claude';
+    return editDialog('generate', `Edit with ${name}`, `${name.toUpperCase()} · EDITS THE WHOLE VIDEO · USES TOKENS`, `<p class="hint">The editing brain first cuts the video on the narration's pauses (free). Then ${name} edits all of it as a professional editor and motion designer, directed by the editing skills and the competitor lessons: a transition for every scene change, camera life, effects where lines land, animated words, the music and the sound. Every change is checked and saved as one new revision you can undo. Shots ${name} would draw again are listed for you, never drawn without your click. This takes a few minutes.</p><div class="form-grid">${renderNameField()}</div>`, `Edit with ${name}`, {contentId: content.contentId, visualApprovalId: content.inputs.visualApprovalId, ai: id});
+  }
   if (command === 'tl-generate') return editDialog('generate', 'Draft the edit', 'EDITING BRAIN · LOCAL · NO COST', `<p class="hint">Measures the pauses in the approved narration, then cuts, times and moves every shot with a reason, proposes graphics and runs the critic. ${edit ? 'Your earlier edit stays in the history; this makes a new revision from scratch.' : ''}</p><div class="form-grid">${renderNameField()}</div>`, 'Draft the edit', {contentId: id, visualApprovalId: content.inputs.visualApprovalId});
   if (command === 'tl-retention') {
     const out = document.getElementById(`retention-out-${id}`), csv = document.getElementById(`retention-${id}`)?.value || '';
@@ -248,6 +253,11 @@ document.getElementById('edit-form').addEventListener('submit', event => {
   if (value('person')) renderRemember(value('person'));
   let message = null;
   saveForm(form, async () => {
+    if (kind === 'generate' && data.ai) {
+      const edit = await api(`/api/content/${data.contentId}/edits`, {requestedBy: person, visualApprovalId: data.visualApprovalId, ai: data.ai}), done = edit.aiEdit || {}, name = data.ai === 'chatgpt' ? 'ChatGPT' : 'Claude';
+      message = `${name} edited the video (r${edit.revision}): ${done.applied || 0} change${done.applied === 1 ? '' : 's'}${done.refused?.length ? `, ${done.refused.length} left out because they did not pass the checks` : ''}.${done.redraws?.length ? ` It would draw ${done.redraws.length} shot${done.redraws.length === 1 ? '' : 's'} again: ask for that in the timeline if you agree.` : ''}${done.left?.length ? ` ${done.left.join(' ')}` : ''}`;
+      return;
+    }
     if (kind === 'generate') { const edit = await api(`/api/content/${data.contentId}/edits`, {requestedBy: person, visualApprovalId: data.visualApprovalId}); message = `Edit r${edit.revision} drafted: ${edit.critique.counts.critical} critical, ${edit.critique.counts.suggestion} suggestions.`; return; }
     if (kind === 'render') { await api(`/api/content/${data.contentId}/renders`, {requestedBy: person, visualApprovalId: data.visualApprovalId, editRevisionId: data.editRevisionId, resolution: Number(value('resolution') || 360)}); message = 'Edit render queued.'; return; }
     const {edit} = editContext();
@@ -386,7 +396,7 @@ function tlProposal() {
   const p = TL.proposal;
   if (!p) return '';
   return `<div class="tl-proposal"><p><b>${esc(p.provider === 'chatgpt' ? 'ChatGPT' : 'Claude')}:</b> ${esc(p.explain || '')}</p><ol>${p.steps.map(step => `<li class="${step.ok ? 'ok' : 'bad'}">${step.ok ? '✓' : '✕'} ${esc(step.summary)}${step.error ? `<br><small>Not possible: ${esc(step.error)}</small>` : ''}${step.warnings ? `<br><small>Repaired: ${esc(step.warnings.join(' · '))}</small>` : ''}</li>`).join('')}</ol>
-    <div class="card-actions">${p.ops.length ? action(`Apply ${p.ops.length} change${p.ops.length === 1 ? '' : 's'}`, 'tl-apply', '', 'primary') : ''}${action('Discard', 'tl-discard', '', 'secondary')}<span class="muted">${p.usage?.totalTokens ? `${p.usage.totalTokens.toLocaleString()} tokens` : ''}</span></div></div>`;
+    ${p.ops.length ? '' : '<p class="hint">None of these changes can be made, so there is nothing to apply and nothing in the edit changed. Only the editor\'s answer used tokens; ask again in other words if a change is still wanted.</p>'}<div class="card-actions">${p.ops.length ? action(`Apply ${p.ops.length} change${p.ops.length === 1 ? '' : 's'}`, 'tl-apply', '', 'primary') : ''}${action('Discard', 'tl-discard', '', 'secondary')}<span class="muted">${p.usage?.totalTokens ? `${p.usage.totalTokens.toLocaleString()} tokens` : ''}</span></div></div>`;
 }
 // One field of a drawing: a list where the vocabulary has one, a number, a tick, words, or JSON for anything nested.
 function tlField(path, key, value, vocab) {
@@ -486,7 +496,7 @@ function tlAction(command, id, button) {
   if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { const saved = await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh();
     // 0.91: shots drawn again go to Room 04; the owner is told what happens next.
     const redraw = saved?.redraw, changed = p.ops.filter(op => op.type !== 'redraw-shot').length;
-    toast(redraw ? `${changed ? `${changed} change${changed === 1 ? '' : 's'} applied. ` : ''}Room 04 is drawing ${redraw.labels.join(', ')} again. When it is done: draw them, approve the visuals, then press Fresh draft here (your changes come along).` : `${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
+    toast(redraw ? `${changed ? `${changed} change${changed === 1 ? '' : 's'} applied. ` : ''}Room 04 is drawing ${redraw.labels.join(', ')} again.${redraw.waiting?.length ? ` ${redraw.waiting.join(', ')} (designed shots) wait: ask for them again when this is done, as one storyboard job runs at a time.` : ''} When it is done: draw them, approve the visuals, then press Fresh draft here (your changes come along).` : `${p.ops.length} change${p.ops.length === 1 ? '' : 's'} applied as a new revision.`); }); }
   return toast('Unknown action.', true);
 }
 // ------------------------------------------------------------ the live player (0.83, owner request 2026-11-03)

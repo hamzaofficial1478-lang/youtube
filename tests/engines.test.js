@@ -165,3 +165,12 @@ test('picture type (0.63): one choice for every look of an engine; natural and m
   assert.equal(Dna.key({engine: 'cinema', type: 'natural'}), 'cinema/footage');
   assert.match(Dna.plannerLines(['natural/handdrawn/pencil'])[0], /pictures are realistic paintings by ChatGPT, never photos/);
 });
+
+// 0.106 (owner review 2026-11-10 of a Motion Graphics HTML-render video: most shots were plain flat drawings, "too basic,
+// the same as stickman"): a Motion Graphics video designs its shots; a drawn shot there carries a painted picture.
+test('a Motion Graphics video is told to design its shots, and only it', () => {
+  const E = require('../engines');
+  assert.match(E.promptGuide('atelier', {atelier: {finish: 'anime'}}), /MAIN LOOK: this is a Motion Graphics video[\s\S]*Never use a plain drawn shot/);
+  assert.doesNotMatch(E.promptGuide('stickman', {}), /MAIN LOOK/);
+  assert.doesNotMatch(E.promptGuide('atelier', {mix: true}), /MAIN LOOK/, 'the Story Mix keeps every engine');
+});

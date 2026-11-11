@@ -426,3 +426,17 @@ Owner report 2026-11-10 with a screenshot: a Motion Graphics (HTML render) ninja
 - A designed shot or a drawn picture that failed its checks twice is remembered (`plan_pictures` `...:failed`), so a Resume never pays for it again; rejected paintings were already remembered (0.104).
 - A paused storyboard shows the scenes it keeps ("Kept · not saved yet") where the live list used to vanish when the run ended.
 
+## One fine painting, the next a flat drawing; Motion Graphics videos that look basic (0.106)
+
+Owner review 2026-11-10 of a Motion Graphics (HTML render) ninja video: one picture was a detailed painting ("FIRST TARGET"), the next a flat simple drawing that "looked drawn by the free model" ("ONE GAUNTLET"); most shots looked basic, "the same as stickman"; "no compromise on quality".
+
+**Why the pictures differed.** When ChatGPT paints the pictures and a painting does not come (its picture allowance used up, a painting that ran out of time twice, or one the art director sent back twice), the shot gets a vector picture instead, drawn by the AI from shapes. That is a much plainer picture. Since 0.100 a used-up allowance did not stop the storyboard, so every picture after it was drawn this simpler way without a word on the page.
+
+**Now:**
+- A used-up picture allowance pauses the storyboard ("ChatGPT's picture allowance is used up for now ... the storyboard waits instead of drawing simpler pictures") and it goes on by itself an hour later, at most three times within a day (`resumeWhenOnline` resumes `limit` pauses after `NET_WAIT_MINUTES` of awake time); every finished picture is kept. The plan AI's own usage limit pauses and resumes the same way.
+- Room 04 names every picture that was not painted as planned, with its reason ("N pictures were not painted as planned"); "New picture" on a shot paints it again.
+
+**Why most shots looked basic.** A Motion Graphics video may use plain drawn shots as guests, and the planner used them for most shots: flat figures and words, next to a few designed HTML shots. A Motion Graphics video is now told that its designed shots are its look: every shot is designed, except one whose moment is better as a painted picture, and never a plain drawn shot (`engines.js` MAIN LOOK line, only when Motion Graphics is the main engine). More designed shots mean more AI answers per storyboard; quality comes first.
+
+**Redesigning several shots.** Room 04's Redesign still takes one shot; the editor can now ask for several in one job (see EDITING-ROOM.md 0.106).
+

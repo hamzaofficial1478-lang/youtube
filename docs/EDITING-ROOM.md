@@ -337,3 +337,17 @@ Owner report 2026-11-05: "Apply 29 changes" was refused with "Send 1-20 edit ope
 - The editor's answer carries up to two changes a shot for a polish (40 to 400) and one a shot for a request (20 to 200) (`opsCap`). The room for its answer grows with them, about 180 tokens a change, at most 64,000 (`answerTokens`).
 - Applying takes up to 1,000 changes at once.
 - A change of an element's kind (a prop that should be a figure) replaces the element in its place, keeping where and when it appears, instead of failing with "an element keeps its kind".
+
+## Black HTML scenes in the player, the editor and designed shots, and three ways to edit (0.106)
+
+Owner report 2026-11-10 with screenshots: every HTML render scene was black in the live player; asked to fix them, Claude proposed drawing all 18 again and every one was refused ("not a drawn shot that can be drawn again"), with only Discard to press after 32,994 tokens; "the program will not edit the video by itself: three options, by Claude, by ChatGPT or by the program".
+
+**Why the HTML scenes were black.** The live player plays a designed (HTML) shot, and real footage, from the video Room 04 saved for it. The server refused to send any video file to the page ("Only images are shown in the browser in this room", a rule from 0.9 when Room 04 only showed pictures), so the player had nothing to draw and showed black. The rendered video was not affected: the render draws designed shots from their compositions. Videos are now served like the narration, with byte ranges (`SceneRoom.assetFile`). Checked in a browser: a saved video now plays in the player.
+
+**The editor and designed shots.** The editor saw only black reported to it and guessed that the designs had failed, so it asked to draw them again; that operation existed only for drawn shots. Now:
+- "Draw this shot again" on a designed shot designs it again, one new composition per shot, with the editor's or owner's reason (`redraw-shot` routes to `SceneRoom.redesignFrame`, which takes several shots in one job; a shot whose new design fails its checks keeps its current one and is named). Drawn shots still go to one "change with words" job; when both kinds are asked at once, the designed ones wait and are named, because one storyboard job runs at a time.
+- The editor is told it cannot see the pictures and must never guess that a shot is black or broken.
+- When none of the proposed changes can be made, the panel says so: there is nothing to apply, nothing in the edit changed, and only the editor's answer used tokens.
+
+**Three ways to edit.** Step 1 of the road offers "Edit with Claude", "Edit with ChatGPT" (each when connected) and "Edit with the program (free)". The program's way is the editing brain as before: cuts on the narration's pauses, on this PC, without AI. An AI's way first has the brain cut the base for free, then that AI edits the whole video as a professional editor and motion designer, directed by the editing skills and the competitor lessons (the polish brief: transitions, camera, effects, word animations, music, sound), and every change that passes its checks is saved as one new revision signed "Claude for <you>" (`EditingRoom.editWith`, `POST /api/content/:id/edits` with `ai`). Undo goes back to the brain's cut. Shots the AI would draw again are listed, never drawn without the owner's click; a new music score that the sound library cannot fill is left out and named.
+

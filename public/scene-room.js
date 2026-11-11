@@ -8,6 +8,13 @@ const SCENE_PURPOSE = {hook: 'Hook', context: 'Context', explain: 'Explain', exa
 const SCENE_JOB = {queued: ['Queued', 'orange'], running: ['Running', 'orange'], paused: ['Paused', 'orange'], cancelled: ['Stopped', 'gray'], completed: ['Done', 'green'], failed: ['Failed', 'gray'], interrupted: ['Interrupted · cost unknown', 'orange'], stale: ['Stale', 'gray'], blocked_quota: ['Hourly cap reached', 'orange'], blocked_budget: ['Over budget', 'orange'], quality_failed: ['Blocked by checks', 'orange'], usage_unknown: ['Usage unknown', 'orange'], budget_violation: ['Over token limit', 'orange']};
 // What was already fixed before the owner sees the plan: shots Claude's continuity review redrew, and the
 // continuity the program mended.
+// 0.106 (owner 2026-11-10: "one picture is a fine painting, the next looks like the free model"): the shots whose
+// painting did not come show a simpler drawing; they are named here with the reason, and "New picture" paints one again.
+const scenePictures = plan => {
+  const weak = (plan.pictures?.notes || []).filter(note => /could not paint it|drawn instead|draws this shot itself|picture was not drawn/.test(note)), key = 'scene-pictures';
+  if (!weak.length) return '';
+  return `<details class="scene-warnings" data-keep-open="${key}" ${keepOpen.has(key) ? 'open' : ''}><summary>${weak.length} picture${weak.length === 1 ? ' was' : 's were'} not painted as planned</summary><p class="hint">These shots show a simpler drawing because their painting did not come (the reason is on each line). Press "New picture" on a shot to have it painted again.</p><ul class="intel-list">${weak.slice(0, 60).map(note => `<li>${esc(note)}</li>`).join('')}</ul></details>`;
+};
 // The video's art direction (atelier shots design to it) and how the designs went.
 const sceneDirection = plan => {
   const d = plan.direction;
@@ -262,7 +269,7 @@ function scenePlanCard(content, manifest) {
     ${!manifest.scope.current ? `<p class="inline-warning">${esc(manifest.scope.issues.join(' '))}</p>` : ''}
     ${manifest.issues.length ? `<div class="checks" id="scene-problems"><strong>Fix before approval</strong><ul>${manifest.issues.map(item => `<li>${sceneLinked(item)}</li>`).join('')}</ul>${manifest.scope.current && manifest.issues.some(item => SCENE_LONG.test(item)) ? `<p class="hint">Shots that hold longer than the video's pace: fix them with "Fix with Claude" or "Fix with ChatGPT" in step 2 of ${'<button type="button" class="scene-jump" data-action="scene-goto-board" data-id="road">What happens next</button>'} at the top of this room. The program splits each long shot and the AI draws only the new shots; everything else keeps its drawing.</p>` : ''}</div>` : ''}
     ${sceneDirectives(content)}${manifest.warnings.length ? `<details class="scene-warnings"><summary>${manifest.warnings.length} warning${manifest.warnings.length === 1 ? '' : 's'}</summary><ul class="intel-list">${manifest.warnings.map(item => `<li>${esc(item)}</li>`).join('')}</ul></details>` : ''}
-    ${sceneStory(manifest.plan)}${sceneUndesigned(manifest)}${sceneDirection(manifest.plan)}${sceneFixes(manifest.plan)}
+    ${sceneStory(manifest.plan)}${sceneUndesigned(manifest)}${sceneDirection(manifest.plan)}${scenePictures(manifest.plan)}${sceneFixes(manifest.plan)}
     ${manifest.plan.summary ? `<p class="muted">${esc(manifest.plan.summary)}</p>` : ''}
     ${manifest.plan.design ? sceneDesignLine(manifest.plan.design) : ''}
     ${manifest.plan.cast?.length ? `<p class="muted"><strong>Cast:</strong> ${manifest.plan.cast.map(member => esc(`${member.name}${member.role ? ` (${member.role})` : ''}`)).join(' · ')}</p>` : ''}

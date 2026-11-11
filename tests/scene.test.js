@@ -1913,4 +1913,60 @@ test('a failed design is drawn in its kit place, the storyboard is saved, and a 
   assert.ok(latestManifest(room, content.id).plan.compose.notes.some(item => /^S02A: .*decided before the stop; not asked again/.test(item)));
   // The fallback never fails: a short line on the motion engine (the designed engines' fallback) shows its own words.
   assert.deepEqual(require('../sketch').fromText('Yes, he did it.', {primary: 'motion'}).elements.map(item => [item.kind, item.text]), [['text', 'Yes, he did it.']]);
+  // 0.106: several designed shots are redesigned in one job (the editor names them), each with its own reason; one that
+  // fails again keeps its current design and is named.
+  const now = latestManifest(room, content.id), byNow = Object.fromEntries(shots(now).map(shot => [shot.label, shot])), mark = asked.length;
+  assert.throws(() => room.redesignFrame(now.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: now.revision, shots: [{shotId: shots(now).find(shot => !shot.frame)?.id || 'none', reason: 'x'}]}), /Only a designed \(HTML\) shot can be redesigned/);
+  const queuedDesign = room.redesignFrame(now.id, {requestedBy: 'Owner', connector: ids.claude, expectedRevision: now.revision, shots: [{shotId: byNow.S01A.id, reason: 'Heavier rain'}, {shotId: byNow.S02A.id, reason: 'A real duel'}]});
+  assert.equal(queuedDesign.job.redesign.label, 'S01A, S02A');
+  await room.processNextPlan();
+  const design = room.publicPlanJob(room.planJobRow(queuedDesign.job.id));
+  assert.equal(design.status, 'completed', design.error);
+  assert.deepEqual(asked.slice(mark).sort(), ['s01a', 's02a', 's02a'], 'each named shot is designed again; nothing else is asked');
+  assert.match(design.error, /^S02A kept its current design/);
+  assert.ok(latestManifest(room, content.id).revision > now.revision, 'a new storyboard revision holds the new design');
+});
+
+// 0.106 (owner report 2026-11-10: one picture was a fine painting, the next a flat drawing like the free model; "no
+// compromise on quality"): when ChatGPT's picture allowance runs out, the storyboard waits for it instead of drawing every
+// later picture as simple vector art, and goes on by itself an hour later.
+test('a used-up picture allowance pauses the storyboard instead of drawing simpler pictures, and it goes on by itself an hour later', async t => {
+  const {AiError} = require('../ai');
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const usage = {promptTokens: 9000, completionTokens: 4000, totalTokens: 13000};
+  const ai = {team: () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}}), complete: ({messages, onStart}) => {
+    onStart();
+    let input = null; try { input = JSON.parse(messages[1].content); } catch { input = null; }
+    if (!input?.part) return Promise.resolve({content: JSON.stringify({fits: true, problems: []}), usage, model: 'm'});
+    const first = input.sentences[0].n, last = input.sentences.at(-1).n, scenes = [];
+    for (let start = first; start <= last; start += 4) scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 3), purpose: start === 1 ? 'hook' : 'explain', direction: 'Show it.', onScreenText: '',
+      shots: [{source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A picture serves it.', sketch: {engine: 'stickman', elements: [{kind: 'picture', describe: `A clay tablet, scene ${start}`}, {kind: 'text', style: 'keyword', text: 'Records'}]}}]});
+    return Promise.resolve({content: JSON.stringify({summary: 'Plan', scenes}), usage, model: 'm'});
+  }};
+  ai.reach = async () => true;
+  let limited = true, paints = 0;
+  ai.image = async ({outFile, onStart}) => {
+    paints++;
+    if (paints === 2 && limited) throw new AiError('You have reached your image generation limit.', 429, {kind: 'limit', nothingUsed: true});
+    onStart(); fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(String(paints))]));
+    return {usage: {promptTokens: 100, completionTokens: 10, totalTokens: 110}};
+  };
+  const base = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false});
+  const {store, content, ids, family, narrate} = base;
+  narrate(40);
+  const room = new SceneRoom(store, base.connectors, base.quota, base.styles, {dataRoot: base.dataRoot, ai});
+  room.saveSettings(family.id, {...room.settings(family.id), continuityReview: false, revision: room.settings(family.id).revision});
+  const queued = room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude});
+  await room.processNextPlan();
+  let job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.deepEqual([job.status, job.pause?.kind], ['paused', 'limit'], job.error);
+  assert.match(job.pause.message, /picture allowance is used up for now[\s\S]*waits instead of drawing simpler pictures/);
+  assert.equal(job.progress.pictures, 1, 'the finished painting is kept');
+  limited = false;
+  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 30 * 60000), [], 'it waits the hour');
+  assert.deepEqual(await room.resumeWhenOnline(Date.now() + 61 * 60000), [queued.job.id], 'then it goes on by itself');
+  await room.processNextPlan();
+  job = room.publicPlanJob(room.planJobRow(queued.job.id));
+  assert.equal(job.status, 'completed', job.error);
+  assert.ok(!latestManifest(room, content.id).plan.pictures.notes.some(note => /could not paint it/.test(note)), 'no picture was swapped for a simpler drawing');
 });
