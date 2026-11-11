@@ -526,7 +526,7 @@
  },
  {
   "id": "strategy.weekly-plan-anchor",
-  "title": "Plan the week as one anchor, one cheap video and three Shorts cut from the anchor",
+  "title": "Plan the week as one anchor, one quick-turn video and three Shorts cut from the anchor",
   "rooms": [
    "strategy",
    "ideas"
@@ -537,11 +537,11 @@
   ],
   "kind": "template",
   "when": "When planning a family's week of uploads.",
-  "summary": "A plan that does not fit the week is a list of regrets. Start from the hours really available and what is already half-made. One anchor gets the most time and goes out on the day the channel's own analytics say is best; one cheap video is built from something that exists; three Shorts are cut from the anchor, not written separately. Three uploads in seven days, not seven.",
+  "summary": "A plan that does not fit the week is a list of regrets. Start from the hours really available and what is already half-made. One anchor gets the most time and goes out on the day the channel's own analytics say is best; one quick-turn video is built from something that exists, made to the same standard as the anchor; three Shorts are cut from the anchor, not written separately. Three uploads in seven days, not seven, and none of them below the channel's quality.",
   "steps": [
    "Ask how many hours are available and what is already half-made.",
    "Choose the anchor and its day from the channel's own analytics, not an assumed Tuesday.",
-   "Choose a cheap video built from existing material (a clip, a follow-up to the most-replied comment).",
+   "Choose a quick-turn video built from existing material (a clip, a follow-up to the most-replied comment), held to the same quality as the anchor.",
    "Cut three Shorts from the anchor with the Shorts finder.",
    "Hand back a table: day, format, working title, the one sentence it promises, what already exists; then the hours it costs and what to drop first if the week goes wrong."
   ],
@@ -563,7 +563,7 @@
    "cadence",
    "strategy"
   ],
-  "source": "youtube-agent-skill yt-plan/SKILL.md (MIT, a2feb21), restated",
+  "source": "youtube-agent-skill yt-plan/SKILL.md (MIT, a2feb21), restated Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality.",
   "priority": 25
  },
  {

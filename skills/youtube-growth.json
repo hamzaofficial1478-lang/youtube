@@ -844,9 +844,9 @@
   ],
   "kind": "principle",
   "when": "When a family's upload cadence is set or reviewed.",
-  "summary": "The repository cites a study of five million channels in which channels posting 12 or more videos a month grew much faster, and also that a regular schedule beats sporadic bursts. Set the cadence the family's budget and approval time can sustain every week, then grow it. Subscribers get at most three upload notifications a day, so more uploads in a day waste them.",
+  "summary": "The repository cites a study of five million channels in which channels posting 12 or more videos a month grew much faster, and also that a regular schedule beats sporadic bursts. Set the cadence the family can sustain every week at full quality, then grow it. Subscribers get at most three upload notifications a day, so more uploads in a day waste them.",
   "do": [
-   "Start with the cadence the weekly budget and approvals can hold for three months, then raise it one step at a time."
+   "Start with the cadence the family can hold at full quality and through every approval for three months, then raise it one step at a time."
   ],
   "avoid": [
    "Raising the cadence beyond what can be reviewed and approved properly; quality and the approval gates come first."
@@ -861,7 +861,7 @@
    "consistency",
    "strategy"
   ],
-  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/algorithm-guide.md (vidIQ study); restated in our own words. Figures are the repository's cited third-party reports, indicative only.",
+  "source": "claude-youtube by Daniel Agrici (MIT, 84c3fa6, 2026-04-10): references/algorithm-guide.md (vidIQ study); restated in our own words. Figures are the repository's cited third-party reports, indicative only. Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality.",
   "priority": 30
  },
  {

@@ -778,7 +778,7 @@
     ],
     "do": [
       "Store DNA cards in a library so niche/competitor rooms can aggregate patterns across many channels",
-      "Prefer 10 s generated clips over 5 s and merge adjacent beats to cut cost and cuts"
+      "Prefer 10 s generated clips over 5 s and merge adjacent beats where the motion should run on unbroken (no needless cuts)"
     ],
     "avoid": [
       "Copying topic + structure + treatment together",
@@ -798,7 +798,7 @@
       "Every downstream concept cites at least one DNA field"
     ],
     "tags": ["reference", "competitor-analysis", "pacing", "style-extraction"],
-    "source": "OpenMontage skills/meta/video-reference-analyst.md; schemas/artifacts/video_analysis_brief.schema.json; .agents/skills/visual-style/references/extractors/from-video.md (skimmed) (AGPL-3.0, idea restated)"
+    "source": "OpenMontage skills/meta/video-reference-analyst.md; schemas/artifacts/video_analysis_brief.schema.json; .agents/skills/visual-style/references/extractors/from-video.md (skimmed) (AGPL-3.0, idea restated) Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality."
   },
   {
     "id": "reference.differentiate-not-copy",

@@ -440,3 +440,20 @@ Owner review 2026-11-10 of a Motion Graphics (HTML render) ninja video: one pict
 
 **Redesigning several shots.** Room 04's Redesign still takes one shot; the editor can now ask for several in one job (see EDITING-ROOM.md 0.106).
 
+
+
+## Shots the editor asked to draw again, how the scenes are made, and the check that ran out of room (0.108)
+
+Owner review 2026-11-11: the editor's redraws started by themselves and failed ("Claude returned no drawings ... Scenes S02-S21 were too long to review in one answer"); Room 04 offered no way to draw only those shots; "ONE GAUNTLET" was a flat vector picture while "FIRST TARGET" was a painting; "there should be options: totally paid, a mix, or totally by the program".
+
+**Redraw requests.** The shots the editor asks for wait in a card at the top of Room 04, "The editor asked to draw these shots again", each with the editor's words (`redraw_requests`, one open request per video; a newer ask for the same shot replaces the older one). Buttons: Redraw with ChatGPT, Redraw with Claude (each when connected) and Set aside. A press draws only those shots: drawn shots go to one Change with words job (at most 20 a press; the rest stay waiting), designed (HTML) shots to one Redesign job, never both at once since one storyboard job runs at a time. The press also chooses the pictures inside the shots: ChatGPT paints them, Claude draws vector pictures (`scope.pictures`, `teamFor`), whatever the AI team's usual picture setting is; on a video made all painted or mixed ChatGPT keeps painting, and Claude only plans the shots again (it cannot paint). Nothing starts until the owner presses.
+
+**Why the check ran out of room.** The continuity check of a redraw sends each asked shot with its neighbours for context. The neighbours went with their whole drawings, including the path data of vector pictures, so six scenes did not fit one answer, the check was skipped as "too long" and no drawings came back. Now the neighbours that are only context go without picture path data or kit shapes (`leanSketch`), and a stretch that still does not fit is halved until it does (`splitSlices`); a redraw keeps room for about 3,000 tokens per shot it draws.
+
+**Why one picture was flat and the next painted.** "ONE GAUNTLET" was a designed shot of the Motion Graphics engine: the AI writes it as HTML and SVG code, so it is flat vector art by nature. "FIRST TARGET" was a ChatGPT painting. On that storyboard (before 0.106) some planned paintings also fell back to vector pictures when ChatGPT's picture allowance ran out; 0.106 waits for the allowance instead.
+
+**How the scenes are made.** The storyboard window asks it for every new storyboard (`paint`, kept per video in `scene_paint`, used by every later step through `SceneRoom.inputs`):
+- **All painted (paid).** Every shot is a scene painted by ChatGPT in the video's look (the natural picture type of 0.63 for every shot), with the words, numbers and effects of the motion layer moving over it. No designed HTML shots, no cartoon pictures, nothing drawn free by the program. A shot whose painting fails holds the nearest painting of the video rather than turning into a free drawing, with a note. The budget is 30 paintings a minute.
+- **Mix (about 60% painted, 40% by the engine).** ChatGPT paints the moments that need real places, people and drama; the engine's own work (designed shots for Motion Graphics, drawings for the others) carries the explanations, numbers and quick beats. 18 paintings a minute.
+- **Made by the program (free).** No paintings; the engine makes every shot.
+All painted and Mix need ChatGPT connected (it becomes the picture maker for that video). The choice belongs to the storyboard, not the style: the Editing Room reads the board's own shots, so a painted shot can still be changed there (`drawingRules`), and the render draws each shot as stored. The planner gets a SCENES line for the choice, and the skills chosen for the video direct every painting as before. The Cinematic engine (footage only) does not offer the choice.

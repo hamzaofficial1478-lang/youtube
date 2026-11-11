@@ -228,7 +228,7 @@
     "tasks": ["competitors.scan", "competitors.blueprint", "analytics.review"],
     "kind": "procedure",
     "when": "When a reference or competitor video is analysed.",
-    "summary": "Every frame of a ten-minute video is thousands of images, so looking at all of them wastes the budget and buries the signal. A coarse pass (about fifty frames plus every scene change) finds the structure, and dense windows answer the questions that matter (the hook, a reveal, a transition).",
+    "summary": "Every frame of a ten-minute video is thousands of images, and looking at all of them equally buries the signal. A coarse pass (about fifty frames plus every scene change) finds the structure, and dense windows answer the questions that matter (the hook, a reveal, a transition) in full detail.",
     "steps": [
       "Overview: evenly spaced frames plus scene-change frames across the whole video.",
       "Read the platform's own captions when they exist; never generate a transcript of someone else's video.",
@@ -237,7 +237,7 @@
     ],
     "avoid": ["signing in, using cookies or getting around access controls", "frame-by-frame scans of the whole video"],
     "tags": ["analysis", "competitors", "sampling"],
-    "source": "watch-video SKILL.md and references/analysis-protocol.md (MIT, pinned 9492ba3), restated.",
+    "source": "watch-video SKILL.md and references/analysis-protocol.md (MIT, pinned 9492ba3), restated. Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality.",
     "priority": 60
   },
   {

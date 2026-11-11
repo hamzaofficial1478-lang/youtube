@@ -123,10 +123,10 @@ const NATURAL = Object.freeze({pictures: 'natural',
   motion: 'the camera moves through the painting on the words (slow push, pan, a punch-in on the key word); motion graphics over it (kinetic words, numbers, charts, maps, arrows); a new painting when the place, the moment or the action changes; nothing held longer than about 3.5 s without a move',
   never: 'photographs or photo noise, cartoon outlines, flat cartoon colour, stick figures, 3D plastic renders, readable text, letters, logos or watermarks, a real person\'s likeness or a real, recognisable landmark'});
 const MOODS = Object.freeze({
-  'stickman/classic': 'bright, clear daylight and clean, cheerful colour', 'stickman/whiteboard': 'clean, bright and airy, light backgrounds with few things in them',
+  'stickman/classic': 'bright, clear daylight and clean, cheerful colour', 'stickman/whiteboard': 'clean, bright and airy, light backgrounds that set the place without crowding the subject',
   'stickman/storybook': 'warm, soft, muted colour and gentle light, a calm picture-book mood', 'stickman/illustrated': 'honest detail in soft natural light on light, clean backgrounds',
-  'stickman/doodle': 'bright, playful colour and funny, slightly exaggerated moments', 'handdrawn/cartoon': 'clear, bright colour on light, simple backgrounds',
-  'handdrawn/marker': 'nearly black and white with strong light and dark', 'handdrawn/pencil': 'soft, muted colour and quiet light', 'handdrawn/framed': 'bright, simple and tidy',
+  'stickman/doodle': 'bright, playful colour and funny, slightly exaggerated moments', 'handdrawn/cartoon': 'clear, bright colour on light, uncluttered backgrounds that still set the place',
+  'handdrawn/marker': 'nearly black and white with strong light and dark', 'handdrawn/pencil': 'soft, muted colour and quiet light', 'handdrawn/framed': 'bright, clear and tidy, with the place fully set',
   'handdrawn/dry-erase': 'bold, punchy colour', 'documentary/footage': 'honest editorial light and colour', 'documentary/cartoon': 'warm period colour and clear silhouettes',
   'documentary/painted': 'warm, cinematic golden light and rich period detail', 'documentary/vector': 'deep colours with warm, glowing light', 'documentary/infographic': 'bright, clean, cheerful light',
   'documentary/kinetic': 'bold colour and simple, uncluttered scenes', 'documentary/collage': 'bold colour and strong contrast', 'documentary/data': 'dark, precise, cool light'});

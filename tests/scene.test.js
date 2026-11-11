@@ -1970,3 +1970,89 @@ test('a used-up picture allowance pauses the storyboard instead of drawing simpl
   assert.equal(job.status, 'completed', job.error);
   assert.ok(!latestManifest(room, content.id).plan.pictures.notes.some(note => /could not paint it/.test(note)), 'no picture was swapped for a simpler drawing');
 });
+
+test('0.108: how the scenes are made is chosen per storyboard: all painted never falls back to a free drawing, free paints nothing; the editor\'s redraws wait for the owner\'s choice of AI', async t => {
+  const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  const network = fakeNetwork({claudePlan: input => {
+    if (Array.isArray(input.raw)) return {fits: true, problems: []};
+    if (input.scenes) return {report: 'Nothing to change.', changes: []};
+    const scenes = [], first = input.sentences[0].n, last = input.sentences.at(-1).n;
+    for (let start = first; start <= last; start += 8) {
+      const shot = (n, describe) => ({source: 'generated-graphics', query: '', prompt: '', motion: 'static', notes: 'A real moment: painted.', sketch: {engine: 'stickman', type: 'natural', elements: [{kind: 'picture', describe, backdrop: true}, {kind: 'text', style: 'keyword', text: `Beat ${start}-${n}`}]}});
+      scenes.push({sentenceStart: start, sentenceEnd: Math.min(last, start + 7), purpose: start === 1 ? 'hook' : 'explain', direction: '', onScreenText: '', shots: [shot(1, `A harbour of traders at dusk, scene ${start}`), shot(2, `A lone clerk weighing silver by candlelight, scene ${start}`)]});
+    }
+    return {summary: 'Painted, shot by shot.', cast: [], scenes};
+  }});
+  const {room, content, ids, narrate, store} = setup(t, network, {styleKey: 'stickman-sketch-explainer', withVoice: false, storyMap: false, drawing: {look: 'classic', hand: false}});
+  narrate(40);
+  const ask = paint => room.createPlan(content.id, {mode: 'claude', requestedBy: 'Owner', contentRevision: content.revision, connector: ids.claude, paint, alsoWhileRunning: true});
+  room.ai.team = () => ({painted: false, pictures: {id: ids.claude.id, provider: 'claude'}, claude: {id: ids.claude.id, revision: ids.claude.revision, provider: 'claude'}});
+  assert.throws(() => ask('all'), /All painted: the painted scenes are made by ChatGPT/);
+  assert.throws(() => ask('cheap'), /Choose how the scenes are made/);
+  assert.equal(room.paintMode(content.id), null, 'a refused choice is not kept');
+  const painted = [];
+  room.ai.team = () => ({painted: true, pictures: {id: 'chatgpt-fixture', provider: 'chatgpt'}, chatgpt: {id: 'chatgpt-fixture', revision: 1, provider: 'chatgpt'}, claude: {id: ids.claude.id, revision: ids.claude.revision, provider: 'claude'}});
+  room.ai.image = async ({prompt, outFile, onStart}) => {
+    onStart(); painted.push(prompt);
+    if (/, scene 1\b/.test(prompt)) throw new Error('lost');
+    fs.writeFileSync(outFile, Buffer.concat([PNG, Buffer.from(prompt.slice(60, 160))]));
+    return {usage: {promptTokens: 1000, completionTokens: 10, totalTokens: 1010}};
+  };
+  const queued = ask('all');
+  assert.equal(queued.job.paint, 'all');
+  assert.equal(room.paintMode(content.id), 'all');
+  const scope = JSON.parse(room.planJobRow(queued.job.id).scope);
+  assert.deepEqual([scope.illustrate.budget, scope.illustrate.natural >= 20, scope.compose ?? null], [0, true, null], 'no cartoon pictures, a painting for every shot, no designed frames');
+  await room.processNextPlan();
+  assert.equal(room.publicPlanJob(room.planJobRow(queued.job.id)).status, 'completed', JSON.stringify(room.publicPlanJob(room.planJobRow(queued.job.id)).error));
+  const systems = network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text));
+  assert.ok(systems.every(text => /SCENES: ALL PAINTED/.test(text) && /PICTURE TYPE: natural/.test(text)), 'the planner is told every shot is a painted scene');
+  const manifest = latestManifest(room, content.id), first = manifest.plan.scenes[0].shots;
+  assert.ok(first.every(shot => shot.sketch.type === 'natural'), 'no shot fell back to a free cartoon drawing');
+  assert.ok(first.every(shot => shot.sketch.elements[0].image), 'the scene whose paintings were lost holds the nearest painting instead');
+  assert.ok(manifest.plan.pictures.notes.some(note => /S01[AB]: .*all painted, so it holds the painting of S02[AB] instead of a free drawing/.test(note)), JSON.stringify(manifest.plan.pictures.notes));
+  assert.equal(room.state().contents.find(item => item.contentId === content.id).inputs.style.paint, 'all');
+  // Free: nothing is painted and the planner is told so.
+  const before = painted.length, free = ask('free');
+  assert.equal(JSON.parse(room.planJobRow(free.job.id).scope).illustrate ?? null, null);
+  await room.processNextPlan();
+  assert.equal(painted.length, before, 'free paints nothing');
+  assert.ok(network.calls.filter(call => call.path === '/v1/messages').map(call => call.body.system).filter(text => /You direct the scenes/.test(text)).at(-1).match(/SCENES: FREE/));
+  // The editor's redraws wait here until the owner chooses who draws them; only those shots, with that AI's pictures.
+  const latest = latestManifestRow(room, content.id), labels = shots(latestManifest(room, content.id)).slice(0, 2).map(shot => shot.label);
+  const request = room.requestRedraw(latest.id, {requestedBy: 'Owner', shots: [{label: labels[0], ask: 'Two traders, not one'}], commandId: null});
+  const merged = room.requestRedraw(latest.id, {requestedBy: 'Owner', shots: [{label: labels[1], ask: 'Closer on the scales'}, {label: labels[0], ask: 'Three traders'}]});
+  assert.equal(merged.id, request.id, 'one open request per video');
+  assert.deepEqual(merged.shots.map(shot => [shot.label, shot.ask]), [[labels[1], 'Closer on the scales'], [labels[0], 'Three traders']]);
+  assert.equal(room.state().contents.find(item => item.contentId === content.id).redrawRequests[0].waiting, 2);
+  assert.equal(room.db.prepare("SELECT COUNT(*) AS n FROM scene_plan_jobs WHERE content_id=? AND status='queued'").get(content.id).n, 0, 'nothing starts by itself');
+  assert.throws(() => room.runRedrawRequest(request.id, {requestedBy: 'Owner', ai: 'gemini'}), /Choose ChatGPT or Claude/);
+  const run = room.runRedrawRequest(request.id, {requestedBy: 'Owner', ai: 'claude'});
+  const redrawScope = JSON.parse(room.planJobRow(run.job.id).scope);
+  assert.deepEqual([redrawScope.pictures, redrawScope.redraw.labels.sort(), run.request.status], ['claude', [...labels].sort(), 'sent']);
+  assert.equal(room.teamFor({scope: redrawScope}).painted, false, 'with Claude its pictures are vector drawings');
+  assert.equal(room.teamFor({scope: {...redrawScope, pictures: 'chatgpt'}}).painted, true, 'with ChatGPT they are painted');
+  // An all-painted (or mixed) video keeps ChatGPT painting: Claude plans the shots again but cannot paint them.
+  room.db.prepare("UPDATE scene_paint SET paint='all' WHERE content_id=?").run(content.id);
+  assert.equal(room.teamFor({content_id: content.id, scope: redrawScope}).painted, true, 'an all-painted video stays painted with Claude');
+  room.db.prepare("UPDATE scene_paint SET paint='free' WHERE content_id=?").run(content.id);
+  assert.equal(room.teamFor({content_id: content.id, scope: redrawScope}).painted, false);
+  assert.throws(() => room.runRedrawRequest(request.id, {requestedBy: 'Owner', ai: 'claude'}), /already sent or set aside/);
+  const other = room.requestRedraw(latest.id, {requestedBy: 'Owner', shots: [{label: labels[0], ask: 'Again'}]});
+  assert.equal(room.dismissRedrawRequest(other.id, {dismissedBy: 'Owner'}).status, 'dismissed');
+  assert.equal(room.state().contents.find(item => item.contentId === content.id).redrawRequests.length, 0);
+  assert.ok(store);
+});
+
+test('0.108: a check too big for one answer is split in halves, and neighbours go without their pictures\' path data', () => {
+  const {splitSlices, leanSketch, paintSpec} = require('../scene-room');
+  // The owner's redraw of 17 shots stopped on "Scenes S02-S21 were too long to review in one answer".
+  assert.deepEqual(splitSlices([['a', 'b', 'c', 'd', 'e', 'f']], slice => slice.length <= 2), [['a', 'b'], ['c'], ['d', 'e'], ['f']]);
+  assert.deepEqual(splitSlices([['a', 'b'], [], ['c']], () => true), [['a', 'b'], ['c']]);
+  assert.deepEqual(splitSlices([['a', 'b', 'c']], () => false), [['a'], ['b'], ['c']], 'a single scene always stays (and is named if still too long)');
+  const lean = leanSketch({engine: 'stickman', kit: [{id: 'k1', shapes: [1, 2, 3]}], elements: [{kind: 'picture', describe: 'A ninja', art: 'M0 0L9 9'.repeat(4000)}, {kind: 'text', text: 'Hi'}]});
+  assert.deepEqual(lean, {engine: 'stickman', elements: [{kind: 'picture', describe: 'A ninja', drawn: true}, {kind: 'text', text: 'Hi'}]});
+  assert.equal(paintSpec({drawing: {look: 'classic'}}, 'all').drawing.pictureType, 'natural');
+  assert.equal(paintSpec({drawing: {look: 'classic', pictureType: 'natural'}}, 'free').drawing.pictureType, undefined);
+  assert.equal(paintSpec({drawing: {}}, 'mix').drawing.pictureType, 'mix');
+});

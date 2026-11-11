@@ -994,19 +994,19 @@
     "pinOnly": true,
     "kind": "template",
     "when": "For a family whose style is simple stick-figure animation.",
-    "summary": "Every narration line gets a timed scene: the figure's pose and action, minimal props drawn as simple shapes, a simple background, bold hand-drawn text with arrows or symbols, a basic transition and a sound effect. Body language carries emotion; the palette is black, white and one accent.",
+    "summary": "Every narration line gets a timed scene: the figure's pose, action and face, the props the line names drawn clearly with their telling details, a background that sets the place (ground, sky or walls and one landmark of the setting, with depth), bold hand-drawn text with arrows or symbols, a transition chosen for the cut and a sound effect on the moment. Body language and the face carry the emotion together; the palette is black, white and one accent.",
     "steps": [
       "Give each line a start and end time.",
-      "Describe the pose and action in body language, no facial features.",
-      "Draw props and backgrounds as basic shapes.",
+      "Describe the pose and action in body language, with the face showing the feeling of the line.",
+      "Draw every prop the line names with the details that make it read at a glance, and give the place a background with depth (foreground, the setting, a landmark).",
       "Add bold hand-drawn text with an arrow or symbol where a number or key idea lands.",
-      "Choose a simple transition (slide, wipe, small shake on an impact) and one sound effect."
+      "Choose the transition the cut needs (slide, wipe, whip, a small shake on an impact) and one sound effect on the moment."
     ],
-    "avoid": ["Detail that slows the read.", "More than one accent colour."],
+    "avoid": ["Clutter that hides the subject (detail belongs in the background and the props the words name).", "More than one accent colour."],
     "numbers": {"palette": "black, white and one accent colour"},
     "checks": ["Every line has a scene and every scene has a time range."],
     "tags": ["motion", "2d-animation", "stick-figure"],
-    "source": "CB YT AI Mastery Prompts Bundle, pp. 32-33 (owner course material, restated)",
+    "source": "CB YT AI Mastery Prompts Bundle, pp. 32-33 (owner course material, restated) Revised 2026-11-11 (0.108, owner's quality-first decision): no wording that lowers quality.",
     "priority": 4
   },
   {
