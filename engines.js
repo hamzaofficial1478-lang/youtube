@@ -204,6 +204,9 @@ function promptGuide(primary, {mix = false, look = null, board = null, design = 
     // 0.89: paper and pixel videos keep their people in their own medium, so the video stays one film.
     ...(atelier?.finish === 'collage' ? ['PAPER COLLAGE ATELIER: people in this video are cut-paper figures inside the atelier shots; do not use stick figures or ink sketches for human moments.'] : []),
     ...(atelier?.finish === 'pixel' ? ['PIXEL ART ATELIER: people in this video are pixel sprites inside the atelier shots; do not use stick figures or ink sketches for human moments.'] : []),
+    // 0.106 (owner review 2026-11-10 of a Motion Graphics HTML-render video: most shots were plain flat drawings next to
+    // the designed shots, "too basic ... the same as stickman"): in a Motion Graphics video the designed shots are the look.
+    ...(primary === 'atelier' && !mix ? ['MAIN LOOK: this is a Motion Graphics video, and its designed shots are its look. Design every shot as a frame in this video\'s finish, except a shot whose moment is better told by a detailed painted picture (a drawn shot whose "picture" element is painted). Never use a plain drawn shot (figures, props and words without a picture): it looks basic next to the designed shots. Say in notes why a shot is not designed.'] : []),
     'TASTE: references are ideas, never rules. Choose places, colour, composition, effects and transitions that make each scene appealing and catchy for this audience, and say why when it matters.',
     // A style learned from an approved study: its techniques in our own words (never copy the reference).
     ...(brief ? [`LEARNED LOOK (from an approved style study; use the techniques, never copy a channel): ${brief}`] : []),

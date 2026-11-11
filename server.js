@@ -298,7 +298,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         if(pathname==='/api/render-readiness'&&req.method==='POST')return json(res,200,await renderRoom.checkReadiness(body));
         if(pathname==='/api/render-pins'&&req.method==='POST')return json(res,200,renderRoom.pin(body));
         const editCreate=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/edits$/);
-        if(editCreate&&req.method==='POST')return json(res,200,await editingRoom.generate(editCreate[1],body));
+        if(editCreate&&req.method==='POST')return json(res,200,body?.ai?await editingRoom.editWith(editCreate[1],body):await editingRoom.generate(editCreate[1],body));
         const retentionRoute=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/retention$/);
         if(retentionRoute&&req.method==='POST')return json(res,200,editingRoom.retention(retentionRoute[1],body));
         if(pathname==='/api/craft/check'&&req.method==='POST'){const locale=typeof body.locale==='string'?body.locale.slice(0,35):'en',field=(value,max)=>typeof value==='string'?value.slice(0,max):'';return json(res,200,{hook:craft.scoreHook(field(body.hook,1000),{locale}),packaging:craft.lintPackaging({title:field(body.title,300),thumbnailText:field(body.thumbnailText,200),locale})});}

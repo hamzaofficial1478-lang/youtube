@@ -253,7 +253,7 @@ dialog.wide-dialog{width:min(980px,calc(100vw - 32px))}.editor-section{border:1p
 .road-text{margin:10px 0 0;font-size:12.5px;line-height:1.5;color:#4f5c55}
 .road-link{border:0;background:none;padding:0;font:inherit;font-weight:600;color:#2f6b4f;text-decoration:underline;cursor:pointer}
 .road-actions{margin-top:auto;padding-top:14px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.road-actions .button{flex:1 1 0;min-width:0;padding:8px 14px;font-size:13px}.road-actions .button:only-child{flex:0 1 auto;min-width:60%}
+.road-actions .button{flex:1 1 120px;min-width:0;padding:8px 14px;font-size:13px}.road-actions .button:only-child{flex:0 1 auto;min-width:60%}
 .road-ask{flex:0 0 100%;text-align:center;font-size:12px;font-weight:600;color:#5d6a62;margin-bottom:-2px}
 @media (max-width:900px){.road-steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.road-steps{grid-template-columns:1fr}}

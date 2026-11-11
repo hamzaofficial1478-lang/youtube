@@ -93,7 +93,7 @@ function describeOp(op, timeline, drawn) {
     case 'add-sfx': return `Sound effect: add ${op.kind} at ${s(op.seconds)} s`;
     case 'remove-sfx': return Number.isFinite(Number(op.seconds)) && op.seconds !== null && op.seconds !== undefined ? `Sound effect: take out ${op.kind ? `the ${op.kind}` : 'the effect'} near ${s(op.seconds)} s` : `Sound effects: take out every ${op.kind}`;
     case 'set-music': return `Music: a new score that feels "${String(op.feel || '').slice(0, 80)}", switched on`;
-    case 'redraw-shot': return `${name}: drawn again in Room 04 as asked: "${String(op.ask || '').slice(0, 100)}"`;
+    case 'redraw-shot': return `${name}: ${drawn?.clips?.[op.clipId]?.designed ? 'designed (HTML) again' : 'drawn again'} in Room 04 as asked: "${String(op.ask || '').slice(0, 100)}"`;
     default: return `Unknown operation ${String(op?.type || '').slice(0, 30)}`;
   }
 }
@@ -133,7 +133,8 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
     // 0.91 (owner report 2026-11-04: asked to add effects, the editor switched them all off; asked to fix scenes, it did nothing).
     `- {"type":"add-sfx","seconds","kind"} lays one sound effect at a moment (the second the narrator says its word: WORDS of the clip give the times, a clip's "at" is its start); {"type":"remove-sfx","seconds"?,"kind"?} takes out the effect nearest a moment (of that kind when named) or, without seconds, every effect of a kind. AUDIO.effects lists the effects now in the edit as [second, kind, why]. Kinds: ${Object.keys(M.SFX).join(', ')} (cheer for joy and wins, sad for a loss, groan, gasp for a surprise, laugh, ding for a new idea or a plan, boom for the truth landing, riser for a mystery). When the owner asks to add or change effects, add and remove exactly those; never switch the effects off or remove them all unless the owner says so.`,
     '- {"type":"set-music","feel"}: a new music score for the whole video in the owner\'s words (for example "calm but a bit energetic"); its tracks come from the sound library and Freesound. Use it when the owner describes the music they want.',
-    '- {"type":"redraw-shot","clipId","ask"}: the AI that drew the storyboard draws this shot again in Room 04 as asked (a painted picture is painted again). Use it for what the drawing operations cannot do: a change inside a painted picture or backdrop, a new composition, or an object the drawing guide has no name for. After it, the owner draws the changed shots, approves the visuals and drafts the edit again; the edit\'s own changes come along.',
+    '- {"type":"redraw-shot","clipId","ask"}: the AI that drew the storyboard draws this shot again in Room 04 as asked (a painted picture is painted again); a designed clip (kind "designed": an HTML composition the AI wrote) is designed again, one new composition per shot. Use it for what the drawing operations cannot do: a change inside a painted picture or backdrop, a new composition, or an object the drawing guide has no name for. After it, the owner draws the changed shots, approves the visuals and drafts the edit again; the edit\'s own changes come along.',
+    '- You cannot see the pictures. Never guess that a shot is black, missing or broken: if the owner says so, change only what the owner names and say in "explain" what you could not check.',
     'Do every point of the instruction: each one becomes operations, or a sentence in "explain" saying why it cannot be done. Never answer with no operations when something can be done.',
     'DRAWN SHOTS (clips of kind "drawn"; you may change only the drawings listed under DRAWINGS):',
     '- {"type":"set-element","clipId","element": index from 0,"changes":{field: value}}: change fields of one element (null removes a field). Elements arrive on the narrator\'s words: "at" is a phrase of the clip\'s WORDS.',
@@ -507,9 +508,16 @@ class EditingRoom {
     requireValue(this.scenes?.changeShots, 'Room 04 cannot draw shots again in this program.', 409);
     const {state, payload} = this.editState(revisionId), team = this.scenes.ai?.team?.(), who = team?.claude || team?.chatgpt;
     requireValue(who, 'Connect Claude or ChatGPT and test the connection first (Connections).', 409);
-    const changes = ops.map(op => { const clip = payload.clips.find(item => item.id === op.clipId); requireValue(clip, 'That clip is not in this edit.', 404); return {label: clip.label, ask: String(op.ask || '').slice(0, 300)}; });
-    const job = this.scenes.changeShots(state.inputs.scope.manifestId, {requestedBy: by, changes, connector: {id: who.id, revision: who.revision}});
-    return {jobId: job?.id || null, labels: changes.map(item => item.label), provider: who.provider};
+    const all = ops.map(op => { const clip = payload.clips.find(item => item.id === op.clipId); requireValue(clip, 'That clip is not in this edit.', 404); return {label: clip.label, shotId: clip.shotId, ask: String(op.ask || '').slice(0, 300), designed: !!state.inputs.assets[clip.shotId]?.composition}; });
+    const changes = all.filter(item => !item.designed), designs = all.filter(item => item.designed), manifestId = state.inputs.scope.manifestId, connector = {id: who.id, revision: who.revision};
+    // One storyboard job runs per script, so drawn shots and designed shots in one request go one after the other.
+    let jobId = null, waiting = [];
+    if (changes.length) jobId = this.scenes.changeShots(manifestId, {requestedBy: by, changes: changes.map(({label, ask}) => ({label, ask})), connector})?.id || null;
+    if (designs.length && !changes.length) {
+      const manifest = this.scenes.manifestRow(manifestId);
+      jobId = this.scenes.redesignFrame(manifestId, {requestedBy: by, connector, expectedRevision: manifest.revision, shots: designs.map(item => ({shotId: item.shotId, reason: item.ask}))})?.job?.id || null;
+    } else if (designs.length) waiting = designs.map(item => item.label);
+    return {jobId, labels: (changes.length ? changes : designs).map(item => item.label), provider: who.provider, ...(waiting.length ? {waiting} : {})};
   }
   saveOps(revisionId, input, by) {
     return this.store.transaction(() => {
@@ -740,6 +748,34 @@ class EditingRoom {
 
   // The owner types what to change. One answer, reserved against the family's monthly tokens first, never retried by
   // itself; the proposal is checked operation by operation and only applied when the owner applies it (applyOps).
+  // 0.106 (owner 2026-11-10: "the program will not edit the video by itself; three options: by Claude, by ChatGPT or by
+  // the program"): the editing brain cuts the base on the narrator's pauses (free, as "Edit with the program" does), then
+  // Claude or ChatGPT edits the whole video, directed by the editing skills (POLISH_ASK: transitions, camera, effects,
+  // word animations, music, sound), and every change that passes its checks is saved as one new revision signed by that
+  // AI. Shots it wants drawn again are listed, not drawn: that is Room 04's paid work and the owner's call.
+  async editWith(contentId, input) {
+    object(input);
+    const by = person(input.requestedBy), pick = input.ai;
+    requireValue(['claude', 'chatgpt'].includes(pick), 'Choose Claude or ChatGPT to edit the video.');
+    const draft = await this.generate(contentId, {requestedBy: by, visualApprovalId: input.visualApprovalId});
+    const proposal = await this.command(draft.id, {requestedBy: by, ai: pick, polish: true});
+    const who = pick === 'chatgpt' ? 'ChatGPT' : 'Claude', signed = `${who} for ${by}`.slice(0, 80);
+    const redraws = proposal.ops.filter(op => op.type === 'redraw-shot');
+    let ops = proposal.ops.filter(op => op.type !== 'redraw-shot'), edited = draft, left = [];
+    if (ops.length) {
+      try { edited = this.applyOps(draft.id, {editedBy: signed, ops}); }
+      catch (error) {
+        // A new score needs music in the sound library; the rest of the edit still applies without it.
+        if (!ops.some(op => op.type === 'set-music')) throw error;
+        left = [`The new music was left out: ${error.message}`];
+        ops = ops.filter(op => op.type !== 'set-music');
+        if (ops.length) edited = this.applyOps(draft.id, {editedBy: signed, ops});
+      }
+    }
+    const aiEdit = {provider: proposal.provider, explain: proposal.explain, applied: ops.length, refused: proposal.steps.filter(step => !step.ok).map(step => step.summary).slice(0, 20), left, redraws: redraws.map(op => ({clipId: op.clipId, ask: op.ask})), usage: proposal.usage};
+    this.store.event(`${who} edited "${this.store.content(contentId).title}" for ${by}: ${ops.length} change${ops.length === 1 ? '' : 's'} on the editing brain's cut`);
+    return {...edited, aiEdit};
+  }
   async command(revisionId, input) {
     object(input);
     const by = person(input.requestedBy), polish = input.polish === true;
@@ -797,7 +833,8 @@ class EditingRoom {
         // 0.91: a new score in the owner's words, and a shot drawn again in Room 04, happen when the owner applies.
         if (item.type === 'set-music') { if (!this.soundtrack) throw new Error('Music is not available in this program.'); kept.push({type: 'set-music', feel: musicFeel(item.feel)}); steps.push({ok: true, summary}); continue; }
         if (item.type === 'redraw-shot') {
-          if (!drawn.clips[item.clipId]?.sketch) throw new Error(`${label(item.clipId)} is not a drawn shot that can be drawn again.`);
+          // 0.106: a designed (HTML) shot is designed again (Room 04's Redesign); before, every one was refused.
+          if (!drawn.clips[item.clipId]?.sketch && !drawn.clips[item.clipId]?.designed) throw new Error(`${label(item.clipId)} is footage or a still, not a drawn or designed shot, so it cannot be drawn again.`);
           const ask = String(item.ask || '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim();
           if (ask.length < 3 || ask.length > 300) throw new Error('Say in a few words what the new drawing shows (3-300 characters).');
           kept.push({type: 'redraw-shot', clipId: item.clipId, ask}); steps.push({ok: true, summary}); continue;

@@ -1649,3 +1649,28 @@ test('0.88: a fresh draft after the visuals changed brings the owner\'s own chan
   assert.equal(fresh.timeline.captions.enabled, true, 'the undone change did not come back');
   assert.match(fresh.note, /1 of your 1 changes from the earlier edit \(r4\) came along/);
 });
+
+// 0.106 (owner report 2026-11-10 with screenshots: every HTML render scene was black in the live player, the editor's 18
+// redraws of them were all refused, and "three options of editing: by Claude, by GPT or by the program"): the player's
+// saved videos are served, and Claude or ChatGPT edit the whole video on the editing brain's cut.
+test('0.106: the live player gets its saved videos, and Claude or ChatGPT edit the whole video as one signed revision', {skip: skip || noBrowser}, async t => {
+  const env = setup(t, {seconds: 20});
+  const {editing, scenes, content, store} = env;
+  const {approval} = await drawnBoard(env);
+  // A designed shot (and footage) plays its saved video; the server refused every video, so the player showed black.
+  const video = store.db.prepare("SELECT id FROM visual_assets WHERE media_type='video' LIMIT 1").get();
+  assert.ok(video && fs.existsSync(scenes.assetFile(video.id, 'file').file), 'a saved video is served to the player');
+  await assert.rejects(editing.editWith(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, ai: 'gemini'}), /Choose Claude or ChatGPT/);
+  const asked = [];
+  scenes.ai = {team: () => ({claude: {id: 'claude-1', provider: 'claude-code'}, chatgpt: null}), complete: async ({connectorId, task, messages}) => {
+    asked.push({connectorId, task, messages});
+    return {content: JSON.stringify({explain: 'A cheer where the win lands.', ops: [{type: 'add-sfx', seconds: 1, kind: 'cheer'}, {type: 'add-sfx', seconds: 2, kind: 'kazoo'}]}), usage: {promptTokens: 40, completionTokens: 10, totalTokens: 50}, model: 'claude-opus-5-5', provider: 'claude-code'};
+  }};
+  const edited = await editing.editWith(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, ai: 'claude'});
+  assert.deepEqual([asked.length, asked[0].connectorId, asked[0].task], [1, 'claude-1', 'editing'], 'one answer from the AI chosen');
+  assert.match(asked[0].messages[1].content, /INSTRUCTION FROM THE OWNER: Polish this whole edit/, 'it edits the whole video');
+  assert.equal(edited.createdBy, 'Claude for Owner', 'the revision is signed by the AI that made it');
+  assert.deepEqual(edited.timeline.sfxEdits, [{op: 'add', seconds: 1, kind: 'cheer'}]);
+  assert.deepEqual([edited.aiEdit.applied, edited.aiEdit.refused.length, edited.aiEdit.redraws.length], [1, 1, 0], 'what passed its checks is applied, the rest is named');
+  assert.equal(editing.revisionRow(edited.id).revision, 2, 'the brain\'s cut is revision 1, the AI\'s edit revision 2 (undo goes back to the cut)');
+});
