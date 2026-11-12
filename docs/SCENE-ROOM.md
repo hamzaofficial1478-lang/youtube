@@ -457,3 +457,7 @@ Owner review 2026-11-11: the editor's redraws started by themselves and failed (
 - **Mix (about 60% painted, 40% by the engine).** ChatGPT paints the moments that need real places, people and drama; the engine's own work (designed shots for Motion Graphics, drawings for the others) carries the explanations, numbers and quick beats. 18 paintings a minute.
 - **Made by the program (free).** No paintings; the engine makes every shot.
 All painted and Mix need ChatGPT connected (it becomes the picture maker for that video). The choice belongs to the storyboard, not the style: the Editing Room reads the board's own shots, so a painted shot can still be changed there (`drawingRules`), and the render draws each shot as stored. The planner gets a SCENES line for the choice, and the skills chosen for the video direct every painting as before. The Cinematic engine (footage only) does not offer the choice.
+
+## The storyboard marks the shots the editor asked to redraw (0.109)
+
+Owner review 2026-11-12: the shots the editor asks for should show in the storyboard itself, not only in the card at the top. Each waiting shot now carries an "Editor asks to redraw" mark on its picture and the editor's words under its label, with "Choose who redraws it" jumping to the card (Redraw with ChatGPT or Claude); the storyboard heading counts them. Once sent, the mark becomes "Being drawn again" as before.

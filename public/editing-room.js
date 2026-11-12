@@ -12,6 +12,14 @@ const EDIT_TEMPLATE_NAMES = {'scene-text': 'On-screen text', 'title-card': 'Titl
 // How each animated (canvas) graphic keeps its data: one entry per line.
 const EDIT_CANVAS_FORMAT = {'bar-chart': 'One bar per line: label = value (3-9 bars, one unit), e.g. Grain = 34%', 'line-chart': 'One point per line: label = value (3-12 points), e.g. 1970 = 60%', timeline: 'One event per line: year = event (3-7), e.g. 600 BC = First stamped coins', list: 'One item per line (3-6 items)', comparison: 'Two lines, one per side: Name: short detail', flow: 'One step per line, in order (3-6 steps)'};
 const editSeconds = (frames, fps) => (frames / fps).toFixed(1);
+// 0.109: the effects over the shots and the editing grammar(s) they follow, in one line of the edit's facts.
+const EDIT_GRAMMAR_NAMES = {stickman: 'Stickman', handdrawn: 'Whiteboard', motion: 'Documentary', montage: 'Documentary', atelier: 'Motion graphics', 'atelier/anime': 'Anime (HTML render)', 'atelier/collage': 'Paper collage', 'atelier/pixel': 'Pixel art', cinema: 'Cinematic'};
+function editFxFact(edit) {
+  const clips = edit?.timeline?.clips || [], effects = clips.flatMap(clip => clip.fx || []), grammars = [...new Set(clips.map(clip => clip.grammar).filter(Boolean))];
+  if (!grammars.length && !effects.length) return '<div><dt>Effects</dt><dd>none yet: this edit was drafted before effects existed. Press "Add effects by feeling" under the timeline (free), or ask the editor.</dd></div>';
+  const byKind = Object.entries(effects.reduce((all, effect) => ({...all, [effect.kind]: (all[effect.kind] || 0) + 1}), {})).map(([kind, n]) => `${n} ${kind}`).join(', ');
+  return `<div><dt>Effects</dt><dd>${effects.length ? `${effects.length} over the shots (${esc(byKind)})` : 'none yet'} · edited as ${esc(grammars.map(key => EDIT_GRAMMAR_NAMES[key] || key).join(' + '))}</dd></div>`;
+}
 function editFor(contentId) { return (state.editing?.contents || []).find(item => item.contentId === contentId) || null; }
 const editSkill = item => item.skill ? `<span class="chip ${item.skillApproved ? 'green' : 'gray'}" title="${item.skillApproved ? 'You approved this skill' : 'This skill is still a draft on the Skills page'}">${esc(item.skill)}</span>` : '<span class="chip gray">your choice</span>';
 
@@ -26,7 +34,7 @@ function editCard(content, engineReady) {
   const active = content.renders.some(job => ['queued', 'running'].includes(job.status));
   const head = `<div class="production-card-head"><div><span class="micro-label">EDITING BRAIN · EDIT r${edit.revision} · ${edit.actor === 'brain' ? 'drafted by the brain' : `changed by ${esc(edit.createdBy)}`} · ${esc(date(edit.createdAt))}</span><h2>Edit decisions</h2></div><div class="row-end">${badge(`Slideshow risk ${critique.slideshow.score} · ${critique.slideshow.verdict}`, EDIT_VERDICT[critique.slideshow.verdict] || 'gray')}${critique.counts.critical ? badge(`${critique.counts.critical} critical`, 'orange') : ''}${stale ? badge('Out of date', 'gray') : ''}</div></div>`;
   const timing = edit.timing ? `${edit.timing.method === 'pause-aligned' ? `Cuts follow the narration's measured pauses (${edit.timing.matched} of ${edit.timing.boundaries} sentence breaks found)` : 'Cuts use the word-count estimate'}. ${esc(edit.timing.note || '')}` : '';
-  const facts = `<dl class="style-facts edit-facts"><div><dt>Clips</dt><dd>${stats.clips} · average ${stats.averageShotSeconds} s · ${stats.cutsPerMinute} cuts/min</dd></div><div><dt>Footage</dt><dd>${Math.round(stats.videoShare * 100)}% moving clips · ${Math.round(stats.stillShare * 100)}% stills with camera moves</dd></div><div><dt>Transitions</dt><dd>${esc(stats.transitionTypes.join(', '))} · ${stats.softTransitions} soft</dd></div><div><dt>Longest hold</dt><dd>${Number(stats.longestUnchangedSeconds).toFixed(1)} s without a change</dd></div><div><dt>Graphics</dt><dd>${stats.graphicsAccepted} on screen · ${stats.graphicsProposed} proposed</dd></div><div><dt>Timing</dt><dd>${timing}</dd></div></dl>`;
+  const facts = `<dl class="style-facts edit-facts"><div><dt>Clips</dt><dd>${stats.clips} · average ${stats.averageShotSeconds} s · ${stats.cutsPerMinute} cuts/min</dd></div><div><dt>Footage</dt><dd>${Math.round(stats.videoShare * 100)}% moving clips · ${Math.round(stats.stillShare * 100)}% stills with camera moves</dd></div><div><dt>Transitions</dt><dd>${esc(stats.transitionTypes.join(', '))} · ${stats.softTransitions} soft</dd></div><div><dt>Longest hold</dt><dd>${Number(stats.longestUnchangedSeconds).toFixed(1)} s without a change</dd></div><div><dt>Graphics</dt><dd>${stats.graphicsAccepted} on screen · ${stats.graphicsProposed} proposed</dd></div>${editFxFact(edit)}<div><dt>Timing</dt><dd>${timing}</dd></div></dl>`;
   // 0.95 (owner review 2026-11-09: "Draft a fresh edit" stayed clickable after a fresh draft): while the edit is drawn from
   // today's storyboard, narration and style, a fresh draft would give the same edit (your changes are carried into it), so
   // the button only appears when one of them changed.
@@ -204,7 +212,7 @@ async function editSend(edit, ops, note) {
   const person = renderPerson() || 'Owner';
   return api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: person, ops, ...(note ? {note} : {})});
 }
-const TL_COMMANDS = new Set(['tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-go-scene', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
+const TL_COMMANDS = new Set(['tl-add-fx', 'tl-step', 'tl-goto', 'tl-play', 'tl-pause', 'tl-stop', 'tl-play-retry', 'tl-goto-player', 'tl-ask', 'tl-polish', 'tl-apply', 'tl-discard', 'tl-go-scene', 'tl-json', 'tl-save-drawing', 'tl-reset-drawing', 'tl-discard-drawing', 'tl-el-up', 'tl-el-down', 'tl-el-remove', 'tl-el-add']);
 function editAction(command, id, button) {
   if (TL_COMMANDS.has(command)) return tlAction(command, id, button);
   const {content, edit} = editContext();
@@ -336,7 +344,7 @@ document.getElementById('edit-form').addEventListener('submit', event => {
 // in step with the playhead; and the owner can type what to change for Claude to propose. Every change is a new
 // revision, checked like any other.
 const TL = {rev: null, zoom: 1, at: 0, sel: null, drawings: null, loading: false, drafts: {}, command: '', scope: 'clip', proposal: null, busy: false};
-const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['voice', 'Narration', 12], ['music', 'Music', 20], ['sfx', 'Sound effects', 20]];
+const TL_ROWS = [['ruler', 'Time', 22], ['scenes', 'Scenes', 22], ['picture', 'Picture', 34], ['joins', 'Transitions', 20], ['fx', 'Effects', 18], ['beats', 'Drawing beats', 22], ['graphics', 'Graphics', 18], ['captions', 'Captions', 18], ['voice', 'Narration', 12], ['music', 'Music', 20], ['sfx', 'Sound effects', 20]];
 const TL_SHOT_KEYS = ['type', 'set', 'mood', 'camera', 'transition', 'film', 'texture', 'look', 'board', 'design'];
 const TL_ADD = {text: {kind: 'text', text: 'New words', style: 'title'}, figure: {kind: 'figure', pose: 'stand', expression: 'happy'}, prop: {kind: 'prop', prop: 'coin'}, fx: {kind: 'fx', effect: 'sparkle'}, arrow: {kind: 'arrow', from: [0.3, 0.6], to: [0.6, 0.4]}, bubble: {kind: 'bubble', text: 'Words', of: 0}};
 const tlSeconds = (frames, fps) => frames / fps;
@@ -369,6 +377,13 @@ function tlTracks(tl, stale) {
     const kind = drawn[clip.id]?.designed ? 'designed' : drawn[clip.id] ? 'drawn' : clip.mediaType === 'image' ? 'still' : 'video', w = clip.frames / tl.fps * pps;
     out.push(`<rect class="tl-clip ${kind}${tl.drawings?.[clip.id] ? ' edited' : ''}${clip.hero ? ' hero' : ''}${sel('clip', clip.id)}" x="${x(clip.start / tl.fps)}" y="${py}" width="${Math.max(1, w - 1).toFixed(1)}" height="${ph}" rx="3" data-sel="clip" data-id="${esc(clip.id)}"><title>${esc(clip.label)} · ${(clip.frames / tl.fps).toFixed(2)} s · ${kind}</title></rect>${w > 34 ? `<text class="tl-label on" x="${x(clip.start / tl.fps) + 4}" y="${py + 21}">${esc(clip.label)}</text>` : ''}`);
   });
+  // 0.109: the effects over each clip (edit-fx.js): a mark at its moment, a bar for a whole-shot effect.
+  const [ey, eh] = rows.fx, fxSeen = tl.clips.some(clip => clip.fx?.length);
+  tl.clips.forEach(clip => (clip.fx || []).forEach((effect, k) => {
+    const from = clip.start / tl.fps + effect.at, wide = ['push', 'grade', 'vignette', 'letterbox'].includes(effect.kind), end = clip.start / tl.fps + (effect.until ?? (wide ? clip.frames / tl.fps : effect.at + 0.3));
+    out.push(`<rect class="tl-fx ${esc(effect.kind)}${sel('fx', `${clip.id}|${k}`)}" x="${(x(from) - (wide ? 0 : 3)).toFixed(1)}" y="${ey + (wide ? 2 + ['push', 'grade', 'vignette', 'letterbox'].indexOf(effect.kind) * 3 : 2)}" width="${wide ? Math.max(2, (end - from) * pps - 1).toFixed(1) : 6}" height="${wide ? 3 : eh - 4}" rx="1" data-sel="fx" data-id="${esc(clip.id)}|${k}" data-at="${from.toFixed(2)}"><title>${esc(effect.kind)}${effect.grade ? ` ${esc(effect.grade)}` : ''} · ${esc(effect.reason || '')}</title></rect>`);
+  }));
+  if (!fxSeen) out.push(`<text class="tl-label muted" x="4" y="${ey + eh - 5}">no effects over the shots yet (a fresh draft or the editor adds them)</text>`);
   const [jy, jh] = rows.joins;
   tl.joins.forEach((join, k) => {
     const at = tl.clips[k + 1].start / tl.fps, id = tl.clips[k].id;
@@ -409,10 +424,12 @@ function tlEditor(content, edit, stale) {
   // 0.108: a proposal the editor made is kept by the program, so it shows again after a reload and is applied by its id.
   const room = editFor(content.contentId), command = room?.command, hold = editHold(room);
   if (!TL.proposal && command?.status === 'proposed' && command.baseRevisionId === edit.id) TL.proposal = {commandId: command.id, provider: command.provider, explain: command.explain, ops: command.ops, steps: command.steps, usage: command.usage};
-  if (TL.proposal?.commandId && command?.id !== TL.proposal.commandId) TL.proposal = null;
+  // 0.109: the page's copy of the state can be older than the answer that just arrived (it is not refreshed while the
+  // editor works), so only a state that names another request replaces the proposal (0.108 dropped every new one).
+  if (TL.proposal?.commandId && command && command.id !== TL.proposal.commandId) TL.proposal = null;
   const askButtons = held(ais.map(([key, name], k) => action(TL.busy === key ? `${name} is reading the edit…` : `Ask ${name}`, 'tl-ask', key, k ? 'secondary' : 'primary')).join(''), hold);
   // 0.88: the whole edit polished by the AI in one request, with the approved editing skills and the competitor lessons.
-  const polishRow = ais.length ? `<div class="tl-polish"><strong>Make the whole edit richer</strong><div class="card-actions">${held(ais.map(([key, name], k) => action(TL.busy === `polish:${key}` ? `${name} is polishing the edit…` : `Polish with ${name}`, 'tl-polish', key, k ? 'secondary' : 'primary')).join(''), hold)}</div><p class="hint">One request reads the whole edit and proposes the changes it needs (more for a longer video): transitions for each scene change, camera life, word animations and colours, effects where a line lands, and drawings that match their words and the story's world. It uses your approved editing skills and the competitor lessons, and tokens from the channel's limit. Anything typed in the box above is added to the request. You see every change before applying it.</p></div>` : '';
+  const polishRow = ais.length ? `<div class="tl-polish"><strong>Make the whole edit richer</strong><div class="card-actions">${held(ais.map(([key, name], k) => action(TL.busy === `polish:${key}` ? `${name} is polishing the edit…` : `Polish with ${name}`, 'tl-polish', key, k ? 'secondary' : 'primary')).join('') + action('Add effects by feeling (program, free)', 'tl-add-fx', '', 'secondary'), hold)}</div><p class="hint">One request reads the whole edit and proposes the changes it needs (more for a longer video): transitions for each scene change, camera life, word animations and colours, effects where a line lands, and drawings that match their words and the story's world. It uses your approved editing skills and the competitor lessons, and tokens from the channel's limit. Anything typed in the box above is added to the request. You see every change before applying it.</p></div>` : '';
   // 0.83: a viewer on top with Play, Pause and Stop, the inspector beside it, the timeline below, as in an editing program.
   const toolbar = `<div class="tl-toolbar"><span class="micro-label">TIMELINE</span><label class="tl-zoom">Zoom <input type="range" min="1" max="16" step="1" value="${TL.zoom}" data-tl="zoom" aria-label="Zoom the timeline"></label><small class="muted">Click any item to inspect and change it; click the time ruler to move the playhead.</small></div>`;
   const legend = '<div class="tl-legend"><span class="drawn">Drawn shot</span><span class="edited">Drawing changed in this edit</span><span class="still">Still</span><span class="video">Footage</span><span class="soft">Transition</span><span class="beat">Drawing beat (an element arriving)</span><span class="graphic">Graphic</span><span class="caption">Caption</span></div>';
@@ -454,6 +471,7 @@ function tlDrawing(clip, entry, stale) {
     <details class="tl-json"><summary>The whole drawing as JSON (every field)</summary><textarea rows="12" data-tl-whole>${esc(JSON.stringify(sketch, null, 1))}</textarea><div class="card-actions">${action('Use this JSON', 'tl-json', '', 'secondary')}</div></details>
     <p class="hint">Changes show in the player above as you make them; saving makes a new revision.</p><div class="card-actions">${dirty ? action('Save drawing (new revision)', 'tl-save-drawing', clip.id, 'primary') + action('Discard changes', 'tl-discard-drawing', clip.id, 'secondary') : ''}${edited && !dirty ? action('Back to the board’s drawing', 'tl-reset-drawing', clip.id, 'text-button danger') : ''}</div>`}`;
 }
+const EDIT_FX_NAMES = {push: 'Slow push', punch: 'Punch-in', shake: 'Camera shake', flash: 'Flash', impact: 'Impact frame', glitch: 'Glitch', grade: 'Colour mood', vignette: 'Vignette', letterbox: 'Letterbox'};
 function tlInspector(edit, stale) {
   const tl = edit.timeline, sel = TL.sel;
   if (!sel) return '<h4>Inspector</h4><p class="hint">Click a clip, a transition, a drawing beat, a graphic or a caption on the timeline. Everything the edit does there is listed here and can be changed.</p>';
@@ -465,6 +483,12 @@ function tlInspector(edit, stale) {
     const change = stale ? '' : `<div class="card-actions">${action('Levels and mix', 'audio-settings', edit.id, 'secondary')}<span class="hint">Or ask the editor below (for example: "softer music", "more sound effects").</span></div>`;
     return sel.kind === 'music' ? `<h4>Music · ${tlClock(item.start)}–${tlClock(item.end)}</h4><dl class="style-facts"><div><dt>Mood</dt><dd>${esc(item.mood)} · energy ${esc(item.energy)} of 5</dd></div><div><dt>Track</dt><dd>${esc(item.title || 'not chosen yet')}</dd></div></dl>${change}`
       : `<h4>Sound effect · ${tlClock(item.seconds)}</h4><dl class="style-facts"><div><dt>Sound</dt><dd>${esc(item.kind)}${item.story ? ' (a story sound)' : ''}</dd></div><div><dt>Why here</dt><dd>${esc(item.reason)}</dd></div><div><dt>From the library</dt><dd>${item.sound ? esc(item.sound) : item.story ? 'none yet: Freesound fetches it when connected; until then this moment stays quiet' : 'none yet: add one in the sound library (Freesound fills it when connected)'}</dd></div><div><dt>Density</dt><dd>${esc(tracks.density)}: ${{subtle: 'only the big moments', accent: 'the main moments (each place, each object that makes a sound)', rich: 'every drawn moment (each thing that appears, each place, each word that lands)'}[tracks.density] || ''}</dd></div></dl>${change}`;
+  }
+  // 0.109: one effect over a shot: what it is, why it is there, and how to change it.
+  if (sel.kind === 'fx') {
+    const [clipId, k] = String(sel.id).split('|'), clip = tl.clips.find(item => item.id === clipId), effect = clip?.fx?.[Number(k)];
+    if (!effect) return '';
+    return `<h4>${esc(EDIT_FX_NAMES[effect.kind] || effect.kind)} · ${esc(clip.label)} · ${tlClock(clip.start / tl.fps + effect.at)}</h4><dl class="style-facts"><div><dt>Effect</dt><dd>${esc(effect.kind)}${effect.grade ? ` (${esc(effect.grade)})` : ''} · strength ${Math.round((effect.amount ?? 0.8) * 100)}%</dd></div><div><dt>Why here</dt><dd>${esc(effect.reason || 'Added in the edit.')}</dd></div><div><dt>Editing grammar</dt><dd>${esc(EDIT_GRAMMAR_NAMES[clip.grammar] || 'the video\'s engine')}</dd></div></dl>${stale ? '' : `<p class="hint">To change it, ask the editor below (for example: "no shake on ${esc(clip.label)}", "a stronger flash when he says gold").</p>`}`;
   }
   if (sel.kind === 'caption') { const group = tl.captions?.groups.find(item => item.id === sel.id); return group ? `<h4>Caption · ${tlClock(group.start)}–${tlClock(group.end)}</h4><p>${captionLine(group)}</p><p class="hint">Captions follow the narration; their timing never moves.</p>${stale ? '' : `<div class="card-actions">${action('Correct caption', 'tl-caption', group.id, 'secondary')}</div>`}` : ''; }
   const index = tl.clips.findIndex(item => item.id === sel.clipId), clip = tl.clips[index];
@@ -510,11 +534,13 @@ function tlAction(command, id, button) {
   if (command === 'tl-go-scene') { if (typeof sceneContentId !== 'undefined') sceneContentId = id; productionRoom = 'scene'; return render(); }
   const busy = run => { if (button) button.disabled = true; return run().catch(error => toast(error.message, true)).finally(() => { if (button) button.disabled = false; }); };
   if (command === 'tl-save-drawing' || command === 'tl-reset-drawing') return busy(async () => { await editSend(edit, [{type: 'set-drawing', clipId: id, sketch: command === 'tl-save-drawing' ? TL.drafts[id] : null}]); delete TL.drafts[id]; await refresh(); toast(command === 'tl-save-drawing' ? 'Drawing saved as a new revision.' : 'Back to the board’s drawing.'); });
+  // 0.109: the program's effects over the clips that have none, by engine grammar and the narrator's feeling (free).
+  if (command === 'tl-add-fx') return busy(async () => { const saved = await api(`/api/edit-revisions/${edit.id}/effects`, {requestedBy: renderPerson() || 'Owner'}); await refresh(); toast(`${saved.note || 'Effects added'}. Play the edit to see them; Undo takes them away.`); });
   if (command === 'tl-polish') {
     if (TL.busy) return toast('The editor is still reading the edit.', true);
     const key = ['claude', 'chatgpt'].includes(id) ? id : 'claude';
     TL.busy = `polish:${key}`; render();
-    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', polish: true, ai: key, ...(TL.command.trim() ? {text: TL.command.trim()} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
+    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', polish: true, ai: key, ...(TL.command.trim() ? {text: TL.command.trim()} : {})}).then(result => { TL.proposal = result; return refresh().catch(() => {}); }).catch(error => { toast(error.message, true); return refresh().catch(() => {}); }).finally(() => { TL.busy = false; render(); });
   }
   if (command === 'tl-ask') {
     const text = TL.command.trim();
@@ -522,9 +548,11 @@ function tlAction(command, id, button) {
     const focus = TL.scope === 'clip' ? (TL.sel?.clipId || tlClipAt(tl, TL.at).id) : null;
     if (TL.busy) return toast('The editor is still reading the edit.', true);
     TL.busy = ['claude', 'chatgpt'].includes(id) ? id : 'claude'; render();
-    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ai: TL.busy, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; }).catch(error => toast(error.message, true)).finally(() => { TL.busy = false; render(); });
+    return api(`/api/edit-revisions/${edit.id}/command`, {requestedBy: renderPerson() || 'Owner', text, ai: TL.busy, ...(focus ? {clipId: focus} : {})}).then(result => { TL.proposal = result; return refresh().catch(() => {}); }).catch(error => { toast(error.message, true); return refresh().catch(() => {}); }).finally(() => { TL.busy = false; render(); });
   }
-  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { const saved = p.commandId ? await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: renderPerson() || 'Owner', ops: p.ops, commandId: p.commandId}) : await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); TL.proposal = null; TL.command = ''; await refresh();
+  if (command === 'tl-apply') { const p = TL.proposal; return busy(async () => { let saved;
+    try { saved = p.commandId ? await api(`/api/edit-revisions/${edit.id}/ops`, {editedBy: renderPerson() || 'Owner', ops: p.ops, commandId: p.commandId}) : await editSend(edit, p.ops, `Command: ${TL.command.trim().slice(0, 250)}`); }
+    catch (error) { if (/already applied or discarded|earlier revision/.test(error.message)) { TL.proposal = null; await refresh(); } throw error; } TL.proposal = null; TL.command = ''; await refresh();
     // 0.91: shots drawn again go to Room 04; the owner is told what happens next.
     const redraw = saved?.redraw, changed = p.ops.filter(op => op.type !== 'redraw-shot').length;
     // 0.108: nothing is drawn by itself; the owner chooses in Room 04 who draws them.
@@ -639,11 +667,44 @@ function playCaption(c, t, W, H) {
   group.lines.forEach((line, i) => { const y = base - (group.lines.length - 1 - i) * size * 1.2; c.strokeText(line, W / 2, y); c.fillText(line, W / 2, y); });
   c.textAlign = 'start';
 }
+// 0.109: the edit's effects over a clip, the same maths and timing as the render (edit-fx.js filters): zoom and shake,
+// flash, impact frame, glitch, colour mood, vignette, letterbox. Drawn over the clip's frame, under the captions.
+function playFx(c, clip, local, W, H) {
+  const list = clip.fx;
+  if (!list?.length) return;
+  const on = effect => local >= effect.window[0] && local <= effect.window[1];
+  let z = 1, dx = 0, dy = 0;
+  for (const e of list) {
+    const A = e.amount ?? 0.8, [a, b] = e.window;
+    if (e.kind === 'push' && !clip.pixel) { const k = Math.max(0, Math.min(1, (local - a) / Math.max(0.1, b - a))); z += 0.07 * A * k * k * (3 - 2 * k); }
+    if (e.kind === 'punch' && !clip.pixel) z += 0.13 * A * (local < a ? 0 : local < a + 0.07 ? (local - a) / 0.07 : Math.max(0, 1 - (local - a - 0.07) / 0.3));
+    if (e.kind === 'shake' && on(e)) { const d = 1 - (local - a) / Math.max(0.05, b - a), f = Math.round(local * PLAY.data.fps); dx += 0.011 * A * Math.sin(f / PLAY.data.fps * 61) * d; dy += 0.009 * A * Math.cos(f / PLAY.data.fps * 53) * d; if (!clip.pixel) z += 0.03 * A * d; }
+  }
+  const snap = PLAY.fxSnap ||= document.createElement('canvas');
+  if (snap.width !== W || snap.height !== H) Object.assign(snap, {width: W, height: H});
+  const s = snap.getContext('2d');
+  s.clearRect(0, 0, W, H); s.drawImage(c.canvas, 0, 0);
+  const grade = list.find(e => e.kind === 'grade' && e.css);
+  c.save();
+  if (grade) c.filter = grade.css;
+  if (z !== 1 || dx || dy) { c.fillStyle = '#000'; c.fillRect(0, 0, W, H); c.translate(W / 2 + dx * W * z, H / 2 + dy * H * z); c.scale(z, z); c.drawImage(snap, -W / 2, -H / 2, W, H); }
+  else if (grade) c.drawImage(snap, 0, 0, W, H);
+  c.restore();
+  const flash = Math.min(0.9, list.filter(e => e.kind === 'flash').reduce((sum, e) => sum + 0.55 * (e.amount ?? 0.8) * Math.max(0, 1 - Math.abs(local - e.at - 0.06) / 0.12), 0));
+  if (flash > 0) { c.save(); c.globalAlpha = flash; c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.restore(); }
+  if (list.some(e => e.kind === 'impact' && local >= e.at && local <= e.at + 2 / PLAY.data.fps)) { c.save(); c.globalCompositeOperation = 'difference'; c.fillStyle = '#fff'; c.fillRect(0, 0, W, H); c.restore(); }
+  const glitch = list.find(e => e.kind === 'glitch' && on(e));
+  if (glitch) { const shift = Math.max(2, Math.round(10 * (glitch.amount ?? 0.8))) * W / 1280; s.clearRect(0, 0, W, H); s.drawImage(c.canvas, 0, 0); c.save(); c.globalAlpha = 0.45; c.globalCompositeOperation = 'screen'; c.drawImage(snap, shift, 0); c.drawImage(snap, -shift, 0); c.restore(); }
+  const vignette = list.find(e => e.kind === 'vignette' && on(e));
+  if (vignette) { const g = c.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.3, W / 2, H / 2, Math.hypot(W, H) / 2); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, `rgba(0,0,0,${0.35 + 0.3 * (vignette.amount ?? 0.8)})`); c.fillStyle = g; c.fillRect(0, 0, W, H); }
+  if (W > H && list.some(e => e.kind === 'letterbox' && on(e))) { const bar = Math.round(H * 0.064); c.fillStyle = '#000'; c.fillRect(0, 0, W, bar); c.fillRect(0, H - bar, W, bar); }
+}
 function playDraw(t) {
   const data = PLAY.data, screen = document.querySelector('[data-tl-canvas]');
   if (!data || !screen) return;
   const c = screen.getContext('2d'), [W, H] = [screen.width, screen.height], k = playClipAt(t), clip = data.clips[k], local = t - clip.start / data.fps;
   playClip(c, clip, local, W, H);
+  playFx(c, clip, local, W, H);
   // A soft join dissolves from the last frame of the clip before (the render blends the two exactly).
   const join = k > 0 ? data.joins[k - 1] : null, span = join && join.type !== 'cut' ? join.frames / data.fps : 0;
   if (span && local < span && PLAY.snapFor === data.clips[k - 1].id) { c.globalAlpha = 1 - local / span; c.drawImage(PLAY.snap, 0, 0, W, H); c.globalAlpha = 1; }

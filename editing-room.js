@@ -22,6 +22,7 @@ const {designedSpec} = require('./style');
 const {MotionRenderer} = require('./motion');
 const {messageTokenUpperBound} = require('./writer');
 const live = require('./live');
+const Fx = require('./edit-fx');
 // 0.108: what each kind of editor request is called on the page and in a revision's note.
 const COMMAND_KIND = Object.freeze({ask: 'the change you asked for', polish: 'the polish of the whole edit', 'edit-with': 'the edit of the whole video'});
 
@@ -41,7 +42,7 @@ function opsCap(payload, polish) { const shots = payload.clips.length; return po
 const answerTokens = (cap, polish) => Math.min(64000, (polish ? POLISH_TOKENS : COMMAND_TOKENS) + Math.max(0, cap - (polish ? 40 : 20)) * 180);
 // 0.88 (owner review 2026-11-04: "the editing looks too generic and basic, no special effects, no detailing"): one click
 // asks the AI to polish the whole edit, with the owner's approved editing skills and the competitor lessons.
-const POLISH_ASK = 'Polish this whole edit like a professional editor and motion designer, so it never looks basic or generic. Give every scene change the transition that serves it (an accent on a change of topic and on the turn, gentle on the wind-down) and keep cuts inside a scene. Give drawn shots camera life (set-shot camera; texture or film where it fits the look), give their words an animation and the key word an accent colour, add an effect (kind "fx") where a line lands, and keep the hook fast. Show the subject the words name, in the story\'s world (era, places, objects), and change a drawing that does not match its words. Use the SKILLS and the COMPETITOR LESSONS. Change what makes the video better and keep what already works; as many operations as the edit needs, within the limit given.';
+const POLISH_ASK = 'Polish this whole edit like a professional editor and motion designer, so it never looks basic or generic. Give every scene change the transition that serves it (an accent on a change of topic and on the turn, gentle on the wind-down) and keep cuts inside a scene. Give drawn shots camera life (set-shot camera; texture or film where it fits the look), give their words an animation and the key word an accent colour, add an effect (kind "fx") where a line lands, and keep the hook fast. Edit by this video\'s EDITING GRAMMAR and by FEELING: read each clip\'s "feel" and words, put effects over the shots where they serve the moment (add-fx: an impact, shake or flash on a hit, a punch-in on a reveal or a number, a glitch on technology or a lie, a colour mood and a vignette for sorrow, tension or memory, a letterbox for the turn, a slow push on a held emotional shot), remove an effect that fights the feeling, and let quiet lines breathe. Do something an experienced editor of this kind of video would do to make it more engaging, not the plain default. Show the subject the words name, in the story\'s world (era, places, objects), and change a drawing that does not match its words. Use the SKILLS and the COMPETITOR LESSONS. Change what makes the video better and keep what already works; as many operations as the edit needs, within the limit given.';
 const list = value => (Array.isArray(value) ? [...value] : Object.keys(value || {}));
 // What the inspector offers for each field of a drawing (the drawing vocabulary, sketch.js).
 const VOCAB = Object.freeze({kinds: ['text', 'figure', 'prop', 'arrow', 'bubble', 'fx', 'chart', 'timeline', 'network', 'map', 'crowd', 'quote', 'document', 'gauge', 'loupe', 'ruler'],
@@ -95,18 +96,22 @@ function describeOp(op, timeline, drawn) {
     case 'set-audio': { const a = op.settings || {}; return `Audio: music ${a.music?.enabled ? `on at ${a.music.levelLufs} LUFS` : 'off'}, sound effects ${a.sfx?.enabled ? `on (${a.sfx.density})` : 'off'}`; }
     case 'add-sfx': return `Sound effect: add ${op.kind} at ${s(op.seconds)} s`;
     case 'remove-sfx': return Number.isFinite(Number(op.seconds)) && op.seconds !== null && op.seconds !== undefined ? `Sound effect: take out ${op.kind ? `the ${op.kind}` : 'the effect'} near ${s(op.seconds)} s` : `Sound effects: take out every ${op.kind}`;
+    case 'add-fx': return `${name}: ${Fx.FX[op.kind]?.name || op.kind}${op.kind === 'grade' ? ` ${op.grade}` : ''} at ${s(op.at ?? 0)} s${op.until !== undefined && op.until !== null ? `-${s(op.until)} s` : ''}${op.amount !== undefined ? `, strength ${Math.round(Number(op.amount) * 100)}%` : ''}`;
+    case 'remove-fx': return `${name}: take out ${op.kind ? `the ${Fx.FX[op.kind]?.name.toLowerCase() || op.kind}` : 'every effect'}`;
     case 'set-music': return `Music: a new score that feels "${String(op.feel || '').slice(0, 80)}", switched on`;
     case 'redraw-shot': return `${name}: ${drawn?.clips?.[op.clipId]?.designed ? 'designed (HTML) again' : 'drawn again'} in Room 04 as asked: "${String(op.ask || '').slice(0, 100)}"`;
     default: return `Unknown operation ${String(op?.type || '').slice(0, 30)}`;
   }
 }
 // The editor's messages: the operations, the rules of this style, the edit as data and the drawings it may change.
-function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null, cap = 20}) {
+function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null, cap = 20, feel = {}}) {
   const fps = payload.fps, secs = frames => Math.round(frames / fps * 100) / 100;
   const kindOf = clip => (drawn.clips[clip.id]?.designed ? 'designed' : drawn.clips[clip.id] ? 'drawn' : clip.mediaType === 'image' ? 'still' : 'footage');
   const edit = {fps, seconds: secs(payload.totalFrames), format: payload.format, scenes: payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, at: secs(scene.startFrame)})),
     clips: payload.clips.map((clip, index) => ({id: clip.id, label: clip.label, sceneId: clip.sceneId, kind: kindOf(clip), at: secs(clip.start), hold: secs(clip.frames), ...(clip.mediaType === 'image' && !drawn.clips[clip.id] ? {move: clip.move?.kind} : {}), ...(clip.mediaType === 'video' && !drawn.clips[clip.id] ? {in: clip.inSeconds, speed: clip.speed} : {}), ...(clip.hero ? {hero: true} : {}),
-      ...(index < payload.joins.length ? {transitionAfter: payload.joins[index].type === 'cut' ? 'cut' : `${payload.joins[index].type} ${secs(payload.joins[index].frames)} s`} : {})})),
+      ...(index < payload.joins.length ? {transitionAfter: payload.joins[index].type === 'cut' ? 'cut' : `${payload.joins[index].type} ${secs(payload.joins[index].frames)} s`} : {}),
+      // 0.109: the clip's editing grammar, the narrator's feeling on it and the effects it has now.
+      ...(clip.grammar ? {grammar: clip.grammar} : {}), ...(feel[clip.id] ? {feel: feel[clip.id]} : {}), ...(clip.fx?.length ? {fx: clip.fx.map(effect => [effect.kind, effect.at, effect.amount, ...(effect.grade ? [effect.grade] : [])])} : {})})),
     graphics: payload.graphics.map(item => ({id: item.id, template: item.template, status: item.status, at: secs(item.start), seconds: secs(item.frames), lines: item.lines, ...(item.title ? {title: item.title} : {})})),
     captions: payload.captions ? {enabled: payload.captions.enabled, groups: payload.captions.groups.map(group => [group.id, Math.round(group.start * 100) / 100, group.text])} : null};
   // The drawings Claude may change: the selected clip and its neighbours; otherwise the shots the owner names first
@@ -135,6 +140,8 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
     `- {"type":"set-audio","settings":{"mode":"normalize"|"source","targetLufs":-24 to -14,"truePeakDb":-6 to -1,"music":{"enabled","levelLufs":-40 to -14,"duck":${JSON.stringify(Audio.DUCKS)},"fadeSeconds":0-5,"scoreId"},"sfx":{"enabled","density":${JSON.stringify(Audio.DENSITIES)},"levelDb":-30 to -3}}}: the whole audio mix; send every field, starting from AUDIO.settings. Music plays only the video's score: music.scoreId is AUDIO.score.id, and only when AUDIO.score.ready and current are true. With no such score, switch the music off and say in "explain" that the owner first scores the music in Room 07 Audio ("Score the music"); sound effects can still be switched on (they come from the sound library and land on the drawings' moments).`,
     // 0.91 (owner report 2026-11-04: asked to add effects, the editor switched them all off; asked to fix scenes, it did nothing).
     `- {"type":"add-sfx","seconds","kind"} lays one sound effect at a moment (the second the narrator says its word: WORDS of the clip give the times, a clip's "at" is its start); {"type":"remove-sfx","seconds"?,"kind"?} takes out the effect nearest a moment (of that kind when named) or, without seconds, every effect of a kind. AUDIO.effects lists the effects now in the edit as [second, kind, why]. Kinds: ${Object.keys(M.SFX).join(', ')} (cheer for joy and wins, sad for a loss, groan, gasp for a surprise, laugh, ding for a new idea or a plan, boom for the truth landing, riser for a mystery). When the owner asks to add or change effects, add and remove exactly those; never switch the effects off or remove them all unless the owner says so.`,
+    '- {"type":"add-fx","clipId","kind","at"?,"until"?,"amount"?,"grade"?,"reason"}: an effect over one clip (see EFFECTS; "at" seconds from the clip\'s start, the moment it hits); {"type":"remove-fx","clipId","kind"?}: takes that kind off the clip, or every effect without a kind. A clip\'s "fx" lists [kind, at, amount, grade] it has now.',
+    ...Fx.promptLines([...new Set(payload.clips.map(clip => clip.grammar).filter(Boolean))]),
     '- {"type":"set-music","feel"}: a new music score for the whole video in the owner\'s words (for example "calm but a bit energetic"); its tracks come from the sound library and Freesound. Use it when the owner describes the music they want.',
     '- {"type":"redraw-shot","clipId","ask"}: this shot waits in Room 04 to be drawn again as asked, until the owner chooses who draws it (ChatGPT paints it, Claude draws vector pictures); say so in "explain" (a painted picture is painted again); a designed clip (kind "designed": an HTML composition the AI wrote) is designed again, one new composition per shot. Use it for what the drawing operations cannot do: a change inside a painted picture or backdrop, a new composition, or an object the drawing guide has no name for. After it, the owner draws the changed shots, approves the visuals and drafts the edit again; the edit\'s own changes come along.',
     '- You cannot see the pictures. Never guess that a shot is black, missing or broken: if the owner says so, change only what the owner names and say in "explain" what you could not check.',
@@ -338,16 +345,28 @@ class EditingRoom {
     const row = asset.mediaType === 'video' && asset.origin !== 'drawn' ? this.db.prepare('SELECT payload FROM media_analyses WHERE sha256=? AND version=?').get(asset.sha256, CUTS_VERSION) : null;
     return row ? JSON.parse(row.payload).cuts : undefined;
   }
+  // 0.109: the narrator's performance per sentence (voice direction), when the approved narration was directed and its
+  // sentences are the plan's; the edit's effects follow its emotions and energy.
+  deliveryFor(inputs) {
+    let performed = null;
+    try { performed = inputs.voice?.auditionId ? this.store.voiceDirectionLines?.(inputs.voice.auditionId) : null; } catch { performed = null; }
+    if (!performed?.lines) return null;
+    return {lines: (inputs.payload.sentences || []).map((sentence, k) => (performed.sentences?.[k]?.text === sentence.text ? performed.lines[k] || null : null))};
+  }
   brainInput(inputs, analysis, variants = {}) {
     const narrationSeconds = inputs.scope.narration.durationSeconds;
+    const engine = E.primaryEngine(inputs.spec), videoGrammar = Fx.grammarKey(engine, null, inputs.spec.atelier?.finish);
     const alignment = B.alignSentences(inputs.payload.sentences, analysis.pauses, narrationSeconds);
     const assets = Object.fromEntries(Object.entries(inputs.assets).map(([shotId, asset]) => {
       const cuts = this.cachedCuts(asset);
-      return [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds, ...(cuts ? {cuts} : {}), ...(asset.sketch?.transition ? {sketch: {transition: asset.sketch.transition}} : {})}];
+      // 0.109: each shot edits by its own grammar (a designed shot by its finish, a drawn one by its engine) and keeps
+      // its drawing's own camera, so the edit never pushes over a shot that already moves.
+      const grammar = asset.origin === 'drawn' ? Fx.grammarKey(engine, asset.composition ? {composition: asset.composition} : {engine: asset.sketch?.engine}, inputs.spec.atelier?.finish) : videoGrammar;
+      return [shotId, {assetId: asset.assetId, mediaType: asset.mediaType, clipSeconds: asset.clipSeconds, grammar, ...(asset.sketch?.camera ? {camera: asset.sketch.camera} : {}), ...(cuts ? {cuts} : {}), ...(asset.sketch?.transition ? {sketch: {transition: asset.sketch.transition}} : {})}];
     }));
     return {
       alignment,
-      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, ...(inputs.payload.direction?.palette?.accent ? {accent: inputs.payload.direction.palette.accent} : {}), pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
+      edit: {fps: inputs.spec.canvas.frameRate, narrationSeconds, sentences: alignment.sentences, format: inputs.scope.format, spec: inputs.spec, assets, variants, grammar: videoGrammar, delivery: this.deliveryFor(inputs), ...(inputs.payload.direction?.palette?.accent ? {accent: inputs.payload.direction.palette.accent} : {}), pauses: analysis.pauses || [], locale: inputs.family.primaryLocale, measured: inputs.scope.narration.words || null,
         scenes: inputs.payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, ...(scene.transition ? {transition: scene.transition} : {}), onScreenText: scene.onScreenText, direction: scene.direction, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, shots: scene.shots.map(shot => ({id: shot.id, label: shot.label, motion: shot.motion, source: shot.source, ...(shot.cue ? {cue: shot.cue} : {})}))}))},
     };
   }
@@ -564,6 +583,25 @@ class EditingRoom {
     if (!saved) return {...this.publicRevision(this.revisionRow(revisionId), {detail: true}), redraw: redrawn};
     return redrawn ? {...saved, redraw: redrawn} : saved;
   }
+  // 0.109 (owner review 2026-11-12: "the editing is still so basic ... it overrides the emotions"): the program's effects
+  // over the shots of the current edit, by each clip's editing grammar and the narrator's feeling, free and without AI.
+  // Clips that already carry effects (the owner's or the editor's) are left as they are; one revision, undoable.
+  addEffects(revisionId, input = {}) {
+    object(input);
+    const by = person(input.requestedBy || 'Owner'), {row, timeline, state, payload} = this.editState(revisionId);
+    this.assertIdle(timeline.content_id);
+    requireValue(this.latestRow(timeline.id).id === row.id, 'A newer revision of this edit exists. Reload and try again.', 409);
+    const inputs = state.inputs, engine = E.primaryEngine(inputs.spec), videoGrammar = Fx.grammarKey(engine, null, inputs.spec.atelier?.finish), fps = payload.fps;
+    const grammarOf = clip => { const asset = inputs.assets[clip.shotId]; return clip.grammar || (asset?.origin === 'drawn' ? Fx.grammarKey(engine, asset.composition ? {composition: asset.composition} : {engine: asset.sketch?.engine}, inputs.spec.atelier?.finish) : videoGrammar); };
+    // The narration's words and sentences as the captions measured them (captions follow the voice).
+    const groups = payload.captions?.groups || [], words = groups.flatMap(group => group.words.map(word => ({...word, sentence: group.sentence})));
+    const sentences = (inputs.payload.sentences || []).map(sentence => { const own = words.filter(word => word.sentence === sentence.n); return own.length ? {n: sentence.n, text: sentence.text, startSeconds: own[0].start, endSeconds: own.at(-1).end ?? own.at(-1).start} : null; }).filter(Boolean);
+    const free = payload.clips.filter(clip => !clip.fx?.length);
+    const placed = Fx.placeEffects({clips: free.map(clip => ({...clip, purpose: payload.scenes.find(scene => scene.id === clip.sceneId)?.purpose})), fps, words, sentences, delivery: this.deliveryFor(inputs), grammarOf, camera: clip => (payload.drawings?.[clip.id] || inputs.assets[clip.shotId]?.sketch)?.camera || null, meaningsOf: require('./music').meaningsOf});
+    const ops = Object.entries(placed.fx).flatMap(([clipId, list]) => list.map(effect => ({type: 'add-fx', clipId, ...effect, grammar: grammarOf(payload.clips.find(clip => clip.id === clipId))})));
+    requireValue(ops.length, free.length ? 'The program found no moment for an effect on the clips without one: the lines are calm and the shots already move. Ask the editor for something specific instead.' : 'Every clip already has its effects. Change one on the timeline or ask the editor.', 409);
+    return this.saveOps(row.id, {ops, note: `Effects placed by the editing brain: ${ops.length} over ${Object.keys(placed.fx).length} clips, by each shot's editing grammar and the narrator's feeling`}, by);
+  }
   // The shots the editor asked to draw again, as one waiting request in Room 04 (drawn shots and designed shots alike).
   requestRedraws(revisionId, ops, by, commandId = null) {
     requireValue(this.scenes?.requestRedraw, 'Room 04 cannot draw shots again in this program.', 409);
@@ -720,7 +758,7 @@ class EditingRoom {
     const ordered = payload.clips.map(clip => { const asset = state.inputs.assets[clip.shotId]; return {label: clip.label, sceneId: clip.sceneId, clipId: clip.id, sketch: asset.origin === 'drawn' && !asset.composition ? structuredClone(payload.drawings?.[clip.id] || asset.sketch) : null}; });
     Sk.carry(ordered);
     const clips = payload.clips.map((clip, index) => {
-      const asset = state.inputs.assets[clip.shotId], base = {id: clip.id, label: clip.label, start: clip.start, frames: clip.frames}, src = `/api/visual-assets/${asset.assetId}/file`;
+      const asset = state.inputs.assets[clip.shotId], base = {id: clip.id, label: clip.label, start: clip.start, frames: clip.frames, ...(clip.fx?.length ? {fx: clip.fx.map(effect => ({...effect, window: Fx.windowOf(effect, clip.frames / payload.fps), ...(effect.kind === 'grade' ? {css: Fx.GRADES[effect.grade]?.css} : {})})), pixel: clip.grammar === 'atelier/pixel'} : {})}, src = `/api/visual-assets/${asset.assetId}/file`;
       if (asset.origin === 'drawn' && !asset.composition) {
         try { return {...base, kind: 'drawn', ...this.playerDrawing(payload, index, ordered[index].sketch, primary)}; } catch { /* the board's preview below */ }
       }
@@ -858,7 +896,13 @@ class EditingRoom {
     const skillBrief = this.store.skillRuntime?.brief('editing.plan', family.id, {text: [content.title, family.niche, polish ? 'polish transitions effects animation camera' : ask].join(' '), format: family.format, style}) || null;
     let guidance = null;
     try { guidance = this.scenes.visualGuidance?.(family.id) || null; } catch { guidance = null; }
-    const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap});
+    // 0.109: the narrator's feeling on each clip (voice direction), so the editor edits by emotion.
+    const delivery = this.deliveryFor(state.inputs), feel = {}, groups = payload.captions?.groups || [];
+    if (delivery) payload.clips.forEach(clip => {
+      const mid = (clip.start + clip.frames / 2) / payload.fps, group = [...groups].reverse().find(item => item.start <= mid) || groups[0], line = group ? delivery.lines[(group.sentence || 1) - 1] : null;
+      if (line) feel[clip.id] = `${line.emotion}, energy ${line.energy}/5${line.emphasis?.length ? `, stress "${line.emphasis.slice(0, 2).join('", "')}"` : ''}`;
+    });
+    const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap, feel});
     const maxTokens = answerTokens(cap, polish), reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`, commandId = randomUUID();
     this.store.transaction(() => {
       // 0.108: one editing task at a time for a video (the request is recorded before anything is sent).

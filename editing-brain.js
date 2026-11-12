@@ -12,6 +12,7 @@ const Cap = require('./captions');
 const Audio = require('./audio');
 const Sk = require('./sketch');
 const T = require('./transitions');
+const Fx = require('./edit-fx');
 
 const SCHEMA = 'ytprod.edit/1';
 const round = (value, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -54,10 +55,12 @@ const ENERGY = Object.freeze({
 });
 const energyOf = spec => ((spec?.motion?.intensity ?? 50) < 40 ? 'calm' : (spec?.motion?.intensity ?? 50) < 70 ? 'medium' : 'high');
 // The video's transition vocabulary from its style: a primary and an accent the style allows.
-function transitionPlan(spec, fps) {
+// 0.109: the engine's editing grammar (edit-fx.js) names the transitions its editor reaches for first.
+function transitionPlan(spec, fps, prefer = []) {
   const allowed = new Set((spec?.transitions?.allowed || ['cut']).filter(type => TRANSITIONS.includes(type) && type !== 'cut').map(T.resolve)), energy = energyOf(spec), table = ENERGY[energy];
-  const primary = table.primary.find(type => allowed.has(type)) || [...allowed][0] || null;
-  const accent = table.accent.find(type => allowed.has(type) && type !== primary && type !== 'dip-to-black') || null;
+  const preferred = prefer.map(T.resolve).filter(type => allowed.has(type));
+  const primary = preferred[0] || table.primary.find(type => allowed.has(type)) || [...allowed][0] || null;
+  const accent = [...preferred.slice(1), ...table.accent].find(type => allowed.has(type) && type !== primary && type !== 'dip-to-black') || null;
   const maxFrames = Math.round((spec?.transitions?.maxDurationMs || 0) / 1000 * fps);
   const gentle = allowed.has('crossfade') ? 'crossfade' : primary;
   return {energy, primary, accent, gentle, outro: allowed.has('dip-to-black') ? 'dip-to-black' : gentle, frames: Math.min(maxFrames, Math.round(table.seconds * fps)), maxFrames};
@@ -432,8 +435,8 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
   });
 }
 
-function sceneJoin(previous, next, budget, spec, fps) {
-  const plan = transitionPlan(spec, fps);
+function sceneJoin(previous, next, budget, spec, fps, prefer = []) {
+  const plan = transitionPlan(spec, fps, prefer);
   // Claude's choice for this scene in the plan comes first, when the style allows it (owner review 2026-10-16:
   // the program thinks for itself; nothing here limits the variety it chooses).
   const chosen = next.transition && T.resolve(next.transition);
@@ -442,7 +445,7 @@ function sceneJoin(previous, next, budget, spec, fps) {
     return {type: chosen, frames: Math.min(plan.maxFrames, Math.max(2, Math.round(T.secondsOf(chosen) * fps))), reason: `The scene plan chose ${chosen} here: ${T.CATALOG[chosen].use}.`, skill: SKILL.transitions};
   }
   if (plan.primary && plan.frames >= 2 && budget.left > 0) {
-    const say = (type, frames, why) => ({type, frames, reason: `${why} (${plan.energy} energy: ${plan.primary} between related scenes${plan.accent ? `, ${plan.accent} for a change of topic` : ''}).`, skill: SKILL.transitions});
+    const say = (type, frames, why) => ({type, frames, reason: `${why} (${plan.energy} energy${prefer.length ? `, the engine's editing grammar` : ''}: ${plan.primary} between related scenes${plan.accent ? `, ${plan.accent} for a change of topic` : ''}).`, skill: SKILL.transitions});
     if (['close', 'call-to-action'].includes(next.purpose) && plan.outro) return say(plan.outro, Math.min(plan.maxFrames, Math.round(0.8 * fps)), 'The outro gets the slowest, simplest transition');
     if (next.purpose === 'recap') return say(plan.gentle, Math.min(plan.maxFrames, Math.round(0.6 * fps)), 'The wind-down returns to a gentle transition');
     if (plan.accent && (next.purpose === 'turn' || PURPOSE_REGISTER[next.purpose] !== PURPOSE_REGISTER[previous.purpose])) return say(plan.accent, plan.frames, next.purpose === 'turn' ? 'The turn gets the accent transition' : 'A change of topic gets the accent transition, so the viewer resets');
@@ -452,7 +455,10 @@ function sceneJoin(previous, next, budget, spec, fps) {
 }
 
 // The auto edit. `variants` (sceneId -> n) lets single-scene repair produce a different take of one scene.
-function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null, accent = null}) {
+function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null, accent = null, grammar = null, delivery = null}) {
+  // 0.109: the video's editing grammar (its engine and finish) and each clip's own (a designed shot edits by its finish).
+  // Without a grammar (older callers) the edit is drafted as before: no effects, the energy table's transitions.
+  const videoGrammar = Fx.GRAMMAR[grammar] ? grammar : null, prefer = videoGrammar ? Fx.GRAMMAR[videoGrammar].transitions : [];
   const totalFrames = Math.max(1, Math.round(narrationSeconds * fps));
   const {pacing} = spec;
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
@@ -610,8 +616,8 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     const own = assets?.[b.shotId]?.sketch?.transition;
     // Order: a drawing's own opening move, then Claude's choice for the scene, then the brain's own habits.
     let join = own && own !== 'cut' ? {type: 'cut', frames: 0, reason: `The next drawing opens with its own ${own} move, so the edit cuts.`, skill: SKILL.transitions}
-      : next.transition ? sceneJoin(previous, next, budget, spec, fps)
-      : previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook} : sceneJoin(previous, next, budget, spec, fps);
+      : next.transition ? sceneJoin(previous, next, budget, spec, fps, prefer)
+      : previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook} : sceneJoin(previous, next, budget, spec, fps, prefer);
     if (join.type !== 'cut' && !next.transition && joins.length && joins[joins.length - 1].type !== 'cut') join = {type: 'cut', frames: 0, reason: 'Two transitions in a row would look decorative; this one is a hard cut.', skill: SKILL.transitions};
     const shorter = Math.min(a.frames, b.frames);
     if (join.type !== 'cut') join.frames = Math.max(2, Math.min(join.frames, Math.floor(shorter / 3)));
@@ -620,6 +626,11 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     if (join.type === 'dip-colour') join.colour = accent || spec.palette.accent;
     joins.push(join);
   }
+  // 0.109: effects over the shots, placed by the engine's grammar on the words that land and the narrator's feeling.
+  const clipGrammar = clip => (Fx.GRAMMAR[assets?.[clip.shotId]?.grammar] ? assets[clip.shotId].grammar : videoGrammar);
+  const spoken = videoGrammar ? Cap.wordTimings({sentences, pauses, narrationSeconds, measured}) : [];
+  const placed = !videoGrammar ? {fx: {}} : Fx.placeEffects({clips: clips.map(clip => ({...clip, purpose: sceneRows.find(scene => scene.id === clip.sceneId)?.purpose})), fps, words: spoken, sentences, delivery, grammarOf: clipGrammar, camera: clip => assets?.[clip.shotId]?.camera || null, meaningsOf: require('./music').meaningsOf});
+  if (videoGrammar) clips.forEach(clip => { clip.grammar = clipGrammar(clip); if (placed.fx[clip.id]) clip.fx = placed.fx[clip.id]; });
   const scenesOut = sceneRows.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, register: scene.register, startFrame: scene.startFrame, endFrame: scene.endFrame, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, variant: scene.variant}));
   const graphics = proposeGraphics({scenes: sceneRows, sentences, fps, totalFrames, spec});
   const markers = retentionMarkers(sceneRows, fps, totalFrames);
@@ -657,6 +668,10 @@ function validateTimeline(timeline) {
     if (!Number.isSafeInteger(clip.frames) || clip.frames < 1) problems.push(`Clip ${index + 1} (${clip.label}) has no length.`);
     if (!(clip.speed > 0 && clip.speed <= 1)) problems.push(`Clip ${index + 1} (${clip.label}) has an invalid speed.`);
     if (clip.mediaType === 'image' && !MOVES.includes(clip.move?.kind)) problems.push(`Clip ${index + 1} (${clip.label}) has no camera move.`);
+    if (clip.fx !== undefined) {
+      if (!Array.isArray(clip.fx) || clip.fx.length > 12) problems.push(`Clip ${index + 1} (${clip.label}) has more than 12 effects.`);
+      else for (const effect of clip.fx) { try { Fx.checkEffect(effect, clip.frames / timeline.fps); } catch (error) { problems.push(`Clip ${index + 1} (${clip.label}): ${error.message}`); break; } }
+    }
     expected = clip.start + clip.frames;
   });
   if (expected !== timeline.totalFrames) problems.push(`The clips cover ${expected} frames; the narration needs ${timeline.totalFrames}.`);
@@ -812,7 +827,7 @@ function critique(timeline, spec) {
 
 // ---------------------------------------------------------------- operations
 
-const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio', 'set-drawing', 'add-sfx', 'remove-sfx']);
+const OP_TYPES = Object.freeze(['set-hold', 'set-transition', 'set-move', 'set-in', 'set-hero', 'set-graphic', 'add-graphic', 'reorder', 'set-captions', 'set-caption', 'set-audio', 'set-drawing', 'add-sfx', 'remove-sfx', 'add-fx', 'remove-fx']);
 function opError(message) { return Object.assign(new Error(message), {status: 400}); }
 function findClip(timeline, id) { const index = timeline.clips.findIndex(clip => clip.id === id); if (index < 0) throw opError('That clip is not in this edit.'); return index; }
 
@@ -966,6 +981,27 @@ function applyOp(source, op, {spec, checkDrawing = null} = {}) {
     if (op.type === 'remove-sfx' && at === null && !op.kind) throw opError('Say which kind of effect to take out, or at what second.');
     timeline.sfxEdits = [...(timeline.sfxEdits || []), {op: op.type === 'add-sfx' ? 'add' : 'remove', ...(at !== null ? {seconds: Math.round(at * 1000) / 1000} : {}), ...(op.kind ? {kind: op.kind} : {})}].slice(-400);
     receipt.changed.push('sfx');
+  } else if (op.type === 'add-fx') {
+    // 0.109: an effect over one clip (edit-fx.js), checked strictly; at most 12 a clip.
+    const clip = timeline.clips[findClip(timeline, op.clipId)], length = clip.frames / fps;
+    let effect;
+    try { effect = Fx.checkEffect({...op, reason: op.reason || 'Added by the owner.'}, length); } catch (error) { throw opError(`${clip.label}: ${error.message}`); }
+    if ((clip.fx || []).length >= 12) throw opError(`${clip.label} already has 12 effects.`);
+    if (effect.kind === 'grade') clip.fx = (clip.fx || []).filter(item => item.kind !== 'grade');
+    // The same effect at the same moment replaces the earlier one (a fresh draft that replays the owner's changes).
+    clip.fx = (clip.fx || []).filter(item => !(item.kind === effect.kind && Math.abs(item.at - effect.at) < 0.3));
+    if (effect.kind === 'push' && clip.mediaType === 'image') throw opError(`${clip.label} is a still: give it a camera move instead (set-move).`);
+    clip.fx = [...(clip.fx || []), effect].sort((a, b) => a.at - b.at);
+    // An edit drafted before 0.109 learns the clip's editing grammar with its first effect (a pixel clip shakes by whole pixels).
+    if (!clip.grammar && Fx.GRAMMAR[op.grammar]) clip.grammar = op.grammar;
+    receipt.changed.push(clip.id);
+  } else if (op.type === 'remove-fx') {
+    const clip = timeline.clips[findClip(timeline, op.clipId)];
+    if (op.kind !== undefined && op.kind !== null && !Fx.KINDS.includes(op.kind)) throw opError(`Effects are: ${Fx.KINDS.join(', ')}.`);
+    const before = (clip.fx || []).length, kept = (clip.fx || []).filter(item => op.kind && item.kind !== op.kind);
+    if (kept.length === before) throw opError(`${clip.label} has no ${op.kind || ''} effect to remove.`.replace('  ', ' '));
+    if (kept.length) clip.fx = kept; else delete clip.fx;
+    receipt.changed.push(clip.id);
   } else if (op.type === 'set-captions') {
     if (!timeline.captions) throw opError('This edit was drafted before captions existed. Draft a fresh edit to get captions.');
     if (typeof op.enabled !== 'boolean') throw opError('Captions must be switched on or off.');
@@ -995,6 +1031,8 @@ function applyOp(source, op, {spec, checkDrawing = null} = {}) {
     }
     receipt.changed.push(clip.id);
   }
+  // 0.109: effects are timed from their clip's start, so after any change of length they are fitted to their clip.
+  for (const clip of timeline.clips) if (clip.fx) { const kept = Fx.fit(clip.fx, clip.frames / fps); if (kept) clip.fx = kept; else delete clip.fx; }
   validateTimeline(timeline);
   return {timeline, receipt};
 }

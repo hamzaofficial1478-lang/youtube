@@ -15,7 +15,7 @@ const {RenderRoom} = require('../render-room');
 const {FrameScanner} = require('../frame-scan');
 const {PackagingRoom} = require('../packaging-room');
 const {ConnectorSlots} = require('../connectors');
-const {EditingRoom} = require('../editing-room');
+const {EditingRoom, describeOp} = require('../editing-room');
 const {LocalizationRoom} = require('../localization-room');
 const {SkillsEngine} = require('../skills');
 const B = require('../editing-brain');
@@ -167,6 +167,31 @@ test('the transition brain: one primary between related scenes, an accent for a 
   const files = Object.fromEntries(related.clips.map(clip => [clip.id, `${clip.id}.src`]));
   const plan = R.planTimeline({timeline: related, files, narration: {file: 'n.wav', durationSeconds: narrationSeconds}, format: 'long-form', workDir: '/w', outFile: '/w/o.mp4', graphics: false});
   assert.match(plan.final.args.join(' '), /xfade=transition=slideleft:duration=0\.4/);
+});
+
+// 0.109 (owner review 2026-11-12: "each engine and each style must have its own editing style"): the engine's grammar
+// picks the transitions its editor reaches for, every clip knows its grammar, and a clip's effects reach its segment.
+test('0.109: each engine edits with its own transitions, and a clip\'s effects reach its render segment', () => {
+  const {sentences, scenes, assets, narrationSeconds} = fixture();
+  const joinInto = (edit, id) => edit.joins[edit.clips.findIndex(clip => clip.sceneId === id) - 1];
+  const purposes = scenes.map((scene, k) => ({...scene, purpose: ['hook', 'context', 'explain', 'close'][k]}));
+  const spec = {...SPEC, transitions: {allowed: ['cut', 'crossfade', 'push', 'slide', 'zoom', 'flash', 'whip-pan', 'wipe'], maxDurationMs: 600}, motion: {...SPEC.motion, intensity: 60}};
+  const anime = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: purposes, assets, spec, grammar: 'atelier/anime'});
+  const board = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: purposes, assets, spec, grammar: 'handdrawn'});
+  assert.equal(joinInto(anime, 'sc3').type, 'flash');
+  assert.match(joinInto(anime, 'sc3').reason, /editing grammar/);
+  assert.equal(joinInto(board, 'sc3').type, 'wipe-left');
+  assert.ok(anime.clips.every(clip => clip.grammar === 'atelier/anime') && board.clips.every(clip => clip.grammar === 'handdrawn'));
+  // Without a grammar (older callers) nothing changes: no grammar, no effects.
+  const plain = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: purposes, assets, spec});
+  assert.ok(plain.clips.every(clip => clip.grammar === undefined && clip.fx === undefined));
+  // A flash on the first clip is drawn in that clip's own segment and nowhere else.
+  const flashed = B.applyOp(anime, {type: 'add-fx', clipId: anime.clips[0].id, kind: 'flash', at: 0.2}).timeline;
+  const files = Object.fromEntries(flashed.clips.map(clip => [clip.id, `${clip.id}.src`]));
+  const plan = R.planTimeline({timeline: flashed, files, narration: {file: 'n.wav', durationSeconds: narrationSeconds}, format: 'long-form', workDir: '/w', outFile: '/w/o.mp4', graphics: false});
+  const chain = segment => segment.args[segment.args.indexOf('-vf') + 1];
+  assert.match(chain(plan.segments[0]), /eq=brightness='min\(0\.9,0\.44\*max\(0,1-abs\(t-0\.26\)\/0\.12\)\)':eval=frame,format=yuv420p$/);
+  assert.ok(plan.segments.slice(1).every(segment => !/eq=brightness/.test(chain(segment))));
 });
 
 test('the critic names the boring, lazy and amateur choices with a fix', () => {
@@ -1387,9 +1412,23 @@ test('full control (0.54): every drawn shot is shown and changed inside the edit
   // A redraw on its own changes nothing in the edit.
   const alone = editing.applyOps(r6.id, {editedBy: 'Owner', ops: [{type: 'redraw-shot', clipId: drawnClip.id, ask: 'Pebbles on the table'}]});
   assert.equal(alone.revision, r6.revision);
+  // 0.109: the editor is told every effect, this video's editing grammar and what each clip carries; it can add and
+  // remove effects, and the program places its own over the clips that have none (free, one revision).
+  assert.match(asked.at(-1).messages[0].content, /"type":"add-fx"[\s\S]*EFFECTS over a shot[\s\S]*EDITING GRAMMAR of [\s\S]*FEELING FIRST/);
+  assert.ok(r6.timeline.clips.every(clip => clip.grammar), 'every clip of a new draft knows its editing grammar');
+  assert.match(describeOp({type: 'add-fx', clipId: drawnClip.id, kind: 'shake', at: 0.2, amount: 0.9}, r6.timeline, {clips: {}}), /: Camera shake at 0\.20 s, strength 90%/);
+  const shaken = editing.applyOps(r6.id, {editedBy: 'Owner', ops: [{type: 'add-fx', clipId: drawnClip.id, kind: 'shake', at: 0.2, amount: 0.9}]});
+  const kinds = shaken.timeline.clips.find(clip => clip.id === drawnClip.id).fx.map(effect => effect.kind);
+  assert.ok(kinds.includes('shake'), JSON.stringify(kinds));
+  let placed = null;
+  try { placed = editing.addEffects(shaken.id, {requestedBy: 'Owner'}); } catch (error) { assert.match(error.message, /found no moment|already has its effects/); }
+  if (placed) {
+    assert.match(placed.note, /Effects placed by the editing brain/);
+    assert.deepEqual(placed.timeline.clips.find(clip => clip.id === drawnClip.id).fx.map(effect => effect.kind), kinds, 'a clip with its own effects is left alone');
+  }
   delete scenes.changeShots;
   scenes.ai = {team: () => ({claude: null, chatgpt: null})};
-  await assert.rejects(editing.command(r6.id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
+  await assert.rejects(editing.command((placed || shaken).id, {requestedBy: 'Owner', text: 'Anything'}), /Connect Claude or ChatGPT/);
 });
 
 // ---------------------------------------------------------------- P08c music and sound effects

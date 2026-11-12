@@ -11,6 +11,8 @@ const {InputError} = require('./store');
 const VS = require('./visual-sources');
 const Audio = require('./audio');
 const T = require('./transitions');
+// 0.109: the edit's effects over each clip (edit-fx.js), drawn in the clip's own segment.
+const Fx = require('./edit-fx');
 
 const RENDERER_VERSION = 'ffmpeg-montage/1.1.0';
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -20,6 +22,8 @@ const REQUIRED_FILTERS = ['zoompan', 'xfade', 'tpad', 'trim', 'setpts', 'scale',
 REQUIRED_FILTERS.push(...Audio.REQUIRED_FILTERS.filter(name => !REQUIRED_FILTERS.includes(name)));
 // The Cinematic engine's finish (0.40).
 REQUIRED_FILTERS.push('colorbalance', 'curves', 'hue', 'noise', 'drawbox', 'normalize');
+// 0.109: the edit's impact frames and glitches.
+REQUIRED_FILTERS.push('negate', 'chromashift');
 const REQUIRED_ENCODERS = ['libx264', 'aac', 'png', 'pcm_s24le'];
 const PRESETS = {
   proxy: {name: 'proxy', label: 'Proxy 360p', 'long-form': {width: 640, height: 360}, shorts: {width: 360, height: 640}, crf: 26, x264: 'veryfast', audioKbps: 128, maxFps: 30},
@@ -279,12 +283,12 @@ function planTimeline({timeline, files, narration, format, preset = PRESETS.prox
       const zp = easedZoompan(clip.move, count);
       motion = clip.move?.kind || 'static';
       const big = `${size.width * 2}:${size.height * 2}`;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', source, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${zp.z}':x='${zp.x}':y='${zp.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', source, '-vf', `scale=${big}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${big},zoompan=z='${zp.z}':x='${zp.x}':y='${zp.y}':d=${count}:s=${size.width}x${size.height}:fps=${fps},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}${Fx.filters(clip.fx, {width: size.width, height: size.height, fps, frames: count, pixel: clip.grammar === 'atelier/pixel'})}format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     } else {
       motion = clip.speed < 1 ? `clip at ${Math.round(clip.speed * 100)}%` : 'clip';
       const available = Math.max(0, ((clip.clipSeconds || count / fps) - (clip.inSeconds || 0)) / (clip.speed || 1));
       const hold = Math.max(0, count / fps - available) + 1;
-      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', ...(clip.inSeconds ? ['-ss', String(clip.inSeconds)] : []), '-i', source, '-vf', `setpts=(PTS-STARTPTS)/${clip.speed || 1},fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
+      args = ['-hide_banner', '-nostdin', '-loglevel', 'error', ...(clip.inSeconds ? ['-ss', String(clip.inSeconds)] : []), '-i', source, '-vf', `setpts=(PTS-STARTPTS)/${clip.speed || 1},fps=${fps},scale=${size.width}:${size.height}:force_original_aspect_ratio=increase:out_range=tv:out_color_matrix=bt709,crop=${size.width}:${size.height},setsar=1,setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=bt709,${lookFilters(look, size, index)}tpad=stop_mode=clone:stop_duration=${round(hold, 3)},trim=end_frame=${count},setpts=PTS-STARTPTS,${Fx.filters(clip.fx, {width: size.width, height: size.height, fps, frames: count, pixel: clip.grammar === 'atelier/pixel'})}format=yuv420p`, '-frames:v', String(count), ...encodeVideo(preset, fps), '-an', '-y', file];
     }
     return {index, clipId: clip.id, shotId: clip.shotId, label: clip.label, assetId: clip.assetId, mediaType: clip.mediaType, startFrame: starts[index], frames: frames[index], extraFrames: extra, motion, file, args};
   });
