@@ -234,6 +234,8 @@ function editionTimeline(timeline, sync, {payload, words = null, narrationSecond
   timeline.clips.forEach((clip, k) => starts.push(k ? Math.min(total - (timeline.clips.length - k), Math.max(starts[k - 1] + 1, at(clip.start))) : 0));
   const clips = timeline.clips.map((clip, k) => {
     const frames = (k < starts.length - 1 ? starts[k + 1] : total) - starts[k], out = {...clip, start: starts[k], frames};
+    // 0.109: effects are timed from their clip's start, so they stretch with it (an effect that would end past it goes).
+    if (clip.fx) { const ratio = frames / clip.frames, length = frames / fps; out.fx = clip.fx.map(effect => ({...effect, at: r2(effect.at * ratio), ...(effect.until !== undefined ? {until: Math.min(r2(effect.until * ratio), r2(length))} : {})})).filter(effect => effect.at < length - 0.05 && (effect.until === undefined || effect.until > effect.at)); if (!out.fx.length) delete out.fx; }
     if (clip.mediaType === 'video' && clip.clipSeconds) {
       const need = speed => frames / fps * speed;
       if (out.inSeconds + need(out.speed) > clip.clipSeconds) out.inSeconds = Math.max(0, r2(clip.clipSeconds - need(out.speed) - 0.02));
