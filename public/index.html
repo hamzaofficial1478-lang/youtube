@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/editing-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/audio-room.js" defer></script><script src="/review-room.js" defer></script><script src="/packaging-room.js" defer></script><script src="/master-room.js" defer></script><script src="/localization-room.js" defer></script><script src="/publishing-room.js" defer></script><script src="/voice-direction.js" defer></script><script src="/app.js" defer></script></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>YouTube Control Room</title><link rel="stylesheet" href="/style.css"><script src="/style-room.js" defer></script><script src="/intelligence.js" defer></script><script src="/scene-room.js" defer></script><script src="/render-room.js" defer></script><script src="/editing-room.js" defer></script><script src="/skills-room.js" defer></script><script src="/audio-room.js" defer></script><script src="/review-room.js" defer></script><script src="/packaging-room.js" defer></script><script src="/master-room.js" defer></script><script src="/localization-room.js" defer></script><script src="/publishing-room.js" defer></script><script src="/voice-direction.js" defer></script><script src="/channel-brain.js" defer></script><script src="/app.js" defer></script></head>
 <body>
 <div id="offline-banner" class="offline-banner" role="alert" hidden>The Control Room program has stopped. Start it again with "Start Control Room"; this page reconnects by itself.</div>
   <aside class="sidebar">
@@ -111,6 +111,8 @@
         <label>Content type<select name="kind"><option value="factual">Factual / educational</option><option value="fiction">Clearly labeled original fiction</option></select></label>
         <label>Target length (minutes)<input name="targetMinutes" type="number" min="1" max="180" step="1" placeholder="Standard, about 6"><span class="hint">Long-form videos: any length from 1 to 180 minutes. About 150 spoken words a minute.</span></label>
         <label class="full">Working title<input name="title" minlength="3" maxlength="100" required placeholder="Make one clear promise to the viewer."></label>
+        <label class="full">Your idea and thoughts <span class="hint">The backbone of this video: the writers build the title, angle, hook and story on it and keep every point you make.</span><textarea name="idea" maxlength="8000" rows="4" placeholder="What the video is about, what must happen, the turn, the feeling at the end, facts you know, anything you already see."></textarea></label>
+        <div class="full attach-row"><label class="button secondary attach-button">Attach idea files<input type="file" id="idea-files" multiple accept=".txt,.md,.pdf,.docx,text/plain,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"></label><span class="hint" id="idea-files-status">Notes, research or an outline (PDF, Word or text, up to 10 MB each): the writers read them with your idea.</span></div>
         <label class="full">Original angle<textarea name="angle" maxlength="3000" rows="2" placeholder="What will this add that existing content misses?"></textarea></label>
         <label class="full">Opening hook<textarea name="hook" maxlength="1000" rows="2" placeholder="The opening line and the payoff it promises."></textarea></label>
         <fieldset class="full script-source"><legend>How should the script be written?</legend>
@@ -309,6 +311,14 @@
     <div class="dialog-heading"><div><p class="eyebrow">FIND A VISUAL FOR THIS SHOT</p><h2 id="shot-heading">Shot</h2></div><button class="icon-button" type="button" data-close="shot-dialog" aria-label="Close dialog">×</button></div>
     <div id="shot-body" class="shot-dialog-body"></div>
     <div class="dialog-actions"><button type="button" class="button secondary" data-close="shot-dialog">Done</button></div>
+  </dialog>
+  <dialog id="brain-dialog" class="wide-dialog" aria-labelledby="brain-heading">
+    <form id="brain-form">
+      <div class="dialog-heading"><div><p class="eyebrow">CHANNEL BRAIN</p><h2 id="brain-heading">Channel brain</h2></div><button class="icon-button" type="button" data-close="brain-dialog" aria-label="Close dialog">×</button></div>
+      <div id="brain-body"></div>
+      <p class="form-error" role="alert" hidden></p>
+      <div class="dialog-actions"><button type="button" class="button secondary" data-close="brain-dialog">Cancel</button><button type="submit" class="button primary">Save</button></div>
+    </form>
   </dialog>
   <dialog id="intel-dialog" class="wide-dialog" aria-labelledby="intel-heading">
     <form id="intel-form">

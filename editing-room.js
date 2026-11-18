@@ -104,7 +104,7 @@ function describeOp(op, timeline, drawn) {
   }
 }
 // The editor's messages: the operations, the rules of this style, the edit as data and the drawings it may change.
-function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null, cap = 20, feel = {}}) {
+function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills = null, guidance = null, cap = 20, feel = {}, channel = null}) {
   const fps = payload.fps, secs = frames => Math.round(frames / fps * 100) / 100;
   const kindOf = clip => (drawn.clips[clip.id]?.designed ? 'designed' : drawn.clips[clip.id] ? 'drawn' : clip.mediaType === 'image' ? 'still' : 'footage');
   const edit = {fps, seconds: secs(payload.totalFrames), format: payload.format, scenes: payload.scenes.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, at: secs(scene.startFrame)})),
@@ -156,6 +156,8 @@ function commandMessages({payload, drawn, spec, focus, ask, audio = null, skills
     // 0.88: the owner's approved editing skills for this request and the competitor lessons reach the editor too.
     // 0.95: the owner's editing skills as numbered directives the editor follows and cites in each change's "why".
     ...(skills ? [require('./direct').directionText(skills)] : []),
+    // 0.110: the channel brain (what the niche is, how it differs, the owner's reference characters, playbook, memory).
+    ...(channel ? [`${require('./creative').BRAIN_LINE}\nCHANNEL: ${JSON.stringify(channel)}`] : []),
     ...(guidance ? [`COMPETITOR LESSONS (techniques the owner chose to learn from competitors; at most 30% reference and at least 70% your own; never copy): ${JSON.stringify(guidance)}`] : []),
     ...(drawn.kit?.length ? [`THE VIDEO'S OWN KIT (use "kit:<id>" where a prop, set or outfit name goes): ${JSON.stringify(drawn.kit)}`] : []),
     ...(drawn.world ? [`THE VIDEO'S WORLD: ${JSON.stringify(drawn.world)} - every place, object and costume belongs to it.`] : []),
@@ -902,7 +904,7 @@ class EditingRoom {
       const mid = (clip.start + clip.frames / 2) / payload.fps, group = [...groups].reverse().find(item => item.start <= mid) || groups[0], line = group ? delivery.lines[(group.sentence || 1) - 1] : null;
       if (line) feel[clip.id] = `${line.emotion}, energy ${line.energy}/5${line.emphasis?.length ? `, stress "${line.emphasis.slice(0, 2).join('", "')}"` : ''}`;
     });
-    const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap, feel});
+    const cap = opsCap(payload, polish), drawn = drawnNow, messages = commandMessages({payload, drawn, spec: state.inputs.spec, focus, ask, audio, skills: skillBrief?.prompt || null, guidance, cap, feel, channel: this.store.brainProvider?.(family.id, timeline.content_id, 6000) || null});
     const maxTokens = answerTokens(cap, polish), reserve = messageTokenUpperBound(messages) + maxTokens, key = `editcmd:${randomUUID()}`, commandId = randomUUID();
     this.store.transaction(() => {
       // 0.108: one editing task at a time for a video (the request is recorded before anything is sent).

@@ -60,6 +60,7 @@ const T = require('./transitions');
 const At = require('./atelier');
 const E = require('./engines');
 const D = require('./director');
+const Cr = require('./creative');
 const Kit = require('./kit');
 // A plan's world kit as checked items: designed by Claude (a list) or carried by a stored plan (an object).
 const kitOf = value => (Array.isArray(value) ? Kit.validateKit(value) : Kit.embedded(value));
@@ -418,6 +419,7 @@ function planMessages(input, {findings = []} = {}) {
     `On-screen text is optional and at most ${input.style.maxWordsOnScreen} words. Direction says what the viewer should understand from the visuals.`,
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
+    ...(input.channel ? [Cr.BRAIN_LINE, Cr.CAST_LINE] : []),
     SCENE_CRAFT,
     ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType, atelier: input.style.atelier, paint: input.style.paint})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
@@ -883,6 +885,7 @@ class SceneRoom {
       style: skillStyle(inputs, spec)}) || null;
     // Why the owner revoked earlier visuals of this script (0.86): the next storyboard learns from them.
     const rejected = this.db.prepare("SELECT end_reason FROM visual_approvals WHERE content_id=? AND status='revoked' ORDER BY ended_at DESC LIMIT 5").all(content.id).map(row => String(row.end_reason || '').replace(/\s*Revoked by [^.]*\.\s*$/, '').trim().slice(0, 300)).filter(Boolean);
+    const channel = this.store.brainProvider?.(inputs.family.id, content.id, 12000) || null;
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
       style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), ...(paintNow ? {paint: paintNow} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
@@ -899,6 +902,8 @@ class SceneRoom {
         return {n: item.n, seconds: round(item.durationSeconds, 1), text: item.text, ...(line && same ? {delivery: {emotion: line.emotion, energy: line.energy, pace: line.pace}} : {}), ...(see.things.length || see.places.length || see.feelings.length ? {see} : {})};
       }))(inputs.voice.auditionId ? this.store.voiceDirectionLines?.(inputs.voice.auditionId) : null),
       competitorGuidance: this.visualGuidance(inputs.family.id),
+      // 0.110: the channel brain (the niche brief, the owner's files and reference pictures, playbook, memory).
+      ...(channel ? {channel} : {}),
       ...(skillBrief ? {skills: skillBrief.prompt} : {}),
       ...(rejected.length ? {ownerRejected: rejected} : {}),
     };
@@ -920,7 +925,7 @@ class SceneRoom {
     });
     // A long script meets the story director first (P06i): one answer over the whole script, which every part follows.
     const map = parts.length > 1 && settings.storyMap !== false ? (() => {
-      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(pictureType ? {pictureType} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
+      const input = {family: promptInput.family, style: {name: spec.name, summary: spec.summary, engine: inputs.engine, mix: E.isMix(spec), engines, designedShots, ...(pictureType ? {pictureType} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {})}, narrationSeconds: promptInput.narrationSeconds, sentences: promptInput.sentences.map(({n, seconds, text: line}) => ({n, seconds, text: line})), ...(promptInput.competitorGuidance ? {competitorGuidance: promptInput.competitorGuidance} : {}), ...(channel ? {channel} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})};
       const maxTokens = Math.min(32000, settings.plannerTokenLimit - messageTokenUpperBound(D.mapMessages(input)));
       requireValue(maxTokens >= 4000, `The story director needs a larger scene planner token limit than ${settings.plannerTokenLimit.toLocaleString('en-US')} for this script. Raise it in visual settings.`, 409);
       return {input, maxTokens};
@@ -1620,7 +1625,10 @@ class SceneRoom {
         const type = natural ? 'natural' : 'cartoon', rules = Dna.of({engine, look, board, design, type}), film = [shot.sketch.film, spec.drawing?.film].find(value => E.FILMS[value]) || null;
         const people = natural ? (item.who || []).map(id => (plan.cast || []).find(member => member.id === id)).filter(Boolean) : [];
         const portraits = people.map(member => keptImage(`paint:cast:${member.id}`)).filter(Boolean), styleKey = styleKeys[type];
-        const references = [...(styleKey ? [styleKey] : []), ...portraits].slice(0, 3).map(sha => this.artFile(sha));
+        // 0.110: a character drawn from the owner's reference picture (the channel brain) has that picture attached to every
+        // painting of them, after the style reference and before the portraits painted earlier.
+        const owned = (this.store.brainReferenceFiles?.(people.filter(member => member.ref).map(member => member.ref)) || []).slice(0, 2);
+        const references = [...(styleKey ? [this.artFile(styleKey)] : []), ...owned.map(item => item.file), ...portraits.slice(0, 3 - owned.length).map(sha => this.artFile(sha))].slice(0, 4);
         for (let attempt = 1; attempt <= 2 && !image; attempt++) {
           const key = `${job.id}:picture:${label}:${job.tag ?? job.attempts}:${item.backdrop ? 'backdrop' : 'paint'}${attempt > 1 ? `-${attempt}` : ''}`;
           // A painting finished before a stop but not yet checked is kept (0.104): Resume has it checked instead of
@@ -1640,7 +1648,7 @@ class SceneRoom {
             let candidate = pending;
             if (pending) notes.push(`${label}: its painting was made before the program stopped; it was checked now instead of painted again.`);
             else {
-            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills, lessons}), outFile: incoming, references, onStart});
+            const made = await this.ai.image({connectorId: team.pictures.id, signal: job.signal, prompt: Il.paintPrompt({describe: item.describe, words: words[si]?.[hi] || '', engine, look, board, design, type, people: people.map(({name, role, look: dress}) => ({name, role, look: dress})), portraits: portraits.length > 0, owned: owned.map(item => ({name: (people.find(member => member.ref === item.id) || {}).name, label: item.label, description: item.description})), palette, world: plan.world || null, backdrop: item.backdrop === true, aspect, vertical: family.format === 'shorts', film, filmName: E.FILMS[film]?.name, reference: !!styleKey, findings: problems, skills, lessons}), outFile: incoming, references, onStart});
             settle(key, made.usage, Number.isSafeInteger(made.usage?.totalTokens) ? 'settled' : 'unknown'); settled = true;
             report.tokens += made.usage?.totalTokens || 0;
             candidate = this.keepArt(incoming);
