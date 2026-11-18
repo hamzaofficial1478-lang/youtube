@@ -95,9 +95,18 @@ CAPABILITIES['wikimedia-image'] = {
   synthetic: false, cost: {unit: 'request', paid: false, note: 'Free; no key.'},
   notes: ['Archive photos, public-domain paintings, maps and historical documents for documentaries.', 'Each file\'s licence and credit line are kept with the asset and go into the description.'],
 };
-const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image'], 'generated-graphics': ['drawn-scene'], 'archival-public-domain': ['wikimedia-image']};
+// 0.111: AI video from Meta Muse. Meta offers no Muse video API, so the program directs each shot (muse.js) and the owner
+// generates it in Muse and uploads the clip to that shot (kind 'handoff': nothing is called, nothing is paid here).
+CAPABILITIES['muse-video'] = {
+  id: 'muse-video', version: REGISTRY_VERSION, provider: 'meta-muse', source: 'ai-video', kind: 'handoff', name: 'Meta Muse video (you generate, the program directs)', mediaType: 'video',
+  settings: {maxSeconds: 10, aspect: 'From the family format (16:9 for long-form, 9:16 for Shorts)', references: 'The channel brain\'s character pictures, attached by you in Muse'},
+  mediaRoles: [], output: {mime: ['video/mp4', 'video/quicktime', 'video/webm'], maxBytes: 500 * MB, rendition: 'The clip you download from Muse'},
+  rights: {name: 'Meta AI terms for content you generate', url: 'https://www.meta.com/legal/ai-terms/', commercialUse: true, attribution: 'Not required', restrictions: ['Synthetic media: disclosed on YouTube', 'Check Meta\'s current terms for commercial use of your plan']}, synthetic: true,
+  cost: {unit: 'clip', paid: false, note: 'Generated on your own Muse subscription; the program spends nothing.'},
+  notes: ['The program writes each shot\'s direction (character, place, action, camera, light, length) and lists the reference pictures to attach; you upload the clip back to its shot.', 'Muse\'s own sound is not used: the program adds the narration, music and effects.'],
+};
+const SOURCE_CAPABILITIES = {'stock-video': ['pexels-video', 'pixabay-video'], 'stock-image': ['pexels-photo', 'pixabay-photo'], 'ai-image': ['openai-image'], 'ai-video': ['muse-video'], 'generated-graphics': ['drawn-scene'], 'archival-public-domain': ['wikimedia-image']};
 const NOT_EXECUTABLE = {
-  'ai-video': 'No AI video adapter is enabled yet.',
   'maps-and-diagrams': 'Maps and diagrams will be produced by the renderer in a later room.',
 };
 const capability = id => { requireValue(Object.hasOwn(CAPABILITIES, id), 'Unknown visual capability.'); return structuredClone(CAPABILITIES[id]); };

@@ -182,6 +182,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const editionExport=req.method==='GET'&&pathname.match(/^\/api\/edition-revisions\/([a-f0-9-]+)\/export$/);
         if(editionExport){const {text,filename}=localizationRoom.exportText(editionExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="edition.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
         if(packageExport){const {text,filename}=packagingRoom.exportText(packageExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="package.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
+        if(pathname==='/api/muse-direction'&&req.method==='GET')return json(res,200,sceneRoom.museDirection(String(url.searchParams.get('manifestId')||''),String(url.searchParams.get('shotId')||'')));
         const brainImage=pathname.match(/^\/api\/brain-images\/([a-f0-9-]+)$/);
         if(brainImage&&req.method==='GET'){const {file,mime}=channelBrain.imageFile(brainImage[1]);return sendMedia(req,res,file,mime);}
         const watchGet=pathname.match(/^\/api\/(video-watches|competitor-roadmaps)\/([a-f0-9-]+)(\/docx)?$/);
@@ -228,6 +229,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
       // 0.78: the owner's own narration file arrives as the raw body (up to 500 MB, streamed to disk), with its fields in the query.
       const narrationFile=pathname.match(/^\/api\/content\/([a-f0-9-]+)\/narration-file$/);
       if(narrationFile&&req.method==='POST')return json(res,200,await voiceRuntime.attach(narrationFile[1],req,Object.fromEntries(url.searchParams)));
+      // 0.111: a clip made in Meta Muse arrives as the raw body (up to 500 MB, streamed to disk), with its shot in the query.
+      if(pathname==='/api/muse-clip'&&req.method==='POST'){const q=Object.fromEntries(url.searchParams);return json(res,200,await sceneRoom.attachClip(String(q.manifestId||''),String(q.shotId||''),req,q));}
       const body=await readBody(req,pathname==='/api/niche-reads'?6*1024*1024:pathname==='/api/script-file'||pathname==='/api/brain-files'?14*1024*1024:pathname==='/api/brain-images'?15*1024*1024:pathname==='/api/skills/read-files'?56*1024*1024:pathname==='/api/skills/import'?8*1024*1024:/^\/api\/content\/[a-f0-9-]+\/references$/.test(pathname)?1024*1024:262144);let result;
       // 0.73: a script the owner attaches (TXT, Word .docx or PDF) comes back as plain text for the draft's script box.
       const listAction=pathname.match(/^\/api\/manage\/([a-z-]+)\/(delete|export)$/);

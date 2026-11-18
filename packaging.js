@@ -78,7 +78,7 @@ function credits(assets) {
   const seen = new Set();
   return assets.filter(asset => (seen.has(asset.id) ? false : seen.add(asset.id))).map(asset => {
     const rights = asset.rights || {};
-    if (asset.origin === 'ai' || rights.synthetic) return {label: asset.label, line: `${asset.label}: AI-generated image (${rights.provider || 'AI'})`};
+    if (asset.origin === 'ai' || rights.synthetic) return {label: asset.label, line: `${asset.label}: AI-generated ${(asset.mediaType || asset.media_type) === 'video' ? 'video' : 'image'} (${rights.provider === 'meta-muse' ? 'Meta Muse' : rights.provider || 'AI'})`};
     if (rights.attribution) return {label: asset.label, line: `${asset.label}: ${rights.attribution}${rights.license?.url ? ` (${rights.license.url})` : ''}${rights.pageUrl ? ` ${rights.pageUrl}` : ''}`};
     const by = rights.author ? `${rights.author} on ${rights.provider || 'stock library'}` : rights.provider || 'stock library';
     return {label: asset.label, line: `${asset.label}: ${by}${rights.pageUrl ? ` ${rights.pageUrl}` : ''}`};
