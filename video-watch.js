@@ -409,11 +409,20 @@ class VideoWatcher {
     for (const skill of skills) for (const taskKey of skill.tasks) { this.skills.bind({createdBy: by, note: `Competitor roadmap r${row.revision}: leads ${family.name}'s jobs of this process`, mode: 'pin', taskKey, skillId: skill.id, familyId: family.id}); pins.push(`${skill.id} → ${taskKey}`); }
     const dropped = prefix ? this.skills.bindings(family.id).filter(item => item.familyId === family.id && item.skillId.startsWith(prefix) && !ids.has(item.skillId)) : [];
     for (const item of dropped) this.skills.unbind(item.id, {removedBy: by});
+    // 0.112 (owner decision 2026-11-18): this channel's directions stay its own (pinned above), and every technique the
+    // library does not have yet becomes a shared skill any channel may use where it fits. Measured against the shared
+    // library only (other channels' pinned roadmaps and playbooks are their own and never block or change).
+    let shared = [];
+    if (confirmations.share !== false) {
+      const existing = this.skills.skills().filter(item => !/^(roadmap|playbook)\./.test(item.id)).flatMap(item => { const spec = (item.approved || item.latest)?.skill || {}; return [...(spec.do || []), ...(spec.steps || []), ...(spec.avoid || []), ...(spec.checks || [])]; });
+      const learned = W.sharedSkills(result, {existing, familyName: family.name, revision: row.revision, approvedBy: by, date});
+      if (learned.length) { this.skills.importPack({createdBy: by, changeNote: `New techniques from ${family.name}'s competitor roadmap r${row.revision}, shared with every channel`, origin: 'learned', skills: learned, pack: 'Learned from competitors', approve: {approvedBy: by, confirmations: {wordingReviewed: true, numbersReviewed: true, scopeReviewed: true}}}); shared = learned.map(item => item.id); }
+    }
     this.store.transaction(() => {
       this.db.prepare("UPDATE competitor_roadmaps SET status='superseded', updated_at=? WHERE family_id=? AND status='approved'").run(now(), family.id);
-      this.db.prepare("UPDATE competitor_roadmaps SET status='approved', review=?, applied=?, updated_at=? WHERE id=?").run(JSON.stringify({decision: 'approved', reviewer: by, at: now(), confirmations: {read: true, ownWork: true, leads: true}}), JSON.stringify({skills: [...ids], pins, unpinned: dropped.map(item => `${item.skillId} → ${item.taskKey}`), imported}), now(), id);
+      this.db.prepare("UPDATE competitor_roadmaps SET status='approved', review=?, applied=?, updated_at=? WHERE id=?").run(JSON.stringify({decision: 'approved', reviewer: by, at: now(), confirmations: {read: true, ownWork: true, leads: true}}), JSON.stringify({skills: [...ids], pins, unpinned: dropped.map(item => `${item.skillId} → ${item.taskKey}`), imported, shared}), now(), id);
     });
-    this.store.event(`${by} approved competitor roadmap r${row.revision} of ${family.name}: ${ids.size} skill(s) now lead its jobs`);
+    this.store.event(`${by} approved competitor roadmap r${row.revision} of ${family.name}: ${ids.size} skill(s) now lead its jobs${shared.length ? `, ${shared.length} new technique(s) shared with every channel` : ''}`);
     return this.publicRoadmap(this.roadmapRow(id));
   }
 

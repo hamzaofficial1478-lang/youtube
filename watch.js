@@ -324,6 +324,52 @@ function roadmapSkills(roadmap, {familyId, familyName, revision, approvedBy, dat
   });
 }
 
+// 0.112 (owner decision 2026-11-18, "mark this point"): what one channel's competitors teach stays that channel's own
+// direction (roadmapSkills, pinned to that family only, never touching another family's), while a technique the
+// skills library does not have yet becomes a shared skill every channel may use when it fits its request. "New" is
+// measured: a rule is new when no existing rule shares most of its meaningful words.
+const STOP = new Set('the a an and or of to in on at for with by from as is are be it its this that these those your our their into than then when each every one two more most very just only not no so any all can will should must'.split(' '));
+const stems = text => new Set(String(text || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !STOP.has(word)).map(word => word.replace(/(ings|ing|edly|ed|es|s)$/, '')).filter(word => word.length > 2));
+function similarity(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const word of a) if (b.has(word)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+// The rules of a roadmap that no existing rule already says (similarity below `limit`), per process.
+function novelRules(rules, existing, limit = 0.6) {
+  const known = existing.map(stems), out = [];
+  for (const rule of rules) {
+    const own = stems(rule);
+    if (own.size < 3) continue;
+    if (known.some(other => similarity(own, other) >= limit)) continue;
+    out.push(rule);
+    known.push(own);
+  }
+  return out;
+}
+// Shared skills from an approved roadmap: one per process with at least two new rules; never pinned, never tied to a
+// family, chosen per request by fit like any skill. existing: every rule text the library already has.
+function sharedSkills(roadmap, {existing = [], familyName, revision, approvedBy, date}) {
+  const out = [];
+  for (const entry of roadmap.processes) {
+    const spec = PROCESSES[entry.process], candidates = [...entry.steps, ...entry.do, ...entry.beat.map(item => `Do better than the usual video: ${item}`)];
+    const rules = novelRules(candidates, existing).slice(0, 12), avoid = novelRules(entry.avoid, existing).slice(0, 8);
+    if (rules.length < 2) continue;
+    const id = `learned.${entry.process}-${require('node:crypto').createHash('sha256').update(rules.join('\n')).digest('hex').slice(0, 10)}`;
+    out.push({
+      id, title: clip(`Learned: ${spec.label.toLowerCase()} technique (${clip(entry.goal || rules[0], 60)})`, 120), rooms: spec.rooms, tasks: spec.tasks, kind: 'procedure',
+      when: clip(`${spec.label} jobs where this fits: ${entry.goal || rules[0]}`, 400),
+      summary: clip(`A technique the program found in watched competitor videos that the skills library did not have yet. ${entry.goal || ''}`, 1500).padEnd(10, '.'),
+      do: rules, avoid, checks: novelRules(entry.checks, existing).slice(0, 8), numbers: entry.numbers,
+      tags: ['learned-from-competitors', entry.process], source: clip(`Learned from competitor videos watched for ${familyName} (roadmap r${revision}), approved by ${approvedBy} on ${date}. Shared with every channel; ${familyName}'s own directions stay pinned to it.`, 600),
+      priority: 70, pinOnly: false,
+    });
+    existing = [...existing, ...rules, ...avoid];
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- documents (Word export)
 function breakdownBlocks(watch) {
   const b = watch.result || {}, blocks = [{kind: 'title', text: `${watch.title || b.title || 'Competitor video'}`}, {kind: 'small', text: [watch.channel, watch.url, b.durationSeconds ? clock(b.durationSeconds) : null, `watched by ${watch.engineLabel || watch.engine}`].filter(Boolean).join(' · ')}];
@@ -355,4 +401,4 @@ function roadmapBlocks(item) {
   return blocks;
 }
 
-module.exports = {WATCH_GUIDE, ADDED, SUBJECTS, PROCESSES, processOf, clock, secondsOf, frameTarget, frameTimes, parseTranscript, transcriptLines, measure, watchSystem, watchText, geminiPrompt, frameMessages, jsonOf, readBreakdown, roadmapMessages, readRoadmap, roadmapSkills, breakdownBlocks, roadmapBlocks};
+module.exports = {WATCH_GUIDE, ADDED, SUBJECTS, PROCESSES, processOf, clock, secondsOf, frameTarget, frameTimes, parseTranscript, transcriptLines, measure, watchSystem, watchText, geminiPrompt, frameMessages, jsonOf, readBreakdown, roadmapMessages, readRoadmap, roadmapSkills, novelRules, sharedSkills, breakdownBlocks, roadmapBlocks};

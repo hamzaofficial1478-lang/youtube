@@ -35,6 +35,9 @@ const PROVIDERS = {
   reddit: {name: 'Reddit (your Reddit app)', test: 'Signs in as your Reddit app and runs one search; nothing is posted', ready: true, reddit: true},
   // 0.61 (owner request 2026-10-23): free sound effects and music. Their API terms reserve commercial use, so each
   // connection records the owner's confirmation that the platform allows their use.
+  // 0.112 (owner decision 2026-11-18): the owner's Meta Muse subscription, reached through useapi.net (an independent
+  // service; Meta has no Muse video API). The owner adds the muse.ai account on useapi.net; the program keeps only the token.
+  muse: {name: 'Meta Muse video (your Muse account, through useapi.net)', test: 'Lists the Muse accounts the useapi.net token can use; nothing is generated and no allowance is used', ready: true, terms: true, keyLabel: 'useapi.net API token'},
   freesound: {name: 'Freesound (sound effects, CC0 and CC BY)', test: 'One sound search (1 request); nothing downloaded', ready: true, terms: true, keyLabel: 'Freesound API key'},
   jamendo: {name: 'Jamendo (music, CC BY)', test: 'One track search (1 request); nothing downloaded', ready: true, terms: true, keyLabel: 'Jamendo client ID', keyMin: 8}
 };
@@ -180,6 +183,11 @@ class ConnectorSlots {
         const data=await new NexLevClient(key,this.fetch).channelAbout('UC_x5XG1OV2P6uZZ5FSM9Ttw');
         if(!data||typeof data!=='object')throw new InputError('NexLev returned an unexpected response.',502);
         result={access:'read_only_channel_profile',message:'NexLev accepted the API key and returned a channel profile (1 request used). Plan limits and other endpoints are not tested.'};
+      }else if(slot.provider==='muse'){
+        const {MuseClient}=require('./muse-api'),accounts=await new MuseClient(key,this.fetch).accounts();
+        if(!accounts.length)throw new InputError('useapi.net accepted the token, but no Muse account is added to it. On useapi.net, open Setup Muse and add your muse.ai account, then test again.',409);
+        const paused=accounts.filter(item=>/pause|error|attention/i.test(`${item.status} ${item.error||''}`));
+        result={access:'muse_video',message:`useapi.net accepted the token and lists ${accounts.length} Muse account(s)${accounts.some(item=>item.email)?` (${accounts.map(item=>item.email).filter(Boolean).join(', ')})`:''}${paused.length?`; ${paused.length} need attention on useapi.net`:''} (1 request, nothing generated). Videos use your Muse account's weekly allowance.`};
       }else if(slot.provider==='gemini'){
         const {GeminiClient}=require('./gemini'),models=await new GeminiClient(key,this.fetch).test();
         result={access:'video_watching',message:`Gemini accepted the key and lists ${models.length} model(s)${models.length?` (${models.filter(name=>/gemini/i.test(name)).slice(0,5).join(', ')})`:''} (1 request). Nothing was watched; the model used is set in the Competitors page's scan settings.`};

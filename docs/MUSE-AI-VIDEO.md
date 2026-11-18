@@ -1,4 +1,4 @@
-# AI video from Meta Muse (0.111)
+# AI video from Meta Muse (0.111, connected in 0.112)
 
 Owner request 2026-11-18: the owner has a Meta Muse subscription and wants AI videos made with it, directed by the program and its skills: the program decides how each scene looks (detailing, direction), Muse delivers the scenes, and the program assembles, edits, scores and adds the sound, so fewer scenes have to be generated again.
 
@@ -6,7 +6,7 @@ Owner request 2026-11-18: the owner has a Meta Muse subscription and wants AI vi
 
 - Meta previewed **Muse Video** on 7 July 2026 for creators and Meta AI ("coming soon").
 - Meta's developer API (public preview, US) offers **Muse Spark** (text) and **Muse Image**, not video.
-- The only way to drive a muse.ai account by program today is a third party (useapi.net) that signs in with the owner's Meta email and password and keeps the session. That hands a password to an outside company and automates a consumer app, against the program's rules (no secrets collected; the 0.96 decision on flow-mcp) and possibly Meta's terms. It is not built; the owner may decide otherwise after reading the risk.
+- The only way to drive a muse.ai account by program today is a third party (useapi.net) that signs in with the owner's Meta email and password and keeps the session. That hands a password to an outside company and automates a consumer app, against the program's rules (no secrets collected; the 0.96 decision on flow-mcp) and possibly Meta's terms. It was not built in 0.111; in 0.112 the owner chose it (see below), with the program keeping only a useapi.net token, never the Meta password.
 
 So the program **directs and the owner generates**. When Meta opens a video API, the handoff is replaced by a connection without changing the rest.
 
@@ -18,8 +18,20 @@ So the program **directs and the owner generates**. When Meta opens a video API,
 4. **The clip.** "Upload the clip from Muse" streams the file (MP4, MOV or WebM, up to 500 MB) to the data folder; `SceneRoom.attachClip` probes it with the pinned ffprobe, checks it (`muse.checkClip`: a video, at least 720p; a shorter clip or another shape is noted, never refused), keeps it as a synthetic `ai` video asset (capability `muse-video`, provider `meta-muse`, the direction it was made from, disclosure required), records an `upload` job and selects it for the shot. A shot planned for another source refuses a clip unless the owner ticks the exception.
 5. **The rest is the program's.** The board is approved as always; the Editing Room cuts the clips with the engine's grammar (Cinematic: film grammar and one grade) and the effects of 0.109, the narration, music and sound effects are the program's (Muse's sound is dropped by the render), captions, Room 08, packaging (credits say "AI-generated video (Meta Muse)") and the master follow.
 
-## Not done
+## 0.112: Muse connected like Claude and ChatGPT
 
-- No automatic generation: there is no Muse video API. Clips are made by the owner in Muse.
+Owner decision 2026-11-18: "I'm not asking for the API, I'm asking for the subscription, like Claude and ChatGPT; I checked that the Muse subscription can be connected to Claude." What the owner saw is useapi.net's Muse connector (an independent service, not Meta), which runs Muse on the owner's own muse.ai account and its weekly allowance. The program now uses the same service directly, by the owner's choice:
+
+- **Connection** (Connections → "Meta Muse video (your Muse account, through useapi.net)"): the owner adds the muse.ai account on useapi.net once (Setup Muse) and pastes only the useapi.net API token here (stored encrypted like every key; the program never sees the Meta password). The owner confirms that useapi.net is not Meta, that Meta's terms may not allow automated use and that Meta could limit the account. The test lists the Muse accounts the token can use (`muse-api.js` `MuseClient.accounts`); nothing is generated.
+- **Making a clip** (Room 04: "Make it with Muse" on an AI-video shot, "Make all with Muse" on the Batch sourcing card; the plan must be approved first): `SceneRoom.queueMuse`/`queueMuseAll` write a `muse` visual job with the shot's direction (the storyboard AI's shot, the reference character, the world, the camera, the grade, continuity, the channel's picture skills as craft lines, what to avoid) and the reference pictures named `image_1`... as the API asks. `runMuse` (its own lane, `processNextMuse`, so drawings and searches never wait) uploads the reference pictures (`POST /assets`, raw bytes), starts the job (`POST /jobs/video`, async), saves the Muse job id before waiting, polls `GET /jobs/{jobid}` every 10 s for up to 20 minutes, downloads the finished video (`GET /assets/{assetId}`), and keeps it like an upload (`keepClip`). A job Muse already started is looked at again on Retry (after a stop, a lost connection or a slow job), never made twice; a weekly-allowance or busy refusal is a hold (`blocked_quota`) with Muse's own words and its retry time; a failed job can be retried by the owner.
+- **Keeping a clip** (`keepClip`, for uploads and made clips alike): probed with the pinned ffprobe, checked against its shot (720p or more; shorter or another shape noted), kept as it is when it is already H.264 MP4, otherwise converted to H.264 MP4 without sound (CRF 16), stored as a disclosed synthetic video with the prompt, references and Muse job id, and selected (a made clip fills an empty shot or replaces an earlier Muse clip, never the owner's own pick of something else).
+- **Who leads Muse**: the connected models do. The storyboard is planned by Claude or ChatGPT with the owner's scene skills as directives and the AI VIDEO line; their shot description is the heart of every Muse prompt. The owner's picture skills (`visuals.prompt`) add craft lines; the use is recorded per Muse job in Skills → Usage.
+- **Fixes to 0.111**: a shot planned for another source can take a Muse clip through a real tick in the shot window (before, the message named a tick that did not exist); AI-video shots are planned at 10 s or less even when the style allows longer shots; clips that are not H.264 MP4 are converted so the live player and the render read them alike; the grade is described in words.
+
+Not tested: a real useapi.net account (a fake server stands in), a full render made of Muse clips, and the exact answer of `GET /accounts` (undocumented; the test reads either a list or an object of accounts).
+
+## Not done (0.111)
+
+- (0.111) No automatic generation. Since 0.112 the Muse connection makes the clips; uploading your own stays possible.
 - A dedicated skill pack for AI-video direction is not added; the planner line and the film skills that already reach `scene.plan` direct the shots.
 - "Adopt the style of a video" (0.110) says when AI video would suit a style but does not switch Muse on by itself.

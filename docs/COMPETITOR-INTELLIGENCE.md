@@ -174,3 +174,11 @@ channel, and turns them into a roadmap that leads the models. The owner chose Ge
   steps reach the models as the first numbered directives. A later roadmap makes new revisions of the same skills and
   unpins a process it no longer has; nothing reaches another family. The watcher itself is led by the
   `competitors.scan` skills, the roadmap by `competitors.blueprint`.
+
+## Each channel's own directions, shared new techniques (0.112)
+
+Owner decision 2026-11-18 ("mark this point"): what the program reads in one channel's competitors goes straight into that channel's directions, never another's; whatever is new to the program becomes a skill every channel can use.
+
+- **Straight into the channel's jobs**: the watched-video studies of a channel (what works, where to beat them) and its approved roadmap's plan are part of that channel's brain context (`ChannelBrain.context` → `competitors`), read by its writers, planners, painter and editor as soon as a video is watched. Another channel never receives them.
+- **Directions stay separate**: an approved roadmap still becomes pin-only skills pinned to its own channel (`roadmap.f<channel>-<process>`); a newer roadmap of one channel supersedes only that channel's.
+- **New techniques are shared**: on approval (tick "Techniques the skills library does not have yet become skills every channel can use", on by default) `W.sharedSkills` compares every step, rule and "beat them" point with the shared library (every skill except the channels' own roadmaps and playbooks) and keeps only what no existing rule already says (`W.novelRules`: shared meaningful words below 60%). Each process with two or more new rules becomes one approved, unpinned skill `learned.<process>-<hash>` (origin `learned`, priority 70) chosen for any channel's job by fit like any skill. A second channel learning the same technique adds nothing.

@@ -2090,3 +2090,67 @@ test('0.111: a Muse shot gets its direction and takes the clip the owner uploads
   if (stock) await assert.rejects(room.attachClip(manifest.id, stock.id, fs.createReadStream(path.join(dataRoot, 'ok.mp4')), {by: 'Owner', name: 'x.mp4'}), /planned for another source/);
   assert.equal(family.format, 'long-form');
 });
+
+// 0.112: the owner's Muse account through useapi.net makes the clip from the program's direction: the reference
+// pictures are uploaded, the job runs async, the finished video is downloaded, checked, kept and selected; a job Muse
+// already started is looked at again on retry, never made twice.
+test('0.112: Muse makes an approved shot on the owner\'s account and the clip is kept and selected', {skip: hasFFmpeg ? false : 'FFmpeg is not installed'}, async t => {
+  const TOKEN = 'useapi-fixture-token-0123456789abcdef';
+  const visuals = {sources: ['ai-video', 'stock-video'], primarySource: 'ai-video', aiDisclosure: 'always-disclose', characterConsistency: true};
+  const clip = path.join(os.tmpdir(), `muse-fixture-${process.pid}.mp4`);
+  execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=24:duration=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', clip]);
+  t.after(() => fs.rmSync(clip, {force: true}));
+  const calls = [];
+  let polls = 0, failNext = false;
+  const base = fakeNetwork();
+  const network = {...base, fetch: async (url, options = {}) => {
+    const u = String(url);
+    if (!u.startsWith('https://api.useapi.net/')) return base.fetch(url, options);
+    calls.push({url: u, method: options.method || 'GET', auth: options.headers?.Authorization, redirect: options.redirect, body: options.body});
+    const json = (data, status = 200) => new Response(JSON.stringify(data), {status, headers: {'content-type': 'application/json'}});
+    if (u.endsWith('/v1/muse/accounts')) return json({'owner@example.com': {email: 'owner@example.com', status: 'ok'}});
+    if (u.includes('/v1/muse/jobs/video')) return failNext ? json({error: 'The weekly allowance is used up', code: 412}, 412) : json({jobid: 'job-1', status: 'started'}, 201);
+    if (u.includes('/v1/muse/jobs/job-1')) return json(++polls < 2 ? {jobid: 'job-1', status: 'started'} : {jobid: 'job-1', status: 'completed', result: {assets: [{assetId: 'user:1-video:abc.mp4', type: 'video', mime: 'video/mp4'}], text: 'Done'}});
+    if (u.includes('/v1/muse/assets/')) return new Response(fs.readFileSync(clip), {status: 200, headers: {'content-type': 'video/mp4'}});
+    throw new Error(`Unexpected useapi request ${u}`);
+  }};
+  const {store, room, content, connectors} = setup(t, network, {revise: {visuals}});
+  const slot = connectors.save({name: 'Muse', provider: 'muse', notes: '', key: TOKEN, termsConfirmed: true});
+  const tested = await connectors.test(slot.id, slot.revision);
+  assert.match(tested.connector.test.message, /lists 1 Muse account\(s\) \(owner@example.com\)/);
+  const muse = {id: slot.id, revision: tested.connector.revision};
+  const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  const shot = shots(manifest).find(item => item.source === 'ai-video');
+  assert.throws(() => room.queueMuse({manifestId: manifest.id, shotId: shot.id, requestedBy: 'Owner', connector: muse}), /Approve this plan revision/);
+  approvePlan(room, manifest);
+  const job = room.queueMuse({manifestId: manifest.id, shotId: shot.id, requestedBy: 'Owner', connector: muse});
+  assert.throws(() => room.queueMuse({manifestId: manifest.id, shotId: shot.id, requestedBy: 'Owner', connector: muse}), /already making/);
+  room.museWait = 0;
+  // The poll waits 10 s between looks; the fixture answers at once.
+  const {MuseClient} = require('../muse-api');
+  const original = MuseClient.prototype.waitVideo;
+  MuseClient.prototype.waitVideo = function (jobid, options) { return original.call(this, jobid, {...options, everyMs: 0}); };
+  t.after(() => { MuseClient.prototype.waitVideo = original; });
+  assert.equal(await room.processNextVisual(), null, 'Muse jobs run in their own lane');
+  const done = await room.processNextMuse();
+  assert.equal(done.status, 'completed', done.error);
+  const sent = calls.find(call => call.url.endsWith('/jobs/video'));
+  assert.equal(sent.auth, `Bearer ${TOKEN}`);
+  assert.equal(sent.redirect, 'error');
+  const body = JSON.parse(sent.body);
+  assert.equal(body.async, true);
+  assert.ok(body.prompt.startsWith(shot.prompt.slice(0, 30)) && /landscape 16:9/.test(body.prompt));
+  const selected = store.db.prepare('SELECT a.* FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=? AND s.shot_id=?').get(content.id, shot.id);
+  const probe = JSON.parse(selected.probe), rights = JSON.parse(selected.rights);
+  assert.deepEqual([selected.origin, selected.media_type, probe.codec, rights.provider, rights.museJob], ['ai', 'video', 'h264', 'meta-muse', 'job-1']);
+  assert.ok(!calls.some(call => call.url.includes(TOKEN)), 'the token travels in its header only');
+  // An allowance refusal is a hold, not a failure of the clip; nothing is kept.
+  failNext = true;
+  const second = shots(manifest).find(item => item.source === 'ai-video' && item.id !== shot.id);
+  room.queueMuse({manifestId: manifest.id, shotId: second.id, requestedBy: 'Owner', connector: muse});
+  await room.processNextMuse();
+  const held = store.db.prepare("SELECT status, error FROM visual_jobs WHERE shot_id=? AND kind='muse'").get(second.id);
+  assert.equal(held.status, 'blocked_quota');
+  assert.match(held.error, /weekly allowance/);
+  assert.equal(job.kind, 'muse');
+});

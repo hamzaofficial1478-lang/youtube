@@ -169,7 +169,7 @@ class ChannelBrain {
     }
     const playbook = this.playbookRow(familyId);
     return C.context({brief: (({revision, updatedBy, updatedAt, ...rest}) => rest)(this.brief(familyId) || {}), files: this.files(familyId).map(row => ({name: row.name, text: row.text})),
-      images: this.images(familyId).map(row => this.publicImage(row)), playbook: playbook ? JSON.parse(playbook.payload) : null, memory: this.memory(familyId), idea}, {bytes});
+      images: this.images(familyId).map(row => this.publicImage(row)), playbook: playbook ? JSON.parse(playbook.payload) : null, memory: this.memory(familyId), idea, competitors: this.learned(familyId)}, {bytes});
   }
   // The reference pictures a cast member points at (sketch cast "ref"), as files to attach to a painting.
   referenceFiles(ids) {

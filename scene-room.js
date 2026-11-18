@@ -686,7 +686,7 @@ class SceneRoom {
         this.db.prepare("UPDATE intelligence_usage SET status='unknown', updated_at=? WHERE job_id LIKE ? AND status='reserved'").run(at, `${row.id}:%`);
       }
       for (const row of this.db.prepare("SELECT id, kind FROM visual_jobs WHERE status='running'").all()) {
-        const message = row.kind === 'import' ? 'The program stopped during the download. Nothing was charged; retry deliberately.' : row.kind === 'generate' ? 'The program stopped during generation. The provider may have charged it; retry deliberately.' : row.kind === 'draw' ? 'The program stopped while drawing this shot. Drawing is local and free; draw it again.' : 'The program stopped during the search. One request may have been used; retry deliberately.';
+        const message = row.kind === 'import' ? 'The program stopped during the download. Nothing was charged; retry deliberately.' : row.kind === 'generate' ? 'The program stopped during generation. The provider may have charged it; retry deliberately.' : row.kind === 'draw' ? 'The program stopped while drawing this shot. Drawing is local and free; draw it again.' : row.kind === 'muse' ? 'The program stopped while Muse was making this clip. Retry looks at the same Muse job first, so nothing is made twice.' : 'The program stopped during the search. One request may have been used; retry deliberately.';
         this.db.prepare('UPDATE visual_jobs SET status=?, error=?, updated_at=? WHERE id=?').run(row.kind === 'import' ? 'failed' : 'interrupted', message, at, row.id);
         if (row.kind === 'search') this.quota.markUnknown(row.id);
         if (row.kind === 'generate') this.db.prepare("UPDATE visual_usage SET status='unknown', updated_at=? WHERE job_id=? AND status='reserved'").run(at, row.id);
@@ -893,7 +893,7 @@ class SceneRoom {
     const promptInput = {
       family: {name: inputs.family.name, niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
       style: {name: spec.name, summary: spec.summary, engine: inputs.engine, ...(inputs.scope ? {drawEngines: inputs.scope.drawn} : {}), ...(spec.drawing ? {look: spec.drawing.look, ...(spec.drawing.board ? {board: spec.drawing.board} : {}), ...(spec.drawing.design ? {design: spec.drawing.design} : {}), ...(spec.drawing.film && spec.drawing.film !== 'none' ? {film: spec.drawing.film} : {}), ...ticks(spec.drawing)} : {}), ...(spec.cinema ? {grade: spec.cinema.grade} : {}), ...(spec.atelier && spec.atelier.finish !== 'motion' ? {atelier: spec.atelier} : {}), ...(spec.brief ? {brief: spec.brief} : {}), sources, primarySource, ...(pictures ? {pictures, ...(this.ai?.team?.().painted ? {painted: true} : {})} : {}), ...(pictureType ? {pictureType, naturalPaintings, painted: true} : {}), ...(paintNow ? {paint: paintNow} : {}), cameraMoves: designedSpec(spec).motion.cameraMoves, transitions: (designedSpec(spec).transitions?.allowed || []).filter(name => name !== 'cut' && T.CATALOG[T.resolve(name)]), ...(!frames ? {frames: false} : designedShots ? {designedShots} : {}), ...(E.isMix(spec) ? {mix: true} : {}),
-        sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: spec.adaptive ? {min: 0.8, max: 10} : {min: spec.pacing.shotMinSeconds, max: spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen,
+        sceneSeconds: {min: spec.qc.minSceneSeconds, max: spec.qc.maxSceneSeconds}, shotSeconds: spec.adaptive ? {min: 0.8, max: 10} : {min: spec.pacing.shotMinSeconds, max: sources.includes('ai-video') ? Math.min(Mu.MAX_SECONDS, spec.pacing.shotMaxSeconds) : spec.pacing.shotMaxSeconds}, maxWordsOnScreen: spec.typography.maxWordsOnScreen,
         // An adaptive style (0.64): Claude designs this video's look; the style's own values are only its starting point.
         ...(spec.adaptive ? {adaptive: true, startingPoint: {palette: spec.palette, fonts: {heading: spec.typography.headingFont, body: spec.typography.bodyFont}, pace: {shotMinSeconds: spec.pacing.shotMinSeconds, shotMaxSeconds: spec.pacing.shotMaxSeconds, hookShotMaxSeconds: spec.pacing.hookShotMaxSeconds}, energy: spec.motion.intensity, captions: {theme: spec.captions.theme || 'clean', animation: spec.captions.animation || 'fade', highlight: spec.captions.activeWordHighlight}}, fonts: Fonts.choices().map(item => `${item.name} (${item.group}${item.installed ? '' : ', drawn as ' + item.instead})`)} : {})},
       narrationSeconds: round(inputs.voice.durationSeconds, 1),
@@ -2537,14 +2537,16 @@ class SceneRoom {
   }
 
   // ------------------------------------------------------------ worker
-  claimVisual() {
+  // 0.112: Muse clips run in a lane of their own (a clip takes minutes), so drawings and searches never wait behind them.
+  claimVisual({muse = false} = {}) {
     return this.store.transaction(() => {
-      const row = this.db.prepare("SELECT * FROM visual_jobs WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
+      const row = this.db.prepare(`SELECT * FROM visual_jobs WHERE status='queued' AND kind${muse ? "='muse'" : "<>'muse'"} ORDER BY created_at, rowid LIMIT 1`).get();
       if (!row) return null;
       const scope = JSON.parse(row.scope), at = now();
       const stale = message => { this.db.prepare("UPDATE visual_jobs SET status='stale', error=?, updated_at=? WHERE id=?").run(message, at, row.id); return null; };
       let ctx;
-      try { ctx = this.shotContext(row.manifest_id, row.shot_id, {needApproved: row.kind === 'generate'}); } catch (error) { return stale(`${error.message} Nothing was sent.`); }
+      try { ctx = this.shotContext(row.manifest_id, row.shot_id, {needApproved: ['generate', 'muse'].includes(row.kind)}); } catch (error) { return stale(`${error.message} Nothing was sent.`); }
+      if (row.kind === 'muse' && !connectorCurrent(this.connectors, scope.connector, 'muse')) return stale('The Muse connection changed or is no longer tested. Nothing was sent.');
       if (row.kind === 'search') {
         const cached = this.db.prepare('SELECT * FROM visual_search_cache WHERE cache_key=? AND expires_at>?').get(scope.cacheKey, at);
         if (cached) { this.db.prepare("UPDATE visual_jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?").run(at, row.id); return {...row, scope, ctx, cached}; }
@@ -2562,6 +2564,13 @@ class SceneRoom {
       this.db.prepare("UPDATE visual_jobs SET status='running', attempts=attempts+1, updated_at=? WHERE id=?").run(at, row.id);
       return {...row, scope, ctx, cached: null};
     });
+  }
+  async processNextMuse() {
+    if (this.museBusy) return null;
+    const job = this.claimVisual({muse: true});
+    if (!job) return null;
+    this.museBusy = true;
+    try { return await this.runMuse(job); } finally { this.museBusy = false; }
   }
   async processNextVisual() {
     if (this.visualBusy) return null;
@@ -2836,9 +2845,89 @@ class SceneRoom {
     const words = (payload.sentences || []).filter(item => item.n >= scene.sentenceStart && item.n <= scene.sentenceEnd).map(item => item.text).join(' ');
     const cast = payload.cast || [], refs = {};
     for (const item of this.store.brainReferenceFiles?.(cast.filter(member => member.ref).map(member => member.ref)) || []) refs[item.id] = {label: item.label, description: item.description};
-    const grade = payload.grade && E.GRADES[payload.grade] ? E.GRADES[payload.grade].name || payload.grade : null;
-    const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null});
-    return {shotId: shot.id, label: shot.label, source: shot.source, ...direction};
+    const grade = payload.grade && E.GRADES[payload.grade] ? `${E.GRADES[payload.grade].name}: ${String(E.GRADES[payload.grade].plan || '').split('. ')[0]}` : null;
+    // The owner's picture and film skills lead Muse too (the same craft lines the painter gets).
+    const brief = this.store.skillRuntime?.brief('visuals.prompt', family.id, {text: [shot.prompt, scene.direction, family.niche, 'video shot camera light cinematic'].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null}) || null;
+    const craft = Dna.craftText(brief?.prompt, 'do', 700);
+    const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null, craft});
+    return {shotId: shot.id, label: shot.label, source: shot.source, ...direction, skills: brief ? {count: brief.skills?.length || 0} : null, brief};
+  }
+  // The prompt Muse gets: the direction, with each attached reference named as the API asks (image_1 ...).
+  musePrompt(direction) {
+    const names = direction.attach.map((item, k) => `image_${k + 1} is "${item.label}", the reference of ${item.who}`).join('; ');
+    return `${direction.text}${names ? `\nReference images: ${names}. Keep that person exactly as in their image.` : ''}`.slice(0, 5000);
+  }
+  // 0.112: Muse makes the clip on the owner's own account (the Muse connection, through useapi.net). One shot, or every
+  // AI-video shot without a clip; the plan must be approved first, like any paid generation.
+  queueMuse(input) {
+    object(input);
+    const by = person(input.requestedBy), connector = connectorReference(this.connectors, input.connector, 'muse', 'Meta Muse', true);
+    return this.store.transaction(() => {
+      const ctx = this.shotContext(input.manifestId, input.shotId, {needApproved: true});
+      requireValue(ctx.shot.source === 'ai-video' || input.exception === true, 'This shot is planned for another source. Tick "use a Muse clip although it is planned otherwise" first.', 409);
+      requireValue(!this.activeJob(ctx.content.id, ctx.shot.id, 'muse'), 'Muse is already making this shot.', 409);
+      return this.publicJob(this.jobRow(this.insertMuseJob(ctx, connector, by)));
+    });
+  }
+  queueMuseAll(manifestId, input) {
+    object(input);
+    const by = person(input.requestedBy), connector = connectorReference(this.connectors, input.connector, 'muse', 'Meta Muse', true);
+    return this.store.transaction(() => {
+      const mctx = this.manifestContext(manifestId, {needApproved: true}), ids = [];
+      for (const scene of mctx.payload.scenes) for (const shot of scene.shots) {
+        if (shot.source !== 'ai-video' || this.db.prepare('SELECT 1 FROM visual_selections WHERE content_id=? AND shot_id=?').get(mctx.content.id, shot.id) || this.activeJob(mctx.content.id, shot.id, 'muse')) continue;
+        ids.push(this.insertMuseJob({...mctx, scene, shot}, connector, by));
+      }
+      requireValue(ids.length, 'Every AI-video shot already has a clip or is being made.', 409);
+      this.store.event(`${by} asked Muse for ${ids.length} clip(s) of "${mctx.content.title}"`);
+      return {queued: ids.length};
+    });
+  }
+  insertMuseJob(ctx, connector, by) {
+    const direction = this.museDirection(ctx.row.id, ctx.shot.id), {brief, ...rest} = direction;
+    const id = this.insertJob({ctx, kind: 'muse', capabilityId: 'muse-video', scope: {connector, prompt: this.musePrompt(rest), refs: rest.attach, seconds: rest.seconds, aspect: rest.aspect}, createdBy: by});
+    if (brief) this.store.skillRuntime?.recordUsage({jobId: id, familyId: ctx.family.id, room: 'scene', taskKey: 'visuals.prompt', brief});
+    return id;
+  }
+  async runMuse(job) {
+    const scope = job.scope, key = `muse:${job.id}`, dir = path.join(this.assetDir, job.family_id, job.content_id);
+    let kept = {};
+    try { kept = JSON.parse(job.result || '{}') || {}; } catch { kept = {}; }
+    live.start(key, {room: 'scene', label: `Muse makes ${job.ctx.shot.label}`, contentId: job.content_id, familyId: job.family_id, who: 'Meta Muse', wait: 'A Muse video sends nothing until it is ready (usually 1-3 minutes).'});
+    const fail = (status, message) => { this.db.prepare('UPDATE visual_jobs SET status=?, error=?, updated_at=? WHERE id=?').run(status, String(message).slice(0, 1200), now(), job.id); return null; };
+    let file = null;
+    try {
+      const {MuseClient} = require('./muse-api'), client = new MuseClient(this.connectors.key(scope.connector.id), this.connectors.fetch);
+      // A job Muse already started (before a stop or a failed download) is looked at again, never made twice.
+      let museJob = kept.museJob || null;
+      if (!museJob) {
+        const images = [];
+        for (const ref of scope.refs || []) {
+          const [item] = this.store.brainReferenceFiles?.([ref.id]) || [];
+          if (item) images.push(await client.upload(item.file, /\.png$/i.test(item.file) ? 'image/png' : /\.webp$/i.test(item.file) ? 'image/webp' : 'image/jpeg'));
+        }
+        live.note(key, `Muse makes ${job.ctx.shot.label}${images.length ? ` with ${images.length} reference picture(s)` : ''}`);
+        museJob = await client.startVideo({prompt: scope.prompt, images});
+        this.db.prepare('UPDATE visual_jobs SET result=?, updated_at=? WHERE id=?').run(JSON.stringify({museJob, references: images.length}), now(), job.id);
+      }
+      const made = await client.waitVideo(museJob, {onTick: () => live.tick(key, {})});
+      fs.mkdirSync(dir, {recursive: true});
+      file = path.join(dir, `.muse-${randomUUID()}.mp4`);
+      await client.download(made.assetId, file);
+      const by = job.created_by, rights = {basis: 'ai-generated', license: VS.capability('muse-video').rights, provider: 'meta-muse', model: 'Muse (your subscription, through useapi.net)', prompt: scope.prompt, references: (scope.refs || []).map(item => item.label), museJob, museAsset: made.assetId, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
+        note: 'Synthetic video made by Meta Muse on the owner\'s account from the program\'s direction. YouTube requires disclosure of realistic synthetic media.'};
+      // keepClip copies or converts it; the downloaded file itself is removed in finally.
+      const result = await this.keepClip({ctx: job.ctx, file, name: `${job.ctx.shot.label}.mp4`, by, rights, jobId: job.id, selectIfEmpty: true});
+      this.db.prepare("UPDATE visual_jobs SET status='completed', result=?, updated_at=? WHERE id=?").run(JSON.stringify({museJob, assetId: result.assetId, notes: result.notes}), now(), job.id);
+      return this.publicJob(this.jobRow(job.id));
+    } catch (error) {
+      // A job that failed at Muse is over (Retry asks again); one still running, or a lost download, keeps its Muse job.
+      if (error?.failed) this.db.prepare('UPDATE visual_jobs SET result=NULL WHERE id=?').run(job.id);
+      return fail(error?.kind === 'allowance' || error?.kind === 'busy' ? 'blocked_quota' : 'failed', error instanceof InputError ? error.message : `Muse: ${error?.message || 'the clip could not be made'}`);
+    } finally {
+      if (file) fs.rmSync(file, {force: true});
+      live.end(key);
+    }
   }
   // The clip the owner made in Muse, uploaded to its shot: streamed to the data folder, probed, checked, kept like any
   // footage (synthetic, disclosed) and selected for the shot. A failed check keeps nothing.
@@ -2846,10 +2935,9 @@ class SceneRoom {
     const by = person(params.by), name = String(params.name || 'clip.mp4').replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
     requireValue(/\.(mp4|mov|m4v|webm)$/i.test(name), 'Attach the video clip Muse gave you (MP4, MOV or WebM).', 415);
     const ctx = this.shotContext(manifestId, shotId), cap = VS.capability('muse-video');
-    requireValue(ctx.shot.source === 'ai-video' || params.exception === '1', 'This shot is planned for another source. Tick "use an AI video clip although it is planned otherwise" to upload one.', 409);
-    const assetId = randomUUID(), dir = path.join(this.assetDir, ctx.family.id, ctx.content.id), file = path.join(dir, `${assetId}${path.extname(name).toLowerCase()}`);
+    requireValue(ctx.shot.source === 'ai-video' || params.exception === '1', 'This shot is planned for another source. Tick "use a Muse clip although it is planned otherwise" first.', 409);
+    const dir = path.join(this.assetDir, ctx.family.id, ctx.content.id), file = path.join(dir, `.upload-${randomUUID()}${path.extname(name).toLowerCase()}`);
     fs.mkdirSync(dir, {recursive: true});
-    let kept = false;
     try {
       let bytes = 0;
       await new Promise((resolve, reject) => {
@@ -2858,26 +2946,46 @@ class SceneRoom {
         stream.on('end', () => out.end(resolve)); stream.on('error', reject); out.on('error', reject);
       });
       requireValue(bytes > 10 * 1024, 'The file is empty or too small to be a video clip.', 400);
-      let probe;
-      try { probe = await VS.probeMedia(file, this.ffprobe); } catch { throw new InputError('This file could not be read as a video. Download the clip from Muse again (MP4) and upload that.', 415); }
-      const seconds = ctx.shot.durationSeconds, check = Mu.checkClip(probe, {seconds, vertical: ctx.family.format === 'shorts'});
-      requireValue(check.ok, check.problems.join(' '), 422);
-      const thumb = await this.thumbnail(file, assetId, probe), sha256 = VS.sha256File(file), sizeBytes = fs.statSync(file).size, mime = /\.webm$/i.test(name) ? 'video/webm' : /\.mov$/i.test(name) ? 'video/quicktime' : 'video/mp4';
       const direction = (() => { try { return this.museDirection(manifestId, shotId); } catch { return null; } })();
       const rights = {basis: 'ai-generated', license: cap.rights, provider: 'meta-muse', model: 'Muse (owner\'s subscription)', prompt: direction?.text || ctx.shot.prompt, references: (direction?.attach || []).map(item => item.label), uploadedAs: name, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
         note: 'Synthetic video made in Meta Muse from the program\'s direction and uploaded by the owner. YouTube requires disclosure of realistic synthetic media.'};
-      this.store.transaction(() => {
-        const at = now(), jobId = randomUUID();
-        this.db.prepare("INSERT INTO visual_jobs(id,family_id,content_id,manifest_id,shot_id,kind,capability_id,scope,status,result,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,?,'upload',?,?,'completed',?,1,?,?,?)")
-          .run(jobId, ctx.family.id, ctx.content.id, ctx.row.id, ctx.shot.id, cap.id, JSON.stringify({name, sizeBytes}), JSON.stringify({assetId, sha256, notes: check.notes}), by, at, at);
-        this.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)')
-          .run(assetId, ctx.family.id, ctx.content.id, ctx.shot.id, 'ai', JSON.stringify(cap), jobId, 'video', path.relative(this.dataRoot, file).replaceAll('\\', '/'), thumb, sha256, sizeBytes, mime, JSON.stringify(probe), JSON.stringify(rights), by, at);
-        this.selectTx(ctx.content.id, ctx.shot.id, assetId, by, 'required', 'upload');
-        kept = true;
-      });
+      const kept = await this.keepClip({ctx, file, name, by, rights, jobId: null, selectIfEmpty: false});
       this.store.event(`${by} uploaded a Muse clip for ${ctx.shot.label} of "${ctx.content.title}"`);
+      return kept;
+    } finally { fs.rmSync(file, {force: true}); }
+  }
+  // A Muse clip (uploaded or made through the connection) checked and kept: probed by the pinned ffprobe, checked
+  // against its shot, made a plain H.264 MP4 without sound when it is not one already (so the live player and the
+  // render read it alike), stored as a synthetic video asset and selected. A failed check keeps nothing.
+  async keepClip({ctx, file, name, by, rights, jobId, selectIfEmpty}) {
+    const cap = VS.capability('muse-video'), assetId = randomUUID(), dir = path.dirname(file), final = path.join(dir, `${assetId}.mp4`);
+    let probe;
+    try { probe = await VS.probeMedia(file, this.ffprobe); } catch { throw new InputError('This file could not be read as a video. Download the clip from Muse again (MP4) and use that.', 415); }
+    const check = Mu.checkClip(probe, {seconds: ctx.shot.durationSeconds, vertical: ctx.family.format === 'shorts'});
+    requireValue(check.ok, check.problems.join(' '), 422);
+    if (probe.codec === 'h264' && /mp4|mov/.test(probe.format)) fs.copyFileSync(file, final, fs.constants.COPYFILE_EXCL);
+    else {
+      try { await VS.runTool(this.ffmpeg, ['-hide_banner', '-nostdin', '-v', 'error', '-i', file, '-map', '0:v:0', '-an', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', final], 600000); }
+      catch { fs.rmSync(final, {force: true}); throw new InputError('The clip could not be converted to MP4 with the pinned FFmpeg.', 415); }
+      probe = await VS.probeMedia(final, this.ffprobe);
+    }
+    let saved = false;
+    try {
+      const thumb = await this.thumbnail(final, assetId, probe), sha256 = VS.sha256File(final), sizeBytes = fs.statSync(final).size;
+      this.store.transaction(() => {
+        const at = now(), source = jobId || randomUUID();
+        if (!jobId) this.db.prepare("INSERT INTO visual_jobs(id,family_id,content_id,manifest_id,shot_id,kind,capability_id,scope,status,result,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,?,'upload',?,?,'completed',?,1,?,?,?)")
+          .run(source, ctx.family.id, ctx.content.id, ctx.row.id, ctx.shot.id, cap.id, JSON.stringify({name}), JSON.stringify({assetId, sha256, notes: check.notes}), by, at, at);
+        this.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)')
+          .run(assetId, ctx.family.id, ctx.content.id, ctx.shot.id, 'ai', JSON.stringify(cap), source, 'video', path.relative(this.dataRoot, final).replaceAll('\\', '/'), thumb, sha256, sizeBytes, 'video/mp4', JSON.stringify(probe), JSON.stringify(rights), by, at);
+        // An upload is the owner's choice for the shot; a clip made by the connection fills an empty shot or replaces
+        // an earlier Muse clip, never the owner's own pick of something else.
+        const current = this.db.prepare('SELECT a.capability FROM visual_selections s JOIN visual_assets a ON a.id=s.asset_id WHERE s.content_id=? AND s.shot_id=?').get(ctx.content.id, ctx.shot.id);
+        if (!selectIfEmpty || !current || /"muse-video"/.test(current.capability)) this.selectTx(ctx.content.id, ctx.shot.id, assetId, by, 'required', jobId ? 'muse' : 'upload');
+        saved = true;
+      });
       return {assetId, shotId: ctx.shot.id, notes: check.notes, durationSeconds: probe.durationSeconds, width: probe.width, height: probe.height};
-    } finally { if (!kept) fs.rmSync(file, {force: true}); }
+    } finally { if (!saved) fs.rmSync(final, {force: true}); }
   }
 
   // Must run inside a transaction.
