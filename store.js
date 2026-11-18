@@ -7,7 +7,7 @@ const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/y
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount,cleanTranscript,referencePack}=require('./writer');
 // What a script request is about, for choosing the skills that fit it (0.74).
 const skillFormat=family=>['long-form','shorts'].includes(family.format)?family.format:null;
-const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
+const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,String(content.idea||'').slice(0,1200),family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
 const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
 const Retention=require('./retention');
 const Delivery=require('./delivery');
@@ -129,6 +129,8 @@ function contentInput(input) {
   });
   return {title, kind, angle: text(input.angle || '', 'Original angle', 0, 3000), hook: text(input.hook || '', 'Hook', 0, 1000),
     script: text(input.script || '', 'Primary-language script', 0, 300000), sources, rightsConfirmed: input.rightsConfirmed === true,
+    // 0.110 (owner 2026-11-18: "if user have an idea ... that thing should be taken strongly"): the owner's own idea and thoughts.
+    idea: text(input.idea || '', 'Your idea and thoughts', 0, 8000),
     // The owner's chosen length for a long-form video (minutes); empty keeps the standard length.
     targetMinutes: input.targetMinutes === undefined || input.targetMinutes === null || input.targetMinutes === '' ? null : integer(Number(input.targetMinutes), 1, 180, 'Target length in minutes')};
 }
@@ -510,15 +512,17 @@ class Store {
     if(c.kind==='factual')requireValue(c.sources.length>0&&c.sources.every(source=>source.permission==='permitted'&&source.notes.length>=10),'Claude needs permitted evidence notes for factual script generation.');
     const polish=input.polish===true;
     if(polish){requireValue(c.state==='draft','Return the script to draft before polishing it.',409);requireValue(String(c.script||'').trim().length>0,'Add your script first: the polish works on your own words.',409);}
-    const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
+    const policy=scriptPolicy(f.format,c.targetMinutes??null),basePromptInput={family:{name:f.name,audience:f.audience,locale:f.primaryLocale,countries:f.countries,niche:f.niche,format:f.format,...(f.writingVoice?{writingVoice:f.writingVoice}:{})},content:{title:c.title,kind:c.kind,angle:c.angle,hook:c.hook,...(c.idea?{idea:c.idea}:{}),...(c.targetMinutes&&f.format==='long-form'?{targetMinutes:c.targetMinutes}:{})},sources:c.sources.slice(0,10).map((source,index)=>({id:`S${index+1}`,title:source.title,url:source.url,notes:source.notes}))};
     // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
     const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
     // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
     const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
     const refs=this.scriptReferenceRows(c.id);if(refs.length)basePromptInput.references=referencePack(refs);
+    // 0.110: the channel brain (niche brief, the owner's files, reference pictures, playbook, memory, this video's idea files).
+    const channel=typeof this.brainProvider==='function'?this.brainProvider(f.id,c.id):null;if(channel)basePromptInput.channel=channel;
     if(polish)basePromptInput.ownScript={title:c.title,hook:String(c.hook||'').trim()||(String(c.script).trim().match(/^[\s\S]*?[.!?](?=\s|$)/)||[String(c.script).trim().slice(0,300)])[0],script:String(c.script).trim()};
     // The skill brief, the references and the script to polish are added on top (0.73, 0.99).
-    const extra=(basePromptInput.skills?skillBrief.injectedBytes:0)+(basePromptInput.references?Buffer.byteLength(JSON.stringify(basePromptInput.references)):0)+(basePromptInput.ownScript?Buffer.byteLength(JSON.stringify(basePromptInput.ownScript)):0);
+    const extra=(basePromptInput.skills?skillBrief.injectedBytes:0)+(channel?Buffer.byteLength(JSON.stringify(channel)):0)+(c.idea?Buffer.byteLength(c.idea):0)+(basePromptInput.references?Buffer.byteLength(JSON.stringify(basePromptInput.references)):0)+(basePromptInput.ownScript?Buffer.byteLength(JSON.stringify(basePromptInput.ownScript)):0);
     const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+extra,{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
     requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
     // 0.96: the second writer reviews with the owner's script-review skills as directives.

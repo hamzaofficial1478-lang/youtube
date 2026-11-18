@@ -141,7 +141,9 @@ function validateCast(raw, options = {}) {
     const id = clean(item.id, 12).toLowerCase().replace(/[^a-z0-9-]/g, '') || `c${k + 1}`;
     if (seen.has(id)) return c.problem(`${label} repeats the id ${id}.`, null);
     seen.add(id);
-    return {id, name: clean(item.name, 24) || `Character ${k + 1}`, role: clean(item.role, 60), look: lookOf(item.look, c, label, kitRef)};
+    // 0.110: a character drawn from one of the owner's reference pictures (the channel brain's picture id).
+    const ref = typeof item.ref === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(item.ref) ? item.ref : null;
+    return {id, name: clean(item.name, 24) || `Character ${k + 1}`, role: clean(item.role, 60), look: lookOf(item.look, c, label, kitRef), ...(ref ? {ref} : {})};
   }).filter(Boolean);
 }
 

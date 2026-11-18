@@ -595,13 +595,24 @@ function familyStyleBody(form) {
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
   $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${hand}${types}${finish}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }
-function familyStyleDialog(familyId) {
+// pick (0.110): the engine, look and picture type a style match chose for a video link, preselected for the owner to confirm.
+function familyStyleDialog(familyId, pick = null) {
   const form = $('#family-style-form'), current = styleActive(familyId), found = current && styleRevisionById(current.revisionId);
   form.reset(); form.querySelector('.form-error').hidden = true; form.elements.familyId.value = familyId;
   const engines = styleEngines().map(item => item.engine), engine = found && (found.profile.origin === 'launch' ? found.profile : engines.find(item => engineOf(item) === engineOf(found.profile)));
-  form.dataset.profileId = engine?.id || engines[0]?.id || '';
+  const picked = pick && engines.find(item => fsLatest(item).spec.renderer.adapter === pick.engine);
+  form.dataset.profileId = picked?.id || engine?.id || engines[0]?.id || '';
   delete form.dataset.revisionId;
   familyStyleBody(form);
+  if (picked) {
+    // Tick the matched look alone in its group (a mix stays as it is), and the picture type.
+    const box = pick.look && pick.look !== 'mix' ? form.querySelector(`.form-grid input[type=checkbox][value="${CSS.escape(pick.look)}"]:not([name="fs.films"]):not([name="fs.types"])`) : null;
+    if (box) { for (const other of form.querySelectorAll(`input[name="${CSS.escape(box.name)}"]`)) other.checked = other === box; }
+    const finish = form.elements['fs.atelierFinish'];
+    if (finish && pick.engine === 'atelier' && [...finish.options].some(option => option.value === pick.look)) finish.value = pick.look;
+    const types = form.querySelectorAll('input[name="fs.types"]');
+    if (types.length && pick.pictureType) for (const type of types) type.checked = pick.pictureType === 'mix' || type.value === pick.pictureType;
+  }
   $('#family-style-dialog').showModal();
 }
 // The spec with the owner's ticks: one = that look, two or more = a mix of only those; nothing ticked keeps the look.
