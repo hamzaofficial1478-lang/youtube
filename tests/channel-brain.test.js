@@ -52,6 +52,12 @@ test('creative.js: the brief is checked, the context fits its budget, the playbo
   assert.equal(context.references[0].description, 'Rust shirt, satchel');
   assert.ok(context.idea.files[0].text.endsWith('[the rest of the file is left out]'), 'the video\'s idea file is packed first');
   assert.equal(C.context({}), null);
+  // 0.112: this channel's watched competitor studies go straight into its jobs, trimmed to share the budget.
+  const studies = Array.from({length: 8}, (_, k) => ({title: `Video ${k}`, summary: 'x '.repeat(400), beat: ['a list read over one still -> show each item', 'slow middle -> cut the recap']}));
+  const withCompetitors = C.context({competitors: {roadmap: {summary: 'Open on the countdown.'}, studies}}, {bytes: 8000});
+  assert.equal(withCompetitors.competitors.plan, 'Open on the countdown.');
+  assert.ok(withCompetitors.competitors.studies.length >= 1 && withCompetitors.competitors.studies.length < 8, 'trimmed to a quarter of the budget');
+  assert.match(C.BRAIN_LINE, /competitors is what the program saw in THIS channel's competitors/);
   // The playbook: read leniently, refused without rules, one skill per process with signature lines.
   assert.throws(() => C.readPlaybook({summary: 'x'}), /without a summary or rules/);
   const playbook = C.readPlaybook({summary: 'Real survival, minute by minute, with one recurring survivor.', signature: {character: 'The same survivor in a rust shirt', editing: 'A countdown clock on every turn'}, rules: {script: ['Open on the clock: days left, food left.'], editing: ['A hard cut to black before each turn.'], dance: ['x']}, avoid: ['Zombies', 'Stick figures'], series: [{title: 'Trapped', premise: 'One place, one week'}]});

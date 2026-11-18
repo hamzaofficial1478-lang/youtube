@@ -288,6 +288,12 @@ test('a roadmap from the watched videos is approved by name and leads only this 
   const approved = watcher.review(ready.id, {decision: 'approve', reviewer: 'Hasnain', confirmations: {read: true, ownWork: true, leads: true}});
   assert.equal(approved.status, 'approved');
   assert.equal(approved.applied.skills.length, 2);
+  // 0.112: new techniques became shared skills (never pinned to any channel); the channel's own steps stay pinned to it.
+  assert.ok(Array.isArray(approved.applied.shared));
+  for (const id of approved.applied.shared) {
+    assert.match(id, /^learned\./);
+    assert.ok(!skills.bindings(family.id).some(item => item.skillId === id) && !skills.bindings(other.id).some(item => item.skillId === id), 'shared, not pinned');
+  }
   const brief = skills.brief('script.candidate', {familyId: family.id});
   const led = brief.skills.find(skill => skill.id.startsWith('roadmap.f'));
   assert.ok(led, 'the roadmap leads this family\'s script jobs');
@@ -333,4 +339,23 @@ test('a saved video file is read from its frames and the owner\'s transcript by 
   assert.ok(done.measured.wordsPerMinute > 100);
   assert.equal(store.db.prepare("SELECT status FROM intelligence_usage WHERE job_id=?").get(done.id).status, 'settled');
   assert.equal(net.calls.length, 0, 'nothing went to Google for a frames watch');
+});
+
+test('0.112: only techniques the library does not have become shared skills; each channel keeps its own directions', () => {
+  const existing = ['Open on one object and one clear question within the first nine seconds.', 'Cut to black before every turn of the story.'];
+  assert.deepEqual(W.novelRules(['Open with one object and a single question in the first 9 seconds', 'Show a countdown of days and food left at every turn', 'Show a countdown of the days and food that remain at each turn', 'Too short'], existing), ['Show a countdown of days and food left at every turn'], 'a rule the library says already, a near-duplicate of a new rule and a rule without substance are left out');
+  const roadmap = {summary: 'x', processes: [
+    {process: 'script', goal: 'Stakes the viewer can count.', steps: ['Show a countdown of days and food left at every turn', 'Name the one tool the survivor still has in the hook'], do: ['Open on one object and one clear question within nine seconds'], avoid: ['Zombie attacks as a shortcut for danger'], beat: ['Explain the survival science in one sentence the moment it matters'], checks: [], own: [], numbers: {}, evidence: []},
+    {process: 'sound', goal: 'Silence before the turn.', steps: ['Cut to black before every turn of the story'], do: [], avoid: [], beat: [], checks: [], own: [], numbers: {}, evidence: []},
+  ]};
+  const shared = W.sharedSkills(roadmap, {existing, familyName: 'Survival Minutes', revision: 2, approvedBy: 'Hasnain', date: '2026-11-18'});
+  assert.equal(shared.length, 1, 'the sound process brings nothing new');
+  const skill = shared[0];
+  assert.match(skill.id, /^learned\.script-[0-9a-f]{10}$/);
+  assert.deepEqual([skill.pinOnly, skill.priority], [false, 70]);
+  assert.equal(skill.do.length, 3);
+  assert.ok(!skill.do.some(rule => /one clear question/.test(rule)));
+  assert.match(skill.source, /Shared with every channel; Survival Minutes's own directions stay pinned to it/);
+  assert.equal(validateSkill(skill).id, skill.id);
+  assert.deepEqual(W.sharedSkills(roadmap, {existing: [...existing, ...skill.do], familyName: 'Other', revision: 1, approvedBy: 'Hasnain', date: '2026-11-18'}), [], 'a second channel learning the same technique adds nothing');
 });

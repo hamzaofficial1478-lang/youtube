@@ -300,7 +300,7 @@ function sceneShotCard(content, manifest, scene, shot) {
   const redraw = content.planJobs.find(job => ['queued', 'running', 'paused'].includes(job.status) && job.redraw?.labels?.includes(shot.label));
   // 0.109 (owner review 2026-11-12): a shot the editor asked to draw again is marked on the board until it is sent.
   const asked = !redraw && (content.redrawRequests || []).flatMap(request => request.shots).find(item => item.state === 'waiting' && item.label === shot.label);
-  const media = asset?.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual for ${esc(shot.label)}" loading="lazy">` : `<span class="shot-empty">${active ? (active.kind === 'search' ? 'Searching…' : active.kind === 'import' ? 'Downloading…' : active.kind === 'draw' ? 'Drawing…' : 'Generating…') : 'No visual yet'}</span>`;
+  const media = asset?.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual for ${esc(shot.label)}" loading="lazy">` : `<span class="shot-empty">${active ? (active.kind === 'search' ? 'Searching…' : active.kind === 'import' ? 'Downloading…' : active.kind === 'draw' ? 'Drawing…' : active.kind === 'muse' ? 'Muse is making it…' : 'Generating…') : 'No visual yet'}</span>`;
   return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}${redraw ? `<span class="shot-redraw ${redraw.status === 'paused' ? 'paused' : ''}">${redraw.status === 'paused' ? 'Redraw paused' : 'Being drawn again'}</span>` : ''}${asked ? `<span class="shot-redraw asked" title="${esc(asked.ask)}">Editor asks to redraw</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>${asked ? `<small class="shot-asked">Editor: ${esc(asked.ask)} <button type="button" class="text-button" data-action="scene-goto-board" data-id="redraw">Choose who redraws it ↑</button></small>` : ''}
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
@@ -334,7 +334,7 @@ function sceneBatchCard(content, manifest, family) {
       <div><strong>${stockEmpty} stock shot${stockEmpty === 1 ? '' : 's'} empty</strong><small>One search each with your first tested stock library (${esc(settings.stockOrder.join(' → '))}).</small>${manifest.scope.current && stockEmpty ? action('Search all', 'scene-search-all', manifest.id, 'secondary') : ''}</div>
       <div><strong>${withResults} empty shot${withResults === 1 ? '' : 's'} with results</strong><small>Downloads the top result for each, with its license evidence.</small>${manifest.scope.current && withResults ? action('Use top results', 'scene-pick-top', manifest.id, 'secondary') : ''}</div>
       ${drawn ? sceneDrawRow(content, manifest) : ''}
-      ${museShots.length ? `<div><strong>${museEmpty.length} of ${museShots.length} Muse shot${museShots.length === 1 ? '' : 's'} waiting for a clip</strong><small>Open each one: copy the program's direction into Muse, attach the reference pictures it lists, generate, then upload the clip to that shot.</small>${museEmpty.length ? action(`Open ${esc(museEmpty[0].label)}`, 'scene-shot-open', museEmpty[0].id, 'secondary') : ''}</div>` : ''}
+      ${museShots.length ? `<div><strong>${museEmpty.length} of ${museShots.length} Muse shot${museShots.length === 1 ? '' : 's'} waiting for a clip</strong><small>${sceneMuseConnector() ? 'Muse makes each clip on your account from the program\'s direction and your reference pictures, one after another.' : 'Connect Meta Muse in Connections and the program makes them; or open each, copy the direction into Muse and upload the clip.'}</small>${museEmpty.length && sceneMuseConnector() && manifest.status === 'approved' && manifest.scope.current ? action('Make all with Muse', 'scene-muse-all', manifest.id, 'primary') : ''}${museEmpty.length ? action(`Open ${esc(museEmpty[0].label)}`, 'scene-shot-open', museEmpty[0].id, 'secondary') : ''}</div>` : ''}
       <div><strong>${aiEmpty} AI shot${aiEmpty === 1 ? '' : 's'} empty</strong><small>${manifest.status === 'approved' ? `About ${money(aiEmpty * settings.priceCents[settings.imageQuality])} at ${esc(settings.imageQuality)} quality.` : 'Approve the plan before spending on AI images.'}</small>${manifest.scope.current && aiEmpty && manifest.status === 'approved' ? action('Generate all', 'scene-generate-all', manifest.id, 'secondary') : ''}</div>
     </div></section>`;
 }
@@ -598,6 +598,7 @@ function sceneAction(command, id, button) {
   }
   if (command === 'scene-revoke') return sceneDialog('revoke', 'Revoke the visual approval', 'HANDOFF', `<div class="form-grid">${scenePersonField()}<label>Reason<input name="reason" required minlength="8" maxlength="1000"></label></div>`, 'Revoke', {id});
   if (command === 'scene-shot-open') return sceneShotOpen(id);
+  if (command === 'scene-muse-all') { const muse = sceneMuseConnector(); if (!muse) return toast('Connect Meta Muse in Connections first.', true); return api('/api/muse-generate', {all: true, manifestId: id, requestedBy: scenePerson() || 'Owner', connector: {id: muse.id, revision: muse.revision}}).then(result => { toast(`Muse is making ${result.queued} clip(s), one after another; each is selected for its shot when it is ready.`); return refresh(); }).catch(error => toast(error.message, true)); }
   return toast('Unknown action.', true);
 }
 
@@ -673,7 +674,7 @@ function sceneShotOpen(shotId) {
   document.getElementById('shot-heading').textContent = `${shot.label} · ${styleLabel(shot.source)} · ${sceneSeconds(shot.durationSeconds)}`;
   document.getElementById('shot-body').innerHTML = `<p class="scene-narration">${esc(sceneNarration(manifest, scene))}</p>
     <div id="shot-selected"></div>
-    ${shot.source === 'ai-video' ? sceneMusePanel(shot) : ''}
+    ${shot.source === 'ai-video' || (sceneSpec(content)?.visuals?.sources || []).includes('ai-video') ? sceneMusePanel(shot, manifest) : ''}
     <div class="shot-panels">
       <section class="shot-panel"><h3>Stock search</h3>${caps.length ? `<div class="form-grid"><label>Library<select id="shot-cap">${caps.map(cap => `<option value="${cap.id}">${esc(cap.name)}</option>`).join('')}</select></label><label>Search words<input id="shot-query" maxlength="100" value="${esc(shot.query)}"></label></div><div class="card-actions"><button type="button" class="button primary" data-scene-act="search">Search</button></div><p class="hint">Results and previews are kept for 24 hours. The chosen file is downloaded with its license, author and source page.</p>` : '<p class="inline-warning">Add and test a Pexels or Pixabay connector in Connections.</p>'}</section>
       <section class="shot-panel"><h3>AI image</h3>${manifest.status !== 'approved' ? '<p class="inline-warning">Approve the plan revision before spending on AI images.</p>' : !openai.length ? '<p class="inline-warning">Add and test an OpenAI connector in Connections.</p>' : `<label>Prompt<textarea id="shot-prompt" rows="4" maxlength="1500">${esc(shot.prompt || `Original illustration for a ${sceneSpec(content)?.name.toLowerCase() || 'documentary'} video, no text, no logos, no real people: ${sceneNarration(manifest, scene).slice(0, 300)}`)}</textarea></label><div class="form-grid"><label>Quality<select id="shot-quality">${['low', 'medium', 'high'].map(item => `<option value="${item}" ${item === settings.imageQuality ? 'selected' : ''}>${item} · ${money(settings.priceCents[item])}</option>`).join('')}</select></label><label>OpenAI connector<select id="shot-openai">${sceneConnectorOptions('openai')}</select></label></div><label class="checkbox-label"><input type="checkbox" id="shot-cost">I confirm the estimated cost (${esc(settings.imageModel)}).</label>${shot.source !== 'ai-image' ? '<label class="checkbox-label"><input type="checkbox" id="shot-exception">Use an AI image although this shot is planned for stock.</label>' : ''}<div class="card-actions"><button type="button" class="button primary" data-scene-act="generate">Generate</button></div>`}</section>
@@ -684,13 +685,17 @@ function sceneShotOpen(shotId) {
     <h3 class="intel-subhead">Visuals already downloaded for this script</h3><div id="shot-gallery" class="candidate-grid"></div>`;
   document.getElementById('shot-dialog').showModal();
   sceneShotRender();
-  if (shot.source === 'ai-video') sceneMuseLoad(manifest.id, shot.id);
+  if (document.getElementById('muse-direction')) sceneMuseLoad(manifest.id, shot.id);
 }
 // 0.111: an AI-video shot is made in Meta Muse from the program's direction; the owner uploads the clip back here.
-function sceneMusePanel(shot) {
-  return `<section class="shot-panel muse-panel"><h3>AI video · Meta Muse</h3><p class="hint">Meta has no Muse video API yet, so the program directs and you generate: copy the direction into Muse, attach the reference pictures listed, generate, download the clip and upload it here. The program then cuts, grades, times and scores it with the rest of the video (Muse's own sound is not used).</p>
+const sceneMuseConnector = () => (state.connectors || []).find(item => item.provider === 'muse' && item.hasKey && !item.busy && item.test?.status === 'passed') || null;
+function sceneMusePanel(shot, manifest) {
+  const muse = sceneMuseConnector(), other = shot.source !== 'ai-video';
+  const make = !muse ? '<span class="hint">Connect Meta Muse in Connections (your Muse account through useapi.net) and the program makes the clip itself; or upload one you made.</span>' : manifest.status !== 'approved' ? '<span class="hint">Approve the plan revision before Muse makes clips.</span>' : '<button type="button" class="button primary" data-scene-act="muse-make">Make it with Muse</button>';
+  return `<section class="shot-panel muse-panel"><h3>AI video · Meta Muse</h3><p class="hint">The storyboard's AI wrote this shot's direction with your skills and your channel's reference pictures. Muse makes the clip on your Muse account (the program sends the direction and the pictures), or you make it in Muse yourself and upload it. The program then cuts, grades, times and scores it with the rest of the video (Muse's own sound is not used).</p>
     <div id="muse-direction"><p class="muted">Writing the direction…</p></div>
-    <div class="card-actions"><label class="button primary file-button">Upload the clip from Muse<input type="file" id="muse-clip" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" hidden></label><span class="hint" id="muse-status">MP4, MOV or WebM up to 500 MB; 720p or more.</span></div></section>`;
+    ${other ? '<label class="checkbox-label"><input type="checkbox" id="muse-exception">Use a Muse clip although this shot is planned for another source.</label>' : ''}
+    <div class="card-actions">${make}<label class="button secondary file-button">Upload a clip I made<input type="file" id="muse-clip" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" hidden></label><span class="hint" id="muse-status">MP4, MOV or WebM up to 500 MB; 720p or more.</span></div></section>`;
 }
 async function sceneMuseLoad(manifestId, shotId) {
   const box = document.getElementById('muse-direction');
@@ -707,7 +712,7 @@ document.addEventListener('change', async event => {
   if (file.size > 500 * 1024 * 1024) { status.textContent = 'The clip is larger than 500 MB.'; return; }
   status.textContent = `Uploading ${file.name}…`;
   try {
-    const query = new URLSearchParams({manifestId: sceneShot.manifestId, shotId: sceneShot.shotId, name: file.name, by: scenePerson() || 'Owner'});
+    const query = new URLSearchParams({manifestId: sceneShot.manifestId, shotId: sceneShot.shotId, name: file.name, by: scenePerson() || 'Owner', ...(document.getElementById('muse-exception')?.checked ? {exception: '1'} : {})});
     const response = await reach(`/api/muse-clip?${query}`, {method: 'POST', headers: {'Content-Type': file.type || 'application/octet-stream', 'X-Local-Token': state.token}, body: file}), data = await response.json();
     if (!response.ok) throw new Error(data.error || 'The clip could not be added.');
     status.textContent = `Added: ${data.durationSeconds.toFixed(1)} s, ${data.width}x${data.height}.${data.notes.length ? ` ${data.notes.join(' ')}` : ''}`;
@@ -750,6 +755,13 @@ document.getElementById('shot-dialog').addEventListener('close', () => { clearIn
 document.getElementById('shot-dialog').addEventListener('click', async event => {
   const button = event.target.closest('[data-scene-act]');
   if (!button || !sceneShot) return;
+  if (button.dataset.sceneAct === 'muse-make') {
+    const muse = sceneMuseConnector(), status = document.getElementById('muse-status');
+    button.disabled = true;
+    try { await api('/api/muse-generate', {manifestId: sceneShot.manifestId, shotId: sceneShot.shotId, requestedBy: scenePerson() || 'Owner', connector: {id: muse.id, revision: muse.revision}, exception: !!document.getElementById('muse-exception')?.checked}); status.textContent = 'Muse is making the clip (usually 1-3 minutes). It appears here and is selected when it is ready.'; await refresh(); sceneShotRender(); }
+    catch (error) { status.textContent = error.message; button.disabled = false; }
+    return;
+  }
   if (button.dataset.sceneAct === 'muse-copy') { const text = document.getElementById('muse-text'); try { await navigator.clipboard.writeText(text.value); toast('Direction copied: paste it into Muse.'); } catch { text.select(); toast('Select-all is on: press Ctrl+C to copy.'); } return; }
   const act = button.dataset.sceneAct, person = document.getElementById('shot-person').value.trim();
   sceneRemember(person);

@@ -19,20 +19,21 @@ const clip = (value, max) => { const s = String(value ?? '').replace(/\s+/g, ' '
 // shot: {label, prompt, motion, notes, durationSeconds}; scene: {direction, purpose}; words: what the narrator says;
 // cast: the plan's cast (members with ref point at the owner's reference pictures); refs: {id: {label, description}};
 // world: {era, place, rules}; grade: the video's grade name; vertical; before/after: neighbouring shots' prompts.
-function direction({shot, scene = {}, words = '', cast = [], refs = {}, world = null, grade = null, vertical = false, before = null, after = null}) {
+function direction({shot, scene = {}, words = '', cast = [], refs = {}, world = null, grade = null, vertical = false, before = null, after = null, craft = ''}) {
   const seconds = Math.min(MAX_SECONDS, Math.max(2, Math.round((shot.durationSeconds || 5) * 10) / 10));
   const named = cast.filter(member => member.ref && refs[member.ref] && new RegExp(`\\b${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(`${shot.prompt} ${shot.notes || ''}`));
   // A shot that names nobody but the story has one reference character uses that one when the prompt speaks of a person.
   const people = named.length ? named : (cast.filter(member => member.ref && refs[member.ref]).length === 1 && /\b(he|she|they|man|woman|survivor|person|figure|him|her)\b/i.test(shot.prompt) ? cast.filter(member => member.ref && refs[member.ref]) : []);
   const attach = people.map(member => ({id: member.ref, label: refs[member.ref].label, who: member.name}));
   const lines = [
-    `${clip(shot.prompt, 1500)}`,
+    `${clip(shot.prompt || shot.query, 1500)}`,
     people.length ? `Character${people.length > 1 ? 's' : ''}: ${people.map(member => `${member.name}${member.role ? ` (${member.role})` : ''}, exactly as in the attached reference "${refs[member.ref].label}"${refs[member.ref].description ? `: ${clip(refs[member.ref].description, 500)}` : ''}`).join('; ')}. Same face, hair, build and clothes as the reference; only pose and expression change.` : null,
     world?.place || world?.era ? `World: ${[world.place, world.era ? `${world.era} era` : null].filter(Boolean).join(', ')}${world.rules?.length ? ` (${world.rules.slice(0, 4).join('; ')})` : ''}.` : null,
     `Camera: ${CAMERA[shot.motion] || 'slow, motivated movement'}; one continuous shot, no cuts.`,
     scene.direction ? `The viewer must understand: ${clip(scene.direction, 300)}` : null,
     words ? `This shot plays under the narration: "${clip(words, 300)}" (do not show these words).` : null,
     grade ? `Colour and light: ${grade}.` : null,
+    craft ? `Craft (the channel's skills): ${clip(craft, 700)}` : null,
     before ? `Continuity: it follows a shot of ${clip(before, 200)}.` : null,
     `Length ${seconds} seconds, ${vertical ? 'vertical 9:16' : 'landscape 16:9'}, realistic motion, cinematic quality.`,
     'Avoid: any text, captions, subtitles, logos or watermarks; extra people who are not described; morphing faces or hands; a different character from the reference.',

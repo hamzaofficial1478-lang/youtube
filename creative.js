@@ -31,13 +31,19 @@ function validateBrief(input) {
 // What every job receives about the channel: the brief, the owner's files (trimmed to fit), the reference pictures with
 // their usage and description, the approved playbook and the memory the owner kept. Sized to a byte budget so it never
 // crowds out the job's own data; the brief and the references always fit first.
-function context({brief = null, files = [], images = [], playbook = null, memory = [], idea = null}, {bytes = 16000} = {}) {
+function context({brief = null, files = [], images = [], playbook = null, memory = [], idea = null, competitors = null}, {bytes = 16000} = {}) {
   const out = {};
   const kept = brief ? Object.entries(brief).filter(([, value]) => (Array.isArray(value) ? value.length : value)) : [];
   if (kept.length) out.brief = Object.fromEntries(kept);
   if (images.length) out.references = images.map(image => ({id: image.id, label: image.label, role: image.role, usage: image.usage, ...(image.description ? {description: image.description} : {})}));
   if (playbook) out.playbook = {summary: playbook.summary, signature: playbook.signature, avoid: playbook.avoid};
   if (memory.length) out.memory = memory.slice(-12).map(item => clip(item, 400));
+  // 0.112: what the program saw in THIS channel's competitors' videos, straight into its jobs (never another channel's).
+  if (competitors && (competitors.roadmap || competitors.studies?.length)) {
+    const studies = (competitors.studies || []).map(item => ({video: clip(item.title, 100), works: clip(item.summary, 500), beatThem: (item.beat || []).slice(0, 3).map(line => clip(line, 220))}));
+    out.competitors = {...(competitors.roadmap ? {plan: clip(competitors.roadmap.summary, 600)} : {}), studies};
+    while (out.competitors.studies.length > 1 && Buffer.byteLength(JSON.stringify(out.competitors)) > Math.max(1500, bytes / 4)) out.competitors.studies.pop();
+  }
   if (idea && (idea.thoughts || idea.files?.length)) out.idea = {...(idea.thoughts ? {thoughts: idea.thoughts} : {})};
   let left = bytes - Buffer.byteLength(JSON.stringify(out));
   // The owner's files share what is left: this video's idea files first, then the channel's.
@@ -57,7 +63,7 @@ function context({brief = null, files = [], images = [], playbook = null, memory
   return Object.keys(out).length ? out : null;
 }
 // The line every planner and writer gets with the brain's data.
-const BRAIN_LINE = 'CHANNEL BRAIN (data: CHANNEL): the owner\'s own description of this channel. brief.about is what the niche is about, brief.promise what every video gives the viewer, brief.difference how this channel must differ from its competitors, brief.ideas the owner\'s ideas, brief.titles example titles in the channel\'s voice, brief.avoid what never to do; files are the owner\'s notes; references are pictures the owner attached, each with its role and how to use it (a character reference is that character in every video: same face, hair, clothes and build unless the story changes them); playbook is the approved way this channel stands out; memory is what the owner asked the program to remember. Follow it: it outranks your habits and the competitors\' patterns.';
+const BRAIN_LINE = 'CHANNEL BRAIN (data: CHANNEL): the owner\'s own description of this channel. brief.about is what the niche is about, brief.promise what every video gives the viewer, brief.difference how this channel must differ from its competitors, brief.ideas the owner\'s ideas, brief.titles example titles in the channel\'s voice, brief.avoid what never to do; files are the owner\'s notes; references are pictures the owner attached, each with its role and how to use it (a character reference is that character in every video: same face, hair, clothes and build unless the story changes them); playbook is the approved way this channel stands out; memory is what the owner asked the program to remember; competitors is what the program saw in THIS channel\'s competitors\' videos (what works and where to beat them): learn the technique, beat them where they are weak, keep at least 70% your own, never their words, characters or look. Follow it: it outranks your habits and the competitors\' patterns.';
 // The planners (story director and shot planner) cast the owner's reference characters by their picture id.
 const CAST_LINE = 'REFERENCE CHARACTERS: CHANNEL.references with role "character" are the owner\'s own recurring characters. When the story has such a person, put them in the cast with "ref": that reference id, a fitting name, and the look closest to its description and usage (hair, outfit, colours); keep them the same in every shot unless the words change them. Never invent a different hero when the owner gave one. A reference with role "place", "object" or "style" guides those places, objects and the look.';
 const IDEA_LINE = 'OWNER IDEA (data: content.idea, and the owner\'s idea files in CHANNEL.idea.files): the owner\'s own idea and thoughts for THIS video. It is the backbone of the video: build the title, angle, hook and story on it, keep every point the owner makes, in their order of importance, and only correct a point that is factually wrong (say so in uncertainties). Add what makes it stronger; never replace it with a different idea.';

@@ -34,3 +34,23 @@ test('muse.js: an uploaded clip is checked against its shot', () => {
   assert.equal(Mu.checkClip(probe(1280, 720, null, 'image'), {seconds: 3}).ok, false);
   assert.ok(Mu.checkClip(probe(1080, 1920, 6), {seconds: 6, vertical: true}).ok);
 });
+
+test('muse-api.js: the useapi.net client names refusals, keeps the token out of messages and reads a finished job', async () => {
+  const {MuseClient} = require('../muse-api');
+  const TOKEN = 'useapi-fixture-token-0123456789abcdef';
+  const answers = {
+    '/v1/muse/jobs/video': () => new Response(JSON.stringify({error: `Weekly allowance used for ${TOKEN}`, code: 412}), {status: 412}),
+    '/v1/muse/jobs/j1': () => new Response(JSON.stringify({status: 'failed', error: {code: 429, message: 'Video limit reached', retryAt: '2026-11-18T12:00:00Z'}}), {status: 200}),
+    '/v1/muse/jobs/j2': () => new Response(JSON.stringify({status: 'completed', result: {assets: [{assetId: 'a-image', type: 'image'}, {assetId: 'a-video', type: 'video', mime: 'video/mp4'}]}}), {status: 200}),
+  };
+  const client = new MuseClient(TOKEN, async (url, options) => { assert.equal(options.redirect, 'error'); assert.equal(options.headers.Authorization, `Bearer ${TOKEN}`); return answers[new URL(url).pathname](); }, {sleep: async () => {}});
+  await assert.rejects(client.startVideo({prompt: 'x'}), error => error.kind === 'allowance' && !error.message.includes(TOKEN) && /\[token\]/.test(error.message));
+  await assert.rejects(client.waitVideo('j1'), error => error.kind === 'busy' && error.failed === true && error.retryAt === '2026-11-18T12:00:00Z');
+  assert.deepEqual(await client.waitVideo('j2'), {assetId: 'a-video', mime: 'video/mp4', bytes: null, text: ''});
+  assert.throws(() => new MuseClient('short'), /useapi.net API token/);
+});
+
+test('muse.js: the channel\'s skills reach the direction as craft lines', () => {
+  const d = Mu.direction({shot: {prompt: 'Wide shot: the raft alone on a grey sea at dawn.', motion: 'pull-out', durationSeconds: 6}, craft: 'Light from one motivated source. Keep the horizon level.'});
+  assert.match(d.text, /Craft \(the channel's skills\): Light from one motivated source/);
+});
