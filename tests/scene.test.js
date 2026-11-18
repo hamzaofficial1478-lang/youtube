@@ -596,7 +596,7 @@ test('stock and AI adapters use fixed origins, header keys, allowlisted media ho
   assert.equal(VS.validImageModel('dall-e-3'), false);
   assert.equal(VS.mediaUrl('https://images.pexels.com.evil.example/x.jpg'), null);
   assert.equal(VS.mediaUrl('http://images.pexels.com/x.jpg'), null);
-  assert.deepEqual(VS.executableSources(['ai-video', 'stock-video', 'maps-and-diagrams', 'ai-image']), ['stock-video', 'ai-image']);
+  assert.deepEqual(VS.executableSources(['ai-video', 'stock-video', 'maps-and-diagrams', 'ai-image']), ['ai-video', 'stock-video', 'ai-image'], 'AI video is a Muse handoff since 0.111');
 });
 
 test('downloads refuse other hosts, oversize or mislabelled files; ffprobe evidence and thumbnails are real', {skip}, async t => {
@@ -2055,4 +2055,38 @@ test('0.108: a check too big for one answer is split in halves, and neighbours g
   assert.equal(paintSpec({drawing: {look: 'classic'}}, 'all').drawing.pictureType, 'natural');
   assert.equal(paintSpec({drawing: {look: 'classic', pictureType: 'natural'}}, 'free').drawing.pictureType, undefined);
   assert.equal(paintSpec({drawing: {}}, 'mix').drawing.pictureType, 'mix');
+});
+
+// 0.111: AI video from Meta Muse. The program writes each shot's direction (with the channel's reference character);
+// the owner generates the clip in Muse and uploads it to its shot, where it is checked, kept as synthetic and selected.
+test('0.111: a Muse shot gets its direction and takes the clip the owner uploads', {skip: hasFFmpeg ? false : 'FFmpeg is not installed'}, async t => {
+  const visuals = {sources: ['ai-video', 'stock-video'], primarySource: 'ai-video', aiDisclosure: 'always-disclose', characterConsistency: true};
+  const {store, room, content, family, dataRoot} = setup(t, fakeNetwork(), {revise: {visuals}});
+  const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  const shot = shots(manifest).find(item => item.source === 'ai-video');
+  assert.ok(shot, 'the free planner gives AI-video shots their prompt');
+  // The direction (the reference character's part is covered in muse.test.js; a free plan has no cast).
+  const payload = JSON.parse(room.manifestRow(manifest.id).payload), first = payload.scenes[0].shots[0];
+  const direction = room.museDirection(manifest.id, first.id);
+  assert.ok(direction.text.startsWith(first.prompt.slice(0, 40)));
+  assert.match(direction.text, /landscape 16:9/);
+  assert.match(direction.text, /This shot plays under the narration: "Every coin in your pocket/);
+  assert.ok(direction.seconds <= 10);
+  // A clip that is not a video, or too small, is refused and nothing is kept.
+  const clipOf = (name, size, seconds) => { const file = path.join(dataRoot, name); execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', `testsrc2=size=${size}:rate=30:duration=${seconds}`, '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-y', file]); return file; };
+  const upload = (file, name, extra = {}) => room.attachClip(manifest.id, first.id, fs.createReadStream(file), {by: 'Owner', name, ...extra});
+  await assert.rejects(upload(clipOf('small.mp4', '320x180', 2), 'small.mp4'), /720p or more/);
+  await assert.rejects(upload(clipOf('ok.mp4', '1280x720', 2), 'clip.txt'), /MP4, MOV or WebM/);
+  assert.equal(store.db.prepare("SELECT COUNT(*) AS n FROM visual_assets WHERE capability LIKE '%muse-video%'").get().n, 0);
+  const kept = await upload(path.join(dataRoot, 'ok.mp4'), 'raft.mp4');
+  assert.equal(kept.width, 1280);
+  assert.match(kept.notes.join(' '), /the edit slows or holds it/, 'a clip shorter than its shot is noted');
+  const asset = store.db.prepare('SELECT * FROM visual_assets WHERE id=?').get(kept.assetId), rights = JSON.parse(asset.rights);
+  assert.deepEqual([asset.origin, asset.media_type, rights.provider, rights.synthetic, rights.disclosure], ['ai', 'video', 'meta-muse', true, 'required']);
+  assert.equal(rights.prompt, direction.text, 'the direction it was made from is kept with the clip');
+  assert.equal(store.db.prepare('SELECT asset_id FROM visual_selections WHERE content_id=? AND shot_id=?').get(content.id, first.id).asset_id, kept.assetId, 'selected for its shot');
+  // A shot planned for stock needs the owner's tick to take a Muse clip.
+  const stock = payload.scenes.flatMap(scene => scene.shots).find(item => item.source === 'stock-video');
+  if (stock) await assert.rejects(room.attachClip(manifest.id, stock.id, fs.createReadStream(path.join(dataRoot, 'ok.mp4')), {by: 'Owner', name: 'x.mp4'}), /planned for another source/);
+  assert.equal(family.format, 'long-form');
 });

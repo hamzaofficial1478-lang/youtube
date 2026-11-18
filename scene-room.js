@@ -61,6 +61,7 @@ const At = require('./atelier');
 const E = require('./engines');
 const D = require('./director');
 const Cr = require('./creative');
+const Mu = require('./muse');
 const Kit = require('./kit');
 // A plan's world kit as checked items: designed by Claude (a list) or carried by a stored plan (an object).
 const kitOf = value => (Array.isArray(value) ? Kit.validateKit(value) : Kit.embedded(value));
@@ -211,6 +212,7 @@ function structural(scenes, sentenceCount, sources, motions, {primary = 'stickma
       requireValue(typeof shot.notes === 'string' && shot.notes.length <= 500, `${shotLabel} notes must be at most 500 characters.`);
       if (shot.source.startsWith('stock-')) requireValue(shot.query.trim().length >= 2, `${shotLabel} needs stock search words.`);
       if (shot.source === 'ai-image') requireValue(shot.prompt.trim().length >= 10, `${shotLabel} needs an image prompt of at least 10 characters.`);
+      if (shot.source === 'ai-video') requireValue(shot.prompt.trim().length >= 20, `${shotLabel} needs a video direction (prompt) of at least 20 characters.`);
       if (shot.cue !== undefined) requireValue(typeof shot.cue === 'string' && shot.cue.length <= 80, `${shotLabel} cue must be at most 80 characters.`);
       if (shot.source === 'generated-graphics' && shot.frame !== undefined) { try { At.validateFrame(shot.frame, {lenient: true, label: shotLabel}); } catch (error) { throw new InputError(error.message); } }
       if (shot.source === 'generated-graphics' && shot.sketch !== undefined && shot.frame === undefined) { try { Sk.validate(shot.sketch, {primary, cast, lenient: true, kit}); } catch (error) { throw new InputError(`${shotLabel} drawing: ${error.message}`); } }
@@ -420,6 +422,7 @@ function planMessages(input, {findings = []} = {}) {
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
     ...(input.channel ? [Cr.BRAIN_LINE, Cr.CAST_LINE] : []),
+    ...(input.style.sources.includes('ai-video') ? [Mu.PLANNER_LINE] : []),
     SCENE_CRAFT,
     ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType, atelier: input.style.atelier, paint: input.style.paint})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
@@ -850,9 +853,10 @@ class SceneRoom {
     // A new plan uses only the sources the program can fetch now (live 0.25 run: Claude planned stock footage on a
     // PC without a stock key): stock needs a tested Pexels or Pixabay connection, AI images a tested OpenAI one.
     const ready = provider => !this.connectors || this.connectors.list().some(item => item.provider === provider && (item.hasKey || provider === 'wikimedia') && item.test?.status === 'passed');
+    // 0.111: AI video is a Muse handoff (the owner generates each clip), so it needs no connection.
     const usable = inputs.sources.filter(source => (source.startsWith('stock-') ? ready('pexels') || ready('pixabay') : source === 'ai-image' ? ready('openai') : source === 'archival-public-domain' ? ready('wikimedia') : true));
-    // The Cinematic engine draws nothing, so it has no free fallback: it needs footage it can fetch.
-    requireValue(usable.length || inputs.engine !== 'cinema', 'The Cinematic engine uses real footage: connect a free Pexels or Pixabay key (or an OpenAI image key) in Connectors and test it first.', 409);
+    // The Cinematic engine draws nothing, so it has no free fallback: it needs footage it can fetch (or Muse clips).
+    requireValue(usable.length || inputs.engine !== 'cinema', 'The Cinematic engine uses real footage: connect a free Pexels or Pixabay key (or an OpenAI image key) in Connectors and test it first, or let Muse make the clips (AI video in the channel\'s style).', 409);
     const sources = usable.length ? usable : inputs.sources, primarySource = sources.includes(inputs.primarySource) ? inputs.primarySource : sources[0];
     if (mode === 'rules') {
       return this.store.transaction(() => {
@@ -2823,6 +2827,59 @@ class SceneRoom {
       return {shotId: ctx.shot.id, assetId: asset.id};
     });
   }
+  // ------------------------------------------------------------ AI video from Muse (0.111): directed here, made by the owner
+  // The direction of one AI-video shot for Meta Muse: the program's words for the video model, the reference pictures to
+  // attach, the length and shape (muse.js). Free: nothing is sent anywhere.
+  museDirection(manifestId, shotId) {
+    const ctx = this.shotContext(manifestId, shotId), {payload, scene, shot, family} = ctx;
+    const all = payload.scenes.flatMap(item => item.shots), at = all.findIndex(item => item.id === shot.id);
+    const words = (payload.sentences || []).filter(item => item.n >= scene.sentenceStart && item.n <= scene.sentenceEnd).map(item => item.text).join(' ');
+    const cast = payload.cast || [], refs = {};
+    for (const item of this.store.brainReferenceFiles?.(cast.filter(member => member.ref).map(member => member.ref)) || []) refs[item.id] = {label: item.label, description: item.description};
+    const grade = payload.grade && E.GRADES[payload.grade] ? E.GRADES[payload.grade].name || payload.grade : null;
+    const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null});
+    return {shotId: shot.id, label: shot.label, source: shot.source, ...direction};
+  }
+  // The clip the owner made in Muse, uploaded to its shot: streamed to the data folder, probed, checked, kept like any
+  // footage (synthetic, disclosed) and selected for the shot. A failed check keeps nothing.
+  async attachClip(manifestId, shotId, stream, params = {}) {
+    const by = person(params.by), name = String(params.name || 'clip.mp4').replace(/[\x00-\x1f\x7f\\/:*?"<>|]+/g, ' ').trim().slice(0, 120);
+    requireValue(/\.(mp4|mov|m4v|webm)$/i.test(name), 'Attach the video clip Muse gave you (MP4, MOV or WebM).', 415);
+    const ctx = this.shotContext(manifestId, shotId), cap = VS.capability('muse-video');
+    requireValue(ctx.shot.source === 'ai-video' || params.exception === '1', 'This shot is planned for another source. Tick "use an AI video clip although it is planned otherwise" to upload one.', 409);
+    const assetId = randomUUID(), dir = path.join(this.assetDir, ctx.family.id, ctx.content.id), file = path.join(dir, `${assetId}${path.extname(name).toLowerCase()}`);
+    fs.mkdirSync(dir, {recursive: true});
+    let kept = false;
+    try {
+      let bytes = 0;
+      await new Promise((resolve, reject) => {
+        const out = fs.createWriteStream(file, {flags: 'wx'});
+        stream.on('data', chunk => { bytes += chunk.length; if (bytes > cap.output.maxBytes) { stream.destroy(); out.destroy(); reject(new InputError('The clip is larger than 500 MB.', 413)); return; } if (!out.write(chunk)) { stream.pause(); out.once('drain', () => stream.resume()); } });
+        stream.on('end', () => out.end(resolve)); stream.on('error', reject); out.on('error', reject);
+      });
+      requireValue(bytes > 10 * 1024, 'The file is empty or too small to be a video clip.', 400);
+      let probe;
+      try { probe = await VS.probeMedia(file, this.ffprobe); } catch { throw new InputError('This file could not be read as a video. Download the clip from Muse again (MP4) and upload that.', 415); }
+      const seconds = ctx.shot.durationSeconds, check = Mu.checkClip(probe, {seconds, vertical: ctx.family.format === 'shorts'});
+      requireValue(check.ok, check.problems.join(' '), 422);
+      const thumb = await this.thumbnail(file, assetId, probe), sha256 = VS.sha256File(file), sizeBytes = fs.statSync(file).size, mime = /\.webm$/i.test(name) ? 'video/webm' : /\.mov$/i.test(name) ? 'video/quicktime' : 'video/mp4';
+      const direction = (() => { try { return this.museDirection(manifestId, shotId); } catch { return null; } })();
+      const rights = {basis: 'ai-generated', license: cap.rights, provider: 'meta-muse', model: 'Muse (owner\'s subscription)', prompt: direction?.text || ctx.shot.prompt, references: (direction?.attach || []).map(item => item.label), uploadedAs: name, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
+        note: 'Synthetic video made in Meta Muse from the program\'s direction and uploaded by the owner. YouTube requires disclosure of realistic synthetic media.'};
+      this.store.transaction(() => {
+        const at = now(), jobId = randomUUID();
+        this.db.prepare("INSERT INTO visual_jobs(id,family_id,content_id,manifest_id,shot_id,kind,capability_id,scope,status,result,attempts,created_by,created_at,updated_at) VALUES(?,?,?,?,?,'upload',?,?,'completed',?,1,?,?,?)")
+          .run(jobId, ctx.family.id, ctx.content.id, ctx.row.id, ctx.shot.id, cap.id, JSON.stringify({name, sizeBytes}), JSON.stringify({assetId, sha256, notes: check.notes}), by, at, at);
+        this.db.prepare('INSERT INTO visual_assets(id,family_id,content_id,shot_id,origin,capability,source_job_id,candidate_id,media_type,relative_path,thumb_path,sha256,size_bytes,mime,probe,rights,created_by,created_at) VALUES(?,?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?,?)')
+          .run(assetId, ctx.family.id, ctx.content.id, ctx.shot.id, 'ai', JSON.stringify(cap), jobId, 'video', path.relative(this.dataRoot, file).replaceAll('\\', '/'), thumb, sha256, sizeBytes, mime, JSON.stringify(probe), JSON.stringify(rights), by, at);
+        this.selectTx(ctx.content.id, ctx.shot.id, assetId, by, 'required', 'upload');
+        kept = true;
+      });
+      this.store.event(`${by} uploaded a Muse clip for ${ctx.shot.label} of "${ctx.content.title}"`);
+      return {assetId, shotId: ctx.shot.id, notes: check.notes, durationSeconds: probe.durationSeconds, width: probe.width, height: probe.height};
+    } finally { if (!kept) fs.rmSync(file, {force: true}); }
+  }
+
   // Must run inside a transaction.
   endApprovals(contentId, status, reason, keepManifestId = null) {
     const rows = this.db.prepare("SELECT * FROM visual_approvals WHERE content_id=? AND status='approved'").all(contentId);

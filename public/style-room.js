@@ -589,11 +589,14 @@ function familyStyleBody(form) {
   const hand = ['ffmpeg-sketch', 'canvas-frames'].includes(adapter) ? `<label class="checkbox-label full"><input type="checkbox" name="fs.hand" ${spec.drawing?.hand ? 'checked' : ''}>A hand draws each scene <span class="hint">Every figure, object and word is drawn line by line by a hand, like whiteboard animation, and the scenes look hand-drawn. Leave it off for Classic, Storybook and Doodle unless you want that feel.</span></label>` : '';
   // 0.64: Claude designs each video (colours, fonts, pace, energy, captions); on unless the owner said no.
   const adaptive = `<label class="checkbox-label full"><input type="checkbox" name="fs.adaptive" ${spec.adaptive !== false ? 'checked' : ''}>Let the AI design each video <span class="hint">Colours, fonts, pace, energy, transitions and caption look are chosen for every story, so no two videos are a template. This style's own settings stay the starting point.</span></label>`;
+  // 0.111: AI video clips made in Meta Muse from the program's direction (the Cinematic and Documentary engines cut footage).
+  const museNow = spec.visuals?.sources?.includes('ai-video') ? (spec.visuals.sources.length === 1 ? 'all' : 'mix') : 'off';
+  const muse = ['cinematic-hybrid', 'ffmpeg-montage'].includes(adapter) ? `<label class="full">AI video clips (Meta Muse)<select name="fs.muse"><option value="off" ${museNow === 'off' ? 'selected' : ''}>Off</option><option value="mix" ${museNow === 'mix' ? 'selected' : ''}>Some shots: the AI chooses where a generated clip serves best</option><option value="all" ${museNow === 'all' ? 'selected' : ''}>Every shot is a Muse clip</option></select><span class="hint">The program writes each shot's direction for Muse (your character from the Channel brain, the place, action, camera and light); you generate the clip in Muse and upload it in Room 04; the program cuts, grades, times and scores it. Always disclosed as AI on YouTube.</span></label>` : '';
   const films = adapter === 'cinematic-hybrid' ? '' : `<div class="full"><span class="field-label">Film looks <span class="hint">None: no film look. One: every drawn shot in it. Two or more: Claude chooses one of them for each video.</span></span>${styleChecks('fs.films', (v.drawingFilms || []).filter(value => !['none', 'choose'].includes(value)), fsTicked(spec, 'films', 'film', []).filter(value => value !== 'choose'), filmLabel)}</div>`;
   // 0.68: the Motion Graphics (atelier) engine's finish (motion graphics, HTML render or a mix, 0.70) and its colour script.
   const finish = ['atelier', 'story-mix'].includes(adapter) ? `<label>Motion Graphics finish<select name="fs.atelierFinish">${styleOptions(v.atelierFinishes || ['motion', 'anime'], spec.atelier?.finish || 'motion', finishLabel)}</select><span class="hint">HTML render draws cel-anime characters and places; Paper collage is cut and torn paper moved like stop-motion; Pixel art is cells in a closed palette; Mix uses the finishes you tick, one per scene.</span></label><label>Colour script (HTML render)<select name="fs.atelierScript">${styleOptions(v.atelierScripts || ['choose'], spec.atelier?.script || 'choose', scriptLabel)}</select></label><label>Pixel palette (Pixel art)<select name="fs.atelierPalette">${styleOptions(v.atelierPalettes || ['choose'], spec.atelier?.palette || 'choose', paletteLabel)}</select></label>${finishTicks('fs.atelierFinishes', 'fs.atelierFinish', spec, v)}` : '';
   $('#family-style-heading').textContent = `Editing style for ${family?.name || 'this channel'}`;
-  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${hand}${types}${finish}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
+  $('#family-style-body').innerHTML = `${engines}<div class="form-grid">${groups}${hand}${types}${finish}${muse}${films}${adaptive}</div><p class="card-actions">${action('⚙ All settings of this style', 'style-revise', chosen.id, 'secondary')}<span class="hint">Colours, pacing, captions, sound and every other setting, as a new draft revision in the style editor.</span></p>`;
 }
 // pick (0.110): the engine, look and picture type a style match chose for a video link, preselected for the owner to confirm.
 function familyStyleDialog(familyId, pick = null) {
@@ -629,6 +632,12 @@ function familyStyleSpec(form, base) {
   }
   const adaptive = form.querySelector('input[name="fs.adaptive"]');
   if (adaptive) spec.adaptive = adaptive.checked;
+  const muse = form.elements['fs.muse'];
+  if (muse && spec.visuals) {
+    const others = spec.visuals.sources.filter(source => source !== 'ai-video');
+    if (muse.value === 'off') { spec.visuals.sources = others.length ? others : ['stock-video']; if (spec.visuals.primarySource === 'ai-video') spec.visuals.primarySource = spec.visuals.sources[0]; }
+    else { spec.visuals.sources = muse.value === 'all' ? ['ai-video'] : [...others, 'ai-video']; spec.visuals.aiDisclosure = 'always-disclose'; spec.visuals.characterConsistency = true; if (muse.value === 'all') spec.visuals.primarySource = 'ai-video'; }
+  }
   const hand = form.querySelector('input[name="fs.hand"]');
   if (hand) { spec.drawing ||= {look: 'classic', hand: false}; spec.drawing.hand = hand.checked; }
   const finish = form.elements['fs.atelierFinish'];

@@ -304,7 +304,7 @@ function sceneShotCard(content, manifest, scene, shot) {
   return `<div class="shot-card ${asset ? 'filled' : ''}"><div class="shot-media">${media}${asset ? `<span class="shot-origin">${asset.origin === 'ai' ? 'AI' : asset.origin === 'drawn' ? 'Drawn' : esc(asset.provider)}</span>` : ''}${redraw ? `<span class="shot-redraw ${redraw.status === 'paused' ? 'paused' : ''}">${redraw.status === 'paused' ? 'Redraw paused' : 'Being drawn again'}</span>` : ''}${asked ? `<span class="shot-redraw asked" title="${esc(asked.ask)}">Editor asks to redraw</span>` : ''}</div>
     <div class="shot-body"><div class="card-top"><strong>${esc(shot.label)}</strong><small>${sceneSeconds(shot.durationSeconds)}</small></div>${asked ? `<small class="shot-asked">Editor: ${esc(asked.ask)} <button type="button" class="text-button" data-action="scene-goto-board" data-id="redraw">Choose who redraws it ↑</button></small>` : ''}
       <small class="shot-source">${esc(styleLabel(shot.source))} · ${esc(styleLabel(shot.motion))}</small>
-      <p class="shot-brief">${esc(shot.source === 'ai-image' ? shot.prompt : shot.source === 'generated-graphics' ? (shot.frame ? sceneFrameSummary(shot.frame) : sceneSketchSummary(shot.sketch, manifest.plan.cast)) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
+      <p class="shot-brief">${esc(['ai-image', 'ai-video'].includes(shot.source) ? shot.prompt : shot.source === 'generated-graphics' ? (shot.frame ? sceneFrameSummary(shot.frame) : sceneSketchSummary(shot.sketch, manifest.plan.cast)) : shot.query)}</p>${shot.cue ? `<small class="muted">Starts on “${esc(shot.cue)}”</small>` : ''}
       ${failed ? `<p class="inline-warning">${esc(failed.error || failed.status)}</p>` : ''}
       <div class="shot-actions">${editable ? action(asset ? 'Change' : 'Find visual', 'scene-shot-open', shot.id, asset ? 'secondary' : 'primary') + action('Edit', 'scene-shot-edit', shot.id, 'text-button') + (shot.frame && shot.source === 'generated-graphics' ? action('Redesign', 'scene-frame-redesign', shot.id, 'text-button') : '') + (shot.sketch && shot.source === 'generated-graphics' ? action('Change with words', 'scene-shot-change', shot.id, 'text-button') + action(shot.sketch.elements.some(item => item.kind === 'picture' && item.art) ? 'New picture' : 'Paid picture', 'scene-shot-picture', shot.id, 'text-button') : '') + (scene.shots.length > 1 ? action('Remove', 'scene-shot-remove', shot.id, 'text-button danger') : '') : ''}${count ? `<small class="muted">${count} result${count === 1 ? '' : 's'}</small>` : ''}</div></div></div>`;
 }
@@ -324,6 +324,7 @@ function sceneBatchCard(content, manifest, family) {
   const settings = state.scenes.settings[family.id], shots = sceneShots(manifest);
   const stockEmpty = shots.filter(shot => (shot.source.startsWith('stock-') || shot.source === 'archival-public-domain') && !content.selections[shot.id]).length;
   const aiEmpty = shots.filter(shot => shot.source === 'ai-image' && !content.selections[shot.id]).length;
+  const museShots = shots.filter(shot => shot.source === 'ai-video'), museEmpty = museShots.filter(shot => !content.selections[shot.id]);
   const drawn = shots.filter(shot => shot.source === 'generated-graphics').length, drawnEmpty = shots.filter(shot => shot.source === 'generated-graphics' && !content.selections[shot.id]).length;
   const withResults = shots.filter(shot => !content.selections[shot.id] && content.candidateCounts[shot.id]).length;
   const active = sceneActiveJobs(content).length;
@@ -333,6 +334,7 @@ function sceneBatchCard(content, manifest, family) {
       <div><strong>${stockEmpty} stock shot${stockEmpty === 1 ? '' : 's'} empty</strong><small>One search each with your first tested stock library (${esc(settings.stockOrder.join(' → '))}).</small>${manifest.scope.current && stockEmpty ? action('Search all', 'scene-search-all', manifest.id, 'secondary') : ''}</div>
       <div><strong>${withResults} empty shot${withResults === 1 ? '' : 's'} with results</strong><small>Downloads the top result for each, with its license evidence.</small>${manifest.scope.current && withResults ? action('Use top results', 'scene-pick-top', manifest.id, 'secondary') : ''}</div>
       ${drawn ? sceneDrawRow(content, manifest) : ''}
+      ${museShots.length ? `<div><strong>${museEmpty.length} of ${museShots.length} Muse shot${museShots.length === 1 ? '' : 's'} waiting for a clip</strong><small>Open each one: copy the program's direction into Muse, attach the reference pictures it lists, generate, then upload the clip to that shot.</small>${museEmpty.length ? action(`Open ${esc(museEmpty[0].label)}`, 'scene-shot-open', museEmpty[0].id, 'secondary') : ''}</div>` : ''}
       <div><strong>${aiEmpty} AI shot${aiEmpty === 1 ? '' : 's'} empty</strong><small>${manifest.status === 'approved' ? `About ${money(aiEmpty * settings.priceCents[settings.imageQuality])} at ${esc(settings.imageQuality)} quality.` : 'Approve the plan before spending on AI images.'}</small>${manifest.scope.current && aiEmpty && manifest.status === 'approved' ? action('Generate all', 'scene-generate-all', manifest.id, 'secondary') : ''}</div>
     </div></section>`;
 }
@@ -671,6 +673,7 @@ function sceneShotOpen(shotId) {
   document.getElementById('shot-heading').textContent = `${shot.label} · ${styleLabel(shot.source)} · ${sceneSeconds(shot.durationSeconds)}`;
   document.getElementById('shot-body').innerHTML = `<p class="scene-narration">${esc(sceneNarration(manifest, scene))}</p>
     <div id="shot-selected"></div>
+    ${shot.source === 'ai-video' ? sceneMusePanel(shot) : ''}
     <div class="shot-panels">
       <section class="shot-panel"><h3>Stock search</h3>${caps.length ? `<div class="form-grid"><label>Library<select id="shot-cap">${caps.map(cap => `<option value="${cap.id}">${esc(cap.name)}</option>`).join('')}</select></label><label>Search words<input id="shot-query" maxlength="100" value="${esc(shot.query)}"></label></div><div class="card-actions"><button type="button" class="button primary" data-scene-act="search">Search</button></div><p class="hint">Results and previews are kept for 24 hours. The chosen file is downloaded with its license, author and source page.</p>` : '<p class="inline-warning">Add and test a Pexels or Pixabay connector in Connections.</p>'}</section>
       <section class="shot-panel"><h3>AI image</h3>${manifest.status !== 'approved' ? '<p class="inline-warning">Approve the plan revision before spending on AI images.</p>' : !openai.length ? '<p class="inline-warning">Add and test an OpenAI connector in Connections.</p>' : `<label>Prompt<textarea id="shot-prompt" rows="4" maxlength="1500">${esc(shot.prompt || `Original illustration for a ${sceneSpec(content)?.name.toLowerCase() || 'documentary'} video, no text, no logos, no real people: ${sceneNarration(manifest, scene).slice(0, 300)}`)}</textarea></label><div class="form-grid"><label>Quality<select id="shot-quality">${['low', 'medium', 'high'].map(item => `<option value="${item}" ${item === settings.imageQuality ? 'selected' : ''}>${item} · ${money(settings.priceCents[item])}</option>`).join('')}</select></label><label>OpenAI connector<select id="shot-openai">${sceneConnectorOptions('openai')}</select></label></div><label class="checkbox-label"><input type="checkbox" id="shot-cost">I confirm the estimated cost (${esc(settings.imageModel)}).</label>${shot.source !== 'ai-image' ? '<label class="checkbox-label"><input type="checkbox" id="shot-exception">Use an AI image although this shot is planned for stock.</label>' : ''}<div class="card-actions"><button type="button" class="button primary" data-scene-act="generate">Generate</button></div>`}</section>
@@ -681,13 +684,43 @@ function sceneShotOpen(shotId) {
     <h3 class="intel-subhead">Visuals already downloaded for this script</h3><div id="shot-gallery" class="candidate-grid"></div>`;
   document.getElementById('shot-dialog').showModal();
   sceneShotRender();
+  if (shot.source === 'ai-video') sceneMuseLoad(manifest.id, shot.id);
 }
+// 0.111: an AI-video shot is made in Meta Muse from the program's direction; the owner uploads the clip back here.
+function sceneMusePanel(shot) {
+  return `<section class="shot-panel muse-panel"><h3>AI video · Meta Muse</h3><p class="hint">Meta has no Muse video API yet, so the program directs and you generate: copy the direction into Muse, attach the reference pictures listed, generate, download the clip and upload it here. The program then cuts, grades, times and scores it with the rest of the video (Muse's own sound is not used).</p>
+    <div id="muse-direction"><p class="muted">Writing the direction…</p></div>
+    <div class="card-actions"><label class="button primary file-button">Upload the clip from Muse<input type="file" id="muse-clip" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.m4v,.webm" hidden></label><span class="hint" id="muse-status">MP4, MOV or WebM up to 500 MB; 720p or more.</span></div></section>`;
+}
+async function sceneMuseLoad(manifestId, shotId) {
+  const box = document.getElementById('muse-direction');
+  try {
+    const response = await reach(`/api/muse-direction?manifestId=${encodeURIComponent(manifestId)}&shotId=${encodeURIComponent(shotId)}`), d = await response.json();
+    if (!response.ok) throw new Error(d.error);
+    box.innerHTML = `<p><strong>${esc(d.label)}</strong> · ${d.seconds} s · ${esc(d.aspect)}</p><label>Direction for Muse<textarea id="muse-text" rows="9" readonly>${esc(d.text)}</textarea></label><div class="card-actions"><button type="button" class="button secondary" data-scene-act="muse-copy">Copy the direction</button></div>${d.attach.length ? `<p><span class="micro-label">ATTACH IN MUSE</span></p><div class="brain-images">${d.attach.map(item => `<a class="brain-image" href="/api/brain-images/${esc(item.id)}" download><img src="/api/brain-images/${esc(item.id)}" alt="${esc(item.label)}"><span><strong>${esc(item.label)}</strong><br><small>${esc(item.who)} · click to download</small></span></a>`).join('')}</div>` : '<p class="hint">No reference picture for this shot. Add your character on the channel page (Channel brain) and build the storyboard again so every shot of them carries the picture.</p>'}${d.after ? `<p class="hint">The next shot: ${esc(d.after)}</p>` : ''}`;
+  } catch (error) { box.innerHTML = `<p class="inline-warning">${esc(error.message || 'The direction could not be written.')}</p>`; }
+}
+document.addEventListener('change', async event => {
+  if (event.target.id !== 'muse-clip' || !sceneShot) return;
+  const file = event.target.files[0], status = document.getElementById('muse-status');
+  if (!file) return;
+  if (file.size > 500 * 1024 * 1024) { status.textContent = 'The clip is larger than 500 MB.'; return; }
+  status.textContent = `Uploading ${file.name}…`;
+  try {
+    const query = new URLSearchParams({manifestId: sceneShot.manifestId, shotId: sceneShot.shotId, name: file.name, by: scenePerson() || 'Owner'});
+    const response = await reach(`/api/muse-clip?${query}`, {method: 'POST', headers: {'Content-Type': file.type || 'application/octet-stream', 'X-Local-Token': state.token}, body: file}), data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'The clip could not be added.');
+    status.textContent = `Added: ${data.durationSeconds.toFixed(1)} s, ${data.width}x${data.height}.${data.notes.length ? ` ${data.notes.join(' ')}` : ''}`;
+    await refresh(); sceneShotRender();
+  } catch (error) { status.textContent = error.message; }
+  finally { event.target.value = ''; }
+});
 async function sceneShotRender() {
   if (!sceneShot) return;
   const content = sceneContent(sceneShot.contentId), manifest = sceneLatest(content);
   if (!content || !manifest || manifest.id !== sceneShot.manifestId) { document.getElementById('shot-selected').innerHTML = '<p class="inline-warning">The plan changed. Close this window and open the shot again.</p>'; return; }
   const selection = content.selections[sceneShot.shotId], asset = selection && sceneAsset(content, selection.assetId);
-  document.getElementById('shot-selected').innerHTML = asset ? `<div class="selected-asset">${asset.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual">` : ''}<div><strong>Selected: ${asset.origin === 'ai' ? `AI image · ${esc(asset.rights.model)}` : `${esc(sceneProvider(asset.provider))} ${esc(asset.mediaType)}`}</strong><small>${asset.probe.width}×${asset.probe.height}${asset.probe.durationSeconds ? ` · ${sceneSeconds(asset.probe.durationSeconds)}` : ''} · ${esc(asset.rights.license.name)}${asset.rights.author ? ` · ${esc(asset.rights.author)}` : ''} · ${esc(asset.sha256.slice(0, 12))}</small>${asset.rights.pageUrl ? `<a href="${esc(asset.rights.pageUrl)}" target="_blank" rel="noopener noreferrer">Source page ↗</a>` : ''}${asset.rights.synthetic ? '<small class="muted">Synthetic media · disclosure decided at approval</small>' : ''}</div><button type="button" class="button text-button danger" data-scene-act="clear">Clear</button></div>` : '<p class="muted">No visual selected for this shot yet.</p>';
+  document.getElementById('shot-selected').innerHTML = asset ? `<div class="selected-asset">${asset.thumb ? `<img src="${esc(asset.thumb)}" alt="Selected visual">` : ''}<div><strong>Selected: ${asset.origin === 'ai' ? `${asset.mediaType === 'video' ? 'AI video' : 'AI image'} · ${esc(asset.rights.model)}` : `${esc(sceneProvider(asset.provider))} ${esc(asset.mediaType)}`}</strong><small>${asset.probe.width}×${asset.probe.height}${asset.probe.durationSeconds ? ` · ${sceneSeconds(asset.probe.durationSeconds)}` : ''} · ${esc(asset.rights.license.name)}${asset.rights.author ? ` · ${esc(asset.rights.author)}` : ''} · ${esc(asset.sha256.slice(0, 12))}</small>${asset.rights.pageUrl ? `<a href="${esc(asset.rights.pageUrl)}" target="_blank" rel="noopener noreferrer">Source page ↗</a>` : ''}${asset.rights.synthetic ? '<small class="muted">Synthetic media · disclosure decided at approval</small>' : ''}</div><button type="button" class="button text-button danger" data-scene-act="clear">Clear</button></div>` : '<p class="muted">No visual selected for this shot yet.</p>';
   const jobs = content.jobs.filter(job => job.shotId === sceneShot.shotId).slice(0, 6);
   document.getElementById('shot-jobs').innerHTML = jobs.length ? `<div class="history-list">${jobs.map(job => `<div class="history-row"><span class="job-dot ${['queued', 'running'].includes(job.status) ? 'queued' : job.status === 'completed' ? 'completed' : ''}"></span><div><strong>${sceneJobBadge(job.status)} ${esc(job.kind)} · ${esc(job.capabilityId)}</strong><small>${esc(date(job.createdAt))} · attempt ${job.attempts}/3${job.result?.cached ? ' · from 24-hour cache' : ''}${job.error ? ` · ${esc(job.error)}` : ''}</small></div>${['failed', 'interrupted', 'blocked_quota', 'blocked_budget', 'stale'].includes(job.status) && job.attempts < 3 ? `<button type="button" class="button text-button" data-scene-act="retry" data-id="${esc(job.id)}">Retry deliberately</button>` : ''}</div>`).join('')}</div>` : '';
   try {
@@ -717,6 +750,7 @@ document.getElementById('shot-dialog').addEventListener('close', () => { clearIn
 document.getElementById('shot-dialog').addEventListener('click', async event => {
   const button = event.target.closest('[data-scene-act]');
   if (!button || !sceneShot) return;
+  if (button.dataset.sceneAct === 'muse-copy') { const text = document.getElementById('muse-text'); try { await navigator.clipboard.writeText(text.value); toast('Direction copied: paste it into Muse.'); } catch { text.select(); toast('Select-all is on: press Ctrl+C to copy.'); } return; }
   const act = button.dataset.sceneAct, person = document.getElementById('shot-person').value.trim();
   sceneRemember(person);
   const base = {manifestId: sceneShot.manifestId, shotId: sceneShot.shotId};
