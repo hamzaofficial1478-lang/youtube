@@ -61,14 +61,29 @@ class VoiceDirector {
     } catch { return null; }
   }
   // The voice-direction skills that fit this video (0.74): its title, niche and audience.
-  skillBrief(inputs) { return this.store.skillRuntime?.brief('voice.direction', inputs.family.id, {text: [inputs.content.title, inputs.family.niche, inputs.family.audience].join(' ')}) || null; }
-  promptInput(inputs) {
+  skillBrief(inputs, feedback = '') { return this.store.skillRuntime?.brief('voice.direction', inputs.family.id, {contentId: inputs.content.id, text: [inputs.content.title, inputs.family.niche, inputs.family.audience, feedback].join(' ')}) || null; }
+  // 0.114: another direction of the same script carries the owner's reason and the earlier performance in short.
+  retryOf(inputs, feedback = '') {
+    const count = this.db.prepare('SELECT COUNT(*) AS n FROM voice_directions WHERE content_id=?').get(inputs.content.id).n;
+    if (!count && !feedback) return null;
+    const last = this.db.prepare('SELECT payload FROM voice_directions WHERE content_id=? ORDER BY revision DESC LIMIT 1').get(inputs.content.id);
+    let earlier = null;
+    try {
+      const p = JSON.parse(last?.payload || 'null'), lines = p?.lines || [], tally = key => Object.entries(lines.reduce((out, line) => ({...out, [line[key]]: (out[line[key]] || 0) + 1}), {})).map(([k, n]) => `${k} ${n}`).join(', ');
+      if (p) earlier = {summary: String(p.summary || '').slice(0, 600), emotions: tally('emotion'), paces: tally('pace'), energy: lines.length ? Math.round(lines.reduce((sum, line) => sum + (line.energy || 0), 0) / lines.length * 10) / 10 : null, firstLines: lines.slice(0, 6).map(line => ({n: line.n, emotion: line.emotion, energy: line.energy, pace: line.pace}))};
+    } catch { earlier = null; }
+    return {attempt: count + 1, ...(feedback ? {feedback} : {}), ...(earlier ? {earlier} : {})};
+  }
+  promptInput(inputs, feedback = '') {
     const style = this.styles?.handoffs().find(item => item.familyId === inputs.family.id && item.ready);
     const spec = style ? JSON.parse(this.styles.revisionRow(style.revisionId).spec) : null;
     return {family: {niche: inputs.family.niche, audience: inputs.family.audience, format: inputs.family.format, locale: inputs.family.primaryLocale},
       ...(spec ? {style: {name: spec.name, summary: spec.summary, musicMoods: spec.audio.musicMoods, motionIntensity: spec.motion.intensity}} : {}),
       ...(this.voiceGuidance(inputs.family.id) ? {competitorVoice: this.voiceGuidance(inputs.family.id)} : {}),
-      ...(this.skillBrief(inputs) ? {skills: this.skillBrief(inputs).prompt} : {}),
+      ...(this.skillBrief(inputs, feedback) ? {skills: this.skillBrief(inputs, feedback).prompt} : {}),
+      ...(this.retryOf(inputs, feedback) ? {retry: this.retryOf(inputs, feedback)} : {}),
+      // 0.114: how the watched competitor videos are narrated (their voice subject).
+      ...((watched => (watched ? {competitorWatched: watched} : {}))((() => { try { return this.store.competitorLessons?.(inputs.family.id, 'voice', 4000) || null; } catch { return null; } })())),
       title: inputs.content.title, sentences: inputs.sentences};
   }
 
@@ -80,10 +95,11 @@ class VoiceDirector {
     const connector = connectorReference(this.connectors, input.connector, 'ai', 'Claude', true);
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM voice_direction_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'Claude is already directing this narration.', 409);
-      const promptInput = this.promptInput(inputs), maxTokens = answerTokens(inputs.sentences.length), tokenLimit = messageTokenUpperBound(D.messages(promptInput)) + maxTokens;
+      const feedback = String(input.feedback ?? '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 1500);
+      const promptInput = this.promptInput(inputs, feedback), maxTokens = answerTokens(inputs.sentences.length), tokenLimit = messageTokenUpperBound(D.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO voice_direction_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, connector, promptInput, maxTokens, tokenLimit}), by, at, at);
-      const skillBrief = this.skillBrief(inputs);
+      const skillBrief = this.skillBrief(inputs, feedback);
       if (skillBrief && promptInput.skills) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'voice', taskKey: 'voice.direction', brief: skillBrief});
       this.store.event(`Queued Claude voice direction for "${inputs.content.title}"`);
       return this.publicJob(this.jobRow(id));

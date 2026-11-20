@@ -293,6 +293,15 @@ class VideoWatcher {
   }
 
   // ------------------------------------------------------------ the roadmap
+  // 0.114: what the watched competitor videos of this channel teach one process (editing, sound, voice, script...),
+  // by the subjects ticked for each channel; null when nothing was watched for it.
+  lessons(familyId, process, maxBytes = 8000) {
+    try {
+      const rows = this.db.prepare("SELECT channel, title, result, measured FROM competitor_video_watches WHERE family_id=? AND status='watched' AND removed_at IS NULL ORDER BY updated_at DESC LIMIT 12").all(familyId)
+        .map(row => ({channel: row.channel, title: row.title, result: row.result ? JSON.parse(row.result) : null, measured: row.measured ? JSON.parse(row.measured) : null}));
+      return W.processLessons(rows, process, maxBytes);
+    } catch { return null; }
+  }
   watchedFor(familyId) {
     return this.db.prepare("SELECT * FROM competitor_video_watches WHERE family_id=? AND status='watched' AND removed_at IS NULL ORDER BY competitor_key, created_at").all(familyId);
   }

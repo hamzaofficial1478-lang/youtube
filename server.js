@@ -87,7 +87,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
   const videoWatcher=new VideoWatcher(store,{connectors,quota,intel:competitorIntel,ai,renders:renderRoom,skills,watchDir:path.join(dataRoot,'watches'),fetch:providerFetch});
   // 0.110: the channel brain (niche brief, the owner's files and reference pictures, the creative director, style match).
   const channelBrain=new ChannelBrain(store,{connectors,quota,ai,skills,intel:competitorIntel,imageDir:path.join(dataRoot,'brain-images'),fetch:providerFetch,catalogue:(()=>{const E=require('./engines');return {renderers:require('./style').RENDERERS,looks:Object.keys(E.LOOKS),boards:Object.keys(E.BOARDS),designs:Object.keys(E.DESIGNS),finishes:require('./atelier').OWN_FINISHES};})()});
-  store.brainProvider=(familyId,contentId,bytes)=>{try{return channelBrain.context(familyId,{contentId,bytes});}catch(error){console.error('Channel brain:',error.message);return null;}};
+  store.brainProvider=(familyId,contentId,bytes)=>{try{return channelBrain.context(familyId,{contentId,bytes});store.competitorLessons=(familyId,process,maxBytes)=>videoWatcher.lessons(familyId,process,maxBytes);}catch(error){console.error('Channel brain:',error.message);return null;}};
   store.brainReferenceFiles=ids=>channelBrain.referenceFiles(ids);
   const packagingRoom=new PackagingRoom(store,sceneRoom,renderRoom,editingRoom,connectors,ai,{dataRoot});renderRoom.packaging=packagingRoom;
   const localizationRoom=new LocalizationRoom(store,renderRoom,packagingRoom,connectors,ai,{dataRoot,ffmpeg,ffprobe});renderRoom.localization=localizationRoom;

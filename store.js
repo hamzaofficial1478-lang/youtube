@@ -7,7 +7,7 @@ const { validateYouTubeMetadata } = require('./vendor/youtube-automation-agent/y
 const {assessScriptQuality,scriptPolicy,deriveCompletionLimit,wordCount,cleanTranscript,referencePack}=require('./writer');
 // What a script request is about, for choosing the skills that fit it (0.74).
 const skillFormat=family=>['long-form','shorts'].includes(family.format)?family.format:null;
-const scriptSkillContext=(content,family)=>({text:[content.title,content.angle,content.hook,String(content.idea||'').slice(0,1200),family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual'].filter(Boolean).join(' '),format:skillFormat(family)});
+const scriptSkillContext=(content,family,feedback='')=>({contentId:content.id,text:[content.title,content.angle,content.hook,String(content.idea||'').slice(0,1200),family.niche,family.audience,content.kind==='fiction'?'fiction story':'factual',feedback].filter(Boolean).join(' '),format:skillFormat(family)});
 const {scoreHook,lintPackaging,neverWordsUsed}=require('./craft');
 const Retention=require('./retention');
 const Delivery=require('./delivery');
@@ -516,20 +516,31 @@ class Store {
     // Approved competitor blueprint (R05): technique guidance only, never competitor wording.
     const guidance=typeof this.scriptGuidanceProvider==='function'?this.scriptGuidanceProvider(f.id):null;if(guidance)basePromptInput.guidance=guidance;
     // Approved skills (Skills Engine): compiled brief only, inside the family's job token limit.
-    const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
+    // 0.114: another attempt carries the owner's reason and the earlier script, so the writer fixes what was weak.
+    const feedback=String(input.feedback??'').replace(/[\x00-\x1f\x7f]+/g,' ').trim().slice(0,1500),retry=this.scriptRetry(c,feedback);if(retry)basePromptInput.retry=retry;
+    const skillBrief=this.skillRuntime?.brief('script.candidate',f.id,scriptSkillContext(c,f,feedback))||null;if(skillBrief)basePromptInput.skills=skillBrief.prompt;
     const refs=this.scriptReferenceRows(c.id);if(refs.length)basePromptInput.references=referencePack(refs);
     // 0.110: the channel brain (niche brief, the owner's files, reference pictures, playbook, memory, this video's idea files).
     const channel=typeof this.brainProvider==='function'?this.brainProvider(f.id,c.id):null;if(channel)basePromptInput.channel=channel;
+    // 0.114: the hooks, structure, narration and titles of the competitor videos the program watched.
+    let watched=null;try{watched=this.competitorLessons?.(f.id,'script',6000)||null;}catch{watched=null;}if(watched)basePromptInput.competitorWatched=watched;
     if(polish)basePromptInput.ownScript={title:c.title,hook:String(c.hook||'').trim()||(String(c.script).trim().match(/^[\s\S]*?[.!?](?=\s|$)/)||[String(c.script).trim().slice(0,300)])[0],script:String(c.script).trim()};
     // The skill brief, the references and the script to polish are added on top (0.73, 0.99).
-    const extra=(basePromptInput.skills?skillBrief.injectedBytes:0)+(channel?Buffer.byteLength(JSON.stringify(channel)):0)+(c.idea?Buffer.byteLength(c.idea):0)+(basePromptInput.references?Buffer.byteLength(JSON.stringify(basePromptInput.references)):0)+(basePromptInput.ownScript?Buffer.byteLength(JSON.stringify(basePromptInput.ownScript)):0);
+    const extra=(watched?Buffer.byteLength(JSON.stringify(watched)):0)+(retry?Buffer.byteLength(JSON.stringify(retry)):0)+(basePromptInput.skills?skillBrief.injectedBytes:0)+(channel?Buffer.byteLength(JSON.stringify(channel)):0)+(c.idea?Buffer.byteLength(c.idea):0)+(basePromptInput.references?Buffer.byteLength(JSON.stringify(basePromptInput.references)):0)+(basePromptInput.ownScript?Buffer.byteLength(JSON.stringify(basePromptInput.ownScript)):0);
     const jobLimit=Math.max(f.tokenBudget.scriptJobLimit,policy.minutes?policy.maxCompletionTokens+12000:0)+extra,{promptInput,maxCompletionTokens}=deriveCompletionLimit(basePromptInput,jobLimit,policy.maxCompletionTokens);
     requireValue(maxCompletionTokens>=500,'Increase the script job token limit for this format, or reduce the approved skills bound to script writing.');
     // 0.96: the second writer reviews with the owner's script-review skills as directives.
-    const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f))||null:null;
+    const reviewBrief=input.partner?this.skillRuntime?.brief('script.review',f.id,scriptSkillContext(c,f,feedback))||null:null;
     const scope={contentRevision:c.revision,familyRevision:f.revision,connectorId:input.connectorId,connectorRevision:input.connectorRevision,promptVersion:3,tokenLimit:input.partner?jobLimit*3:jobLimit,partner:input.partner&&typeof input.partner.connectorId==='string'?{connectorId:input.partner.connectorId,connectorRevision:input.partner.connectorRevision}:null,reviewSkills:reviewBrief?.prompt||null,guidanceAnalysisId:guidance?.analysisId||null,skillRevisionIds:skillBrief?.revisionIds||[],...(polish?{polish:true}:{}),referenceIds:refs.map(ref=>ref.id),promptInput};
     const refKey=refs.length?`:r${createHash('sha256').update(refs.map(ref=>ref.id).join(',')).digest('hex').slice(0,12)}`:'';
     return {scope,skillBrief,reviewBrief,guidance,refKey};
+  }
+  // The earlier script of this draft, summarised for another attempt (null for the first one).
+  scriptRetry(c,feedback){
+    const count=this.db.prepare('SELECT COUNT(*) AS n FROM script_candidates WHERE content_id=?').get(c.id).n;if(!count&&!feedback)return null;
+    const last=this.db.prepare('SELECT payload FROM script_candidates WHERE content_id=? ORDER BY created_at DESC,rowid DESC LIMIT 1').get(c.id);let earlier=null;
+    try{const p=JSON.parse(last?.payload||'null');if(p)earlier={title:p.title,angle:p.angle,hook:p.hook,opening:String(p.script||'').slice(0,900),ending:String(p.script||'').slice(-400)};}catch{earlier=null;}
+    return {attempt:count+1,...(feedback?{feedback}:{}),...(earlier?{earlier}:{})};
   }
   // Reference videos of a draft (0.99): links with the transcript the owner pasted or attached.
   scriptReferenceRows(contentId){return this.db.prepare('SELECT * FROM script_references WHERE content_id=? AND removed_at IS NULL ORDER BY created_at,rowid').all(contentId);}
@@ -562,9 +573,12 @@ class Store {
       const {scope,skillBrief,reviewBrief,guidance,refKey}=this.scriptJobScope(c,f,input);
       const skillKey=skillBrief?.revisionIds.length?`:k${createHash('sha256').update(skillBrief.revisionIds.join(',')).digest('hex').slice(0,12)}`:'';
       const type=`ai_script:${input.connectorId}:${input.connectorRevision}:f${f.revision}:p2${guidance?`:g${guidance.analysisId}`:''}${skillKey}${scope.polish?':polish':''}${refKey}`;
-      const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND type=?').get(id,c.revision,type);if(existing)return existing;
+      const existing=this.db.prepare('SELECT * FROM jobs WHERE content_id=? AND revision=? AND (type=? OR substr(type,1,?)=?) ORDER BY created_at DESC,rowid DESC').all(id,c.revision,type,type.length+6,`${type}:again`);
+      // 0.114: a click while one is waiting or writing is the same job; once it finished, the owner asks for another version.
+      const open=existing.find(job=>['queued','running'].includes(job.status));if(open)return open;
+      const fullType=existing.length?`${type}:again${existing.length}`:type;
       const jobId=randomUUID(),at=now();
-      this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,type,JSON.stringify(scope),at,at);
+      this.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,input,created_at,updated_at) VALUES(?,?,?,?,'queued',?,?,?)").run(jobId,id,c.revision,fullType,JSON.stringify(scope),at,at);
       if(skillBrief)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.candidate',brief:skillBrief});if(reviewBrief?.prompt)this.skillRuntime.recordUsage({jobId,familyId:f.id,room:'script',taskKey:'script.review',brief:reviewBrief});
       this.event(`Queued Claude ${f.primaryLocale} script candidate: ${c.title}`);return this.db.prepare('SELECT * FROM jobs WHERE id=?').get(jobId);
     });

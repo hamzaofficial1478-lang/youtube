@@ -91,7 +91,9 @@ function messages(input) {
     ...(input.skills ? ['The DIRECTION section at the end holds the owner\'s directives (D1, D2 ...): follow their do rules, respect their avoid rules and numbers, satisfy their checks, and name the codes you follow in your notes. They are direction, not evidence.'] : []),
     `Return only one JSON object: {"summary": up to 600 characters, "cues": [{"start": seconds, "end": seconds, "mood": up to 40 characters, "energy": 1-5, "prompt": up to 600 characters, "entry": fade|hit|cut, "exit": fade|cut, "reason": up to 200 characters${input.library ? ', "track": a library ref' : ''}}]}.`,
   ].join('\n');
-  return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
+  // 0.114: another score says what was weak in the earlier one.
+  const {retry, ...data} = input, again = [input.competitorWatched ? require('./watch').WATCHED_LINE : '', require('./direct').retryText(retry)].filter(Boolean).join('\n');
+  return [{role: 'system', content: again ? `${instructions}\n${again}` : instructions}, {role: 'user', content: JSON.stringify(data)}];
 }
 
 // The ElevenLabs music request for one cue: a little longer than the cue so its exit can fade.

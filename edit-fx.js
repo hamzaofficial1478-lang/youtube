@@ -76,14 +76,16 @@ const PAST_WORDS = /\b(?:long ago|years ago|centuries|ancient|once upon|in the p
 // words: [{text, start, end}] on the narration; sentences: [{n, text, startSeconds, endSeconds}]; delivery: the voice
 // direction's lines by sentence (index n-1) or null; grammarOf(clip) -> GRAMMAR key; camera(clip) -> the drawing's own
 // camera move ('still' when it holds); meaningsOf: music.js. Returns {fx: {clipId: [effects]}, count}.
-function placeEffects({clips, fps, words = [], sentences = [], delivery = null, grammarOf, camera = () => null, meaningsOf, allowed = null}) {
+function placeEffects({clips, fps, words = [], sentences = [], delivery = null, grammarOf, camera = () => null, meaningsOf, allowed = null, boost = 1}) {
   const out = {}, moments = [], perClip = new Map();
   const seconds = clips.reduce((sum, clip) => sum + clip.frames, 0) / fps;
   const add = (clip, effect) => { (out[clip.id] ||= []).push(effect); perClip.set(clip.id, (perClip.get(clip.id) || 0) + (FX[effect.kind].moment ? 1 : 0)); };
   const lineAt = time => { const sentence = sentences.find(item => time >= item.startSeconds - 0.05 && time < (item.endSeconds ?? Infinity)); return sentence ? {sentence, line: delivery?.lines?.[sentence.n - 1] || null} : {sentence: null, line: null}; };
   const ok = (grammar, kind) => (GRAMMAR[grammar].fx[kind] || 0) > 0 && (!allowed || allowed.includes(kind));
   const amountOf = (grammar, kind, energy) => round(clamp((GRAMMAR[grammar].fx[kind] || 0) * (energy === 'high' ? 1 : energy === 'low' ? 0.65 : 0.85), 0.2, 1), 2);
-  let budget = Math.max(2, Math.round(seconds / 60 * Math.max(...clips.map(clip => GRAMMAR[grammarOf(clip)].perMinute)))), last = -Infinity;
+  // 0.114: competitors who cut briskly earn more moments (three a clip, 1.4 s apart); calm ones fewer.
+  let budget = Math.max(2, Math.round(seconds / 60 * Math.max(...clips.map(clip => GRAMMAR[grammarOf(clip)].perMinute)) * boost)), last = -Infinity;
+  const perMax = boost > 1.2 ? 3 : 2, apart = boost > 1.2 ? 1.4 : 2;
   clips.forEach((clip, index) => {
     const from = clip.start / fps, to = (clip.start + clip.frames) / fps, length = to - from, grammar = grammarOf(clip), g = GRAMMAR[grammar];
     const spoken = words.filter(word => word.start >= from && word.start < to - 0.15);
@@ -98,7 +100,7 @@ function placeEffects({clips, fps, words = [], sentences = [], delivery = null, 
     }
     said.sort((a, b) => a.at - b.at);
     for (const hit of said) {
-      if (budget <= 0 || (perClip.get(clip.id) || 0) >= 2 || hit.at - last < 2) continue;
+      if (budget <= 0 || (perClip.get(clip.id) || 0) >= perMax || hit.at - last < apart) continue;
       const at = round(Math.max(0, hit.at - from - 0.04), 3), moment = [];
       if (hit.kind === 'hit' || (hit.kind === 'boom' && energy !== 'low')) {
         if (ok(grammar, 'impact') && ['high', null].includes(energy)) moment.push('impact');

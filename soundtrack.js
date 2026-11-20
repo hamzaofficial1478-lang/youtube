@@ -186,14 +186,29 @@ class SoundtrackRoom {
     return this.store.transaction(() => {
       requireValue(!this.db.prepare("SELECT 1 FROM score_jobs WHERE content_id=? AND status IN ('queued','running')").get(contentId), 'Claude is already scoring this video.', 409);
       const tracks = this.libraryTracks(inputs.family.id), library = tracks.length ? M.catalogue(tracks, {moods: inputs.spec?.audio.musicMoods || [], niche: inputs.family.niche}) : null;
-      const skillBrief = this.store.skillRuntime?.brief('audio.mix', inputs.family.id, {text: [inputs.content.title, inputs.family.niche, ...(inputs.spec?.audio.musicMoods || [])].join(' ')}) || null;
-      const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
+      // 0.114: another score carries the owner's reason and the earlier score in short; the skills rotate.
+      const feedback = String(input.feedback ?? '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 1500), retry = this.scoreRetry(contentId, feedback);
+      // 0.114: the music of the competitor videos the program watched (by the subjects ticked for each channel).
+      let watched = null; try { watched = this.store.competitorLessons?.(inputs.family.id, 'sound', 5000) || null; } catch { watched = null; }
+      const skillBrief = this.store.skillRuntime?.brief('audio.mix', inputs.family.id, {contentId, text: [inputs.content.title, inputs.family.niche, ...(inputs.spec?.audio.musicMoods || []), feedback].join(' ')}) || null;
+      const promptInput = {...this.promptInput(inputs), ...(library ? {library: library.map(({id: trackId, ...item}) => item)} : {}), ...(skillBrief ? {skills: skillBrief.prompt} : {}), ...(retry ? {retry} : {}), ...(watched ? {competitorWatched: watched} : {})}, maxTokens = Math.min(16000, 1500 + inputs.manifest.plan.scenes.length * 120), tokenLimit = messageTokenUpperBound(M.messages(promptInput)) + maxTokens;
       const id = randomUUID(), at = now();
       this.db.prepare("INSERT INTO score_jobs(id,family_id,content_id,status,scope,attempts,created_by,created_at,updated_at) VALUES(?,?,?,'queued',?,0,?,?,?)").run(id, inputs.family.id, contentId, JSON.stringify({contentRevision: inputs.content.revision, voiceApprovalId: inputs.voice.approvalId, connector, promptInput, ...(library ? {refs: Object.fromEntries(library.map(item => [item.ref, item.id]))} : {}), maxTokens, tokenLimit}), by, at, at);
       if (skillBrief) this.store.skillRuntime.recordUsage({jobId: id, familyId: inputs.family.id, room: 'audio', taskKey: 'audio.mix', brief: skillBrief});
       this.store.event(`Queued Claude music score for "${inputs.content.title}"`);
       return this.publicScoreJob(this.scoreJobRow(id));
     });
+  }
+  scoreRetry(contentId, feedback = '') {
+    // An AI score counts as an attempt; the program's free score is only the earlier version to beat.
+    const count = this.db.prepare("SELECT COUNT(*) AS n FROM scores WHERE content_id=? AND source='claude'").get(contentId).n;
+    if (!count && !feedback) return null;
+    let earlier = null;
+    try {
+      const p = JSON.parse(this.db.prepare('SELECT payload FROM scores WHERE content_id=? ORDER BY revision DESC LIMIT 1').get(contentId)?.payload || 'null');
+      if (p) earlier = {summary: String(p.summary || '').slice(0, 500), cues: (p.cues || []).slice(0, 10).map(cue => ({mood: cue.mood, energy: cue.energy, from: cue.startSeconds ?? cue.start, prompt: String(cue.prompt || '').slice(0, 160)}))};
+    } catch { earlier = null; }
+    return {attempt: Math.max(2, count + 1), ...(count ? {} : {kept: true}), ...(feedback ? {feedback} : {}), ...(earlier ? {earlier} : {})};
   }
   scoreJobRow(id) { const row = this.db.prepare('SELECT * FROM score_jobs WHERE id=?').get(id); requireValue(row, 'Score job not found.', 404); return row; }
   publicScoreJob(row) { const usage = this.db.prepare('SELECT * FROM intelligence_usage WHERE job_id=?').get(row.id); return {id: row.id, contentId: row.content_id, status: row.status, error: row.error, attempts: row.attempts, scoreId: row.score_id, createdAt: row.created_at, usage: usage ? {status: usage.status, total: usage.total_tokens} : null}; }
