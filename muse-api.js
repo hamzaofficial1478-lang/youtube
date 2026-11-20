@@ -58,8 +58,9 @@ class MuseClient {
   }
   // One reference picture uploaded to the Muse account (the same file returns the same asset id; no allowance used).
   async upload(file, mime) {
-    const bytes = fs.readFileSync(file);
-    const data = await this.call('POST', `/assets${this.query()}`, {headers: {'Content-Type': mime, 'Content-Length': String(bytes.length)}, body: bytes, timeoutMs: 120000});
+    const bytes = fs.readFileSync(file), send = () => this.call('POST', `/assets${this.query()}`, {headers: {'Content-Type': mime, 'Content-Length': String(bytes.length)}, body: bytes, timeoutMs: 120000});
+    // 503: the same file is being uploaded by another request; it gives the same asset id once that one is done.
+    const data = await send().catch(async error => { if (error?.httpStatus !== 503) throw error; await this.sleep(5000); return send(); });
     if (typeof data?.assetId !== 'string' || !data.assetId) throw new MuseError('response', 'The upload answer has no asset id.', this.token);
     return data.assetId;
   }

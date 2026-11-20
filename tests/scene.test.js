@@ -2101,7 +2101,7 @@ test('0.112: Muse makes an approved shot on the owner\'s account and the clip is
   execFileSync('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-f', 'lavfi', '-i', 'testsrc2=size=1280x720:rate=24:duration=3', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=3', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-y', clip]);
   t.after(() => fs.rmSync(clip, {force: true}));
   const calls = [];
-  let polls = 0, failNext = false;
+  let polls = 0, failNext = false, busyNext = false;
   const base = fakeNetwork();
   const network = {...base, fetch: async (url, options = {}) => {
     const u = String(url);
@@ -2109,6 +2109,7 @@ test('0.112: Muse makes an approved shot on the owner\'s account and the clip is
     calls.push({url: u, method: options.method || 'GET', auth: options.headers?.Authorization, redirect: options.redirect, body: options.body});
     const json = (data, status = 200) => new Response(JSON.stringify(data), {status, headers: {'content-type': 'application/json'}});
     if (u.endsWith('/v1/muse/accounts')) return json({'owner@example.com': {email: 'owner@example.com', status: 'ok'}});
+    if (u.includes('/v1/muse/jobs/video') && busyNext) { busyNext = false; return json({error: {code: 429, message: 'Too many videos at once', retryAt: new Date(Date.now() + 30000).toISOString()}}, 429); }
     if (u.includes('/v1/muse/jobs/video')) return failNext ? json({error: 'The weekly allowance is used up', code: 412}, 412) : json({jobid: 'job-1', status: 'started'}, 201);
     if (u.includes('/v1/muse/jobs/job-1')) return json(++polls < 2 ? {jobid: 'job-1', status: 'started'} : {jobid: 'job-1', status: 'completed', result: {assets: [{assetId: 'user:1-video:abc.mp4', type: 'video', mime: 'video/mp4'}], text: 'Done'}});
     if (u.includes('/v1/muse/assets/')) return new Response(fs.readFileSync(clip), {status: 200, headers: {'content-type': 'video/mp4'}});
@@ -2153,4 +2154,21 @@ test('0.112: Muse makes an approved shot on the owner\'s account and the clip is
   assert.equal(held.status, 'blocked_quota');
   assert.match(held.error, /weekly allowance/);
   assert.equal(job.kind, 'muse');
+  // 0.113: clips are made in parallel lanes; Muse saying it is busy puts the clip back in the queue and holds the lanes.
+  failNext = false;
+  const rest = shots(manifest).filter(item => item.source === 'ai-video' && ![shot.id, second.id].includes(item.id)).slice(0, 2);
+  assert.equal(rest.length, 2, 'the fixture plan has four AI-video shots');
+  rest.forEach(item => room.queueMuse({manifestId: manifest.id, shotId: item.id, requestedBy: 'Owner', connector: muse}));
+  const both = await Promise.all([room.processNextMuse(), room.processNextMuse()]);
+  assert.deepEqual(both.map(item => item?.status), ['completed', 'completed'], 'two clips run at once');
+  busyNext = true;
+  const third = shots(manifest).filter(item => item.source === 'ai-video' && ![shot.id, second.id, ...rest.map(r => r.id)].includes(item.id))[0];
+  room.queueMuse({manifestId: manifest.id, shotId: third.id, requestedBy: 'Owner', connector: muse});
+  assert.equal(await room.processNextMuse(), null);
+  const waiting = store.db.prepare("SELECT status, error FROM visual_jobs WHERE shot_id=? AND kind='muse' ORDER BY created_at DESC").get(third.id);
+  assert.equal(waiting.status, 'queued', 'a busy refusal waits in the queue');
+  assert.match(waiting.error, /Muse is busy/);
+  assert.equal(await room.processNextMuse(), null, 'the lanes hold until Muse\'s time');
+  room.museHoldUntil = 0;
+  assert.equal((await room.processNextMuse()).status, 'completed', 'then the clip is made');
 });

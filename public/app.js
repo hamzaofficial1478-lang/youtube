@@ -22,7 +22,9 @@ async function api(url,body,method='POST'){
   const response=await reach(url,{method,headers:body?{'Content-Type':'application/json','X-Local-Token':state.token}:{},body:body?JSON.stringify(body):undefined});
   const data=await response.json();if(!response.ok)throw new Error(data.error||'Request failed.');return data;
 }
-async function refresh(){const response=await reach('/api/state');if(!response.ok)throw new Error('The local program is unavailable. Restart it and refresh.');state=await response.json();render();}
+// 0.113: after an update the page reloads itself (its files are never cached), unless a window is open.
+let pageVersion=null;
+async function refresh(){const response=await reach('/api/state');if(!response.ok)throw new Error('The local program is unavailable. Restart it and refresh.');state=await response.json();const version=state.app?.version;if(pageVersion&&version&&version!==pageVersion&&!document.querySelector('dialog[open]'))return location.reload();pageVersion||=version;render();}
 function badge(label,color='gray'){return `<span class="chip ${color}">${esc(label)}</span>`;}
 function action(label,command,id='',className='secondary'){return `<button type="button" class="button ${className}" data-action="${command}" data-id="${esc(id)}">${label}</button>`;}
 // Craft check (youtube-agent-skill heuristics, English only). Advice beside a draft; it never blocks approval.
