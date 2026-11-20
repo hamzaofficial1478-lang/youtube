@@ -111,7 +111,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     if(!/^application\/json(?:;|$)/i.test(req.headers['content-type']||''))throw new InputError('Use application/json.',415);
     const chunks=[];let bytes=0;
     for await(const chunk of req){bytes+=chunk.length;if(bytes>limit)throw new InputError(`Request is too large. Maximum ${Math.round(limit/1024)} KB.`,413);chunks.push(chunk);}
-    let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'));}catch{throw new InputError('Request body is not valid JSON.');}
+    let body;try{body=JSON.parse(Buffer.concat(chunks).toString('utf8'),(key,value)=>key==='__proto__'?undefined:value);}catch{throw new InputError('Request body is not valid JSON.');}
     if(!body || typeof body!=='object' || Array.isArray(body))throw new InputError('Send a JSON object.');return body;
   }
   // 0.98 (owner 2026-11-10): jobs that stopped because the internet dropped are tried again by the program itself when
@@ -136,6 +136,8 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
     .add('trend-topics',{table:'trend_topics',label:'topic ideas',retry:row=>trends.retryTopics(row.id,again)});
   const server=http.createServer(async(req,res)=>{
     res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');res.setHeader('X-Frame-Options','DENY');
+    // 0.113 security review: other sites may not embed or open this program's files, and the page gets no camera, microphone or location.
+    res.setHeader('Cross-Origin-Opener-Policy','same-origin');res.setHeader('Cross-Origin-Resource-Policy','same-origin');res.setHeader('Permissions-Policy','camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()');
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       const port=server.address().port, host=req.headers.host;
@@ -527,7 +529,9 @@ if(require.main===module){
   const {server,dataRoot}=createApp({dataFile:process.env.CONTROL_ROOM_DATA_FILE||undefined,reach:reachable});
   server.on('error',error=>{console.error(error.code==='EADDRINUSE'?`Port ${port} is in use. Close the other app or set PORT to another local port.`:error.message);process.exit(1);});
   server.listen(port,'127.0.0.1',()=>console.log(`YouTube Control Room ${APP_VERSION}\nOpen http://127.0.0.1:${port}\nLocal production with named approvals; uploads happen only from Room 11 (or its locked autopilot) after the video is approved.`));
-  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{try{fs.writeFileSync(path.join(dataRoot,'last-stop.json'),JSON.stringify({reason:'stop',at:new Date().toISOString()}));}catch{}server.close();});
+  // 0.113: a stop closes the page's open connections too (server.close alone waited for them for ever), then the database, then exits.
+  let stopping=false;
+  for(const signal of ['SIGINT','SIGTERM'])process.on(signal,()=>{if(stopping)return;stopping=true;try{fs.writeFileSync(path.join(dataRoot,'last-stop.json'),JSON.stringify({reason:'stop',at:new Date().toISOString()}));}catch{}server.close(()=>process.exit(0));server.closeIdleConnections();setTimeout(()=>server.closeAllConnections(),5000).unref();setTimeout(()=>process.exit(0),15000).unref();});
   // One unexpected error in a background job must not stop the whole program (the page would only say
   // "Failed to fetch"); it is written to data/server-error.log and every job keeps its own recorded state.
   process.on('unhandledRejection',error=>console.error(`${new Date().toISOString()} Unhandled background error (the program keeps running):`,error?.stack||error));

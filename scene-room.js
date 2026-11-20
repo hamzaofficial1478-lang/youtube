@@ -20,6 +20,7 @@ const Fonts = require('./fonts');
 // One painted picture on the ChatGPT plan: about 11k uncached tokens in a live test (2026-10-22), reserved with room.
 const PAINT_TOKENS = 30000;
 // The libraries the program searches (0.57: Wikimedia Commons for archive and public-domain images).
+const MUSE_LANES = 4; // Muse clips made at once (0.113)
 const STOCK_NAMES = {pexels: 'Pexels', pixabay: 'Pixabay', wikimedia: 'Wikimedia Commons'};
 // The visual rules a plan follows: the style's look, every look of the engine for a mix, the footage look of a
 // documentary beside its designed shots.
@@ -2565,12 +2566,24 @@ class SceneRoom {
       return {...row, scope, ctx, cached: null};
     });
   }
+  // 0.113 (owner request 2026-11-20: "make Muse clips in parallel"): up to MUSE_LANES clips are made at once (each a
+  // separate Muse job; useapi.net runs up to 10 per account). Muse saying it is busy holds every lane until its time.
   async processNextMuse() {
-    if (this.museBusy) return null;
+    if ((this.museRunning || 0) >= MUSE_LANES || Date.now() < (this.museHoldUntil || 0)) return null;
     const job = this.claimVisual({muse: true});
     if (!job) return null;
-    this.museBusy = true;
-    try { return await this.runMuse(job); } finally { this.museBusy = false; }
+    this.museRunning = (this.museRunning || 0) + 1;
+    try { return await this.runMuse(job); } finally { this.museRunning--; }
+  }
+  // A reference picture is uploaded once for every lane (useapi.net refuses the same file while it is being uploaded,
+  // and gives the same asset id for the same file).
+  museUpload(client, connectorId, file) {
+    const key = `${connectorId}:${file}`, hit = (this.museUploads ||= new Map()).get(key);
+    if (hit && Date.now() - hit.at < 6 * 3600000) return hit.promise;
+    const promise = client.upload(file, /\.png$/i.test(file) ? 'image/png' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg');
+    this.museUploads.set(key, {promise, at: Date.now()});
+    promise.catch(() => this.museUploads.delete(key));
+    return promise;
   }
   async processNextVisual() {
     if (this.visualBusy) return null;
@@ -2895,16 +2908,15 @@ class SceneRoom {
     try { kept = JSON.parse(job.result || '{}') || {}; } catch { kept = {}; }
     live.start(key, {room: 'scene', label: `Muse makes ${job.ctx.shot.label}`, contentId: job.content_id, familyId: job.family_id, who: 'Meta Muse', wait: 'A Muse video sends nothing until it is ready (usually 1-3 minutes).'});
     const fail = (status, message) => { this.db.prepare('UPDATE visual_jobs SET status=?, error=?, updated_at=? WHERE id=?').run(status, String(message).slice(0, 1200), now(), job.id); return null; };
-    let file = null;
+    // A job Muse already started (before a stop or a failed download) is looked at again, never made twice.
+    let file = null, museJob = kept.museJob || null;
     try {
       const {MuseClient} = require('./muse-api'), client = new MuseClient(this.connectors.key(scope.connector.id), this.connectors.fetch);
-      // A job Muse already started (before a stop or a failed download) is looked at again, never made twice.
-      let museJob = kept.museJob || null;
       if (!museJob) {
         const images = [];
         for (const ref of scope.refs || []) {
           const [item] = this.store.brainReferenceFiles?.([ref.id]) || [];
-          if (item) images.push(await client.upload(item.file, /\.png$/i.test(item.file) ? 'image/png' : /\.webp$/i.test(item.file) ? 'image/webp' : 'image/jpeg'));
+          if (item) images.push(await this.museUpload(client, scope.connector.id, item.file));
         }
         live.note(key, `Muse makes ${job.ctx.shot.label}${images.length ? ` with ${images.length} reference picture(s)` : ''}`);
         museJob = await client.startVideo({prompt: scope.prompt, images});
@@ -2923,6 +2935,14 @@ class SceneRoom {
     } catch (error) {
       // A job that failed at Muse is over (Retry asks again); one still running, or a lost download, keeps its Muse job.
       if (error?.failed) this.db.prepare('UPDATE visual_jobs SET result=NULL WHERE id=?').run(job.id);
+      // Busy before anything started (too many clips at once): nothing was made or charged, so the clip waits in the
+      // queue and every lane holds until Muse's own time (at most 6 tries; then it waits for the owner's Retry).
+      if (error?.kind === 'busy' && !error.failed && !museJob && job.attempts < 6) {
+        const until = Date.parse(error.retryAt || '') || Date.now() + 60000;
+        this.museHoldUntil = Math.min(Math.max(until, Date.now() + 15000), Date.now() + 3600000);
+        this.db.prepare("UPDATE visual_jobs SET status='queued', error=?, updated_at=? WHERE id=?").run(`Muse is busy with other clips; this one goes on by itself after ${new Date(this.museHoldUntil).toISOString().slice(11, 16)} UTC.`, now(), job.id);
+        return null;
+      }
       return fail(error?.kind === 'allowance' || error?.kind === 'busy' ? 'blocked_quota' : 'failed', error instanceof InputError ? error.message : `Muse: ${error?.message || 'the clip could not be made'}`);
     } finally {
       if (file) fs.rmSync(file, {force: true});

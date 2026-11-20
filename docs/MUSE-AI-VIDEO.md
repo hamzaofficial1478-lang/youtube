@@ -30,6 +30,15 @@ Owner decision 2026-11-18: "I'm not asking for the API, I'm asking for the subsc
 
 Not tested: a real useapi.net account (a fake server stands in), a full render made of Muse clips, and the exact answer of `GET /accounts` (undocumented; the test reads either a list or an object of accounts).
 
+## 0.113: four clips at once, and how long a Muse clip is
+
+Owner request 2026-11-20: "make Muse clips in parallel to make the video process fast", and "Muse can make videos up to 1 hour".
+
+- **Parallel**: `processNextMuse` runs up to four clips at once (`MUSE_LANES`, each its own Muse job; useapi.net allows 10 jobs per account by default). When Muse answers busy (HTTP 429) before a job started, nothing was made or charged: the clip goes back in the queue with "Muse is busy ... goes on by itself after HH:MM UTC" and every lane waits until Muse's own retry time (15 s to an hour), at most 6 times, then the owner's Retry. The channel's reference picture is uploaded once for all four lanes (`museUpload`, kept 6 hours) and an upload refused with 503 (the same file being uploaded) is asked once more after 5 s.
+- **Length**: one Muse generation is a clip of about 10 seconds (useapi.net's job answer, Meta's preview and the reviews all say 10-15 s, and the API has no length setting). Pages that speak of long or one-hour Muse videos describe joining many clips, which is exactly what the program does: each shot of the storyboard is one clip of up to 10 s, and the Editing Room cuts them into a video of any length.
+
+Not tested: four clips at once on a real account (how many Muse itself runs at the same time is not documented; the busy hold covers it).
+
 ## Not done (0.111)
 
 - (0.111) No automatic generation. Since 0.112 the Muse connection makes the clips; uploading your own stays possible.

@@ -461,3 +461,11 @@ All painted and Mix need ChatGPT connected (it becomes the picture maker for tha
 ## The storyboard marks the shots the editor asked to redraw (0.109)
 
 Owner review 2026-11-12: the shots the editor asks for should show in the storyboard itself, not only in the card at the top. Each waiting shot now carries an "Editor asks to redraw" mark on its picture and the editor's words under its label, with "Choose who redraws it" jumping to the card (Redraw with ChatGPT or Claude); the storyboard heading counts them. Once sent, the mark becomes "Being drawn again" as before.
+
+## "Not started" while drawing, and two rows for one job (0.113)
+
+Owner report 2026-11-20 with two screenshots: the redraw card said "Not started" at the top while its first shots were being drawn and the bottom said "A storyboard job is running for this video"; and the storyboard box showed the same work twice.
+
+- **What was happening**: the editor asked for 19 shots. "Redraw with ChatGPT" had sent the drawn shot(s) as one Change-with-words job, which was running; the 18 listed were designed (HTML) shots that wait for the next press, because only one storyboard job runs per video. The label "Not started" was fixed text.
+- **The card now says what is true**, from the jobs its shots were sent to: "Drawing N now · M waiting", "N paused", "N drawn · M waiting", "All sent" or "Not started"; a line counts them (being drawn, paused, drawn, stopped, still waiting for you); the shots are listed under each state; while a job runs the buttons are replaced by "The first N are being drawn now; the M waiting ones can be sent when that job finishes".
+- **One entry per running job**: a job with live progress shows only in its live box, which now carries its own line (what it is, when it was asked and last run, the attempt) above Stop; the history rows below leave it out. Finished and earlier jobs stay in the rows and "Earlier attempts".

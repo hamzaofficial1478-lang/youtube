@@ -246,6 +246,8 @@ class ClaudeCode {
     if (!found) throw new AiError(CLAUDE_MISSING, 503);
     if (process.platform !== 'win32') throw new AiError('Open a terminal on this computer and run: claude auth login. Then test the connection again.', 400);
     // cmd /k keeps the window open, so its messages stay readable; the owner closes it when done.
+    // cmd reads the line itself, so a path with a quote, % or a line break is refused rather than passed on.
+    if ([found.command, ...found.prefix].some(part => /["%\r\n]/.test(part))) throw new AiError('Claude Code\'s path has characters the sign-in window cannot take. Open a terminal and run: claude auth login', 400);
     const line = `"${[found.command, ...found.prefix].map(part => `"${part}"`).join(' ')} auth login --claudeai"`;
     const child = spawn(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/k', line], {env: cliEnv(), detached: true, stdio: 'ignore', windowsVerbatimArguments: true});
     child.on('error', () => {});
