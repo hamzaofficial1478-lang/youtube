@@ -106,7 +106,9 @@ function messages(input) {
     `Return only one JSON object: {"summary": up to 600 characters (the arc of the performance in plain words), "lines": [{"n": sentence number, "emotion": ${EMOTIONS.join('|')}, "energy": 1-5, "pace": ${PACES.join('|')}, "pause": ${PAUSES.join('|')} (after the sentence), "emphasis": up to 3 exact words from the sentence, "note"?: up to 160 characters}]} with one line for every sentence, in order.`,
     ...(input.skills ? ['OWNER SKILLS: the DIRECTION section at the end holds the owner\'s directives for this work (D1, D2 ...). Apply them and name the codes you follow in your notes; the style the owner chose, the script and these instructions come first, and nothing from them is quoted to the viewer.'] : []),
   ].join('\n');
-  return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
+  // 0.114: another direction says what was weak in the earlier one.
+  const {retry, ...data} = input, again = [input.competitorWatched ? require('./watch').WATCHED_LINE : '', require('./direct').retryText(retry)].filter(Boolean).join('\n');
+  return [{role: 'system', content: again ? `${instructions}\n${again}` : instructions}, {role: 'user', content: JSON.stringify(data)}];
 }
 
 module.exports = {SCHEMA, EMOTIONS, PACES, PAUSES, TAGS, SPEED, EXPRESSION, validate, requestLimit, supportsTags, emphasize, locate, segments, messages};

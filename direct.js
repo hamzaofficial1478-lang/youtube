@@ -92,4 +92,18 @@ function cited(answer, brief) {
   return list.filter((item, k) => seen.has(String(k + 1))).map(item => item.id);
 }
 
-module.exports = {directives, directionText, lead, withDirection, directed, requestText, cited, isBrief};
+// 0.114 (owner 2026-11-20: "a retry with the same skills gives the same result; the program should ask the models what
+// the owner did not like"): another attempt at work the owner did not keep. The model first names what was weak in the
+// earlier attempt (the owner's words first, then each directive's checks), then does clearly better where it was weak.
+// retry: {attempt, feedback, earlier, kept}; '' for a first attempt.
+function retryText(retry) {
+  if (!retry || !(Number(retry.attempt) >= 2)) return '';
+  const said = String(retry.feedback || '').replace(/\s+/g, ' ').trim().slice(0, 1500);
+  return [
+    `ANOTHER ATTEMPT (attempt ${retry.attempt}): ${retry.kept ? 'the owner asks for a better version than the earlier one' : 'the owner did not keep the earlier attempt'}${said ? `, and says: "${said}"` : ''}.`,
+    retry.earlier ? `THE EARLIER ATTEMPT (data, summarised; never copy it back): ${JSON.stringify(retry.earlier).slice(0, 4000)}` : null,
+    `Before you answer, work out what was weak in it: ${said ? 'the owner\'s words first, then ' : ''}each directive's checks against it, and what a viewer would find dull, unclear, generic or repeated. Say it in one short line at the start of your notes, reasons or explanation. Then do clearly better and differently where it was weak: other choices, techniques of the directives the earlier attempt did not use, more precision and detail. Keep only what served the video and the owner did not criticise. Never return the earlier answer again.`,
+  ].filter(Boolean).join('\n');
+}
+
+module.exports = {directives, directionText, lead, withDirection, directed, requestText, cited, isBrief, retryText};

@@ -156,6 +156,43 @@ function measure({duration = null, cuts = null, transcript = null, colours = nul
   return out;
 }
 
+// 0.114 (owner 2026-11-20: "the competitor scan stays through the whole output and leads each room by the subjects
+// selected for each competitor"): the lessons of the watched competitor videos for one process of making our video (its
+// subjects only), with their measured rhythm and the transitions they name. rows: [{channel, title, result, measured}].
+const TRANSITION_WORDS = [['whip', 'whip-pan'], ['zoom cut', 'zoom-cut'], ['zoom transition', 'zoom-in'], ['glitch', 'glitch'], ['white flash', 'flash'], ['flash cut', 'flash'], ['dip to black', 'dip-to-black'], ['fade to black', 'dip-to-black'], ['dip to white', 'dip-to-white'], ['crossfade', 'crossfade'], ['cross-fade', 'crossfade'], ['cross dissolve', 'dissolve'], ['dissolve', 'dissolve'], ['slide', 'slide-left'], ['push transition', 'push-left'], ['wipe', 'wipe-left'], ['iris', 'iris-open'], ['pixel', 'pixelize'], ['blur transition', 'blur']];
+const BRISK_WORDS = /\b(fast[- ]paced|rapid|quick cuts?|snappy|frenetic|high[- ]energy|cuts every [0-3](?:\.\d)? ?s)/i, CALM_WORDS = /\b(slow[- ]paced|lingering|long holds?|calm pacing|unhurried|contemplative)/i;
+// The line every model reads when the data carries these lessons.
+const WATCHED_LINE = 'COMPETITOR VIDEOS WATCHED ("competitorWatched" in the data): what the program saw in the competitor videos the owner chose, by the subjects ticked for each channel, with their measured rhythm. Learn their techniques for this job and use them where they serve this video (name the channel in a reason or note when you follow one); at most 30% reference and at least 70% your own; never copy their wording, footage, identity or signature look.';
+function processLessons(rows, process, maxBytes = 8000) {
+  const subjects = PROCESSES[process]?.subjects || [], studies = [], words = [], rhythm = {shot: [], cpm: [], hook: []};
+  for (const row of rows || []) {
+    // The measured rhythm (cuts, shot lengths) belongs to editing; other processes read only their own subjects.
+    const given = row?.result?.subjects || {}, picked = {}, m = process === 'editing' ? row?.measured || {} : {};
+    for (const key of subjects) {
+      const item = given[key];
+      if (!item) continue;
+      picked[key] = {verdict: clip(item.verdict, 300), steps: (item.steps || []).slice(0, 4).map(step => clip(step, 220)), ...(item.numbers && Object.keys(item.numbers).length ? {numbers: item.numbers} : {})};
+      words.push(item.verdict || '', ...(item.steps || []), ...(item.observations || []).map(entry => `${entry.what || ''} ${entry.why || ''}`));
+    }
+    if (m.medianShotSeconds) rhythm.shot.push(m.medianShotSeconds);
+    if (m.cutsPerMinute) rhythm.cpm.push(m.cutsPerMinute);
+    if (Number.isFinite(m.cutsInFirst30s)) rhythm.hook.push(m.cutsInFirst30s);
+    if (!Object.keys(picked).length && !m.cutsPerMinute) continue;
+    studies.push({channel: clip(row.channel, 120), title: clip(row.title, 160), ...(Object.keys(picked).length ? {subjects: picked} : {}), ...(m.cutsPerMinute ? {measured: {medianShotSeconds: m.medianShotSeconds, cutsPerMinute: m.cutsPerMinute, cutsInFirst30s: m.cutsInFirst30s}} : {})});
+  }
+  if (!studies.length) return null;
+  const median = list => (list.length ? [...list].sort((a, b) => a - b)[Math.floor(list.length / 2)] : null), text = words.join(' ').toLowerCase();
+  const measured = {medianShotSeconds: median(rhythm.shot), cutsPerMinute: median(rhythm.cpm), cutsInFirst30s: median(rhythm.hook)};
+  const energy = measured.cutsPerMinute >= 18 || (measured.medianShotSeconds && measured.medianShotSeconds <= 2.5) || (!measured.cutsPerMinute && BRISK_WORDS.test(text)) ? 'brisk'
+    : (measured.cutsPerMinute && measured.cutsPerMinute <= 8) || (!measured.cutsPerMinute && CALM_WORDS.test(text)) ? 'calm' : null;
+  const out = {process, rule: 'Techniques only: at most 30% reference and at least 70% our own; never copy wording, footage, identity or a signature look.', channels: [...new Set(studies.map(item => item.channel).filter(Boolean))].slice(0, 6),
+    studies: studies.slice(0, 6), ...(measured.cutsPerMinute || measured.medianShotSeconds ? {rhythm: measured} : {}), ...(energy ? {energy} : {}),
+    transitions: [...new Set(TRANSITION_WORDS.filter(([word]) => text.includes(word)).map(([, type]) => type))].slice(0, 6)};
+  // The newest studies stay when it does not fit the prompt's share.
+  while (out.studies.length > 1 && Buffer.byteLength(JSON.stringify(out)) > maxBytes) out.studies.pop();
+  return out;
+}
+
 // ---------------------------------------------------------------- the watch request
 const SCHEMA = '{"summary": "what this video is and why it works, up to 600 characters", "title": "the title as you see or know it, or empty", "format": "long" | "short", "durationSeconds": number, "timeline": [{"from": "MM:SS", "to": "MM:SS", "part": "hook" | "setup" | "beat" | "rehook" | "payoff" | "cta" | "other", "seen": "what is on screen", "heard": "what is said or heard, described", "technique": "the craft at work"}] (8-80 entries covering the whole video), "subjects": {"<subject key>": {"verdict": "how they do it, 1-3 sentences", "steps": ["how to do it the way they do, in order, as instructions a producer can follow"], "observations": [{"at": "MM:SS", "what": "what happens there", "why": "why it works or does not"}], "numbers": {"<what>": "<measured or estimated value with its unit>"}}}, "retention": [{"at": "MM:SS", "kind": "regrab" | "drop", "what": "...", "why": "..."}], "beat": [{"at": "MM:SS", "weakness": "...", "howWeBeatIt": "..."}], "unavailable": ["what you could not see or hear that was asked"]}';
 function subjectLines(subjects) {
@@ -401,4 +438,4 @@ function roadmapBlocks(item) {
   return blocks;
 }
 
-module.exports = {WATCH_GUIDE, ADDED, SUBJECTS, PROCESSES, processOf, clock, secondsOf, frameTarget, frameTimes, parseTranscript, transcriptLines, measure, watchSystem, watchText, geminiPrompt, frameMessages, jsonOf, readBreakdown, roadmapMessages, readRoadmap, roadmapSkills, novelRules, sharedSkills, breakdownBlocks, roadmapBlocks};
+module.exports = {processLessons, WATCHED_LINE, WATCH_GUIDE, ADDED, SUBJECTS, PROCESSES, processOf, clock, secondsOf, frameTarget, frameTimes, parseTranscript, transcriptLines, measure, watchSystem, watchText, geminiPrompt, frameMessages, jsonOf, readBreakdown, roadmapMessages, readRoadmap, roadmapSkills, novelRules, sharedSkills, breakdownBlocks, roadmapBlocks};

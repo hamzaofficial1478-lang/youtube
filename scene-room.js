@@ -441,7 +441,9 @@ function planMessages(input, {findings = []} = {}) {
     ...(input.direction ? ['The video already has its art direction (input "direction"): design within it and do not return a new one.'] : []),
     ...(findings.length ? [`YOUR LAST ANSWER FOR THIS PART FAILED THESE CHECKS. Answer again with the whole part, these fixed: ${findings.slice(0, 8).join(' ')}`] : []),
   ].join('\n');
-  return [{role: 'system', content: instructions}, {role: 'user', content: JSON.stringify(input)}];
+  // 0.114: another storyboard says what was weak in the earlier one (kept out of the data).
+  const {retry, ...data} = input, again = [input.competitorWatched ? require('./watch').WATCHED_LINE : '', require('./direct').retryText(retry)].filter(Boolean).join('\n');
+  return [{role: 'system', content: again ? `${instructions}\n${again}` : instructions}, {role: 'user', content: JSON.stringify(data)}];
 }
 // Claude sometimes wraps its JSON in a sentence; the object itself is what counts.
 function looseJson(text) {
@@ -886,7 +888,9 @@ class SceneRoom {
     // The owner's approved skills for scene planning (0.39): reviewed craft rules, recorded with the job.
     // Chosen for this video (0.74): its subject, and its engine and looks (skills made for another engine stay out).
     const drawing = spec.drawing || {};
-    const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id, {tried: this.triedSkills(content.id, 'scene.plan'), text: [content.title, content.angle, inputs.family.niche, spec.name].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(inputs.family.format) ? inputs.family.format : null,
+    // 0.114: the owner's reason for building again, and the earlier storyboard in short.
+    const feedback = String(input.feedback ?? '').replace(/[\x00-\x1f\x7f]+/g, ' ').trim().slice(0, 1500), retry = this.planRetry(content.id, feedback);
+    const skillBrief = this.store.skillRuntime?.brief('scene.plan', inputs.family.id, {tried: this.triedSkills(content.id, 'scene.plan'), text: [content.title, content.angle, inputs.family.niche, spec.name, feedback].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(inputs.family.format) ? inputs.family.format : null,
       style: skillStyle(inputs, spec)}) || null;
     // Why the owner revoked earlier visuals of this script (0.86): the next storyboard learns from them.
     const rejected = this.db.prepare("SELECT end_reason FROM visual_approvals WHERE content_id=? AND status='revoked' ORDER BY ended_at DESC LIMIT 5").all(content.id).map(row => String(row.end_reason || '').replace(/\s*Revoked by [^.]*\.\s*$/, '').trim().slice(0, 300)).filter(Boolean);
@@ -911,6 +915,9 @@ class SceneRoom {
       ...(channel ? {channel} : {}),
       ...(skillBrief ? {skills: skillBrief.prompt} : {}),
       ...(rejected.length ? {ownerRejected: rejected} : {}),
+      ...(retry ? {retry} : {}),
+      // 0.114: the visuals, look and characters of the competitor videos the program watched.
+      ...((watched => (watched ? {competitorWatched: watched} : {}))((() => { try { return this.store.competitorLessons?.(inputs.family.id, 'storyboard', 6000) || null; } catch { return null; } })())),
     };
     // One part for an ordinary script; a long one is split into parts of PART_SENTENCES with their neighbours' words.
     // A drawing engine as the primary means every shot carries a drawing; partner cutaways in a footage video do not shrink the parts.
@@ -1765,6 +1772,17 @@ class SceneRoom {
   // The skills earlier storyboards and redraws of this video were given (0.94, owner report 2026-11-05: "the program not
   // even tried the new skills or new ways to draw"): each time one was used it counts less for the next attempt, so a
   // video drawn again gets skills it has not tried yet, by id with how often.
+  // The earlier storyboard of this script in short, for another attempt (null for the first one).
+  planRetry(contentId, feedback = '') {
+    const count = this.db.prepare("SELECT COUNT(*) AS n FROM scene_manifests WHERE content_id=? AND source='claude'").get(contentId).n;
+    if (!count && !feedback) return null;
+    let earlier = null;
+    try {
+      const row = this.latestManifestRow(contentId), p = row ? JSON.parse(row.payload) : null;
+      if (p) earlier = {summary: String(p.summary || '').slice(0, 500), scenes: (p.scenes || []).slice(0, 8).map(scene => ({label: scene.label, purpose: scene.purpose, direction: String(scene.direction || '').slice(0, 160), shots: (scene.shots || []).length}))};
+    } catch { earlier = null; }
+    return {attempt: count + 1, ...(feedback ? {feedback} : {}), ...(earlier ? {earlier} : {})};
+  }
   triedSkills(contentId, taskKey, exceptJobId = null) {
     const tried = {};
     for (const row of this.db.prepare('SELECT u.skill_ids FROM skill_usage u JOIN scene_plan_jobs j ON j.id=u.job_id WHERE j.content_id=? AND u.task_key=? AND j.id<>?').all(contentId, taskKey, exceptJobId || '')) {

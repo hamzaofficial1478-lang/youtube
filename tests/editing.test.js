@@ -182,6 +182,10 @@ test('0.109: each engine edits with its own transitions, and a clip\'s effects r
   assert.match(joinInto(anime, 'sc3').reason, /editing grammar/);
   assert.equal(joinInto(board, 'sc3').type, 'wipe-left');
   assert.ok(anime.clips.every(clip => clip.grammar === 'atelier/anime') && board.clips.every(clip => clip.grammar === 'handdrawn'));
+  // 0.114: the watched competitors' transitions come first, and the reason names them.
+  const learned = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: purposes, assets, spec, grammar: 'handdrawn', lessons: {channels: ['Rival'], transitions: ['whip-pan'], energy: 'brisk'}});
+  assert.equal(joinInto(learned, 'sc3').type, 'whip-pan');
+  assert.match(joinInto(learned, 'sc3').reason, /the competitors' editing \(Rival\)/);
   // Without a grammar (older callers) nothing changes: no grammar, no effects.
   const plain = B.autoEdit({fps: 30, narrationSeconds, sentences, scenes: purposes, assets, spec});
   assert.ok(plain.clips.every(clip => clip.grammar === undefined && clip.fx === undefined));
@@ -1737,6 +1741,13 @@ test('0.106: the live player gets its saved videos, and Claude or ChatGPT edit t
   assert.deepEqual(edited.timeline.sfxEdits, [{op: 'add', seconds: 1, kind: 'cheer'}]);
   assert.deepEqual([edited.aiEdit.applied, edited.aiEdit.refused.length, edited.aiEdit.redraws.length], [1, 1, 0], 'what passed its checks is applied, the rest is named');
   assert.equal(editing.revisionRow(edited.id).revision, 2, 'the brain\'s cut is revision 1, the AI\'s edit revision 2 (undo goes back to the cut)');
+  // 0.114: "Edit again" works on the current revision with the owner's reason, names the earlier edit, and rotates skills.
+  const again = await editing.editWith(content.id, {requestedBy: 'Owner', visualApprovalId: approval.id, ai: 'claude', fromRevision: edited.id, feedback: 'Too calm in the middle; more energy on the reveals.'});
+  assert.equal(asked.length, 2);
+  assert.match(asked[1].messages[0].content, /ANOTHER ATTEMPT \(attempt 2\): the owner asks for a better version/);
+  assert.match(asked[1].messages[1].content, /Too calm in the middle/);
+  assert.equal(editing.revisionRow(again.id).revision, 3, 'edited on r2, not on a fresh cut');
+  await assert.rejects(editing.editWith(content.id, {requestedBy: 'Owner', ai: 'claude', fromRevision: edited.id}), /newer revision/);
 });
 
 // 0.108: a storyboard made all painted has painted (natural) shots while its style has no picture type; the Editing

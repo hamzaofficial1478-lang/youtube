@@ -97,3 +97,30 @@ test('0.109: the effects render through FFmpeg and keep BT.709 TV range', {skip:
   assert.equal(Fx.filters([], {width: 320, height: 180, fps, frames: 60}), '', 'no effects, no filters');
   fs.rmSync(dir, {recursive: true, force: true});
 });
+
+// 0.114 (owner 2026-11-20: "I clicked an effect and there was no option to change it"; "the competitors' editing should
+// lead the edit"): one effect is removed by its moment; the watched competitors' brisk editing earns more moments.
+test('0.114: one effect is changed by its moment, and brisk competitors earn more effects', () => {
+  const timeline = {schema: 'ytprod.edit/1', fps, format: 'long-form', totalFrames: 330, narrationSeconds: 11, scenes: [], graphics: [], markers: [],
+    clips: clips.map(clip => ({...clip, label: clip.id.toUpperCase(), assetId: 'a', clipSeconds: null, inSeconds: 0, speed: 1, move: null, hero: false, part: null})),
+    joins: [{type: 'cut', frames: 0}, {type: 'cut', frames: 0}], ending: {fadeOutFrames: 0}};
+  const two = B.applyOp(B.applyOp(timeline, {type: 'add-fx', clipId: 'c1', kind: 'flash', at: 0.5}).timeline, {type: 'add-fx', clipId: 'c1', kind: 'flash', at: 2.5}).timeline;
+  // The inspector sends remove-fx (by its moment) then add-fx.
+  const one = B.applyOp(two, {type: 'remove-fx', clipId: 'c1', kind: 'flash', at: 2.5}).timeline;
+  assert.deepEqual(one.clips[0].fx.map(effect => effect.at), [0.5], 'only the effect at that moment goes');
+  const moved = B.applyOp(one, {type: 'add-fx', clipId: 'c1', kind: 'shake', at: 1.2, amount: 0.5}).timeline;
+  assert.deepEqual(moved.clips[0].fx.map(effect => effect.kind), ['flash', 'shake']);
+  // Brisk competitors: more moments (three a clip, closer together); calm ones: fewer.
+  const count = boost => Object.values(place('atelier', {boost}).fx).flat().filter(effect => Fx.FX[effect.kind].moment).length;
+  assert.ok(count(1.5) >= count(1), `${count(1.5)} >= ${count(1)}`);
+  assert.ok(count(0.7) <= count(1));
+});
+
+test('0.114: the watched competitors\' editing gives the free edit their transitions and rhythm', () => {
+  const W = require('../watch');
+  const lessons = W.processLessons([{channel: 'Rival', title: 'How money began', result: {subjects: {transitions: {verdict: 'Whip pans between ideas and a glitch on every turn', steps: ['whip pan on a topic change']}, pacing: {verdict: 'Fast-paced, quick cuts'}}}, measured: {medianShotSeconds: 2, cutsPerMinute: 22, cutsInFirst30s: 13}}], 'editing');
+  assert.deepEqual([lessons.energy, lessons.transitions.slice(0, 2)], ['brisk', ['whip-pan', 'glitch']]);
+  assert.deepEqual(lessons.channels, ['Rival']);
+  assert.equal(W.processLessons([{channel: 'Rival', result: {subjects: {voice: {verdict: 'calm'}}}, measured: {cutsPerMinute: 22}}], 'packaging'), null, 'other processes read only their own subjects');
+  assert.match(W.WATCHED_LINE, /at most 30% reference/);
+});

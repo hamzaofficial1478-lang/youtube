@@ -435,7 +435,7 @@ function proposeGraphics({scenes, sentences, fps, totalFrames, spec}) {
   });
 }
 
-function sceneJoin(previous, next, budget, spec, fps, prefer = []) {
+function sceneJoin(previous, next, budget, spec, fps, prefer = [], source = "the engine's editing grammar") {
   const plan = transitionPlan(spec, fps, prefer);
   // Claude's choice for this scene in the plan comes first, when the style allows it (owner review 2026-10-16:
   // the program thinks for itself; nothing here limits the variety it chooses).
@@ -445,7 +445,7 @@ function sceneJoin(previous, next, budget, spec, fps, prefer = []) {
     return {type: chosen, frames: Math.min(plan.maxFrames, Math.max(2, Math.round(T.secondsOf(chosen) * fps))), reason: `The scene plan chose ${chosen} here: ${T.CATALOG[chosen].use}.`, skill: SKILL.transitions};
   }
   if (plan.primary && plan.frames >= 2 && budget.left > 0) {
-    const say = (type, frames, why) => ({type, frames, reason: `${why} (${plan.energy} energy${prefer.length ? `, the engine's editing grammar` : ''}: ${plan.primary} between related scenes${plan.accent ? `, ${plan.accent} for a change of topic` : ''}).`, skill: SKILL.transitions});
+    const say = (type, frames, why) => ({type, frames, reason: `${why} (${plan.energy} energy${prefer.length ? `, ${source}` : ''}: ${plan.primary} between related scenes${plan.accent ? `, ${plan.accent} for a change of topic` : ''}).`, skill: SKILL.transitions});
     if (['close', 'call-to-action'].includes(next.purpose) && plan.outro) return say(plan.outro, Math.min(plan.maxFrames, Math.round(0.8 * fps)), 'The outro gets the slowest, simplest transition');
     if (next.purpose === 'recap') return say(plan.gentle, Math.min(plan.maxFrames, Math.round(0.6 * fps)), 'The wind-down returns to a gentle transition');
     if (plan.accent && (next.purpose === 'turn' || PURPOSE_REGISTER[next.purpose] !== PURPOSE_REGISTER[previous.purpose])) return say(plan.accent, plan.frames, next.purpose === 'turn' ? 'The turn gets the accent transition' : 'A change of topic gets the accent transition, so the viewer resets');
@@ -455,10 +455,15 @@ function sceneJoin(previous, next, budget, spec, fps, prefer = []) {
 }
 
 // The auto edit. `variants` (sceneId -> n) lets single-scene repair produce a different take of one scene.
-function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null, accent = null, grammar = null, delivery = null}) {
+function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, format = 'long-form', variants = {}, pauses = [], locale = 'en', measured = null, accent = null, grammar = null, delivery = null, lessons = null}) {
   // 0.109: the video's editing grammar (its engine and finish) and each clip's own (a designed shot edits by its finish).
   // Without a grammar (older callers) the edit is drafted as before: no effects, the energy table's transitions.
-  const videoGrammar = Fx.GRAMMAR[grammar] ? grammar : null, prefer = videoGrammar ? Fx.GRAMMAR[videoGrammar].transitions : [];
+  // 0.114: the competitors' editing (what the program watched, by the subjects ticked for each channel) comes first:
+  // the transitions they use, and their rhythm sets how many effects land.
+  const videoGrammar = Fx.GRAMMAR[grammar] ? grammar : null, learned = (lessons?.transitions || []).filter(type => T.CATALOG[T.resolve(type)]);
+  const prefer = [...learned, ...(videoGrammar ? Fx.GRAMMAR[videoGrammar].transitions : [])];
+  const joinSource = learned.length ? `the competitors' editing (${(lessons.channels || []).slice(0, 3).join(', ') || 'watched videos'}) and the engine's grammar` : "the engine's editing grammar";
+  const boost = lessons?.energy === 'brisk' ? 1.5 : lessons?.energy === 'calm' ? 0.7 : 1;
   const totalFrames = Math.max(1, Math.round(narrationSeconds * fps));
   const {pacing} = spec;
   const minF = Math.max(1, Math.round(pacing.shotMinSeconds * fps)), maxF = Math.max(minF, Math.round(pacing.shotMaxSeconds * fps));
@@ -616,8 +621,8 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
     const own = assets?.[b.shotId]?.sketch?.transition;
     // Order: a drawing's own opening move, then Claude's choice for the scene, then the brain's own habits.
     let join = own && own !== 'cut' ? {type: 'cut', frames: 0, reason: `The next drawing opens with its own ${own} move, so the edit cuts.`, skill: SKILL.transitions}
-      : next.transition ? sceneJoin(previous, next, budget, spec, fps, prefer)
-      : previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook} : sceneJoin(previous, next, budget, spec, fps, prefer);
+      : next.transition ? sceneJoin(previous, next, budget, spec, fps, prefer, joinSource)
+      : previous.index === 0 ? {type: 'cut', frames: 0, reason: 'The hook ends on a hard cut to keep the energy.', skill: SKILL.hook} : sceneJoin(previous, next, budget, spec, fps, prefer, joinSource);
     if (join.type !== 'cut' && !next.transition && joins.length && joins[joins.length - 1].type !== 'cut') join = {type: 'cut', frames: 0, reason: 'Two transitions in a row would look decorative; this one is a hard cut.', skill: SKILL.transitions};
     const shorter = Math.min(a.frames, b.frames);
     if (join.type !== 'cut') join.frames = Math.max(2, Math.min(join.frames, Math.floor(shorter / 3)));
@@ -629,7 +634,7 @@ function autoEdit({fps, narrationSeconds, sentences, scenes, assets, spec, forma
   // 0.109: effects over the shots, placed by the engine's grammar on the words that land and the narrator's feeling.
   const clipGrammar = clip => (Fx.GRAMMAR[assets?.[clip.shotId]?.grammar] ? assets[clip.shotId].grammar : videoGrammar);
   const spoken = videoGrammar ? Cap.wordTimings({sentences, pauses, narrationSeconds, measured}) : [];
-  const placed = !videoGrammar ? {fx: {}} : Fx.placeEffects({clips: clips.map(clip => ({...clip, purpose: sceneRows.find(scene => scene.id === clip.sceneId)?.purpose})), fps, words: spoken, sentences, delivery, grammarOf: clipGrammar, camera: clip => assets?.[clip.shotId]?.camera || null, meaningsOf: require('./music').meaningsOf});
+  const placed = !videoGrammar ? {fx: {}} : Fx.placeEffects({clips: clips.map(clip => ({...clip, purpose: sceneRows.find(scene => scene.id === clip.sceneId)?.purpose})), fps, words: spoken, sentences, delivery, grammarOf: clipGrammar, camera: clip => assets?.[clip.shotId]?.camera || null, meaningsOf: require('./music').meaningsOf, boost});
   if (videoGrammar) clips.forEach(clip => { clip.grammar = clipGrammar(clip); if (placed.fx[clip.id]) clip.fx = placed.fx[clip.id]; });
   const scenesOut = sceneRows.map(scene => ({id: scene.id, label: scene.label, purpose: scene.purpose, register: scene.register, startFrame: scene.startFrame, endFrame: scene.endFrame, sentenceStart: scene.sentenceStart, sentenceEnd: scene.sentenceEnd, variant: scene.variant}));
   const graphics = proposeGraphics({scenes: sceneRows, sentences, fps, totalFrames, spec});
@@ -998,7 +1003,9 @@ function applyOp(source, op, {spec, checkDrawing = null} = {}) {
   } else if (op.type === 'remove-fx') {
     const clip = timeline.clips[findClip(timeline, op.clipId)];
     if (op.kind !== undefined && op.kind !== null && !Fx.KINDS.includes(op.kind)) throw opError(`Effects are: ${Fx.KINDS.join(', ')}.`);
-    const before = (clip.fx || []).length, kept = (clip.fx || []).filter(item => op.kind && item.kind !== op.kind);
+    // 0.114: with "at", only that one effect goes (the inspector changes one effect at a time).
+    const exact = op.at !== undefined && op.at !== null && Number.isFinite(Number(op.at));
+    const before = (clip.fx || []).length, kept = (clip.fx || []).filter(item => !((!op.kind || item.kind === op.kind) && (!exact || Math.abs(item.at - Number(op.at)) < 0.05)));
     if (kept.length === before) throw opError(`${clip.label} has no ${op.kind || ''} effect to remove.`.replace('  ', ' '));
     if (kept.length) clip.fx = kept; else delete clip.fx;
     receipt.changed.push(clip.id);

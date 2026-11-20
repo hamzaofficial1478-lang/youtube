@@ -717,3 +717,44 @@ test('0.108: no skill that lowers quality reaches a model: none among the built-
   assert.ok(ids.includes('scene.rich-places') && !ids.includes('scene.cheap-scenes'), 'the risky skill is held back from the brief');
   assert.ok(skillQuality(validateSkill(risky)).some(note => /Held back from every job because it saves cost/.test(note)), 'and the owner is told why');
 });
+
+// 0.114 (owner 2026-11-20: "on a retry the same skills give the same result; scan for more skills and ask the models
+// what I did not like"): every job of the same video and task counts the skills earlier attempts got, so the next
+// attempt brings skills it has not tried; and each room's messages carry the owner's reason and the earlier attempt.
+test('0.114: a retry rotates in untried skills for the same video, and the AI is told what was weak', t => {
+  const app = createApp({dataFile: ':memory:', worker: false, protector: {transform: (operation, input) => input}});
+  t.after(() => app.store.close());
+  const store = app.store, skills = app.skills || new SkillsEngine(store, {root});
+  const family = store.saveFamily({name: 'Stone Age Money', tier: 'A', countries: ['United States'], audience: 'Adults who like history told simply.', niche: 'Stone age finance', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 0, cadence: 2, format: 'long-form', competitors: []});
+  const content = store.saveContent({familyId: family.id, kind: 'fiction', title: 'The first casino', angle: '', hook: '', script: '', sources: [], rightsConfirmed: false});
+  const context = {contentId: content.id, text: 'The first casino of the stone age, a story about money and luck', format: 'long-form'};
+  const first = skills.brief('script.candidate', {familyId: family.id, context});
+  assert.ok(first.skillIds.length >= 6);
+  const at = new Date().toISOString();
+  store.db.prepare("INSERT INTO jobs(id,content_id,revision,type,status,created_at,updated_at) VALUES('job-1',?,1,'ai_script:x','completed',?,?)").run(content.id, at, at);
+  skills.recordUsage({jobId: 'job-1', familyId: family.id, room: 'script', taskKey: 'script.candidate', brief: first});
+  assert.equal(skills.tried('script.candidate', content.id, family.id)[first.skillIds[0]], 1);
+  const second = skills.brief('script.candidate', {familyId: family.id, context});
+  const fresh = second.skillIds.filter(id => !first.skillIds.includes(id));
+  assert.ok(fresh.length >= 1, 'the next attempt brings skills the first did not get');
+  assert.ok(second.reasons.some(why => why.tried), 'the reason names the tried skills');
+  // Another video is not affected by this one's attempts.
+  const other = store.saveContent({familyId: family.id, kind: 'fiction', title: 'Another', angle: '', hook: '', script: '', sources: [], rightsConfirmed: false});
+  assert.deepEqual(skills.brief('script.candidate', {familyId: family.id, context: {...context, contentId: other.id}}).skillIds, first.skillIds);
+  // The retry line: the owner's words first, the earlier attempt as data, never the same answer again.
+  const D = require('../direct');
+  assert.equal(D.retryText(null), '');
+  assert.equal(D.retryText({attempt: 1}), '');
+  const line = D.retryText({attempt: 3, feedback: 'The hook is weak and the middle drags.', earlier: {title: 'Old title'}});
+  assert.match(line, /ANOTHER ATTEMPT \(attempt 3\).*"The hook is weak and the middle drags\."/);
+  assert.match(line, /THE EARLIER ATTEMPT .*Old title/);
+  assert.match(line, /Never return the earlier answer again/);
+  // The writer, the voice director and the music supervisor put it in their instructions, not in the data.
+  const [system, user] = scriptMessages({family: {format: 'long-form', locale: 'en-US'}, content: {title: 'x'}, sources: [], retry: {attempt: 2, feedback: 'too slow'}});
+  assert.match(system.content, /ANOTHER ATTEMPT \(attempt 2\).*too slow/);
+  assert.doesNotMatch(user.content, /too slow/);
+  for (const messages of [require('../delivery').messages({sentences: [], retry: {attempt: 2, feedback: 'flat'}}), require('../music').messages({retry: {attempt: 2, feedback: 'too sad'}})]) {
+    assert.match(messages[0].content, /ANOTHER ATTEMPT/);
+    assert.doesNotMatch(messages[1].content, /"retry"/);
+  }
+});

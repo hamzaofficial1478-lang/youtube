@@ -654,6 +654,7 @@ class SkillsEngine {
   // some skills show completed and some pending?"). Only script jobs and language checks wrote an outcome, so every
   // other record said "pending" forever; the job's own record is read instead.
   jobOf(taskKey, jobId) {
+    if (taskKey === 'editing.plan' && this.tableHas('edit_commands')) { const command = this.db.prepare('SELECT status, content_id FROM edit_commands WHERE id=?').get(jobId); if (command) return {status: command.status, contentId: command.content_id}; }
     if (taskKey === 'editing.plan') { const row = this.tableHas('edit_revisions') && this.tableHas('edit_timelines') ? this.db.prepare('SELECT t.content_id FROM edit_revisions r JOIN edit_timelines t ON t.id=r.timeline_id WHERE r.id=?').get(jobId) : null; return row ? {status: 'completed', contentId: row.content_id} : null; }
     // 0.107: a job of the competitor blueprint is an analysis or a roadmap.
     for (const table of [].concat(USAGE_JOBS[taskKey] || [])) {
@@ -662,6 +663,16 @@ class SkillsEngine {
       if (row) return {status: row.status, contentId: row.content_id || null};
     }
     return null;
+  }
+  // {skillId: times} given to earlier jobs of this task for this video (any room records its jobs in skill_usage).
+  tried(taskKey, contentId, familyId = null) {
+    const out = {};
+    const rows = this.db.prepare('SELECT job_id, skill_ids FROM skill_usage WHERE task_key=? AND (? IS NULL OR family_id=?) ORDER BY created_at DESC LIMIT 300').all(taskKey, familyId, familyId);
+    for (const row of rows) {
+      if (this.jobOf(taskKey, row.job_id)?.contentId !== contentId) continue;
+      try { for (const id of JSON.parse(row.skill_ids)) out[id] = (out[id] || 0) + 1; } catch { /* a damaged record is skipped */ }
+    }
+    return out;
   }
   tableHas(table, column = null) {
     this.columnsCache ||= new Map();
@@ -1001,6 +1012,9 @@ class SkillsEngine {
   // budget is dropped whole and counted, never trimmed mid-rule.
   brief(taskKey, {familyId = null, byteBudget = TASK_BRIEF_BYTES[taskKey] || BRIEF_BYTE_BUDGET, context = {}} = {}) {
     integer(byteBudget, 200, 40000, 'Brief byte budget');
+    // 0.114 (owner 2026-11-20: "on a retry the same skills give the same result"): every job of the same video and task
+    // counts the skills earlier attempts were given, so a new attempt rotates in skills it has not tried yet.
+    if (context.contentId && !context.tried) context = {...context, tried: this.tried(taskKey, context.contentId, familyId)};
     const selected = this.select(taskKey, {familyId}), ranked = rankSkills(selected, taskKey, context), {offFormat, alternatives} = ranked;
     // 0.97: skills written for other jobs that this request strongly needs (three or more of its own words) join after
     // the job's leading skills, four at most, so the program hands a model what the moment calls for, not only its label.
