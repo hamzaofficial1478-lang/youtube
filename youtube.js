@@ -4,6 +4,7 @@ const path = require('node:path');
 const {spawnSync} = require('node:child_process');
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
+const {readBounded} = require('./intel-sources');
 
 function validateKey(key) {
   if (typeof key !== 'string' || !/^[A-Za-z0-9_-]{30,200}$/.test(key)) {
@@ -66,19 +67,8 @@ function channelFilter(input) {
 }
 
 async function responseJson(response) {
-  const reader = response.body?.getReader();
-  if (!reader) throw new InputError('YouTube returned an empty response. Try again later.', 502);
-  const chunks = []; let size = 0;
-  try {
-    for (;;) {
-      const {done, value} = await reader.read(); if (done) break;
-      size += value.length;
-      if (size > 131072) { await reader.cancel(); throw new Error('Response limit'); }
-      chunks.push(Buffer.from(value));
-    }
-    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  } catch { throw new InputError('YouTube returned an unreadable response. Try again later.', 502); }
-  finally { reader.releaseLock(); }
+  const body = await readBounded(response, 131072, {empty: 'YouTube returned an empty response. Try again later.', tooBig: 'YouTube returned an unreadable response. Try again later.'});
+  try { return JSON.parse(body.toString('utf8')); } catch { throw new InputError('YouTube returned an unreadable response. Try again later.', 502); }
 }
 
 class YouTubeResearch {

@@ -14,7 +14,7 @@ const {randomUUID, createHash} = require('node:crypto');
 const {InputError} = require('./store');
 const {AiError, messageTokenUpperBound} = require('./writer');
 const {Ai} = require('./ai');
-const {connectorCurrent, connectorReference} = require('./intel-sources');
+const {connectorCurrent, connectorReference, readBounded} = require('./intel-sources');
 const {analyzeAudio} = require('./voice');
 const M = require('./music');
 const Sk = require('./sketch');
@@ -43,12 +43,9 @@ class ElevenLabsAudioClient {
     let response;
     try { onRequest(); response = await this.fetch(url, {method: 'POST', headers: {'xi-api-key': this.key, 'Content-Type': 'application/json', Accept: 'audio/mpeg'}, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(kind === 'music' ? 900000 : 180000)}); } catch { throw new InputError('The ElevenLabs request failed or timed out after it started. Its billing outcome is unknown.', 502); }
     if (!response.ok) { await response.body?.cancel(); throw new InputError(`ElevenLabs returned HTTP ${response.status}. Its billing outcome may be unknown.`, 502); }
-    const reader = response.body?.getReader(), chunks = [];
-    if (!reader) throw new InputError('ElevenLabs returned no audio.', 502);
-    let bytes = 0;
-    while (true) { const {done, value} = await reader.read(); if (done) break; bytes += value.byteLength; if (bytes > MAX_AUDIO_BYTES) { await reader.cancel(); throw new InputError('The generated audio exceeded the 60 MB safety limit.', 502); } chunks.push(Buffer.from(value)); }
-    if (bytes < 256) throw new InputError('ElevenLabs returned an empty or incomplete file.', 502);
-    return {audio: Buffer.concat(chunks, bytes), requestId: response.headers.get('song-id') || response.headers.get('request-id') || response.headers.get('x-request-id') || null};
+    const audio = await readBounded(response, MAX_AUDIO_BYTES, {empty: 'ElevenLabs returned no audio.', tooBig: 'The generated audio exceeded the 60 MB safety limit.'});
+    if (audio.length < 256) throw new InputError('ElevenLabs returned an empty or incomplete file.', 502);
+    return {audio, requestId: response.headers.get('song-id') || response.headers.get('request-id') || response.headers.get('x-request-id') || null};
   }
 }
 

@@ -13,7 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
-const {connectorReference} = require('./intel-sources');
+const {connectorReference, readBounded} = require('./intel-sources');
 const M = require('./music');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -68,13 +68,6 @@ function licenceOf(value) {
 }
 const creditLine = item => `"${item.title}" by ${item.author} (${item.page}), ${item.licence.code}${item.licence.credit ? ` ${item.licence.url}` : ''}`;
 
-async function readBounded(response, limit) {
-  const reader = response.body?.getReader(), chunks = [];
-  requireValue(reader, 'The download returned no data.', 502);
-  let bytes = 0;
-  while (true) { const {done, value} = await reader.read(); if (done) break; bytes += value.byteLength; if (bytes > limit) { await reader.cancel(); throw new InputError('The file is larger than the size limit.', 502); } chunks.push(Buffer.from(value)); }
-  return Buffer.concat(chunks, bytes);
-}
 
 const pause = ms => (ms > 0 ? new Promise(resolve => setTimeout(resolve, ms)) : Promise.resolve());
 class FreesoundClient {

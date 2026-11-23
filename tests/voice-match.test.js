@@ -239,3 +239,24 @@ test('editing-room.js: the edit takes the clip sound the style chose; only clips
   assert.deepEqual(EditingRoom.prototype.clipSounds({assets}, timeline, 'voice'), [{clipId: 'c1', label: 'S01A', start: 2, seconds: 3, inSeconds: 0.5, speed: 0.85, sha256: 'a'.repeat(64), relativePath: 'x.mp4'}]);
   assert.deepEqual(EditingRoom.prototype.clipSounds({assets}, timeline, 'ambience').map(item => item.clipId), ['c2'], 'ambience never lays a speaking clip under the narrator');
 });
+
+test('0.117 (audit): one bounded reader stops a download at its limit; a Fish sample is never read past 8 MB', async t => {
+  const {readBounded} = require('../intel-sources');
+  // An endless answer of 1 MB pieces: the reader must stop pulling once it passes the limit.
+  const endless = () => { let pulls = 0; return {get pulls() { return pulls; }, response: {headers: {get: () => null}, body: new ReadableStream({pull(controller) { pulls++; controller.enqueue(new Uint8Array(1024 * 1024)); }})}}; };
+  const big = endless();
+  await assert.rejects(readBounded(big.response, 3 * 1024 * 1024, {tooBig: 'too big'}), /too big/);
+  assert.ok(big.pulls <= 5, `stopped after ${big.pulls} pieces`);
+  await assert.rejects(readBounded({headers: {get: name => (name === 'content-length' ? '999999999' : null)}, body: new ReadableStream({start(c) { c.close(); }})}, 1024, {tooBig: 'declared'}), /declared/, 'a declared size over the limit is refused before reading');
+  assert.equal((await readBounded(new Response(Buffer.from('hello')), 1024)).toString(), 'hello');
+  // The Fish sample uses it: a huge sample is refused after about 8 MB, not read to the end.
+  const store = new Store(':memory:');
+  t.after(() => store.close());
+  const family = store.saveFamily({name: 'Old Worlds', tier: 'A', countries: ['United States'], audience: 'Adults who like ancient history told as stories.', niche: 'Ancient history stories', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'long-form', monthlyTokenLimit: 900000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['https://www.youtube.com/@RivalHistory']});
+  const sample = endless();
+  const fetchImpl = async url => (String(url).startsWith('https://api.fish.audio/model') ? new Response(JSON.stringify({items: ITEMS.slice(0, 1)}), {headers: {'content-type': 'application/json'}}) : Object.assign(sample.response, {ok: true, status: 200, headers: {get: name => (name === 'content-type' ? 'audio/mpeg' : null)}}));
+  const matcher = new V.VoiceMatcher(store, {connectors: {list: () => [{id: 'fish', provider: 'fish-audio', hasKey: true, test: {status: 'passed'}}], key: () => 'fish-key-0123456789abcdef'}, fetch: fetchImpl});
+  const match = await matcher.find(family.id, {requestedBy: 'Owner'});
+  await assert.rejects(matcher.sample(match.id, 0, 0), /larger than 8 MB/);
+  assert.ok(sample.pulls <= 10, `the sample stopped after ${sample.pulls} MB`);
+});
