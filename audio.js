@@ -10,11 +10,15 @@ const REQUIRED_FILTERS = Object.freeze(['aformat', 'loudnorm', 'silencedetect', 
 const MUSIC_DEFAULTS = Object.freeze({enabled: false, levelLufs: -22, duck: 'medium', fadeSeconds: 1.5, scoreId: null});
 const SFX_DEFAULTS = Object.freeze({enabled: false, density: 'accent', levelDb: -12});
 const DUCKS = Object.freeze(['off', 'light', 'medium', 'strong']), DENSITIES = Object.freeze(['none', 'subtle', 'accent', 'rich']);
+// 0.115 (owner 2026-11-23): the sound a Muse clip was made with. off: dropped; ambience: kept quietly under the
+// narrator; voice: Muse speaks the clip's words, so its sound replaces the narration while the clip plays.
+const CLIP_SOUNDS = Object.freeze(['off', 'ambience', 'voice']);
+const CLIP_SOUND_DEFAULTS = Object.freeze({mode: 'off', levelDb: -14});
 const fail = message => { throw Object.assign(new Error(message), {status: 400}); };
 
 function settings(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('Audio settings must be an object.');
-  if (Object.keys(input).some(key => !Object.hasOwn(DEFAULTS, key) && !['music', 'sfx'].includes(key))) fail('Unsupported audio setting.');
+  if (Object.keys(input).some(key => !Object.hasOwn(DEFAULTS, key) && !['music', 'sfx', 'clipSound'].includes(key))) fail('Unsupported audio setting.');
   const out = {...DEFAULTS, ...input};
   const block = (value, defaults, label) => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) fail(`${label} settings must be an object.`);
@@ -37,6 +41,14 @@ function settings(input) {
     if (!DENSITIES.includes(x.density)) fail(`Sound-effect density must be one of: ${DENSITIES.join(', ')}.`);
     if (!Number.isFinite(x.levelDb) || x.levelDb < -30 || x.levelDb > -3) fail('The sound-effect level must be -30 to -3 dB peak.');
     x.levelDb = Math.round(x.levelDb * 10) / 10;
+  }
+  if (input.clipSound !== undefined) {
+    const c = input.clipSound;
+    if (!c || typeof c !== 'object' || Array.isArray(c) || Object.keys(c).some(key => !Object.hasOwn(CLIP_SOUND_DEFAULTS, key))) fail('Unsupported clip sound setting.');
+    const merged = out.clipSound = {...CLIP_SOUND_DEFAULTS, ...c};
+    if (!CLIP_SOUNDS.includes(merged.mode)) fail(`Clip sound must be one of: ${CLIP_SOUNDS.join(', ')}.`);
+    if (!Number.isFinite(merged.levelDb) || merged.levelDb < -30 || merged.levelDb > 0) fail('The clip sound level must be -30 to 0 dB.');
+    merged.levelDb = Math.round(merged.levelDb * 10) / 10;
   }
   if (out.schema !== SCHEMA) fail('Unsupported audio settings version.');
   if (!['source', 'normalize'].includes(out.mode)) fail('Choose original levels or normalized narration.');
@@ -97,6 +109,6 @@ function qc({stderr, stream, expectedSeconds, config}) {
   return {schema: SCHEMA, settings: s, ...m, durationSeconds: Number.isFinite(duration) ? duration : null, sampleRate, channels, silenceRatio, checks, passed: checks.every(check => check.passed)};
 }
 
-const mixes = config => !!(config?.music?.enabled || (config?.sfx?.enabled && config.sfx.density !== 'none'));
+const mixes = config => !!(config?.music?.enabled || (config?.sfx?.enabled && config.sfx.density !== 'none') || (config?.clipSound && config.clipSound.mode !== 'off'));
 
-module.exports = {DUCKS, DENSITIES, SCHEMA, DEFAULTS, MUSIC_DEFAULTS, SFX_DEFAULTS, MIX_FILTERS, REQUIRED_FILTERS, mixes, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};
+module.exports = {CLIP_SOUNDS, CLIP_SOUND_DEFAULTS, DUCKS, DENSITIES, SCHEMA, DEFAULTS, MUSIC_DEFAULTS, SFX_DEFAULTS, MIX_FILTERS, REQUIRED_FILTERS, mixes, settings, loudnorm, measurement, analysisArgs, finishArgs, qc};

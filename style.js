@@ -23,6 +23,7 @@ const EASING = ['linear', 'ease-in-out', 'spring'];
 const TEXT_CASE = ['sentence', 'title', 'upper'];
 const CAPTION_MODES = ['burned-in', 'sidecar', 'both'];
 const CAPTION_POSITIONS = ['bottom', 'center', 'top'];
+const MUSE_SOUNDS = Object.freeze(['narrator', 'ambience', 'muse']);
 const VISUAL_SOURCES = ['stock-video', 'stock-image', 'ai-image', 'ai-video', 'generated-graphics', 'maps-and-diagrams', 'archival-public-domain'];
 const AI_DISCLOSURE = ['review-per-asset', 'always-disclose'];
 const SFX_USAGE = ['none', 'subtle', 'accent', 'rich'];
@@ -364,6 +365,9 @@ function validateStyleSpec(input) {
     licenseEvidenceRequired: true,
   };
   if (sources.includes('ai-video')) requireValue(visuals.aiDisclosure === 'always-disclose', 'Styles that use AI video must always disclose synthetic media.');
+  // 0.115 (owner 2026-11-23): what is heard over a Muse clip. narrator: the program's narrator (Muse's sound dropped);
+  // ambience: the narrator, with Muse's natural sound quietly under it; muse: Muse speaks its shot's words itself.
+  if (visualsIn.museSound !== undefined && visualsIn.museSound !== null) visuals.museSound = choice(visualsIn.museSound, MUSE_SOUNDS, 'what is heard over a Muse clip');
 
   const audioIn = object(input.audio, 'Audio');
   const audio = {
@@ -914,4 +918,4 @@ class StyleLibrary {
   }
 }
 
-module.exports = {StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES, PICTURE_TYPES, validateDesign, designedSpec};
+module.exports = {MUSE_SOUNDS, StyleLibrary, validateStyleSpec, specDiff, specHash, contrastRatio, RENDERERS, LAUNCH_PROFILES, LAUNCH_VERSION, OWNER_REFERENCE_LIMIT, DRAWING_LOOKS, DRAWING_BOARDS, DRAWING_DESIGNS, DRAWING_FILMS, CINEMA_GRADES, PICTURE_TYPES, validateDesign, designedSpec};

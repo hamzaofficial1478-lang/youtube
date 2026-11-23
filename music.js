@@ -317,8 +317,21 @@ function mixGains({music = [], sfx = [], settings, voiceLufs = null, targetLufs 
   return {music: music.map(cue => clamp(settings.music.levelLufs + shift - (Number.isFinite(cue.measuredLufs) ? cue.measuredLufs : -14))),
     sfx: sfx.map(hit => clamp(settings.sfx.levelDb + shift - (Number.isFinite(hit.measuredPeakDb) ? hit.measuredPeakDb : -3)))};
 }
-function mixGraph({music = [], sfx = [], settings, voiceLufs = null, targetLufs = null}) {
-  const parts = ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]'], beds = [], hits = [], gains = mixGains({music, sfx, settings, voiceLufs, targetLufs});
+// clips (0.115): the Muse clips' own sound, inputs after the effects. In 'voice' mode Muse speaks: the narration is
+// silent while each clip plays and the clip's sound is the voice (the music ducks under it as under the narrator); in
+// 'ambience' mode it lies quietly under the narrator at its level.
+function mixGraph({music = [], sfx = [], clips = [], settings, voiceLufs = null, targetLufs = null}) {
+  const clipMode = settings.clipSound?.mode || 'off', clipGain = settings.clipSound?.levelDb ?? -14, clipParts = [];
+  const useClips = clipMode !== 'off' ? clips : [];
+  useClips.forEach((item, k) => {
+    const input = music.length + sfx.length + k + 1, length = round(item.seconds, 3), from = round(item.inSeconds || 0, 3), delay = Math.round(item.start * 1000), fade = round(Math.min(0.05, length / 4), 3);
+    clipParts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=${from}:${round(from + length, 3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fade},afade=t=out:st=${round(Math.max(0, length - fade), 3)}:d=${fade},volume=${clipGain}dB,adelay=${delay}|${delay}[c${k}]`);
+  });
+  const muted = clipMode === 'voice' && useClips.length ? `,volume='if(${useClips.map(item => `between(t,${round(item.start, 3)},${round(item.start + item.seconds, 3)})`).join('+')},0,1)':eval=frame` : '';
+  const parts = clipMode === 'voice' && useClips.length
+    ? [`[0:a]aformat=sample_rates=48000:channel_layouts=stereo${muted}[nar]`, ...clipParts, `[nar]${useClips.map((item, k) => `[c${k}]`).join('')}amix=inputs=${useClips.length + 1}:normalize=0:duration=first,asplit=3[voice][key][level]`]
+    : ['[0:a]aformat=sample_rates=48000:channel_layouts=stereo,asplit=3[voice][key][level]', ...clipParts];
+  const beds = [], hits = clipMode === 'ambience' ? useClips.map((item, k) => `[c${k}]`) : [], gains = mixGains({music, sfx, settings, voiceLufs, targetLufs});
   music.forEach((cue, k) => {
     const input = k + 1, length = round(cue.end - cue.start, 3), fadeIn = cue.entry === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.02, fadeOut = cue.exit === 'fade' ? Math.min(settings.music.fadeSeconds, length / 3) : 0.05;
     const gain = gains.music[k], delay = Math.round(cue.start * 1000);

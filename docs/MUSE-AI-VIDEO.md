@@ -39,6 +39,19 @@ Owner request 2026-11-20: "make Muse clips in parallel to make the video process
 
 Not tested: four clips at once on a real account (how many Muse itself runs at the same time is not documented; the busy hold covers it).
 
+## 0.115: who speaks over a Muse clip, and the voice it is led with
+
+Owner request 2026-11-23: "when Muse is used the program should use Muse's voice-over automatically, but the program does the rest (editing, effects, music); give an option to use Muse's voice or the connected narrator's; and lead Muse's voice when it generates."
+
+What Muse can do with sound, checked 2026-11-23: every clip comes with its own sound and speech can be written into the prompt, but there is no voice choice and no reference audio, so the voice can change from clip to clip and the lips may not match ([SmartScope](https://smartscope.blog/en/blog/muse-video-generation-audio-10-second-examples-known-2026/), [Meta's research blog](https://research.meta.ai/blog/bringing-your-muse-to-life), [Piclumen's review](https://www.piclumen.com/blog/muse-ai-video-generator-review/)). So the program leads Muse's voice in words.
+
+- **The choice** is the style's `visuals.museSound` ("Voice over the Muse clips" in the channel style window, shown with the Muse setting): `narrator` (default: the program's narrator, Muse's sound dropped), `ambience` (the narrator, with Muse's natural sound under it) or `muse` (Muse speaks each shot's words itself).
+- **The direction** (`Mu.direction` `sound`, `speech`; `Mu.soundLines`): with `muse` each shot gets "Spoken in this clip, word for word and nothing else" with its share of the scene's words (`Mu.shotWords`, by shot length), a Voice line (the chosen Fish voice in words and the narrator profile's voice design and delivery, `store.narratorVoice`) and the line's delivery from the voice direction (`store.voiceDirectionLines`), and "No music". With `ambience` only the place's natural sound is asked for; with `narrator` no speech or music.
+- **The clip's sound is kept**: `keepClip` now keeps the audio track when it converts a clip (AAC 192 kb/s); the edit marks Muse clips that have sound (`inputs.assets[...].sound`).
+- **The mix** (`audio.js` `clipSound` {mode off|ambience|voice, levelDb}, `EditingRoom.clipSoundFor`): a drafted edit takes the style's choice by itself. `voice` mutes the narration over each speaking clip and puts the clip's sound in its place (`music.js` `mixGraph` `clips`, a frame-accurate `volume` switch), so the music ducks under Muse's voice as under the narrator; `ambience` lays the clips' sound 14 dB down under the voice. Music, sound effects, transitions and picture effects stay the program's in every case. The render checks every clip file by checksum (`render-room.js`), the live player plays the clips' own sound and silences the narration where Muse speaks, and language editions drop the clips' sound (it speaks the main language).
+
+Not tested: a real Muse clip that speaks (no generation was run here); the mix was checked with FFmpeg tones (the narration drops more than 20 dB over a speaking clip and comes back after it).
+
 ## Not done (0.111)
 
 - (0.111) No automatic generation. Since 0.112 the Muse connection makes the clips; uploading your own stays possible.
