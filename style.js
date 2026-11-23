@@ -368,6 +368,8 @@ function validateStyleSpec(input) {
   // 0.115 (owner 2026-11-23): what is heard over a Muse clip. narrator: the program's narrator (Muse's sound dropped);
   // ambience: the narrator, with Muse's natural sound quietly under it; muse: Muse speaks its shot's words itself.
   if (visualsIn.museSound !== undefined && visualsIn.museSound !== null) visuals.museSound = choice(visualsIn.museSound, MUSE_SOUNDS, 'what is heard over a Muse clip');
+  // 0.116: Muse speaks only in a video made from Muse clips; a mixed video keeps one narrator.
+  if (visuals.museSound === 'muse') requireValue(sources.length === 1 && sources[0] === 'ai-video', 'Muse can speak only in a video where every shot is a Muse clip; a video that mixes Muse with its engine keeps your narrator.');
 
   const audioIn = object(input.audio, 'Audio');
   const audio = {

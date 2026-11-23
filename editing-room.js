@@ -23,6 +23,7 @@ const {MotionRenderer} = require('./motion');
 const {messageTokenUpperBound} = require('./writer');
 const live = require('./live');
 const Fx = require('./edit-fx');
+const Mu = require('./muse');
 // 0.108: what each kind of editor request is called on the page and in a revision's note.
 const COMMAND_KIND = Object.freeze({ask: 'the change you asked for', polish: 'the polish of the whole edit', 'edit-with': 'the edit of the whole video'});
 
@@ -208,6 +209,11 @@ function text(value, label, min, max) {
 }
 const person = (value, label = 'Your name') => text(value, label, 2, 80);
 
+// 0.116: a Muse clip asked to speak (its direction said so; 0.115 clips are read from the prompt they were made with).
+const clipSpoke = rights => { try { const r = JSON.parse(rights || '{}'); return r.sound === 'muse' || (!r.sound && /Spoken in this clip, word for word/.test(r.prompt || '')); } catch { return false; } };
+// Which clips a sound mode uses: Muse's voice only from clips made to speak, its natural sound only from the others.
+const clipPlays = (asset, mode) => (mode === 'voice' && asset?.sound === 'speech') || (mode === 'ambience' && asset?.sound === 'natural');
+
 class EditingRoom {
   constructor(store, styles, sceneRoom, renderRoom, {ffmpeg = 'ffmpeg'} = {}) {
     this.store = store;
@@ -296,7 +302,7 @@ class EditingRoom {
     for (const item of snapshot.shots) {
       requireValue(planned.has(item.shotId), `${item.label} is missing from the approved plan.`, 409);
       const row = this.scenes.assetRow(item.assetId), probe = JSON.parse(row.probe);
-      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(probe.hasAudio && /"muse-video"/.test(row.capability || '') ? {sound: true} : {}), ...(row.origin === 'drawn' ? (rights => (rights.composition ? {composition: rights.composition} : {sketch: rights.sketch}))(JSON.parse(row.rights)) : {})};
+      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(probe.hasAudio && /"muse-video"/.test(row.capability || '') ? {sound: clipSpoke(row.rights) ? 'speech' : 'natural'} : {}), ...(row.origin === 'drawn' ? (rights => (rights.composition ? {composition: rights.composition} : {sketch: rights.sketch}))(JSON.parse(row.rights)) : {})};
       files[item.shotId] = row.relative_path;
     }
     const styleRow = this.styles.revisionRow(base.manifestRow.style_revision_id);
@@ -501,16 +507,22 @@ class EditingRoom {
   // ask: false when called after a fill, so a search that found nothing never asks Freesound again in a loop.
   // 0.115: the sound of the Muse clips, by the style's choice: Muse speaks (its sound replaces the narration while its
   // clip plays) or its natural sound lies quietly under the narrator. Only clips made with sound count.
+  // 0.116: Muse speaks only in a video made from Muse clips (Mu.soundOf), and only the clips it was asked to speak in
+  // replace the narrator; a clip made before that keeps the narrator over it.
   static clipSoundFor(inputs) {
-    const choice = inputs.spec?.visuals?.museSound, count = Object.values(inputs.assets || {}).filter(asset => asset.sound).length;
-    if (!count || !['muse', 'ambience'].includes(choice)) return null;
-    return {setting: choice === 'muse' ? {mode: 'voice', levelDb: 0} : {mode: 'ambience', levelDb: -14}, note: choice === 'muse' ? `Muse speaks in its ${count} clip${count === 1 ? '' : 's'} (its sound replaces the narrator there)` : `Muse's natural sound under the narrator in ${count} clip${count === 1 ? '' : 's'}`};
+    const choice = Mu.soundOf(inputs.spec?.visuals);
+    if (!['muse', 'ambience'].includes(choice)) return null;
+    const mode = choice === 'muse' ? 'voice' : 'ambience', assets = Object.values(inputs.assets || {}), count = assets.filter(asset => clipPlays(asset, mode)).length;
+    const silent = mode === 'voice' ? assets.filter(asset => asset.sound === 'natural').length : 0;
+    if (!count) return null;
+    return {setting: mode === 'voice' ? {mode, levelDb: 0} : {mode, levelDb: -14}, note: mode === 'voice' ? `Muse speaks in its ${count} clip${count === 1 ? '' : 's'} (its sound replaces the narrator there)${silent ? `; ${silent} clip${silent === 1 ? ' was' : 's were'} made before Muse was asked to speak, so the narrator speaks over ${silent === 1 ? 'it' : 'them'} (make ${silent === 1 ? 'it' : 'them'} again to hear Muse)` : ''}` : `Muse's natural sound under the narrator in ${count} clip${count === 1 ? '' : 's'}`};
   }
-  // The Muse clips of an edit with their sound: where each plays, from where in its file, and the file.
-  clipSounds(inputs, timeline) {
-    return timeline.clips.filter(clip => inputs.assets[clip.shotId]?.sound).map(clip => {
+  // The Muse clips of an edit with their sound: where each plays, from where in its file and at what speed (a clip
+  // slowed to fill its shot slows its sound too, so the lips stay on the words), and the file.
+  clipSounds(inputs, timeline, mode) {
+    return timeline.clips.filter(clip => clipPlays(inputs.assets[clip.shotId], mode)).map(clip => {
       const asset = inputs.assets[clip.shotId];
-      return {clipId: clip.id, label: clip.label, start: Math.round(clip.start / timeline.fps * 1000) / 1000, seconds: Math.round(clip.frames / timeline.fps * 1000) / 1000, inSeconds: clip.inSeconds || 0, sha256: asset.sha256, relativePath: asset.relativePath};
+      return {clipId: clip.id, label: clip.label, start: Math.round(clip.start / timeline.fps * 1000) / 1000, seconds: Math.round(clip.frames / timeline.fps * 1000) / 1000, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, sha256: asset.sha256, relativePath: asset.relativePath};
     });
   }
   autoAudio(inputs, contentId, {ask = true} = {}) {
@@ -788,7 +800,7 @@ class EditingRoom {
       // A designed frame (or a drawing that does not check) plays Room 04's preview of the shot.
       if (asset.origin === 'drawn') return {...base, kind: 'video', src, inSeconds: 0, speed: 1, preview: true};
       // 0.115: a Muse clip with sound plays it in the player as the render mixes it (Muse's voice or its natural sound).
-      const sound = asset.sound && ['voice', 'ambience'].includes(payload.audio?.clipSound?.mode) ? {sound: payload.audio.clipSound.mode, soundGain: Math.round(10 ** ((payload.audio.clipSound.levelDb ?? -14) / 20) * 1000) / 1000} : {};
+      const sound = clipPlays(asset, payload.audio?.clipSound?.mode) ? {sound: payload.audio.clipSound.mode, soundGain: Math.round(10 ** ((payload.audio.clipSound.levelDb ?? -14) / 20) * 1000) / 1000} : {};
       return {...base, kind: asset.mediaType === 'video' ? 'video' : 'still', src, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, move: clip.move || null, ...sound};
     });
     return {revisionId: row.id, revision: row.revision, fps: payload.fps, totalFrames: payload.totalFrames, vertical: payload.format === 'shorts', narration: `/api/edit-revisions/${row.id}/narration`, audio: this.playerAudio(row, state, payload, timeline.content_id),
@@ -1094,7 +1106,7 @@ class EditingRoom {
       requireValue(this.soundtrack, 'Music and sound effects are not available in this program.', 409);
       const config = Audio.settings(payload.audio), track = this.soundtrack.soundtrackFor({content, timeline: payload, config, drawings, engine});
       // 0.115: the Muse clips' own sound (their voice, or their natural sound under the narrator).
-      if (config.clipSound && config.clipSound.mode !== 'off') track.clips = this.clipSounds(state.inputs, payload);
+      if (config.clipSound && config.clipSound.mode !== 'off') track.clips = this.clipSounds(state.inputs, payload, config.clipSound.mode);
       return track;
     })() : null;
     if (Object.keys(drawings).length) requireValue(this.renders.latestReadiness()?.motion?.passed === true, 'Drawn shots are drawn in a local browser. Run the readiness check again (Room 05); it must find Microsoft Edge or Google Chrome.', 409);
