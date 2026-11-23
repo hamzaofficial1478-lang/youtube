@@ -19,7 +19,9 @@ const clip = (value, max) => { const s = String(value ?? '').replace(/\s+/g, ' '
 // shot: {label, prompt, motion, notes, durationSeconds}; scene: {direction, purpose}; words: what the narrator says;
 // cast: the plan's cast (members with ref point at the owner's reference pictures); refs: {id: {label, description}};
 // world: {era, place, rules}; grade: the video's grade name; vertical; before/after: neighbouring shots' prompts.
-function direction({shot, scene = {}, words = '', cast = [], refs = {}, world = null, grade = null, vertical = false, before = null, after = null, craft = ''}) {
+// sound (0.115): what is heard over the clip. narrator (default): the program's narrator, so Muse adds no speech;
+// ambience: only the place's natural sound; muse: Muse speaks the shot's own words (speech: {words, voice, delivery}).
+function direction({shot, scene = {}, words = '', cast = [], refs = {}, world = null, grade = null, vertical = false, before = null, after = null, craft = '', sound = 'narrator', speech = null}) {
   const seconds = Math.min(MAX_SECONDS, Math.max(2, Math.round((shot.durationSeconds || 5) * 10) / 10));
   const named = cast.filter(member => member.ref && refs[member.ref] && new RegExp(`\\b${member.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(`${shot.prompt} ${shot.notes || ''}`));
   // A shot that names nobody but the story has one reference character uses that one when the prompt speaks of a person.
@@ -31,17 +33,39 @@ function direction({shot, scene = {}, words = '', cast = [], refs = {}, world = 
     world?.place || world?.era ? `World: ${[world.place, world.era ? `${world.era} era` : null].filter(Boolean).join(', ')}${world.rules?.length ? ` (${world.rules.slice(0, 4).join('; ')})` : ''}.` : null,
     `Camera: ${CAMERA[shot.motion] || 'slow, motivated movement'}; one continuous shot, no cuts.`,
     scene.direction ? `The viewer must understand: ${clip(scene.direction, 300)}` : null,
-    words ? `This shot plays under the narration: "${clip(words, 300)}" (do not show these words).` : null,
+    words && !(sound === 'muse' && speech?.words) ? `This shot plays under the narration: "${clip(words, 300)}" (do not show these words).` : null,
     grade ? `Colour and light: ${grade}.` : null,
     craft ? `Craft (the channel's skills): ${clip(craft, 700)}` : null,
     before ? `Continuity: it follows a shot of ${clip(before, 200)}.` : null,
     `Length ${seconds} seconds, ${vertical ? 'vertical 9:16' : 'landscape 16:9'}, realistic motion, cinematic quality.`,
     'Avoid: any text, captions, subtitles, logos or watermarks; extra people who are not described; morphing faces or hands; a different character from the reference.',
-    'No speech or music needed: the program adds the narration, music and sound effects.',
+    ...soundLines(sound, speech),
   ].filter(Boolean);
-  return {seconds, aspect: vertical ? '9:16' : '16:9', text: lines.join('\n'), attach, after: after ? clip(after, 200) : null};
+  return {seconds, aspect: vertical ? '9:16' : '16:9', text: lines.join('\n'), attach, after: after ? clip(after, 200) : null, sound: sound === 'muse' && speech?.words ? 'muse' : sound === 'ambience' ? 'ambience' : 'narrator', ...(sound === 'muse' && speech?.words ? {speech: {words: clip(speech.words, 600), seconds: Math.round(String(speech.words).split(/\s+/).filter(Boolean).length / 2.6 * 10) / 10}} : {})};
 }
 
+// What the clip sounds like (0.115). Muse makes every clip with sound and takes no voice or reference audio, so the
+// voice is led in words: the exact words, the narrator's voice described, the delivery of the line.
+function soundLines(sound, speech) {
+  if (sound === 'muse' && speech?.words) return [
+    `Spoken in this clip, word for word and nothing else: "${clip(speech.words, 600)}".`,
+    `Voice: ${clip(speech.voice || 'one clear, warm narrator voice', 300)}${speech.delivery ? `; ${clip(speech.delivery, 200)}` : ''}. Speak clearly and finish every word inside the clip. It is an off-screen narrator, unless a character on screen is the one speaking; then their lips follow the words.`,
+    'No music: the program adds the music and sound effects.',
+  ];
+  if (sound === 'ambience') return ['Sound: only the natural sound of this place and action (wind, water, footsteps, fire, a crowd), no speech and no music; the program lays the narration and music over it.'];
+  return ['No speech or music needed: the program adds the narration, music and sound effects. Nobody speaks to the camera.'];
+}
+// The words a shot carries: the scene's words shared over its shots by their length, in order (Muse speaks them).
+function shotWords(sceneWords, shots, shotId) {
+  const words = String(sceneWords || '').split(/\s+/).filter(Boolean), total = shots.reduce((sum, item) => sum + (Number(item.durationSeconds) || 1), 0);
+  let before = 0;
+  for (const item of shots) {
+    const length = Number(item.durationSeconds) || 1, from = Math.round(words.length * before / total), to = Math.round(words.length * (before + length) / total);
+    if (item.id === shotId) return words.slice(from, to).join(' ');
+    before += length;
+  }
+  return '';
+}
 // The uploaded clip against its shot (probe: visual-sources probeMedia): a video, sharp enough, long enough, the right
 // shape (another shape is cropped to fill the frame).
 function checkClip(probe, {seconds, vertical = false}) {
@@ -61,4 +85,4 @@ function checkClip(probe, {seconds, vertical = false}) {
 
 const PLANNER_LINE = `AI VIDEO (source "ai-video"): each such shot is generated by the owner's video model (Meta Muse) from your "prompt", one clip per shot of at most ${MAX_SECONDS} s, so keep ai-video shots ${MAX_SECONDS} s or shorter (give a long moment several shots). Write the prompt as a film director's shot description of ONE continuous moment (60-1,500 characters): who is in it (name a reference character by the cast name you gave it, and give it "ref"), what they do from the first frame to the last, the place and its details, the time of day and weather, the light and colour, the mood, the lens (wide, medium, close-up, extreme close-up) and the camera move; real physical detail a camera would see (water level, breath in the cold, torn fabric, the weight of a satchel). Show what the words mean; never put text, captions or logos in it. Each shot continues the one before (same clothes, same injuries, same light unless time passes). Plan the coverage like a film: establish the place, then medium and close shots of the character, inserts of the objects that matter, reaction shots on the turns.`;
 
-module.exports = {MAX_SECONDS, CAMERA, direction, checkClip, PLANNER_LINE};
+module.exports = {MAX_SECONDS, CAMERA, direction, checkClip, shotWords, soundLines, PLANNER_LINE};

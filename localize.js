@@ -262,7 +262,9 @@ function editionTimeline(timeline, sync, {payload, words = null, narrationSecond
 function editionSoundtrack(soundtrack, timeline, sync) {
   if (!soundtrack) return soundtrack;
   const map = retime(timeline, sync), fps = timeline.fps, sec = seconds => r3(map(seconds * fps) / fps), end = sync.scenes.at(-1).endFrame / fps;
-  return {...soundtrack, music: soundtrack.music.map(cue => ({...cue, start: sec(cue.start), end: r3(Math.min(end, sec(cue.end)))})), sfx: soundtrack.sfx.map(hit => ({...hit, seconds: sec(hit.seconds)}))};
+  // 0.115: a Muse clip's own sound is in the main language (or timed to it), so an edition leaves it out.
+  const {clips, ...rest} = soundtrack;
+  return {...rest, music: soundtrack.music.map(cue => ({...cue, start: sec(cue.start), end: r3(Math.min(end, sec(cue.end)))})), sfx: soundtrack.sfx.map(hit => ({...hit, seconds: sec(hit.seconds)}))};
 }
 
 module.exports = {SCHEMA, VISIBLE, LIMITS, RATE, DRIFT_LIMIT, NATURAL, seconds, language, visibleTexts, packageSource, source, syllables, figures, messages, normalise, check, script, carry, sentenceTimes, sync, retime, editionDrawings, editionTimeline, editionSoundtrack};

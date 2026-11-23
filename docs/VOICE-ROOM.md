@@ -125,3 +125,17 @@ A VoiceStudio narrator profile now has "The voice VoiceStudio uses": gender, age
 tags OmniVoice understands (`store.VOICE_DESIGN`, validated by `voiceDesignInput`: one per group, unknown tags
 refused). They are saved as `voiceDesign` and sent first in every part's instructions, before the direction. Other
 engines may ignore them; pace still applies. Measured word times are still not available from VoiceStudio.
+
+## Finding a narrator like your competitors' on Fish Audio (0.115)
+
+Owner request 2026-11-23: "when I connect the Fish Audio API, the program should read the competitors' voice and ask the connected API for the matching voice".
+
+- **What is read**: the voice subject of the competitor videos the program watched (Competitors, step 3: Gemini hears the narration of a linked video and describes its pitch, pace, pauses, accent and age), the approved blueprint's voice lessons, and the channel's niche, audience and language. Nothing of a competitor's recording is ever sent anywhere.
+- **The casting** (`voice-match.js`, Voice Room card "Find a voice like your competitors'"): "Find with Claude" or "Find with ChatGPT" asks the AI as a casting director (inside the channel's token reservation, led by the `voice.direction` skills, `MATCH_TOKENS` 4,000) for a description of qualities only (never a real person, never a competitor's own voice) and 2-5 search phrases with tags; "Find from the studies (free)" builds them from the studies' own words.
+- **The search**: Fish Audio's voice library (`GET https://api.fish.audio/model`, the key in the Authorization header, `redirect: 'error'`; [Fish Audio's API](https://docs.fish.audio/api-reference/endpoint/model/list-models)), in the channel's language, Fish's own licensed voices only unless "Include community voices" is ticked (community voices may imitate real people: check the rights). Only trained voices with a safe ID are kept, sample clips only from Fish Audio's own https hosts, ranked by shared words, tags, the gender asked for, use count, licence and samples (`rank`).
+- **Listening and choosing**: up to 8 voices with their sample clips (streamed through the program, at most 8 MB) and a link to each voice's page. "Use this voice" remembers the pick for the channel and opens the narrator profile window filled in (Fish Audio connection, voice ID, name, the voice's page as evidence); the rights are confirmed there as for any voice. The chosen voice in words also leads Muse when Muse speaks (MUSE-AI-VIDEO.md "0.115").
+- **Never cloning**: Fish Audio can clone a voice from a recording ("references"); the program never uses that for competitors. It only searches voices already in the library.
+
+Fish Audio's speech models (s2.1-pro, with a free tier s2.1-pro-free) bill per character of narration; searching the library is not billed ([pricing](https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits.md)).
+
+Not tested: a real Fish Audio key (the search, samples and choice were tested with a stand-in for Fish Audio's answers).

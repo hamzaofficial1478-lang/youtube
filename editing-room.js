@@ -296,7 +296,7 @@ class EditingRoom {
     for (const item of snapshot.shots) {
       requireValue(planned.has(item.shotId), `${item.label} is missing from the approved plan.`, 409);
       const row = this.scenes.assetRow(item.assetId), probe = JSON.parse(row.probe);
-      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(row.origin === 'drawn' ? (rights => (rights.composition ? {composition: rights.composition} : {sketch: rights.sketch}))(JSON.parse(row.rights)) : {})};
+      assets[item.shotId] = {assetId: row.id, mediaType: row.media_type, clipSeconds: row.media_type === 'video' ? probe.durationSeconds || null : null, sha256: row.sha256, relativePath: row.relative_path, origin: row.origin, ...(probe.hasAudio && /"muse-video"/.test(row.capability || '') ? {sound: true} : {}), ...(row.origin === 'drawn' ? (rights => (rights.composition ? {composition: rights.composition} : {sketch: rights.sketch}))(JSON.parse(row.rights)) : {})};
       files[item.shotId] = row.relative_path;
     }
     const styleRow = this.styles.revisionRow(base.manifestRow.style_revision_id);
@@ -499,9 +499,23 @@ class EditingRoom {
   // tracks by itself when it is connected); the music is on when every cue has a track, the effects when the library
   // has effects, at the style's density. A family on paid generation (ElevenLabs) is left to Room 07.
   // ask: false when called after a fill, so a search that found nothing never asks Freesound again in a loop.
+  // 0.115: the sound of the Muse clips, by the style's choice: Muse speaks (its sound replaces the narration while its
+  // clip plays) or its natural sound lies quietly under the narrator. Only clips made with sound count.
+  static clipSoundFor(inputs) {
+    const choice = inputs.spec?.visuals?.museSound, count = Object.values(inputs.assets || {}).filter(asset => asset.sound).length;
+    if (!count || !['muse', 'ambience'].includes(choice)) return null;
+    return {setting: choice === 'muse' ? {mode: 'voice', levelDb: 0} : {mode: 'ambience', levelDb: -14}, note: choice === 'muse' ? `Muse speaks in its ${count} clip${count === 1 ? '' : 's'} (its sound replaces the narrator there)` : `Muse's natural sound under the narrator in ${count} clip${count === 1 ? '' : 's'}`};
+  }
+  // The Muse clips of an edit with their sound: where each plays, from where in its file, and the file.
+  clipSounds(inputs, timeline) {
+    return timeline.clips.filter(clip => inputs.assets[clip.shotId]?.sound).map(clip => {
+      const asset = inputs.assets[clip.shotId];
+      return {clipId: clip.id, label: clip.label, start: Math.round(clip.start / timeline.fps * 1000) / 1000, seconds: Math.round(clip.frames / timeline.fps * 1000) / 1000, inSeconds: clip.inSeconds || 0, sha256: asset.sha256, relativePath: asset.relativePath};
+    });
+  }
   autoAudio(inputs, contentId, {ask = true} = {}) {
-    const st = this.soundtrack;
-    if (!st || st.settings(inputs.family.id).source !== 'library') return null;
+    const st = this.soundtrack, clip = EditingRoom.clipSoundFor(inputs);
+    if (!st || st.settings(inputs.family.id).source !== 'library') return clip ? {settings: Audio.settings({...Audio.DEFAULTS, clipSound: clip.setting}), notes: [clip.note]} : null;
     const notes = [];
     let score = st.latestScore(contentId);
     // 0.87: the channel may let the AI score the music from the script by itself (its named setting; uses tokens). The
@@ -519,7 +533,7 @@ class EditingRoom {
     if (score && !music) notes.push('the music stays off until the sound library has a track for every cue (Freesound fills it by itself when it is connected); switch it on in Levels and mix');
     if (!effects) notes.push('no sound effects: the sound library has none yet');
     const on = [...(music ? [`music on (score r${score.revision}, ${score.cues.length} cue${score.cues.length === 1 ? '' : 's'}, ducked under the voice)`] : []), ...(sfx ? [`sound effects on (${density}, from ${effects} library effect${effects === 1 ? '' : 's'}, placed on the drawings' moments)`] : [])];
-    return {settings: music || sfx ? Audio.settings({...Audio.DEFAULTS, music: {...Audio.MUSIC_DEFAULTS, enabled: music, scoreId: music ? score.id : null}, sfx: {...Audio.SFX_DEFAULTS, enabled: sfx, density}}) : null, notes: [...on, ...notes]};
+    return {settings: music || sfx || clip ? Audio.settings({...Audio.DEFAULTS, music: {...Audio.MUSIC_DEFAULTS, enabled: music, scoreId: music ? score.id : null}, sfx: {...Audio.SFX_DEFAULTS, enabled: sfx, density}, ...(clip ? {clipSound: clip.setting} : {})}) : null, notes: [...on, ...(clip ? [clip.note] : []), ...notes]};
   }
 
   // 0.87 (owner request 2026-11-04: "the program must fetch the music and sfx by itself as per the video"): when a new
@@ -773,7 +787,9 @@ class EditingRoom {
       }
       // A designed frame (or a drawing that does not check) plays Room 04's preview of the shot.
       if (asset.origin === 'drawn') return {...base, kind: 'video', src, inSeconds: 0, speed: 1, preview: true};
-      return {...base, kind: asset.mediaType === 'video' ? 'video' : 'still', src, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, move: clip.move || null};
+      // 0.115: a Muse clip with sound plays it in the player as the render mixes it (Muse's voice or its natural sound).
+      const sound = asset.sound && ['voice', 'ambience'].includes(payload.audio?.clipSound?.mode) ? {sound: payload.audio.clipSound.mode, soundGain: Math.round(10 ** ((payload.audio.clipSound.levelDb ?? -14) / 20) * 1000) / 1000} : {};
+      return {...base, kind: asset.mediaType === 'video' ? 'video' : 'still', src, inSeconds: clip.inSeconds || 0, speed: clip.speed || 1, move: clip.move || null, ...sound};
     });
     return {revisionId: row.id, revision: row.revision, fps: payload.fps, totalFrames: payload.totalFrames, vertical: payload.format === 'shorts', narration: `/api/edit-revisions/${row.id}/narration`, audio: this.playerAudio(row, state, payload, timeline.content_id),
       palette: {bg: spec.palette.background, ink: spec.palette.primary, accent: spec.palette.accent}, fonts: {heading: F.resolve(spec.typography.headingFont), body: F.resolve(spec.typography.bodyFont), hand: F.resolve('Segoe Print')}, drawing: spec.drawing || null,
@@ -1074,7 +1090,13 @@ class EditingRoom {
       drawings[clip.id] = {sketch};
     }
     // Music and sound effects named by the audio settings (P08c), with their files, times and levels.
-    const soundtrack = payload.audio && Audio.mixes(Audio.settings(payload.audio)) ? (() => { requireValue(this.soundtrack, 'Music and sound effects are not available in this program.', 409); return this.soundtrack.soundtrackFor({content, timeline: payload, config: Audio.settings(payload.audio), drawings, engine}); })() : null;
+    const soundtrack = payload.audio && Audio.mixes(Audio.settings(payload.audio)) ? (() => {
+      requireValue(this.soundtrack, 'Music and sound effects are not available in this program.', 409);
+      const config = Audio.settings(payload.audio), track = this.soundtrack.soundtrackFor({content, timeline: payload, config, drawings, engine});
+      // 0.115: the Muse clips' own sound (their voice, or their natural sound under the narrator).
+      if (config.clipSound && config.clipSound.mode !== 'off') track.clips = this.clipSounds(state.inputs, payload);
+      return track;
+    })() : null;
     if (Object.keys(drawings).length) requireValue(this.renders.latestReadiness()?.motion?.passed === true, 'Drawn shots are drawn in a local browser. Run the readiness check again (Room 05); it must find Microsoft Edge or Google Chrome.', 409);
     return {revisionId: row.id, revision: row.revision, timelineId: timeline.id, payloadHash: row.payload_hash, timeline: payload, files, graphicsAss: ass, drawings, engine, ...(soundtrack ? {soundtrack} : {}), criticals: review.counts.critical, critiqueVerdict: review.slideshow.verdict};
   }

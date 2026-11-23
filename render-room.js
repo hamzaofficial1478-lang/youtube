@@ -466,8 +466,10 @@ class RenderRoom {
         // Music and sound effects (P08c): every file is checked against its checksum, laid under or over the
         // finished voice by one filter graph, then the whole mix is brought back to the loudness target.
         const soundtrack = scope.edit.soundtrack;
-        if (soundtrack && (soundtrack.music.length || soundtrack.sfx.length)) {
-          const files = [...soundtrack.music, ...soundtrack.sfx].map(item => {
+        const clipSounds = soundtrack?.clips || [];
+        if (soundtrack && (soundtrack.music.length || soundtrack.sfx.length || clipSounds.length)) {
+          // 0.115: the Muse clips' own sound comes after the music and the effects, each file checked like the others.
+          const files = [...soundtrack.music, ...soundtrack.sfx, ...clipSounds].map(item => {
             const file = this.localFile(item.relativePath);
             requireValue(fs.existsSync(file) && R.fileSha256(file) === item.sha256, 'A music or sound-effect file is missing or changed.', 409);
             return file;
@@ -479,10 +481,10 @@ class RenderRoom {
           for (const hit of soundtrack.sfx) if (!attacks.has(hit.sha256)) attacks.set(hit.sha256, M.attackOf((await exec('measure effect attack', job.paths.ffmpeg, M.attackArgs(this.localFile(hit.relativePath), hit.measuredPeakDb), 60000)).stderr));
           // 0.90: music and effects keep their balance with the voice's real loudness (a narration kept at its own level).
           const voiceLufs = config.mode === 'normalize' ? config.targetLufs : measured.integratedLufs;
-          const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx.map(hit => ({...hit, attackSeconds: attacks.get(hit.sha256)})), settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS}, voiceLufs, targetLufs: config.targetLufs});
+          const graph = M.mixGraph({music: soundtrack.music, sfx: soundtrack.sfx.map(hit => ({...hit, attackSeconds: attacks.get(hit.sha256)})), clips: clipSounds, settings: {music: config.music || Audio.MUSIC_DEFAULTS, sfx: config.sfx || Audio.SFX_DEFAULTS, clipSound: config.clipSound}, voiceLufs, targetLufs: config.targetLufs});
           fs.writeFileSync(path.join(work, 'mix-graph.txt'), graph);
           const mixed = path.join(work, 'mix.wav'), mixArgs = ['-hide_banner', '-nostdin', '-loglevel', 'error', '-i', narrationFile, ...files.flatMap((file, k) => [...(loops.has(k) ? ['-stream_loop', '-1'] : []), '-i', file]), '-filter_complex_script', 'mix-graph.txt', '-map', '[out]', '-ar', '48000', '-ac', '2', '-c:a', 'pcm_s24le', '-fflags', '+bitexact', '-flags:a', '+bitexact', '-map_metadata', '-1', '-y', mixed];
-          this.progress(job.id, `mixing ${soundtrack.music.length} music cue(s) and ${soundtrack.sfx.length} sound effect(s)`, 0, total);
+          this.progress(job.id, `mixing ${soundtrack.music.length} music cue(s) and ${soundtrack.sfx.length} sound effect(s)${clipSounds.length ? ` with the sound of ${clipSounds.length} Muse clip(s)` : ''}`, 0, total);
           await exec('mix music and effects', job.paths.ffmpeg, mixArgs, Math.max(120000, scope.narration.durationSeconds * 2000), work);
           audioCommands.push({step: 'mix music and effects', args: mixArgs.map(arg => (path.isAbsolute(arg) ? path.basename(arg) : arg)), graphSha256: createHash('sha256').update(graph).digest('hex')});
           const mixScan = Audio.analysisArgs(mixed, config), mixMeasured = Audio.measurement((await exec('measure mix', job.paths.ffmpeg, mixScan, Math.max(120000, scope.narration.durationSeconds * 1000))).stderr);
@@ -490,7 +492,7 @@ class RenderRoom {
           await exec('finish mix', job.paths.ffmpeg, finishArgs, Math.max(120000, scope.narration.durationSeconds * 1000));
           audioCommands.push({step: 'finish mix', args: finishArgs.map(arg => (arg === mixed || arg === finished ? path.basename(arg) : arg))});
           narrationFile = finished;
-          audioInfo.mix = {music: soundtrack.music.map(item => ({cueId: item.cueId, start: item.start, end: item.end, sha256: item.sha256})), sfx: soundtrack.sfx.map(item => ({kind: item.kind, seconds: item.seconds, reason: item.reason, sha256: item.sha256})), measured: mixMeasured};
+          audioInfo.mix = {music: soundtrack.music.map(item => ({cueId: item.cueId, start: item.start, end: item.end, sha256: item.sha256})), sfx: soundtrack.sfx.map(item => ({kind: item.kind, seconds: item.seconds, reason: item.reason, sha256: item.sha256})), ...(clipSounds.length ? {clips: clipSounds.map(item => ({label: item.label, start: item.start, seconds: item.seconds, mode: config.clipSound?.mode, sha256: item.sha256}))} : {}), measured: mixMeasured};
         }
       }
       const shots = scope.shots.map(shot => {

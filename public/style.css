@@ -337,3 +337,4 @@ button[disabled]{opacity:.55;cursor:not-allowed}
 #channel-brain textarea{width:100%}
 .file-button{cursor:pointer;display:inline-flex;margin-top:6px}
 .tl-legend .fxmark::before{background:#e8b400}.tl-fx-add{margin-top:8px}.tl-fx-add summary{cursor:pointer;font-weight:600}.tl-fx-form{margin-top:6px}
+.voice-sample{margin-top:6px}.voice-sample audio{display:block;width:100%;max-width:380px;height:32px}

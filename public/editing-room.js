@@ -667,6 +667,7 @@ function playCover(c, el, W, H, move, p) {
 }
 function playClip(c, clip, local, W, H) {
   const data = PLAY.data, hold = clip.frames / data.fps;
+  if (PLAY.audio) PLAY.audio.volume = clip.sound === 'voice' ? 0 : 1;
   if (clip.kind === 'drawn') {
     const entry = playDraft(clip), source = entry?.data || clip;
     if (PLAY.setupFor !== source) { window.MOTION.setup({template: 'sketch-scene', data: source.data, palette: data.palette, fonts: data.fonts, finish: 'clean', drawing: data.drawing, vertical: data.vertical, width: W, height: H, fps: data.fps, duration: source.duration}); PLAY.setupFor = source; }
@@ -676,6 +677,8 @@ function playClip(c, clip, local, W, H) {
     return;
   }
   const el = playMedia(clip), p = Math.max(0, Math.min(1, local / hold));
+  // 0.115: a Muse clip's own sound is heard as the render mixes it; when Muse speaks, the narration is quiet meanwhile.
+  if (clip.kind !== 'still') { el.muted = !(clip.sound && PLAY.playing && !PLAY.silent); if (clip.sound) el.volume = Math.max(0, Math.min(1, clip.soundGain ?? 1)); }
   if (clip.kind !== 'still') {
     const want = (clip.inSeconds || 0) + Math.max(0, local) * (clip.speed || 1);
     if (PLAY.playing) {

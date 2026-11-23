@@ -2880,7 +2880,17 @@ class SceneRoom {
     // The owner's picture and film skills lead Muse too (the same craft lines the painter gets).
     const brief = this.store.skillRuntime?.brief('visuals.prompt', family.id, {text: [shot.prompt, scene.direction, family.niche, 'video shot camera light cinematic'].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null}) || null;
     const craft = Dna.craftText(brief?.prompt, 'do', 700);
-    const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null, craft});
+    // 0.115: what is heard over the clip (the style's choice). When Muse speaks, it gets this shot's own words, the
+    // channel's narrator voice in words and the line's delivery from the voice direction.
+    let sound = 'narrator';
+    try { sound = this.inputs(ctx.content).spec?.visuals?.museSound || 'narrator'; } catch { sound = 'narrator'; }
+    let speech = null;
+    if (sound === 'muse') {
+      const said = Mu.shotWords(words, scene.shots, shot.id), approval = this.db.prepare('SELECT audition_id FROM voice_approvals WHERE id=?').get(ctx.row.voice_approval_id);
+      const lines = approval ? this.store.voiceDirectionLines?.(approval.audition_id)?.lines || [] : [], line = lines[scene.sentenceStart - 1] || null;
+      speech = said ? {words: said, voice: this.store.narratorVoice?.(family.id) || null, delivery: line ? `${line.emotion}, energy ${line.energy} of 5, ${line.pace} pace${line.emphasis?.length ? `, stress "${line.emphasis.slice(0, 3).join('", "')}"` : ''}` : null} : null;
+    }
+    const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null, craft, sound, speech});
     return {shotId: shot.id, label: shot.label, source: shot.source, ...direction, skills: brief ? {count: brief.skills?.length || 0} : null, brief};
   }
   // The prompt Muse gets: the direction, with each attached reference named as the API asks (image_1 ...).
@@ -3003,7 +3013,8 @@ class SceneRoom {
     requireValue(check.ok, check.problems.join(' '), 422);
     if (probe.codec === 'h264' && /mp4|mov/.test(probe.format)) fs.copyFileSync(file, final, fs.constants.COPYFILE_EXCL);
     else {
-      try { await VS.runTool(this.ffmpeg, ['-hide_banner', '-nostdin', '-v', 'error', '-i', file, '-map', '0:v:0', '-an', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', '-y', final], 600000); }
+      // 0.115: the clip's sound is kept (AAC) so the edit can use Muse's voice or natural sound when the style says so.
+      try { await VS.runTool(this.ffmpeg, ['-hide_banner', '-nostdin', '-v', 'error', '-i', file, '-map', '0:v:0', '-map', '0:a:0?', '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-ac', '2', '-movflags', '+faststart', '-y', final], 600000); }
       catch { fs.rmSync(final, {force: true}); throw new InputError('The clip could not be converted to MP4 with the pinned FFmpeg.', 415); }
       probe = await VS.probeMedia(final, this.ffprobe);
     }
