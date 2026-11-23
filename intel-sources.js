@@ -16,14 +16,16 @@ function apiKey(value, label) {
   return value;
 }
 
-async function readJson(response, label, maxBytes = MAX_RESPONSE_BYTES) {
+// 0.117 (audit): one reader for every answer kept in memory (JSON, voice audio, generated sound, samples). It stops
+// as soon as the answer passes its limit, before reading on; files written to disk stream in visual-sources instead.
+async function readBounded(response, limit, {empty = 'The download returned no data.', tooBig = 'The file is larger than the size limit.'} = {}) {
   const declared = Number(response.headers?.get?.('content-length'));
-  if (Number.isFinite(declared) && declared > maxBytes) {
+  if (Number.isFinite(declared) && declared > limit) {
     await response.body?.cancel();
-    throw new InputError(`${label} returned a response that is too large.`, 502);
+    throw new InputError(tooBig, 502);
   }
   const reader = response.body?.getReader();
-  if (!reader) throw new InputError(`${label} returned an empty response.`, 502);
+  if (!reader) throw new InputError(empty, 502);
   const chunks = [];
   let bytes = 0;
   try {
@@ -31,17 +33,22 @@ async function readJson(response, label, maxBytes = MAX_RESPONSE_BYTES) {
       const {done, value} = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > maxBytes) {
+      if (bytes > limit) {
         await reader.cancel();
-        throw new InputError(`${label} returned a response that is too large.`, 502);
+        throw new InputError(tooBig, 502);
       }
       chunks.push(Buffer.from(value));
     }
   } finally {
     reader.releaseLock();
   }
+  return Buffer.concat(chunks, bytes);
+}
+
+async function readJson(response, label, maxBytes = MAX_RESPONSE_BYTES) {
+  const body = await readBounded(response, maxBytes, {empty: `${label} returned an empty response.`, tooBig: `${label} returned a response that is too large.`});
   try {
-    return JSON.parse(Buffer.concat(chunks, bytes).toString('utf8'));
+    return JSON.parse(body.toString('utf8'));
   } catch {
     throw new InputError(`${label} returned invalid JSON.`, 502);
   }
@@ -467,6 +474,7 @@ function connectorReference(connectors, input, provider, label, required) {
 }
 
 module.exports = {
+  readBounded,
   NEXLEV_ORIGIN, YOUTUBE_ORIGIN, NexLevClient, YouTubePublicClient, QuotaLedger, readJson,
   normVideo, normChannel, transcriptText, transcriptSummary, firstArray, count, durationSeconds, isoDate, median,
   copiedPhrases, shingles, words, connectorCurrent, connectorReference, nexlevPeriod, youtubePeriod, hourPeriod, cleanText,

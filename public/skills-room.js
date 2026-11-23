@@ -24,7 +24,13 @@ function skillNumbers(numbers) {
   return `<dl class="style-facts">${keys.map(key => `<div><dt>${esc(skillTitle(key))}</dt><dd class="mono-wrap">${esc(show(numbers[key]))}</dd></div>`).join('')}</dl>`;
 }
 
-function skillsAll() { return state?.skills?.skills || []; }
+// 0.117: the state sends each skill's latest and approved revision as numbers; they are looked up in its revisions once per state.
+let skillsSeen = null, skillsMade = [];
+function skillsAll() {
+  const list = state?.skills?.skills || [];
+  if (list !== skillsSeen) { skillsSeen = list; skillsMade = list.map(skill => ({...skill, latest: skill.revisions.find(item => item.revision === skill.latestRevision) || null, approved: skill.revisions.find(item => item.revision === skill.approvedRevision) || null})); }
+  return skillsMade;
+}
 function skillById(id) { return skillsAll().find(item => item.id === id); }
 function skillRevisionById(id) {
   for (const skill of skillsAll()) {

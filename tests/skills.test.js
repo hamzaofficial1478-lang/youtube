@@ -135,7 +135,14 @@ test('approval needs every named confirmation and supersedes the previous approv
   assert.equal(next.status, 'draft');
   assert.deepEqual(skills.brief('qc.review').skillIds, ['qc.anti-generic']);
   assert.equal(skills.brief('qc.review').skills[0].do.length, approved.skill.do.length, 'a draft revision must not change runtime');
+  // 0.117 (audit): the reach count is kept while nothing changes and worked out again when an approval changes it.
+  const reach = skills.state().reach;
+  assert.strictEqual(skills.state().reach, reach, 'the same answer while no skill changed');
   skills.approveRevision(next.id, review);
+  assert.notStrictEqual(skills.state().reach, reach, 'an approval makes it count again');
+  // The polled state names the latest and approved revisions by number (their text is in "revisions" once).
+  const polled = skills.state().skills.find(item => item.id === 'qc.anti-generic');
+  assert.deepEqual([polled.latestRevision, polled.approvedRevision, 'latest' in polled, 'approved' in polled, polled.revisions.length], [2, 2, false, false, 2]);
   const after = skills.skills().find(item => item.id === 'qc.anti-generic');
   assert.equal(after.approved.revision, 2);
   assert.deepEqual(after.revisions.map(item => item.status), ['superseded', 'approved']);

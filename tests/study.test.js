@@ -95,7 +95,11 @@ test('a style study end to end: a video file is measured and studied by Claude o
   assert.throws(() => studies.create(family.id, {title: 'Ref', createdBy: 'Owner', path: path.join(dir, 'missing.mp4'), connector: {id: 'c', revision: 1}}), /does not exist/);
   const queued = studies.create(family.id, {title: 'Owning a fleet - reference', channel: 'Some Channel', link: 'https://www.youtube.com/watch?v=abc', createdBy: 'Owner', path: `"${video}"`, connector: {id: 'c', revision: 1}});
   assert.deepEqual([queued.status, queued.source.kind], ['queued', 'video']);
-  const done = await studies.processNext();
+  // 0.117 (audit): one study at a time; a second one waits while the first runs.
+  const second = studies.create(family.id, {title: 'Second reference', createdBy: 'Owner', path: video, connector: {id: 'c', revision: 1}});
+  const [done, waiting] = await Promise.all([studies.processNext(), studies.processNext()]);
+  assert.equal(waiting, null, 'the second study did not start while the first ran');
+  store.db.prepare("UPDATE style_studies SET status='stale' WHERE id=?").run(second.id);
   assert.equal(done.status, 'studied', done.error);
   assert.deepEqual([done.measured.shots, done.measured.medianShotSeconds], [4, 1.5], 'the cut rhythm is measured from the file');
   assert.ok(done.measured.colours.includes('#FFFFFF'));

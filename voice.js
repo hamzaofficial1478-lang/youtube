@@ -5,7 +5,7 @@ const path=require('node:path');
 const {randomUUID,createHash}=require('node:crypto');
 const {execFile}=require('node:child_process');
 const {promisify}=require('node:util');
-const {InputError}=require('./store');
+const {InputError}=require('./store');const {readBounded}=require('./intel-sources');
 const Delivery=require('./delivery');
 const live=require('./live');
 
@@ -16,12 +16,9 @@ function boundedText(value,label,max,min=1){if(typeof value!=='string'||value.tr
 function safeId(value,label){return boundedText(value,label,128).replace(/[A-Za-z0-9_.:-]/g,'').length===0?value.trim():(()=>{throw new InputError(`Enter a valid ${label}.`);})();}
 async function responseAudio(response){
   if(!response?.ok){await response?.body?.cancel();throw new InputError(`Voice provider returned HTTP ${response?.status||'unknown'}. Its billing outcome may be unknown.`,502);}
-  const declared=Number(response.headers.get('content-length')||0);if(declared>MAX_AUDIO_BYTES){await response.body?.cancel();throw new InputError('Voice provider audio exceeded the 25 MB safety limit.',502);}
-  const reader=response.body?.getReader();if(!reader)throw new InputError('Voice provider returned no audio body.',502);
-  const chunks=[];let bytes=0;
-  while(true){const {done,value}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>MAX_AUDIO_BYTES){await reader.cancel();throw new InputError('Voice provider audio exceeded the 25 MB safety limit.',502);}chunks.push(Buffer.from(value));}
-  if(bytes<44)throw new InputError('Voice provider returned an empty or incomplete audio file.',502);
-  return Buffer.concat(chunks,bytes);
+  const audio=await readBounded(response,MAX_AUDIO_BYTES,{empty:'Voice provider returned no audio body.',tooBig:'Voice provider audio exceeded the 25 MB safety limit.'});
+  if(audio.length<44)throw new InputError('Voice provider returned an empty or incomplete audio file.',502);
+  return audio;
 }
 class OpenAISpeechClient{
   constructor(key,fetchImpl=fetch){this.key=key;this.fetch=fetchImpl;}

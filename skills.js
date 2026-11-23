@@ -710,14 +710,24 @@ class SkillsEngine {
       counts: {...counts, lessonsProposed: lessons.filter(item => item.status === 'proposed').length},
       vocabulary: {rooms: ROOMS, tasks: TASK_KEYS, kinds: KINDS, origins: ORIGINS, statuses: STATUSES, roomTasks: ROOM_TASKS, projectStateCategories: PROJECT_STATE_CATEGORIES},
       sourceHierarchy: SOURCE_HIERARCHY, briefByteBudget: BRIEF_BYTE_BUDGET, rules: RULES.limits,
-      skills, bindings: this.bindings(), lessons, usage: this.usage(50), projectState: this.projectState(),
+      // 0.117 (audit): the page polls this every 1.5 s while work runs; "latest" and "approved" are the revision numbers
+      // (their text is already in "revisions", so it was sent three times: 5.4 MB a poll).
+      skills: skills.map(({latest, approved, ...rest}) => ({...rest, latestRevision: latest?.revision ?? null, approvedRevision: approved?.revision ?? null})),
+      bindings: this.bindings(), lessons, usage: this.usage(50), projectState: this.projectState(),
       packs: PACK_FILES.map(pack => pack.label),
-      reach: REACH.map(([taskKey, label]) => {
-        if (taskKey === 'editing.plan') { const available = this.select(taskKey).length; return {taskKey, label, used: available, available, inCode: true}; }
-        const brief = this.brief(taskKey);
-        return {taskKey, label, used: brief.skills.length, available: brief.available, bytes: brief.injectedBytes};
-      }),
+      reach: this.reach(),
     };
+  }
+  // How many skills reach each job. It ran skill selection for every job on every poll (about 0.3 s); it is kept until
+  // a skill, a revision's status or a binding changes.
+  reach() {
+    const key = JSON.stringify([this.db.prepare('SELECT COUNT(*) AS n, MAX(rowid) AS m, group_concat(status) AS s FROM skill_revisions').get(), this.db.prepare('SELECT COUNT(*) AS n, MAX(rowid) AS m FROM skill_bindings').get()]);
+    if (this.reachCache?.key !== key) this.reachCache = {key, value: REACH.map(([taskKey, label]) => {
+      if (taskKey === 'editing.plan') { const available = this.select(taskKey).length; return {taskKey, label, used: available, available, inCode: true}; }
+      const brief = this.brief(taskKey);
+      return {taskKey, label, used: brief.skills.length, available: brief.available, bytes: brief.injectedBytes};
+    })};
+    return this.reachCache.value;
   }
 
   // ------------------------------------------------------------ authoring

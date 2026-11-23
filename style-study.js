@@ -111,6 +111,8 @@ class StyleStudies {
   // One study at a time: reserve, make the sheets, ask Claude, check, settle.
   claim() {
     return this.store.transaction(() => {
+      // 0.117 (audit): one study at a time, like the competitor watcher (each runs FFmpeg and an AI answer).
+      if (this.db.prepare("SELECT 1 FROM style_studies WHERE status='running'").get()) return null;
       const row = this.db.prepare("SELECT * FROM style_studies WHERE status='queued' ORDER BY created_at, rowid LIMIT 1").get();
       if (!row) return null;
       const at = now(), family = this.store.family(row.family_id), source = JSON.parse(row.source), connector = JSON.parse(row.connector);

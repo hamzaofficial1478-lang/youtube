@@ -10,6 +10,7 @@
 // never used), only voices already in the library are searched.
 const {randomUUID} = require('node:crypto');
 const {InputError} = require('./store');
+const {readBounded} = require('./intel-sources');
 const {messageTokenUpperBound} = require('./writer');
 
 const requireValue = (ok, message, status = 400) => { if (!ok) throw new InputError(message, status); };
@@ -168,8 +169,9 @@ class VoiceMatcher {
     requireValue(response.ok, `Fish Audio answered HTTP ${response.status} for the sample.`, 502);
     const type = String(response.headers.get('content-type') || 'audio/mpeg');
     requireValue(/^audio\//.test(type), 'The sample is not audio.', 502);
-    const bytes = Buffer.from(await response.arrayBuffer());
-    requireValue(bytes.length > 0 && bytes.length <= 8 * 1024 * 1024, 'The sample is empty or too large.', 502);
+    // 0.117 (audit): read up to 8 MB and stop there (it read the whole file before checking).
+    const bytes = await readBounded(response, 8 * 1024 * 1024, {empty: 'The sample is empty.', tooBig: 'The sample is larger than 8 MB.'});
+    requireValue(bytes.length > 0, 'The sample is empty.', 502);
     return {bytes, type};
   }
   state() {
