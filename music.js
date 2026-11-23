@@ -324,8 +324,11 @@ function mixGraph({music = [], sfx = [], clips = [], settings, voiceLufs = null,
   const clipMode = settings.clipSound?.mode || 'off', clipGain = settings.clipSound?.levelDb ?? -14, clipParts = [];
   const useClips = clipMode !== 'off' ? clips : [];
   useClips.forEach((item, k) => {
+    // 0.116: a clip slowed to fill its shot (speed below 1) plays its sound slowed alike (atempo keeps the pitch), so
+    // Muse's lips stay on its words: it takes seconds x speed of its file.
     const input = music.length + sfx.length + k + 1, length = round(item.seconds, 3), from = round(item.inSeconds || 0, 3), delay = Math.round(item.start * 1000), fade = round(Math.min(0.05, length / 4), 3);
-    clipParts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=${from}:${round(from + length, 3)},asetpts=PTS-STARTPTS,afade=t=in:st=0:d=${fade},afade=t=out:st=${round(Math.max(0, length - fade), 3)}:d=${fade},volume=${clipGain}dB,adelay=${delay}|${delay}[c${k}]`);
+    const speed = item.speed > 0 && item.speed < 1 ? round(item.speed, 3) : 1;
+    clipParts.push(`[${input}:a]aformat=sample_rates=48000:channel_layouts=stereo,atrim=${from}:${round(from + length * speed, 3)},asetpts=PTS-STARTPTS${speed < 1 ? `,atempo=${speed}` : ''},afade=t=in:st=0:d=${fade},afade=t=out:st=${round(Math.max(0, length - fade), 3)}:d=${fade},volume=${clipGain}dB,adelay=${delay}|${delay}[c${k}]`);
   });
   const muted = clipMode === 'voice' && useClips.length ? `,volume='if(${useClips.map(item => `between(t,${round(item.start, 3)},${round(item.start + item.seconds, 3)})`).join('+')},0,1)':eval=frame` : '';
   const parts = clipMode === 'voice' && useClips.length

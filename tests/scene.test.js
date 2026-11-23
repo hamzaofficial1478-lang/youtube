@@ -2091,6 +2091,37 @@ test('0.111: a Muse shot gets its direction and takes the clip the owner uploads
   assert.equal(family.format, 'long-form');
 });
 
+// 0.116 (owner 2026-11-23): Muse speaks only in a video made from Muse clips, with the words the narration times to the
+// shot, the narrator voice, the channel's voice skills and the competitors' narration lessons; Muse joins every engine.
+test('0.116: a video made from Muse clips leads Muse\'s voice with its timed words, voice skills and competitor lessons', t => {
+  const visuals = {sources: ['ai-video'], primarySource: 'ai-video', aiDisclosure: 'always-disclose', characterConsistency: true};
+  const {store, room, content} = setup(t, fakeNetwork(), {revise: {visuals}});
+  store.competitorLessons = (familyId, process) => (process === 'voice' ? {channels: ['Rival'], studies: [{channel: 'Rival', subjects: {voice: {verdict: 'Low, unhurried narrator who pauses before each reveal.', steps: ['Drop the pitch on the last word.']}}}]} : null);
+  const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  const payload = JSON.parse(room.manifestRow(manifest.id).payload), all = payload.scenes.flatMap(scene => scene.shots);
+  assert.ok(all.every(shot => shot.source === 'ai-video'));
+  const first = all[0], direction = room.museDirection(manifest.id, first.id);
+  assert.equal(direction.sound, 'muse', 'Muse speaks by default in a video made from Muse clips');
+  const said = /Spoken in this clip, word for word and nothing else: "([^"]+)"/.exec(direction.text)[1];
+  const timed = require('../captions').wordTimings({sentences: payload.sentences, pauses: [], narrationSeconds: payload.timing.narrationSeconds}).filter(word => word.start >= first.startSeconds - 0.01 && word.start < first.startSeconds + first.durationSeconds - 0.01).map(word => word.text).join(' ');
+  assert.equal(said, timed, 'the words the narration times to this shot (review finding 4)');
+  assert.match(direction.text, /How the niche's best narrators deliver \(techniques only; never imitate their voice\): Low, unhurried narrator/);
+  assert.doesNotMatch(direction.text, /This shot plays under the narration/);
+  // With the narrator chosen, Muse adds no speech.
+  const other = setup(t, fakeNetwork(), {revise: {visuals: {...visuals, museSound: 'narrator'}}});
+  const plan = other.room.createPlan(other.content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: other.content.revision}).manifest;
+  const shot = JSON.parse(other.room.manifestRow(plan.id).payload).scenes[0].shots[0];
+  assert.equal(other.room.museDirection(plan.id, shot.id).sound, 'narrator');
+});
+
+test('0.116: a Stickman style with Muse keeps both sources and its plan passes the checks', t => {
+  const {room, content} = setup(t, fakeNetwork(), {styleKey: 'stickman-sketch-explainer', revise: {visuals: {sources: ['generated-graphics', 'ai-video'], primarySource: 'generated-graphics', aiDisclosure: 'always-disclose', characterConsistency: true}}});
+  const inputs = room.inputs(content);
+  assert.deepEqual([inputs.engine, [...inputs.sources].sort()], ['stickman', ['ai-video', 'generated-graphics']]);
+  const {manifest} = room.createPlan(content.id, {mode: 'rules', requestedBy: 'Owner', contentRevision: content.revision});
+  assert.ok(manifest.id);
+});
+
 // 0.112: the owner's Muse account through useapi.net makes the clip from the program's direction: the reference
 // pictures are uploaded, the job runs async, the finished video is downloaded, checked, kept and selected; a job Muse
 // already started is looked at again on retry, never made twice.

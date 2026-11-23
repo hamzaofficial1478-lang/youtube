@@ -1,6 +1,6 @@
 # YouTube Control Room
 
-Version 0.115.0 - choose who speaks over Muse clips (your narrator, Muse's natural sound under it, or Muse speaking each shot's words led by your narrator's voice in words) while the program does the edit, music and effects, and find a narrator on Fish Audio like your competitors' voice (searched, never cloned); retries get fresh skills and know what you disliked, and picture effects can be changed with "Edit again" by Claude or ChatGPT.
+Version 0.116.0 - Muse as an option in every engine (the AI chooses where a Muse clip serves and where the engine carries on), Muse's own voice only in a video made from Muse clips, led by the words timed to each shot, your narrator's voice, the voice skills and what the competitors' narration teaches; otherwise your connected narrator speaks; plus the fixes of the 0.115 review and a narrator found on Fish Audio like your competitors' voice, never cloned.
 
 This repository, [hamzaofficial1478-lang/youtube](https://github.com/hamzaofficial1478-lang/youtube), is the program's home: `main` holds the current verified version. The laptop folder (Desktop\YT\youtube) is a working copy that pulls from `main` (`git pull origin main`). Uploading code to GitHub does not run its server.
 

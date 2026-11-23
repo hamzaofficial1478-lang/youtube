@@ -186,7 +186,7 @@ function createApp({dataFile=path.join(root,'data','control-room.sqlite'),worker
         const editionExport=req.method==='GET'&&pathname.match(/^\/api\/edition-revisions\/([a-f0-9-]+)\/export$/);
         if(editionExport){const {text,filename}=localizationRoom.exportText(editionExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="edition.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
         if(packageExport){const {text,filename}=packagingRoom.exportText(packageExport[1]);res.writeHead(200,{'Content-Type':'text/plain; charset=utf-8','Content-Disposition':`attachment; filename="package.txt"; filename*=UTF-8''${encodeURIComponent(filename)}`,'Cache-Control':'no-store'});return res.end(text);}
-        if(pathname==='/api/muse-direction'&&req.method==='GET'){const {brief,...direction}=sceneRoom.museDirection(String(url.searchParams.get('manifestId')||''),String(url.searchParams.get('shotId')||''));return json(res,200,direction);}
+        if(pathname==='/api/muse-direction'&&req.method==='GET'){const {brief,voiceBrief,...direction}=sceneRoom.museDirection(String(url.searchParams.get('manifestId')||''),String(url.searchParams.get('shotId')||''));return json(res,200,direction);}
         const voiceSample=pathname.match(/^\/api\/voice-matches\/([a-f0-9-]+)\/sample\/(\d{1,2})\/(\d)$/);
         if(voiceSample&&req.method==='GET'){const {bytes,type}=await voiceMatcher.sample(voiceSample[1],voiceSample[2],voiceSample[3]);res.writeHead(200,{'Content-Type':type,'Content-Length':bytes.length,'Cache-Control':'no-store'});return res.end(bytes);}
         const brainImage=pathname.match(/^\/api\/brain-images\/([a-f0-9-]+)$/);

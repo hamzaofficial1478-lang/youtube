@@ -49,7 +49,7 @@ function voiceOf(item) {
   if (!item || typeof item._id !== 'string' || !/^[A-Za-z0-9_-]{6,64}$/.test(item._id) || item.state && item.state !== 'trained') return null;
   const samples = (Array.isArray(item.samples) ? item.samples : []).map(sample => ({title: clip(sample?.title, 80), text: clip(sample?.text, 300), audio: fishHost(sample?.audio) ? sample.audio : null})).filter(sample => sample.audio).slice(0, 2);
   return {id: item._id, title: clip(item.title, 120), description: clip(item.description, 400), tags: (Array.isArray(item.tags) ? item.tags : []).map(tag => clip(tag, 30)).filter(Boolean).slice(0, 12),
-    languages: (Array.isArray(item.languages) ? item.languages : []).map(lang => clip(lang, 12)).slice(0, 6), licensed: item.licensed === true, uses: Number(item.task_count) || 0, likes: Number(item.like_count) || 0, author: clip(item.author?.nickname, 60), samples, page: `https://fish.audio/m/${item._id}`};
+    languages: (Array.isArray(item.languages) ? item.languages : []).map(lang => clip(lang, 12)).slice(0, 6), licensed: item.licensed === true, uses: Number(item.task_count) || 0, samples, page: `https://fish.audio/m/${item._id}`};
 }
 function fishHost(value) {
   try { const url = new URL(String(value)); return url.protocol === 'https:' && (url.hostname === 'fish.audio' || url.hostname.endsWith('.fish.audio')); } catch { return false; }
@@ -123,8 +123,12 @@ class VoiceMatcher {
     requireValue(by.length >= 2, 'Your name must contain 2-80 characters.');
     const family = this.store.family(familyId), slot = this.fishConnector(), language = String(family.primaryLocale || 'en').split('-')[0].toLowerCase();
     const lessons = this.lessons(familyId, 'voice'), guidance = this.guidance(familyId);
-    let wanted, source = 'program';
-    if (input.ai && input.ai !== 'program') {
+    // 0.116: the description is saved before Fish is searched, so a failed search is asked again without the AI.
+    const again = input.again ? this.row(input.again) : null;
+    requireValue(!again || (again.family_id === family.id && JSON.parse(again.candidates).length === 0), 'Only a voice search of this channel that found nothing can be searched again.', 409);
+    let wanted, source = again?.source || 'program';
+    if (again) { const {licensedOnly, studied, ...kept} = JSON.parse(again.wanted); wanted = kept; }
+    else if (input.ai && !['program', 'again'].includes(input.ai)) {
       requireValue(this.brain, 'The AI is not available in this program.', 409);
       const brief = this.store.skillRuntime?.brief('voice.direction', family.id, {text: `narrator voice casting ${family.niche} ${family.audience}`}) || null;
       const messages = matchMessages({family: {name: family.name, niche: family.niche, audience: family.audience, language}, lessons, guidance, skills: brief?.prompt || null});
@@ -133,12 +137,12 @@ class VoiceMatcher {
       source = reply.provider === 'chatgpt' ? 'chatgpt' : 'claude';
     } else wanted = plainMatch({family, lessons});
     const client = new FishVoices(this.connectors.key(slot.id), this.fetch), found = [];
-    const licensed = input.community !== true;
+    const licensed = input.community !== true, id = again?.id || randomUUID();
+    if (!again) this.db.prepare('INSERT INTO voice_matches(id,family_id,wanted,candidates,source,created_by,created_at) VALUES(?,?,?,?,?,?,?)').run(id, family.id, JSON.stringify({...wanted, licensedOnly: licensed, studied: lessons?.channels || []}), '[]', source, by, now());
     for (const query of wanted.queries) found.push(...await client.search({title: query, language, licensed}));
     if (wanted.tags.length) found.push(...await client.search({tags: wanted.tags, language, licensed}));
     const candidates = rank(found, wanted);
-    const id = randomUUID();
-    this.db.prepare('INSERT INTO voice_matches(id,family_id,wanted,candidates,source,created_by,created_at) VALUES(?,?,?,?,?,?,?)').run(id, family.id, JSON.stringify({...wanted, licensedOnly: licensed, studied: lessons?.channels || []}), JSON.stringify(candidates), source, by, now());
+    this.db.prepare('UPDATE voice_matches SET candidates=?, wanted=? WHERE id=?').run(JSON.stringify(candidates), JSON.stringify({...wanted, licensedOnly: licensed, studied: (again ? JSON.parse(again.wanted).studied : lessons?.channels) || []}), id);
     this.store.event(`${by} looked for a narrator voice on Fish Audio for ${family.name}: ${candidates.length} voice${candidates.length === 1 ? '' : 's'} found`);
     return this.publicMatch(this.row(id));
   }

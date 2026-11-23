@@ -139,3 +139,5 @@ Owner request 2026-11-23: "when I connect the Fish Audio API, the program should
 Fish Audio's speech models (s2.1-pro, with a free tier s2.1-pro-free) bill per character of narration; searching the library is not billed ([pricing](https://docs.fish.audio/developer-guide/models-pricing/pricing-and-rate-limits.md)).
 
 Not tested: a real Fish Audio key (the search, samples and choice were tested with a stand-in for Fish Audio's answers).
+
+0.116: the description is saved before Fish Audio is searched, so when Fish fails or finds nothing, "Search again" repeats the search with the same description without asking the AI again (`find` with `again`); "Use this voice" switches the narrator window to the Fish connection with a Fish model (`s2.1-pro`). In a video made from Muse clips, the chosen voice also leads Muse's own voice (MUSE-AI-VIDEO.md "0.116").

@@ -423,7 +423,7 @@ function planMessages(input, {findings = []} = {}) {
     'Any competitor guidance lists techniques only; never copy a competitor\'s look, wording or identity.',
     ...(input.skills ? [SKILLS_LINE] : []),
     ...(input.channel ? [Cr.BRAIN_LINE, Cr.CAST_LINE] : []),
-    ...(input.style.sources.includes('ai-video') ? [Mu.PLANNER_LINE] : []),
+    ...(input.style.sources.includes('ai-video') ? [Mu.PLANNER_LINE, ...(input.style.sources.length > 1 ? [Mu.MIX_LINE] : [])] : []),
     SCENE_CRAFT,
     ...(input.style.engine ? [E.promptGuide(input.style.engine, {mix: input.style.mix, look: input.style.look, board: input.style.board, design: input.style.design, brief: input.style.brief, sources: input.style.sources, film: input.style.film, grade: input.style.grade, painted: input.style.painted === true, looks: input.style.looks, boards: input.style.boards, designs: input.style.designs, films: input.style.films, pictureType: input.style.pictureType, atelier: input.style.atelier, paint: input.style.paint})] : []),
     ...(input.map ? ['Follow the video map (input "map") from the story director: it set the chapters and which engine carries each beat. Draw the shots of a beat\'s sentences with its engine (sketch.engine, or a frame for atelier) unless the exact words need otherwise, and then say why in the shot\'s notes. An atelier beat gets one designed shot, the moment that must land; its other shots use another engine (each designed shot is counted against the video\'s budget). Open each chapter with its re-hook.'] : input.style.mix ? [D.DOCTRINE] : []),
@@ -2880,18 +2880,25 @@ class SceneRoom {
     // The owner's picture and film skills lead Muse too (the same craft lines the painter gets).
     const brief = this.store.skillRuntime?.brief('visuals.prompt', family.id, {text: [shot.prompt, scene.direction, family.niche, 'video shot camera light cinematic'].filter(Boolean).join(' '), format: ['long-form', 'shorts'].includes(family.format) ? family.format : null}) || null;
     const craft = Dna.craftText(brief?.prompt, 'do', 700);
-    // 0.115: what is heard over the clip (the style's choice). When Muse speaks, it gets this shot's own words, the
-    // channel's narrator voice in words and the line's delivery from the voice direction.
+    // 0.115/0.116: what is heard over the clip. Muse speaks only in a video made from Muse clips (Mu.soundOf); it then
+    // gets the words the narration times to this shot, the channel's narrator voice in words, the line's delivery
+    // from the voice direction, the channel's voice skills and what the watched competitors' narration teaches.
     let sound = 'narrator';
-    try { sound = this.inputs(ctx.content).spec?.visuals?.museSound || 'narrator'; } catch { sound = 'narrator'; }
-    let speech = null;
+    try { sound = Mu.soundOf(this.inputs(ctx.content).spec?.visuals); } catch { sound = 'narrator'; }
+    let speech = null, voiceBrief = null;
     if (sound === 'muse') {
-      const said = Mu.shotWords(words, scene.shots, shot.id), approval = this.db.prepare('SELECT audition_id FROM voice_approvals WHERE id=?').get(ctx.row.voice_approval_id);
-      const lines = approval ? this.store.voiceDirectionLines?.(approval.audition_id)?.lines || [] : [], line = lines[scene.sentenceStart - 1] || null;
-      speech = said ? {words: said, voice: this.store.narratorVoice?.(family.id) || null, delivery: line ? `${line.emotion}, energy ${line.energy} of 5, ${line.pace} pace${line.emphasis?.length ? `, stress "${line.emphasis.slice(0, 3).join('", "')}"` : ''}` : null} : null;
+      const timed = Cap.wordTimings({sentences: payload.sentences || [], pauses: [], narrationSeconds: payload.timing?.narrationSeconds});
+      const said = timed.filter(word => word.start >= shot.startSeconds - 0.01 && word.start < shot.startSeconds + shot.durationSeconds - 0.01).map(word => word.text).join(' ');
+      const approval = this.db.prepare('SELECT audition_id FROM voice_approvals WHERE id=?').get(ctx.row.voice_approval_id);
+      const lines = approval ? this.store.voiceDirectionLines?.(approval.audition_id)?.lines || [] : [], line = lines[(timed.find(word => word.start >= shot.startSeconds - 0.01)?.sentence || scene.sentenceStart) - 1] || null;
+      voiceBrief = this.store.skillRuntime?.brief('voice.direction', family.id, {text: [said, scene.direction, family.niche, 'narrator voice delivery'].filter(Boolean).join(' '), contentId: ctx.content.id}) || null;
+      let lessons = null;
+      try { lessons = this.store.competitorLessons?.(family.id, 'voice', 3000) || null; } catch { lessons = null; }
+      speech = said ? {words: said, voice: this.store.narratorVoice?.(family.id) || null, delivery: line ? `${line.emotion}, energy ${line.energy} of 5, ${line.pace} pace${line.emphasis?.length ? `, stress "${line.emphasis.slice(0, 3).join('", "')}"` : ''}` : null,
+        craft: Dna.craftText(voiceBrief?.prompt, 'do', 500), lessons: (lessons?.studies || []).flatMap(study => Object.values(study.subjects || {}).flatMap(item => [item.verdict, ...(item.steps || [])])).filter(Boolean).join(' ') || null} : null;
     }
     const direction = Mu.direction({shot, scene, words, cast, refs, world: payload.world || null, grade, vertical: family.format === 'shorts', before: all[at - 1]?.prompt || all[at - 1]?.query || null, after: all[at + 1]?.prompt || null, craft, sound, speech});
-    return {shotId: shot.id, label: shot.label, source: shot.source, ...direction, skills: brief ? {count: brief.skills?.length || 0} : null, brief};
+    return {shotId: shot.id, label: shot.label, source: shot.source, ...direction, skills: brief ? {count: brief.skills?.length || 0} : null, brief, ...(speech && voiceBrief ? {voiceBrief} : {})};
   }
   // The prompt Muse gets: the direction, with each attached reference named as the API asks (image_1 ...).
   musePrompt(direction) {
@@ -2925,9 +2932,10 @@ class SceneRoom {
     });
   }
   insertMuseJob(ctx, connector, by) {
-    const direction = this.museDirection(ctx.row.id, ctx.shot.id), {brief, ...rest} = direction;
-    const id = this.insertJob({ctx, kind: 'muse', capabilityId: 'muse-video', scope: {connector, prompt: this.musePrompt(rest), refs: rest.attach, seconds: rest.seconds, aspect: rest.aspect}, createdBy: by});
+    const direction = this.museDirection(ctx.row.id, ctx.shot.id), {brief, voiceBrief, ...rest} = direction;
+    const id = this.insertJob({ctx, kind: 'muse', capabilityId: 'muse-video', scope: {connector, prompt: this.musePrompt(rest), refs: rest.attach, seconds: rest.seconds, aspect: rest.aspect, sound: rest.sound}, createdBy: by});
     if (brief) this.store.skillRuntime?.recordUsage({jobId: id, familyId: ctx.family.id, room: 'scene', taskKey: 'visuals.prompt', brief});
+    if (voiceBrief) this.store.skillRuntime?.recordUsage({jobId: id, familyId: ctx.family.id, room: 'scene', taskKey: 'voice.direction', brief: voiceBrief});
     return id;
   }
   async runMuse(job) {
@@ -2954,7 +2962,7 @@ class SceneRoom {
       fs.mkdirSync(dir, {recursive: true});
       file = path.join(dir, `.muse-${randomUUID()}.mp4`);
       await client.download(made.assetId, file);
-      const by = job.created_by, rights = {basis: 'ai-generated', license: VS.capability('muse-video').rights, provider: 'meta-muse', model: 'Muse (your subscription, through useapi.net)', prompt: scope.prompt, references: (scope.refs || []).map(item => item.label), museJob, museAsset: made.assetId, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
+      const by = job.created_by, rights = {basis: 'ai-generated', license: VS.capability('muse-video').rights, provider: 'meta-muse', model: 'Muse (your subscription, through useapi.net)', prompt: scope.prompt, sound: scope.sound || 'narrator', references: (scope.refs || []).map(item => item.label), museJob, museAsset: made.assetId, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
         note: 'Synthetic video made by Meta Muse on the owner\'s account from the program\'s direction. YouTube requires disclosure of realistic synthetic media.'};
       // keepClip copies or converts it; the downloaded file itself is removed in finally.
       const result = await this.keepClip({ctx: job.ctx, file, name: `${job.ctx.shot.label}.mp4`, by, rights, jobId: job.id, selectIfEmpty: true});
@@ -2995,7 +3003,7 @@ class SceneRoom {
       });
       requireValue(bytes > 10 * 1024, 'The file is empty or too small to be a video clip.', 400);
       const direction = (() => { try { return this.museDirection(manifestId, shotId); } catch { return null; } })();
-      const rights = {basis: 'ai-generated', license: cap.rights, provider: 'meta-muse', model: 'Muse (owner\'s subscription)', prompt: direction?.text || ctx.shot.prompt, references: (direction?.attach || []).map(item => item.label), uploadedAs: name, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
+      const rights = {basis: 'ai-generated', license: cap.rights, provider: 'meta-muse', model: 'Muse (owner\'s subscription)', prompt: direction?.text || ctx.shot.prompt, sound: direction?.sound || 'narrator', references: (direction?.attach || []).map(item => item.label), uploadedAs: name, generatedBy: by, generatedAt: now(), synthetic: true, disclosure: 'required',
         note: 'Synthetic video made in Meta Muse from the program\'s direction and uploaded by the owner. YouTube requires disclosure of realistic synthetic media.'};
       const kept = await this.keepClip({ctx, file, name, by, rights, jobId: null, selectIfEmpty: false});
       this.store.event(`${by} uploaded a Muse clip for ${ctx.shot.label} of "${ctx.content.title}"`);

@@ -15,15 +15,13 @@ const V = require('../voice-match');
 const {Store} = require('../store');
 
 test('muse.js: the clip speaks its own words with the narrator voice, keeps only ambience, or stays silent', () => {
-  const shots = [{id: 'a', durationSeconds: 4}, {id: 'b', durationSeconds: 4}];
-  const words = 'one two three four five six seven eight';
-  assert.equal(Mu.shotWords(words, shots, 'a'), 'one two three four');
-  assert.equal(Mu.shotWords(words, shots, 'b'), 'five six seven eight');
-  assert.equal(Mu.shotWords(words, shots, 'z'), '');
   const base = {shot: {label: 'S01A', prompt: 'Wide shot: a raft drifts on a grey sea under low clouds.', motion: 'static', durationSeconds: 8}, words: 'The sea had no mercy that night.'};
-  const speaking = Mu.direction({...base, sound: 'muse', speech: {words: 'The sea had no mercy', voice: 'deep calm male documentary narrator', delivery: 'grave, slow, a pause before "mercy"'}});
+  const speaking = Mu.direction({...base, sound: 'muse', speech: {words: 'The sea had no mercy', voice: 'deep calm male documentary narrator', delivery: 'grave, slow, a pause before "mercy"', craft: 'Land the last word of a line, then breathe.', lessons: 'Low, unhurried delivery with long pauses before reveals.'}});
   assert.match(speaking.text, /Spoken in this clip, word for word and nothing else: "The sea had no mercy"/);
-  assert.match(speaking.text, /Voice: deep calm male documentary narrator; grave, slow/);
+  assert.match(speaking.text, /Voice: deep calm male documentary narrator; this line grave, slow/);
+  // 0.116: the voice is led by the channel's voice skills and what the watched competitors' narration teaches.
+  assert.match(speaking.text, /Voice craft \(the channel's voice skills\): Land the last word/);
+  assert.match(speaking.text, /How the niche's best narrators deliver \(techniques only; never imitate their voice\): Low, unhurried/);
   assert.match(speaking.text, /No music/);
   assert.doesNotMatch(speaking.text, /No speech/);
   assert.equal(speaking.sound, 'muse');
@@ -34,6 +32,36 @@ test('muse.js: the clip speaks its own words with the narrator voice, keeps only
   assert.equal(silent.sound, 'narrator');
   // Muse asked to speak with no words for the shot falls back to the silent clip.
   assert.match(Mu.direction({...base, sound: 'muse', speech: {words: ''}}).text, /No speech or music needed/);
+});
+
+test('0.116: Muse speaks only in a video made from Muse clips; a video that mixes Muse with its engine keeps the narrator', () => {
+  assert.equal(Mu.soundOf({sources: ['ai-video']}), 'muse', 'a video made from Muse clips speaks with Muse by default');
+  assert.equal(Mu.soundOf({sources: ['ai-video'], museSound: 'narrator'}), 'narrator', 'unless the owner chose the narrator');
+  assert.equal(Mu.soundOf({sources: ['ai-video'], museSound: 'ambience'}), 'ambience');
+  assert.equal(Mu.soundOf({sources: ['generated-graphics', 'ai-video'], museSound: 'muse'}), 'narrator', 'a mixed video keeps one narrator');
+  assert.equal(Mu.soundOf({sources: ['generated-graphics', 'ai-video'], museSound: 'ambience'}), 'ambience');
+  assert.equal(Mu.soundOf({sources: ['generated-graphics']}), 'narrator');
+  const doc = structuredClone(S.LAUNCH_PROFILES.find(item => item.spec.renderer.adapter === 'ffmpeg-montage').spec);
+  doc.visuals = {...doc.visuals, sources: ['generated-graphics', 'ai-video'], primarySource: 'generated-graphics', aiDisclosure: 'always-disclose', museSound: 'muse'};
+  assert.throws(() => S.validateStyleSpec(doc), /Muse can speak only in a video where every shot is a Muse clip/);
+  doc.visuals = {...doc.visuals, sources: ['ai-video'], primarySource: 'ai-video'};
+  assert.equal(S.validateStyleSpec(doc).visuals.museSound, 'muse');
+});
+
+test('0.116: Muse is an option of every engine; the planner keeps its clips and is told where Muse serves', () => {
+  const E = require('../engines');
+  for (const adapter of ['ffmpeg-sketch', 'canvas-frames', 'atelier', 'ffmpeg-montage', 'story-mix']) {
+    const spec = structuredClone(S.LAUNCH_PROFILES.find(item => item.spec.renderer.adapter === adapter).spec);
+    spec.visuals.sources = [...spec.visuals.sources.filter(source => source !== 'ai-video'), 'ai-video'];
+    const planner = E.plannerSources(spec, spec.visuals.sources);
+    assert.ok(planner.sources.includes('ai-video'), `${adapter} keeps its Muse clips`);
+    assert.ok(planner.sources.includes('generated-graphics'), `${adapter} keeps its own engine`);
+  }
+  const stick = String(E.promptGuide('stickman', {sources: ['generated-graphics', 'ai-video']}));
+  assert.match(stick, /except the AI video \(Muse\) shots placed as the WHERE MUSE line says/);
+  assert.doesNotMatch(String(E.promptGuide('stickman', {sources: ['generated-graphics']})), /WHERE MUSE/);
+  assert.match(String(E.promptGuide('atelier', {sources: ['generated-graphics', 'ai-video']})), /live action \(a Muse shot/);
+  assert.match(Mu.MIX_LINE, /^WHERE MUSE, WHERE THE ENGINE/);
 });
 
 test('style and audio settings: what is heard over a Muse clip is checked', () => {
@@ -57,6 +85,9 @@ test('music.js: Muse speaking mutes the narration over its clip; ambience is lai
   assert.doesNotMatch(ambience, /eval=frame/);
   assert.match(ambience, /volume=-14dB,adelay=2000\|2000\[c0\]/);
   assert.match(ambience, /\[voice\]\[c0\]amix=inputs=2/);
+  // 0.116: a clip slowed to fill its shot plays its sound slowed alike (it takes seconds x speed of its file).
+  assert.match(M.mixGraph({clips: [{start: 2, seconds: 5, inSeconds: 1, speed: 0.8}], settings: {...settings, clipSound: {mode: 'voice', levelDb: 0}}}), /atrim=1:5,asetpts=PTS-STARTPTS,atempo=0\.8,/);
+  assert.doesNotMatch(voice, /atempo/, 'a clip at its own speed is not stretched');
   // Off: the clip's sound is not used at all.
   assert.doesNotMatch(M.mixGraph({clips, settings: {...settings, clipSound: {mode: 'off'}}}), /\[c0\]/);
 });
@@ -169,9 +200,19 @@ test('VoiceMatcher: with an AI the voice is described inside the channel\'s rese
   const family = store.saveFamily({name: 'Old Worlds', tier: 'A', countries: ['United States'], audience: 'Adults who like ancient history told as stories.', niche: 'Ancient history stories', locales: ['en-US'], timezone: 'Asia/Karachi', monthlyBudget: 50, cadence: 2, format: 'long-form', monthlyTokenLimit: 900000, scriptTokenLimit: 8000, researchTokenLimit: 8000, competitors: ['https://www.youtube.com/@RivalHistory']});
   const asked = [], titles = [];
   const brain = {call: async (fam, request) => { asked.push(request); return {content: JSON.stringify({description: 'Warm British storyteller', gender: 'any', pace: 'measured', queries: ['warm british storyteller'], tags: ['warm']}), provider: 'chatgpt'}; }};
-  const fetchImpl = async url => { titles.push(new URL(url).searchParams.get('title')); return new Response(JSON.stringify({items: ITEMS.slice(0, 2)}), {headers: {'content-type': 'application/json'}}); };
+  let down = true;
+  const fetchImpl = async url => { if (down) return new Response('', {status: 503}); titles.push(new URL(url).searchParams.get('title')); return new Response(JSON.stringify({items: ITEMS.slice(0, 2)}), {headers: {'content-type': 'application/json'}}); };
   const matcher = new V.VoiceMatcher(store, {connectors: {list: () => [{id: 'fish', provider: 'fish-audio', hasKey: true, test: {status: 'passed'}}], key: () => 'fish-key-0123456789abcdef'}, brain, fetch: fetchImpl});
-  const match = await matcher.find(family.id, {requestedBy: 'Owner', ai: 'chatgpt'});
+  // Review finding 5: Fish fails after the AI answered; the description is kept and searched again without the AI.
+  await assert.rejects(matcher.find(family.id, {requestedBy: 'Owner', ai: 'chatgpt'}), /answered HTTP 503/);
+  const kept = matcher.state()[0];
+  assert.deepEqual([kept.wanted.description, kept.candidates.length, asked.length], ['Warm British storyteller', 0, 1]);
+  down = false;
+  const match = await matcher.find(family.id, {requestedBy: 'Owner', ai: 'again', again: kept.id});
+  assert.equal(asked.length, 1, 'the AI is not asked twice');
+  assert.equal(match.id, kept.id);
+  assert.ok(match.candidates.length > 0);
+  await assert.rejects(matcher.find(family.id, {requestedBy: 'Owner', ai: 'again', again: kept.id}), /found nothing can be searched again/);
   assert.equal(asked[0].kind, 'voice_match');
   assert.equal(asked[0].ai, 'chatgpt');
   assert.equal(asked[0].maxTokens, V.MATCH_TOKENS);
@@ -181,15 +222,20 @@ test('VoiceMatcher: with an AI the voice is described inside the channel\'s rese
   assert.equal(matcher.state()[0].id, match.id);
 });
 
-test('editing-room.js: the edit takes the clip sound the style chose, only for clips that have sound', () => {
+test('editing-room.js: the edit takes the clip sound the style chose; only clips made to speak replace the narrator', () => {
   const {EditingRoom} = require('../editing-room');
-  const pick = EditingRoom.clipSoundFor;
-  const inputs = museSound => ({spec: {visuals: {museSound}}, assets: {s1: {sound: true}, s2: {}}});
-  assert.deepEqual(pick(inputs('muse')).setting, {mode: 'voice', levelDb: 0});
-  assert.match(pick(inputs('muse')).note, /Muse speaks in its 1 clip/);
+  const pick = EditingRoom.clipSoundFor, all = ['ai-video'];
+  const inputs = (museSound, sources = all) => ({spec: {visuals: {sources, museSound}}, assets: {s1: {sound: 'speech'}, s2: {sound: 'natural'}, s3: {}}});
+  assert.deepEqual(pick(inputs(undefined)).setting, {mode: 'voice', levelDb: 0}, 'a video made from Muse clips speaks with Muse by default');
+  // Review finding 1: a clip made before Muse was asked to speak keeps the narrator over it, and the note says so.
+  assert.match(pick(inputs('muse')).note, /Muse speaks in its 1 clip .*1 clip was made before Muse was asked to speak, so the narrator speaks over it/);
   assert.deepEqual(pick(inputs('ambience')).setting, {mode: 'ambience', levelDb: -14});
+  assert.match(pick(inputs('ambience')).note, /natural sound under the narrator in 1 clip/);
   assert.equal(pick(inputs('narrator')), null);
-  assert.equal(pick({spec: {visuals: {museSound: 'muse'}}, assets: {s1: {}}}), null, 'no clip with sound, nothing to mix');
-  const timeline = {fps: 30, clips: [{id: 'c1', label: 'S01A', shotId: 's1', start: 60, frames: 90, inSeconds: 0.5}, {id: 'c2', shotId: 's2', start: 150, frames: 30}]};
-  assert.deepEqual(EditingRoom.prototype.clipSounds({assets: {s1: {sound: true, sha256: 'a'.repeat(64), relativePath: 'x.mp4'}, s2: {}}}, timeline), [{clipId: 'c1', label: 'S01A', start: 2, seconds: 3, inSeconds: 0.5, sha256: 'a'.repeat(64), relativePath: 'x.mp4'}]);
+  assert.equal(pick(inputs('muse', ['generated-graphics', 'ai-video'])), null, 'a mixed video never lets Muse speak');
+  assert.equal(pick({spec: {visuals: {sources: all}}, assets: {s1: {sound: 'natural'}}}), null, 'no clip made to speak: the narrator speaks');
+  const timeline = {fps: 30, clips: [{id: 'c1', label: 'S01A', shotId: 's1', start: 60, frames: 90, inSeconds: 0.5, speed: 0.85}, {id: 'c2', label: 'S01B', shotId: 's2', start: 150, frames: 30}, {id: 'c3', shotId: 's3', start: 180, frames: 30}]};
+  const assets = {s1: {sound: 'speech', sha256: 'a'.repeat(64), relativePath: 'x.mp4'}, s2: {sound: 'natural', sha256: 'b'.repeat(64), relativePath: 'y.mp4'}, s3: {}};
+  assert.deepEqual(EditingRoom.prototype.clipSounds({assets}, timeline, 'voice'), [{clipId: 'c1', label: 'S01A', start: 2, seconds: 3, inSeconds: 0.5, speed: 0.85, sha256: 'a'.repeat(64), relativePath: 'x.mp4'}]);
+  assert.deepEqual(EditingRoom.prototype.clipSounds({assets}, timeline, 'ambience').map(item => item.clipId), ['c2'], 'ambience never lays a speaking clip under the narrator');
 });
